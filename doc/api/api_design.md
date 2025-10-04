@@ -238,5 +238,3 @@ API は Cloud Run (Go) で実装します。
 **Internal**：checkout(reserve/commit/release), promotions/apply, invoices/issue-one, maintenance(cleanup…), audit-log
 
 ---
-
-

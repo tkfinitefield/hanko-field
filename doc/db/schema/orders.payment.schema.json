@@ -94,4 +94,3 @@
     "refundedAt": { "type": ["string", "null"], "format": "date-time", "description": "返金確定時刻（任意）。" }
   }
 }
-

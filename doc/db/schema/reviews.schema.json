@@ -78,4 +78,3 @@
     "updatedAt": { "type": "string", "format": "date-time", "description": "更新日時。" }
   }
 }
-

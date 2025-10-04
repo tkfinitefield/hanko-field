@@ -290,4 +290,3 @@
 * 全POST系は `X-CSRF-Token` 必須（テンプレに埋め込み）
 * `Authorization: Bearer`（Firebase ID Token）検証→RBAC中間層
 * Webhookは `/webhooks/*` で HMAC 検証＋IP制限（Ingress）
-

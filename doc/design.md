@@ -22,4 +22,3 @@
 - doc/app/app_design.md: アプリ設計
 - doc/web/web_design.md: ウェブ設計
 - doc/admin/admin_design.md: 管理画面設計
-

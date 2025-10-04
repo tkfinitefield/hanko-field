@@ -151,5 +151,3 @@
 - `auditLogs.schema.json` - 監査ログ
 - `counters.schema.json` - カウンター
 - `stockReservations.schema.json` - 在庫予約
-
-
