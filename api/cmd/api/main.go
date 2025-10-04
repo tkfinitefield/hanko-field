@@ -15,18 +15,18 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load()
+	cfg, err := config.Load(context.Background())
 	if err != nil {
 		log.Fatalf("failed to load configuration: %v", err)
 	}
 
 	router := handlers.NewRouter()
 	server := &http.Server{
-		Addr:         ":" + cfg.Port,
+		Addr:         ":" + cfg.Server.Port,
 		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
 	shutdown := make(chan os.Signal, 1)

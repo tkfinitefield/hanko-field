@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/hanko-field/api/internal/platform/config"
 	"github.com/hanko-field/api/internal/repositories"
 	"github.com/hanko-field/api/internal/services"
 )
@@ -30,28 +31,25 @@ type Services struct {
 
 // Container wires repositories, services, and background infrastructure for runtime use.
 type Container struct {
+	Config       config.Config
 	Repositories repositories.Registry
 	Services     Services
 }
 
-// NewContainer constructs the runtime dependencies. In production this will be generated via
-// google/wire using provider sets declared in the di package. Tests can supply fake repositories.
-func NewContainer(ctx context.Context, reg repositories.Registry, overrides ...Option) (*Container, error) {
+// NewContainer constructs the runtime dependencies. Production wiring will provide real
+// implementations, while tests can supply in-memory registries.
+func NewContainer(ctx context.Context, cfg config.Config, reg repositories.Registry) (*Container, error) {
 	if reg == nil {
 		return nil, errors.New("repositories registry is required")
 	}
 
-	cfg := options{ctx: ctx}
-	for _, opt := range overrides {
-		opt(&cfg)
-	}
-
-	svc, err := buildServices(cfg, reg)
+	svc, err := buildServices(ctx, reg, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Container{
+		Config:       cfg,
 		Repositories: reg,
 		Services:     svc,
 	}, nil
@@ -65,16 +63,12 @@ func (c *Container) Close(ctx context.Context) error {
 	return c.Repositories.Close(ctx)
 }
 
-// Option configures the container bootstrap for custom wiring (e.g., mocks in tests).
-type Option func(*options)
-
-type options struct {
-	ctx context.Context
-}
-
-func buildServices(cfg options, reg repositories.Registry) (Services, error) {
+func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Config) (Services, error) {
 	// Placeholder wiring; concrete implementation will compose services via constructors once
 	// repositories are implemented. During planning we return zero-valued interfaces so the
 	// package compiles and tests can inject their own doubles.
+	_ = ctx
+	_ = reg
+	_ = cfg
 	return Services{}, nil
 }
