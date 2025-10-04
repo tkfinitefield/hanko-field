@@ -3,8 +3,8 @@
 ハンコフィールドは、アプリでユーザが自分の印鑑をデザインし、注文できるサービスです。
 
 - アプリフレームワーク: Flutter
-- ウェブフレームワーク: Go
-- 管理画面フレームワーク: Go
+- ウェブ: Cloud Run (Go)
+- 管理画面: Cloud Run (Go)
 - データベース: Firestore
 - API: Cloud Run (Go)
 - ストレージ: Firebase Storage

@@ -1,4 +1,4 @@
-了解です！**Go + htmx**（SSR＋部分更新）前提で、管理画面（Admin Console）の**完全な画面一覧**を、
+**Go + htmx**（SSR＋部分更新）前提で、管理画面（Admin Console）の**完全な画面一覧**を、
 
 * 画面URL（人が開くフルページ）
 * 部分描画用のフラグメントURL（`hx-get/hx-post`で差し替え）
