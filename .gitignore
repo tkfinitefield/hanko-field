@@ -1,2 +1,26 @@
-.gocache/
-.dart-tool/
+# macOS
+.DS_Store
+
+# Go build artifacts
+bin/
+*.exe
+*.test
+*.out
+
+# Go module caches
+api/.gocache/
+api/bin/
+
+# Taskfile cache
+.task/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Coverage
+coverage*.txt
+coverage*.out

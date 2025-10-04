@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	domain "finitefield.org/hanko-api/internal/domain"
+	domain "github.com/hanko-field/api/internal/domain"
 )
 
 // Registry exposes typed repository accessors and lifecycle hooks for dependency injection.

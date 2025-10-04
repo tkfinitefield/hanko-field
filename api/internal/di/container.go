@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"finitefield.org/hanko-api/internal/repositories"
-	"finitefield.org/hanko-api/internal/services"
+	"github.com/hanko-field/api/internal/repositories"
+	"github.com/hanko-field/api/internal/services"
 )
 
 // Services bundles the service-layer contracts that handlers rely upon. Concrete implementations

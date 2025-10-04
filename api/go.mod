@@ -1,3 +1,3 @@
-module finitefield.org/hanko-api
+module github.com/hanko-field/api
 
-go 1.23.2
+go 1.21

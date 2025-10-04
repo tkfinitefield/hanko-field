@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	domain "finitefield.org/hanko-api/internal/domain"
+	domain "github.com/hanko-field/api/internal/domain"
 )
 
 // Type aliases expose domain models to the services package without reversing dependency direction.

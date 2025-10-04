@@ -1,0 +1,33 @@
+version: '3'
+
+vars:
+  DEFAULT_ENV: dev
+
+tasks:
+  deps:
+    cmds:
+      - make deps
+  fmt:
+    cmds:
+      - make fmt
+  lint:
+    cmds:
+      - make lint
+  test:
+    cmds:
+      - make test
+  run:
+    cmds:
+      - make run
+  build:
+    cmds:
+      - make build
+  tidy:
+    cmds:
+      - make tidy
+  vuln:
+    cmds:
+      - make vuln
+  generate:
+    cmds:
+      - make generate
