@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "invoices.schema.json",
+  "title": "Invoice",
+  "description": "請求書発行記録。注文・支払い状況に紐づけて管理する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["invoiceNumber", "orderRef", "status", "currency", "amount", "createdAt", "updatedAt"],
+  "properties": {
+    "invoiceNumber": {
+      "type": "string",
+      "description": "表示用請求書番号。`counters/invoices` から採番。"
+    },
+    "orderRef": {
+      "type": "string",
+      "pattern": "^/orders/[A-Za-z0-9_-]+$",
+      "description": "対象注文への参照。"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "issued", "sent", "paid", "void"],
+      "description": "請求書ステータス。"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "amount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "請求金額の総額（最小通貨単位）。"
+    },
+    "dueDate": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "sentAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "paidAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "voidedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "pdfAssetRef": {
+      "type": ["string", "null"],
+      "pattern": "^/assets/[A-Za-z0-9_-]+$",
+      "description": "生成済み PDF アセット参照。"
+    },
+    "lineItems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["description", "amount"],
+        "properties": {
+          "description": { "type": "string" },
+          "amount": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orders.schema.json",
+  "title": "Order",
+  "description": "ユーザーの注文ヘッダ。ステータス遷移、料金サマリ、配送・請求情報を保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "orderNumber",
+    "userRef",
+    "status",
+    "currency",
+    "totals",
+    "lineItems",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "orderNumber": {
+      "type": "string",
+      "description": "外部表示用注文番号。`counters/orders` で採番し、例: HF-2025-000123。"
+    },
+    "userRef": {
+      "type": "string",
+      "pattern": "^/users/[A-Za-z0-9_-]+$",
+      "description": "Firestore リファレンス形式のユーザー参照。匿名注文は許容しない。"
+    },
+    "cartRef": {
+      "type": ["string", "null"],
+      "pattern": "^/carts/[A-Za-z0-9_-]+$",
+      "description": "派生元カートの参照。ゲスト不可のため uid 同一。"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "pending_payment",
+        "paid",
+        "in_production",
+        "ready_to_ship",
+        "shipped",
+        "delivered",
+        "canceled"
+      ],
+      "description": "注文ステータス。内部ジョブで遷移を管理する。"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO 通貨コード。全額同一通貨。"
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subtotal", "discount", "shipping", "tax", "total"],
+      "properties": {
+        "subtotal": { "type": "integer", "minimum": 0 },
+        "discount": { "type": "integer", "minimum": 0 },
+        "tax": { "type": "integer", "minimum": 0 },
+        "shipping": { "type": "integer", "minimum": 0 },
+        "fees": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 }
+      },
+      "description": "最小通貨単位での金額サマリ。"
+    },
+    "promotion": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string" },
+        "applied": { "type": "boolean" },
+        "discountAmount": { "type": "integer", "minimum": 0 }
+      },
+      "description": "使用したプロモーションのスナップショット。"
+    },
+    "lineItems": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["productRef", "sku", "quantity", "unitPrice", "total"],
+        "properties": {
+          "productRef": {
+            "type": "string",
+            "pattern": "^/products/[A-Za-z0-9_-]+$",
+            "description": "Firestore の product 参照。"
+          },
+          "designRef": {
+            "type": ["string", "null"],
+            "pattern": "^/designs/[A-Za-z0-9_-]+$",
+            "description": "ユーザーデザイン参照。"
+          },
+          "designSnapshot": {
+            "type": ["object", "null"],
+            "description": "デザインのレンダリング・パラメータのスナップショット。",
+            "additionalProperties": true
+          },
+          "sku": {
+            "type": "string",
+            "description": "販売 SKU コード。"
+          },
+          "name": {
+            "type": "string",
+            "description": "商品名スナップショット。"
+          },
+          "options": {
+            "type": "object",
+            "description": "サイズや素材などの選択。",
+            "additionalProperties": true
+          },
+          "quantity": { "type": "integer", "minimum": 1 },
+          "unitPrice": { "type": "integer", "minimum": 0 },
+          "total": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "description": "注文時点のアイテム明細。"
+    },
+    "shippingAddress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recipient", "line1", "city", "postalCode", "country"],
+      "properties": {
+        "recipient": { "type": "string" },
+        "line1": { "type": "string" },
+        "line2": { "type": ["string", "null"] },
+        "city": { "type": "string" },
+        "state": { "type": ["string", "null"] },
+        "postalCode": { "type": "string" },
+        "country": { "type": "string" },
+        "phone": { "type": ["string", "null"] }
+      },
+      "description": "配送先スナップショット。PII マスキング対象。"
+    },
+    "billingAddress": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "recipient": { "type": "string" },
+        "line1": { "type": "string" },
+        "line2": { "type": ["string", "null"] },
+        "city": { "type": "string" },
+        "state": { "type": ["string", "null"] },
+        "postalCode": { "type": "string" },
+        "country": { "type": "string" }
+      },
+      "description": "請求先住所（存在する場合）。"
+    },
+    "contact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" }
+      },
+      "description": "通知用連絡先。"
+    },
+    "fulfillment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requestedAt": { "type": ["string", "null"], "format": "date-time" },
+        "estimatedShipDate": { "type": ["string", "null"], "format": "date-time" },
+        "estimatedDeliveryDate": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "description": "出荷予測情報。"
+    },
+    "production": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "queueRef": { "type": ["string", "null"], "pattern": "^/productionQueues/[A-Za-z0-9_-]+$" },
+        "assignedStation": { "type": ["string", "null"] },
+        "operatorRef": { "type": ["string", "null"], "pattern": "^/users/[A-Za-z0-9_-]+$" }
+      },
+      "description": "制作キューでの割当情報。"
+    },
+    "notes": {
+      "type": "object",
+      "description": "スタッフ用メモ等（Free-form）。",
+      "additionalProperties": true
+    },
+    "flags": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "manualReview": { "type": "boolean" },
+        "gift": { "type": "boolean" }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "createdBy": { "type": ["string", "null"] },
+        "updatedBy": { "type": ["string", "null"] }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "placedAt": { "type": ["string", "null"], "format": "date-time" },
+    "paidAt": { "type": ["string", "null"], "format": "date-time" },
+    "shippedAt": { "type": ["string", "null"], "format": "date-time" },
+    "deliveredAt": { "type": ["string", "null"], "format": "date-time" },
+    "canceledAt": { "type": ["string", "null"], "format": "date-time" },
+    "cancelReason": { "type": ["string", "null"] },
+    "metadata": {
+      "type": "object",
+      "description": "外部システム連携用メタデータ。",
+      "additionalProperties": true
+    }
+  }
+}
