@@ -25,12 +25,14 @@ repos:
         args: ["-c", "cd app && flutter analyze --no-fatal-infos"]
         language: system
         pass_filenames: false
+        files: ^app/.*\.dart$
       - id: flutter-test
         name: flutter test
         entry: bash
         args: ["-c", "cd app && flutter test --no-pub"]
         language: system
         pass_filenames: false
+        files: ^app/.*\.dart$
       - id: gofmt-api
         name: gofmt (api)
         entry: bash -lc 'for file in "$@"; do gofmt -w "$file"; done'
