@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reviews.schema.json",
+  "title": "Review",
+  "description": "購入者レビュー。注文へのひも付け、評価、公開可否、モデレーション、店舗からの返信を保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["orderRef", "userRef", "rating", "isPublic", "createdAt"],
+  "properties": {
+    "orderRef": {
+      "type": "string",
+      "pattern": "^/orders/[^/]+$",
+      "description": "このレビューが対象とする注文の参照。"
+    },
+    "userRef": {
+      "type": "string",
+      "pattern": "^/users/[^/]+$",
+      "description": "レビュー作成ユーザーの参照。"
+    },
+    "title": {
+      "type": "string",
+      "description": "任意の見出し。"
+    },
+    "rating": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "星評価（1–5）。"
+    },
+    "comment": {
+      "type": "string",
+      "description": "本文。"
+    },
+    "photos": {
+      "type": "array",
+      "description": "参考画像URL（署名URL可）。",
+      "items": { "type": "string", "format": "uri" }
+    },
+    "isPublic": {
+      "type": "boolean",
+      "description": "公開可否。false なら非公開。"
+    },
+    "moderation": {
+      "type": "string",
+      "enum": ["approved", "rejected", "pending"],
+      "description": "モデレーション状態。"
+    },
+    "storeReply": {
+      "type": "object",
+      "description": "店舗からの返信（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "body": { "type": "string", "description": "返信本文。" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "返信日時。" },
+        "createdBy": {
+          "type": "string",
+          "pattern": "^/users/[^/]+$",
+          "description": "返信したスタッフの参照。"
+        },
+        "isPublic": { "type": "boolean", "description": "返信の公開可否。" }
+      }
+    },
+    "flags": {
+      "type": "array",
+      "description": "通報/フラグ（任意）。",
+      "items": { "type": "string" }
+    },
+    "helpful": {
+      "type": "object",
+      "description": "役に立った票の集計（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "yes": { "type": "integer", "minimum": 0 },
+        "no": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time", "description": "作成日時。" },
+    "updatedAt": { "type": "string", "format": "date-time", "description": "更新日時。" }
+  }
+}
+

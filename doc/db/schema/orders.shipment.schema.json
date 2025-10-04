@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orders.shipment.schema.json",
+  "title": "Order Shipment",
+  "description": "発送・追跡情報。ラベル生成・配送イベントの時系列を保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["carrier", "status", "createdAt"],
+  "properties": {
+    "carrier": {
+      "type": "string",
+      "enum": ["JPPOST", "YAMATO", "SAGAWA", "DHL", "UPS", "FEDEX", "OTHER"],
+      "description": "配送キャリア。"
+    },
+    "service": {
+      "type": "string",
+      "description": "配送サービス/プロダクト名（例: EMS, TA-Q-BIN, EXPRESS）。"
+    },
+    "trackingNumber": {
+      "type": "string",
+      "description": "追跡番号。"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["label_created", "in_transit", "out_for_delivery", "delivered", "exception", "cancelled"],
+      "description": "現在の配送状態。"
+    },
+    "eta": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "配達予定日時（あれば）。"
+    },
+    "labelUrl": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "発送ラベルの署名URL（任意）。"
+    },
+    "documents": {
+      "type": "array",
+      "description": "同梱書類等のURL（任意）。",
+      "items": { "type": "string", "format": "uri" }
+    },
+    "events": {
+      "type": "array",
+      "description": "配送イベントの時系列ログ。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ts", "code"],
+        "properties": {
+          "ts": { "type": "string", "format": "date-time", "description": "イベント時刻。" },
+          "code": {
+            "type": "string",
+            "enum": ["label_created", "picked_up", "in_transit", "arrived_hub", "customs_clearance", "out_for_delivery", "delivered", "exception", "return_to_sender"],
+            "description": "イベント種別。"
+          },
+          "location": { "type": "string", "description": "イベント発生場所（任意）。" },
+          "note": { "type": "string", "description": "備考（任意）。" }
+        }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time", "description": "作成時刻（ラベル生成時など）。" },
+    "updatedAt": { "type": "string", "format": "date-time", "description": "更新時刻。" }
+  }
+}
+

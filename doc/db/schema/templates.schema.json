@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "templates.schema.json",
+  "title": "Design Template",
+  "description": "印影デザインの雛形。形状・書体の既定、配置/余白の既定、適用制約、プレビュー等を保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "shape",
+    "writing",
+    "constraints",
+    "isPublic",
+    "sort",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "テンプレート名（UI表示用）。例: Classic Tensho Round"
+    },
+    "slug": {
+      "type": "string",
+      "description": "URL等で使う一意スラッグ（任意）。"
+    },
+    "description": {
+      "type": "string",
+      "description": "テンプレートの説明（特徴、用途など）。"
+    },
+    "tags": {
+      "type": "array",
+      "description": "検索/分類用タグ。例: [\"traditional\",\"minimal\",\"bank\"]",
+      "items": { "type": "string" }
+    },
+
+    "shape": {
+      "type": "string",
+      "enum": ["round", "square"],
+      "description": "印面形状。"
+    },
+    "writing": {
+      "type": "string",
+      "enum": ["tensho", "reisho", "kaisho", "gyosho", "koentai", "custom"],
+      "description": "既定の書体分類。"
+    },
+
+    "defaults": {
+      "type": "object",
+      "description": "このテンプレ適用時の初期値。",
+      "additionalProperties": false,
+      "properties": {
+        "sizeMm": {
+          "type": "number",
+          "description": "既定サイズ（mm）。",
+          "minimum": 6,
+          "maximum": 30
+        },
+        "layout": {
+          "type": "object",
+          "description": "レイアウト既定値。",
+          "additionalProperties": false,
+          "properties": {
+            "grid": {
+              "type": "string",
+              "description": "例: 3x3, free, radial"
+            },
+            "margin": {
+              "type": "number",
+              "description": "余白（相対 0..1 推奨）。"
+            },
+            "autoKern": {
+              "type": "boolean",
+              "description": "自動カーニングの既定ON/OFF。"
+            },
+            "centerBias": {
+              "type": "number",
+              "description": "中心寄せバイアス（相対）。"
+            }
+          }
+        },
+        "stroke": {
+          "type": "object",
+          "description": "ストローク既定値。",
+          "additionalProperties": false,
+          "properties": {
+            "weight": { "type": "number", "description": "線の太さ（相対）。" },
+            "contrast": { "type": "number", "description": "コントラスト（相対）。" }
+          }
+        },
+        "fontRef": {
+          "type": "string",
+          "pattern": "^/fonts/[^/]+$",
+          "description": "推奨フォント参照（任意）。"
+        }
+      }
+    },
+
+    "constraints": {
+      "type": "object",
+      "description": "テンプレ適用時の許容範囲/規則。",
+      "additionalProperties": false,
+      "required": ["sizeMm", "strokeWeight"],
+      "properties": {
+        "sizeMm": {
+          "type": "object",
+          "description": "サイズ許容範囲（mm）。",
+          "additionalProperties": false,
+          "required": ["min", "max"],
+          "properties": {
+            "min": { "type": "number", "minimum": 6 },
+            "max": { "type": "number", "maximum": 30 },
+            "step": { "type": "number", "description": "UIのステップ幅（任意）。" }
+          }
+        },
+        "strokeWeight": {
+          "type": "object",
+          "description": "線の太さの許容範囲（相対）。",
+          "additionalProperties": false,
+          "required": ["min", "max"],
+          "properties": {
+            "min": { "type": "number" },
+            "max": { "type": "number" }
+          }
+        },
+        "margin": {
+          "type": "object",
+          "description": "余白の許容範囲（相対）。",
+          "additionalProperties": false,
+          "properties": {
+            "min": { "type": "number" },
+            "max": { "type": "number" }
+          }
+        },
+        "glyph": {
+          "type": "object",
+          "description": "文字/記号の利用制約。",
+          "additionalProperties": false,
+          "properties": {
+            "maxChars": { "type": "integer", "description": "最大文字数。例: 4" },
+            "allowRepeat": { "type": "boolean", "description": "同一文字の重複可否。" },
+            "allowedScripts": {
+              "type": "array",
+              "description": "許容スクリプト。例: [\"kanji\",\"kana\",\"latin\"]",
+              "items": { "type": "string", "enum": ["kanji", "kana", "latin", "digits", "punct"] }
+            },
+            "prohibitedChars": {
+              "type": "array",
+              "description": "禁止文字（正規化後）。",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "registrability": {
+          "type": "object",
+          "description": "実印/銀行印等の適合性の示唆（自動判断のためのヒント）。",
+          "additionalProperties": false,
+          "properties": {
+            "jpJitsuinAllowed": { "type": "boolean" },
+            "bankInAllowed": { "type": "boolean" },
+            "notes": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "previewUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "テンプレ代表プレビューのURL（署名URL可）。"
+    },
+    "exampleImages": {
+      "type": "array",
+      "description": "バリエーション例の画像URL。",
+      "items": { "type": "string", "format": "uri" }
+    },
+
+    "recommendations": {
+      "type": "object",
+      "description": "このテンプレに相性の良い組み合わせ（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "defaultSizeMm": { "type": "number" },
+        "materials": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^/materials/[^/]+$" }
+        },
+        "products": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^/products/[^/]+$" }
+        }
+      }
+    },
+
+    "isPublic": {
+      "type": "boolean",
+      "description": "一般公開可否。false のものは下書き/非公開扱い。"
+    },
+    "sort": {
+      "type": "integer",
+      "description": "表示順制御用の昇順ソートキー。"
+    },
+    "version": {
+      "type": "string",
+      "description": "テンプレ自体のバージョン。例: v1.2.0"
+    },
+    "isDeprecated": {
+      "type": "boolean",
+      "description": "非推奨フラグ。新規選択では隠すなど。"
+    },
+    "replacedBy": {
+      "type": "string",
+      "pattern": "^/templates/[^/]+$",
+      "description": "後継テンプレへの参照（任意）。"
+    },
+
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}

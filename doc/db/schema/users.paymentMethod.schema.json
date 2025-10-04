@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "users.paymentMethod.schema.json",
+  "title": "User Payment Method",
+  "description": "外部PSP（例: Stripe/PayPal）にトークン化された支払手段の参照情報。カード番号等の機微情報は保持しません。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "provider",
+    "methodType",
+    "providerRef",
+    "createdAt"
+  ],
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": ["stripe", "paypal", "other"],
+      "description": "決済プロバイダの種別。"
+    },
+    "methodType": {
+      "type": "string",
+      "enum": ["card", "wallet", "bank", "other"],
+      "description": "支払手段のタイプ。"
+    },
+    "brand": {
+      "type": "string",
+      "description": "カードブランド等（例: visa, mastercard）。"
+    },
+    "last4": {
+      "type": "string",
+      "pattern": "^\\d{4}$",
+      "description": "カード番号の下4桁（カードの場合）。"
+    },
+    "expMonth": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 12,
+      "description": "カード有効期限の月（カードの場合）。"
+    },
+    "expYear": {
+      "type": "integer",
+      "minimum": 2000,
+      "description": "カード有効期限の年（カードの場合）。"
+    },
+    "fingerprint": {
+      "type": "string",
+      "description": "カード指紋などのユニーク識別子（PSP提供値）。不正検知・重複判定に利用。"
+    },
+    "billingName": {
+      "type": "string",
+      "description": "請求先名義（PSPで保持される値のキャッシュ）。"
+    },
+    "providerRef": {
+      "type": "string",
+      "description": "PSP側のCustomer/PaymentMethod ID。"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "登録日時。"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "最終更新日時。"
+    }
+  }
+}

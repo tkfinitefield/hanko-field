@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "carts.header.schema.json",
+  "title": "Cart Header",
+  "description": "ユーザーのカート全体を表すヘッダ。通貨・クーポン・見積サマリ・チェックアウト連携・ロック状態などを管理する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["currency", "itemsCount", "createdAt", "updatedAt"],
+  "properties": {
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "カート内価格計算に用いる通貨（例: JPY）。"
+    },
+    "promo": {
+      "type": "object",
+      "description": "適用中のプロモ情報（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string" },
+        "promotionRef": { "type": "string", "pattern": "^/promotions/[^/]+$" },
+        "discountAmount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "estimates": {
+      "type": "object",
+      "description": "見積サマリ（税・送料込みの暫定計算）。",
+      "additionalProperties": false,
+      "properties": {
+        "subtotal": { "type": "integer", "minimum": 0 },
+        "discount": { "type": "integer", "minimum": 0 },
+        "tax": { "type": "integer", "minimum": 0 },
+        "shipping": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "itemsCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "items サブコレクションの件数キャッシュ。UI表示/クエリ削減用。"
+    },
+    "checkout": {
+      "type": "object",
+      "description": "チェックアウト連携状態（PSPセッション等）。",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string", "enum": ["stripe", "paypal", "other"] },
+        "sessionId": { "type": "string" },
+        "status": { "type": "string", "enum": ["idle", "pending", "confirmed", "failed", "expired"] },
+        "lastAttemptAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "lock": {
+      "type": "object",
+      "description": "二重会計や多端末競合を避けるためのロック情報（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "locked": { "type": "boolean" },
+        "by": { "type": "string", "description": "ロック取得主体（uid など）。" },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "notes": { "type": "string", "description": "カート全体のメモ（任意）。" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}
+

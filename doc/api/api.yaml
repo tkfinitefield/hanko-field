@@ -1,0 +1,1492 @@
+openapi: 3.1.0
+info:
+  title: Hanko Field API
+  version: 1.0.0
+  summary: |
+    Cloud Run (Go) REST API for custom seal design & ordering app.
+    Backed by Firebase Auth + Firestore + Cloud Storage + PSP + Shipping carriers.
+  contact:
+    name: Finite Field K.K.
+servers:
+  - url: https://{service}.a.run.app/api/v1
+    variables:
+      service:
+        default: hanko-api
+tags:
+  - name: Public
+  - name: Auth
+  - name: Designs
+  - name: Cart
+  - name: Orders
+  - name: Catalog
+  - name: Content
+  - name: Promotions
+  - name: Reviews
+  - name: Assets
+  - name: Admin
+  - name: Webhooks
+  - name: Internal
+
+security:
+  - FirebaseAuth: []   # default for non-public endpoints; overridden per-path where needed
+
+paths:
+  ############################################################
+  # Public
+  ############################################################
+  /healthz:
+    get:
+      tags: [Public]
+      summary: Liveness probe
+      responses: { '204': { description: No Content } }
+  /readyz:
+    get:
+      tags: [Public]
+      summary: Readiness probe
+      responses: { '204': { description: No Content } }
+
+  /templates:
+    get:
+      tags: [Public, Catalog]
+      summary: List templates
+      parameters:
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+        - { name: pageToken, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/PageTemplate' } } }
+  /templates/{templateId}:
+    get:
+      tags: [Public, Catalog]
+      summary: Get a template
+      parameters: [ { $ref: '#/components/parameters/TemplateId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Template' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /fonts:
+    get:
+      tags: [Public, Catalog]
+      summary: List fonts
+      parameters:
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+        - { name: pageToken, in: query, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PageFont' } } } }
+  /fonts/{fontId}:
+    get:
+      tags: [Public, Catalog]
+      summary: Get a font
+      parameters: [ { $ref: '#/components/parameters/FontId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Font' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /materials:
+    get:
+      tags: [Public, Catalog]
+      summary: List materials
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PageMaterial' } } } }
+  /materials/{materialId}:
+    get:
+      tags: [Public, Catalog]
+      summary: Get a material
+      parameters: [ { $ref: '#/components/parameters/MaterialId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Material' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /products:
+    get:
+      tags: [Public, Catalog]
+      summary: List products (SKU)
+      parameters:
+        - { name: shape, in: query, schema: { $ref: '#/components/schemas/Shape' } }
+        - { name: sizeMm, in: query, schema: { type: number } }
+        - { name: materialId, in: query, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PageProduct' } } } }
+  /products/{productId}:
+    get:
+      tags: [Public, Catalog]
+      summary: Get a product (SKU)
+      parameters: [ { $ref: '#/components/parameters/ProductId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /content/guides:
+    get:
+      tags: [Public, Content]
+      summary: List guides (public)
+      parameters:
+        - { name: lang, in: query, schema: { type: string, default: ja } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/GuideCategory' } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PageGuide' } } } }
+  /content/guides/{slug}:
+    get:
+      tags: [Public, Content]
+      summary: Get a guide by slug
+      parameters: [ { name: slug, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Guide' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /content/pages/{slug}:
+    get:
+      tags: [Public, Content]
+      summary: Get a fixed page by slug
+      parameters: [ { name: slug, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Page' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /promotions/{code}/public:
+    get:
+      tags: [Public, Promotions]
+      summary: Public info for a coupon code (no discount calc)
+      parameters: [ { name: code, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { exists: { type: boolean }, active: { type: boolean }, startsAt: { type: string, format: date-time }, endsAt: { type: string, format: date-time } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  ############################################################
+  # Authenticated User
+  ############################################################
+  /me:
+    get:
+      tags: [Auth]
+      summary: Get my profile
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+    put:
+      tags: [Auth]
+      summary: Update my profile (limited fields)
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/UserUpdate' } } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+
+  /me/addresses:
+    get:
+      tags: [Auth]
+      summary: List my addresses
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Address' } } } } }
+    post:
+      tags: [Auth]
+      summary: Add address
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Address' } } } }
+      responses:
+        '201': { description: Created, headers: { Location: { schema: { type: string } } } }
+
+  /me/addresses/{addressId}:
+    put:
+      tags: [Auth]
+      summary: Update address
+      parameters: [ { $ref: '#/components/parameters/AddressId' } ]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Address' } } } }
+      responses: { '200': { description: OK } }
+    delete:
+      tags: [Auth]
+      summary: Delete address
+      parameters: [ { $ref: '#/components/parameters/AddressId' } ]
+      responses: { '204': { description: No Content } }
+
+  /me/payment-methods:
+    get:
+      tags: [Auth]
+      summary: List my payment methods (PSP references)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PaymentMethod' } } } } }
+    post:
+      tags: [Auth]
+      summary: Add payment method reference
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/PaymentMethod' } } } }
+      responses: { '201': { description: Created } }
+
+  /me/payment-methods/{pmId}:
+    delete:
+      tags: [Auth]
+      summary: Remove payment method
+      parameters: [ { name: pmId, in: path, required: true, schema: { type: string } } ]
+      responses: { '204': { description: No Content } }
+
+  /me/favorites:
+    get:
+      tags: [Auth]
+      summary: List my favorite designs
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Favorite' } } } } }
+  /me/favorites/{designId}:
+    put:
+      tags: [Auth]
+      summary: Add favorite
+      parameters: [ { name: designId, in: path, required: true, schema: { type: string } } ]
+      responses: { '204': { description: No Content } }
+    delete:
+      tags: [Auth]
+      summary: Remove favorite
+      parameters: [ { name: designId, in: path, required: true, schema: { type: string } } ]
+      responses: { '204': { description: No Content } }
+
+  ############################################################
+  # Designs & AI
+  ############################################################
+  /designs:
+    get:
+      tags: [Designs]
+      summary: List my designs
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PageDesign' } } } }
+    post:
+      tags: [Designs]
+      summary: Create a design
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Design' } } } }
+      responses: { '201': { description: Created } }
+
+  /designs/{designId}:
+    get:
+      tags: [Designs]
+      summary: Get a design
+      parameters: [ { $ref: '#/components/parameters/DesignId' } ]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Design' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      tags: [Designs]
+      summary: Update a design
+      parameters: [ { $ref: '#/components/parameters/DesignId' } ]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Design' } } } }
+      responses: { '200': { description: OK } }
+    delete:
+      tags: [Designs]
+      summary: Delete a design
+      parameters: [ { $ref: '#/components/parameters/DesignId' } ]
+      responses: { '204': { description: No Content } }
+
+  /designs/{designId}/versions:
+    get:
+      tags: [Designs]
+      summary: List versions (snapshots)
+      parameters: [ { $ref: '#/components/parameters/DesignId' } ]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/DesignVersion' } } } } } }
+
+  /designs/{designId}/ai-suggestions:
+    get:
+      tags: [Designs]
+      summary: List AI suggestions
+      parameters: [ { $ref: '#/components/parameters/DesignId' } ]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AISuggestion' } } } } } }
+    post:
+      tags: [Designs]
+      summary: Enqueue AI suggestion generation
+      parameters: [ { $ref: '#/components/parameters/DesignId' } ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                method: { type: string, enum: [balance, generateCandidates, vectorizeUpload, registrabilityCheck, custom] }
+                model: { type: string }
+      responses: { '202': { description: Accepted } }
+
+  /designs/{designId}/ai-suggestions/{suggestionId}:
+    get:
+      tags: [Designs]
+      summary: Get an AI suggestion
+      parameters:
+        - { $ref: '#/components/parameters/DesignId' }
+        - { name: suggestionId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AISuggestion' } } } } }
+  /designs/{designId}/ai-suggestions/{suggestionId}:accept:
+    post:
+      tags: [Designs]
+      summary: Accept/apply suggestion
+      parameters:
+        - { $ref: '#/components/parameters/DesignId' }
+        - { name: suggestionId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Applied } }
+  /designs/{designId}/ai-suggestions/{suggestionId}:reject:
+    post:
+      tags: [Designs]
+      summary: Reject suggestion
+      parameters:
+        - { $ref: '#/components/parameters/DesignId' }
+        - { name: suggestionId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Rejected } }
+
+  /designs/{designId}:registrability-check:
+    post:
+      tags: [Designs]
+      summary: Check registrability for official seals
+      parameters: [ { $ref: '#/components/parameters/DesignId' } ]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { registrable: { type: boolean }, diagnostics: { type: array, items: { type: string } } } } } } } }
+
+  ############################################################
+  # Name mapping
+  ############################################################
+  /name-mappings:convert:
+    post:
+      tags: [Auth]
+      summary: Convert latin name to kanji candidates
+      requestBody: { content: { application/json: { schema: { type: object, required: [latin], properties: { latin: { type: string }, locale: { type: string } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/NameMapping' } } } } }
+  /name-mappings/{mappingId}:select:
+    post:
+      tags: [Auth]
+      summary: Select a candidate
+      parameters: [ { name: mappingId, in: path, required: true, schema: { type: string } } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { selected: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+
+  ############################################################
+  # Cart & Checkout
+  ############################################################
+  /cart:
+    get:
+      tags: [Cart]
+      summary: Get cart header
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CartHeader' } } } } }
+    patch:
+      tags: [Cart]
+      summary: Update cart header (currency/promo)
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CartHeaderPatch' } } } }
+      responses: { '200': { description: OK } }
+
+  /cart/items:
+    get:
+      tags: [Cart]
+      summary: List cart items
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/CartItem' } } } } } }
+    post:
+      tags: [Cart]
+      summary: Add item to cart
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CartItem' } } } }
+      responses: { '201': { description: Created } }
+
+  /cart/items/{itemId}:
+    put:
+      tags: [Cart]
+      summary: Update cart item
+      parameters: [ { name: itemId, in: path, required: true, schema: { type: string } } ]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CartItem' } } } }
+      responses: { '200': { description: OK } }
+    delete:
+      tags: [Cart]
+      summary: Remove cart item
+      parameters: [ { name: itemId, in: path, required: true, schema: { type: string } } ]
+      responses: { '204': { description: No Content } }
+
+  /cart:estimate:
+    post:
+      tags: [Cart]
+      summary: Estimate totals (tax/shipping/discount)
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Estimate' } } } } }
+
+  /cart:apply-promo:
+    post:
+      tags: [Cart, Promotions]
+      summary: Apply a coupon code
+      requestBody: { content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+  /cart:remove-promo:
+    delete:
+      tags: [Cart, Promotions]
+      summary: Remove coupon from cart
+      responses: { '204': { description: No Content } }
+
+  /checkout/session:
+    post:
+      tags: [Cart]
+      summary: Create PSP checkout session
+      requestBody: { content: { application/json: { schema: { type: object, properties: { provider: { type: string, enum: [stripe, paypal] } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { sessionId: { type: string }, url: { type: string } } } } } } }
+  /checkout/confirm:
+    post:
+      tags: [Cart]
+      summary: Client confirmation ping (finalization via webhook)
+      responses: { '200': { description: OK } }
+
+  ############################################################
+  # Orders & sub-resources
+  ############################################################
+  /orders:
+    get:
+      tags: [Orders]
+      summary: List my orders
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PageOrder' } } } }
+
+  /orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Get my order
+      parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+
+  /orders/{orderId}:cancel:
+    post:
+      tags: [Orders]
+      summary: Request order cancellation (pre-shipment)
+      parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+      responses: { '200': { description: OK } }
+
+  /orders/{orderId}:request-invoice:
+    post:
+      tags: [Orders]
+      summary: Request invoice/receipt issuance
+      parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+      responses: { '202': { description: Accepted } }
+
+  /orders/{orderId}:reorder:
+    post:
+      tags: [Orders]
+      summary: Reorder using design snapshot
+      parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+      responses: { '201': { description: Created } }
+
+  /orders/{orderId}/payments:
+    get:
+      tags: [Orders]
+      summary: List payments for an order
+      parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Payment' } } } } } }
+
+  /orders/{orderId}/shipments:
+    get:
+      tags: [Orders]
+      summary: List shipments
+      parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Shipment' } } } } } }
+  /orders/{orderId}/shipments/{shipmentId}:
+    get:
+      tags: [Orders]
+      summary: Get shipment
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+        - { name: shipmentId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Shipment' } } } } }
+
+  /orders/{orderId}/production-events:
+    get:
+      tags: [Orders]
+      summary: List production events
+      parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ProductionEvent' } } } } } }
+
+  ############################################################
+  # Reviews
+  ############################################################
+  /reviews:
+    post:
+      tags: [Reviews]
+      summary: Create a review
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Review' } } } }
+      responses: { '201': { description: Created } }
+    get:
+      tags: [Reviews]
+      summary: List my reviews
+      parameters:
+        - { name: orderId, in: query, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Review' } } } } }
+
+  ############################################################
+  # Assets (signed URLs)
+  ############################################################
+  /assets:signed-upload:
+    post:
+      tags: [Assets]
+      summary: Issue a signed upload URL
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, purpose, mimeType]
+              properties:
+                kind: { $ref: '#/components/schemas/AssetKind' }
+                purpose: { $ref: '#/components/schemas/AssetPurpose' }
+                mimeType: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { uploadUrl: { type: string }, assetId: { type: string } } } } } }
+
+  /assets/{assetId}:signed-download:
+    post:
+      tags: [Assets]
+      summary: Issue a signed download URL
+      parameters: [ { name: assetId, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { url: { type: string }, expiresAt: { type: string, format: date-time } } } } } }
+
+  ############################################################
+  # Admin / Staff
+  ############################################################
+  /admin/orders:
+    get:
+      security: [ { FirebaseAuth: [] } ]
+      tags: [Admin, Orders]
+      summary: Admin list orders
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/OrderStatus' } }
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PageOrder' } } } }
+
+  /admin/orders/{orderId}:status:
+    put:
+      tags: [Admin, Orders]
+      summary: Transition order status
+      parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [status], properties: { status: { $ref: '#/components/schemas/OrderStatus' }, note: { type: string } } }
+      responses: { '200': { description: OK } }
+
+  /admin/orders/{orderId}/shipments:
+    post:
+      tags: [Admin, Orders]
+      summary: Create shipment & label
+      parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Shipment' } } } }
+      responses: { '201': { description: Created } }
+
+  /admin/orders/{orderId}/production-events:
+    post:
+      tags: [Admin, Orders]
+      summary: Append production event
+      parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ProductionEvent' } } } }
+      responses: { '201': { description: Created } }
+
+  /admin/catalog/templates:
+    post: { tags: [Admin, Catalog], summary: Create template, requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Template' } } } }, responses: { '201': { description: Created } } }
+  /admin/catalog/templates/{templateId}:
+    put:  { tags: [Admin, Catalog], summary: Update template, parameters: [ { $ref: '#/components/parameters/TemplateId' } ], requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Template' } } } }, responses: { '200': { description: OK } } }
+    delete: { tags: [Admin, Catalog], summary: Delete template, parameters: [ { $ref: '#/components/parameters/TemplateId' } ], responses: { '204': { description: No Content } } }
+
+  /admin/catalog/fonts:
+    post: { tags: [Admin, Catalog], summary: Create font, requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Font' } } } }, responses: { '201': { description: Created } } }
+  /admin/catalog/fonts/{fontId}:
+    put:  { tags: [Admin, Catalog], summary: Update font, parameters: [ { $ref: '#/components/parameters/FontId' } ], requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Font' } } } }, responses: { '200': { description: OK } } }
+    delete: { tags: [Admin, Catalog], summary: Delete font, parameters: [ { $ref: '#/components/parameters/FontId' } ], responses: { '204': { description: No Content } } }
+
+  /admin/catalog/materials:
+    post: { tags: [Admin, Catalog], summary: Create material, requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Material' } } } }, responses: { '201': { description: Created } } }
+  /admin/catalog/materials/{materialId}:
+    put:  { tags: [Admin, Catalog], summary: Update material, parameters: [ { $ref: '#/components/parameters/MaterialId' } ], requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Material' } } } }, responses: { '200': { description: OK } } }
+    delete: { tags: [Admin, Catalog], summary: Delete material, parameters: [ { $ref: '#/components/parameters/MaterialId' } ], responses: { '204': { description: No Content } } }
+
+  /admin/catalog/products:
+    post: { tags: [Admin, Catalog], summary: Create product, requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }, responses: { '201': { description: Created } } }
+  /admin/catalog/products/{productId}:
+    put:  { tags: [Admin, Catalog], summary: Update product, parameters: [ { $ref: '#/components/parameters/ProductId' } ], requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }, responses: { '200': { description: OK } } }
+    delete: { tags: [Admin, Catalog], summary: Delete product, parameters: [ { $ref: '#/components/parameters/ProductId' } ], responses: { '204': { description: No Content } } }
+
+  /admin/content/guides:
+    post: { tags: [Admin, Content], summary: Create guide, requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Guide' } } } }, responses: { '201': { description: Created } } }
+  /admin/content/guides/{guideId}:
+    put:  { tags: [Admin, Content], summary: Update guide, parameters: [ { name: guideId, in: path, required: true, schema: { type: string } } ], requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Guide' } } } }, responses: { '200': { description: OK } } }
+    delete: { tags: [Admin, Content], summary: Delete guide, parameters: [ { name: guideId, in: path, required: true, schema: { type: string } } ], responses: { '204': { description: No Content } } }
+
+  /admin/content/pages:
+    post: { tags: [Admin, Content], summary: Create page, requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Page' } } } }, responses: { '201': { description: Created } } }
+  /admin/content/pages/{pageId}:
+    put:  { tags: [Admin, Content], summary: Update page, parameters: [ { name: pageId, in: path, required: true, schema: { type: string } } ], requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Page' } } } }, responses: { '200': { description: OK } } }
+    delete: { tags: [Admin, Content], summary: Delete page, parameters: [ { name: pageId, in: path, required: true, schema: { type: string } } ], responses: { '204': { description: No Content } } }
+
+  /admin/promotions:
+    get: { tags: [Admin, Promotions], summary: List promotions, responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Promotion' } } } } } } }
+    post: { tags: [Admin, Promotions], summary: Create promotion, requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Promotion' } } } }, responses: { '201': { description: Created } } }
+  /admin/promotions/{promoId}:
+    put:  { tags: [Admin, Promotions], summary: Update promotion, parameters: [ { name: promoId, in: path, required: true, schema: { type: string } } ], requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Promotion' } } } }, responses: { '200': { description: OK } } }
+    delete: { tags: [Admin, Promotions], summary: Delete promotion, parameters: [ { name: promoId, in: path, required: true, schema: { type: string } } ], responses: { '204': { description: No Content } } }
+  /admin/promotions/{promoId}/usages:
+    get:
+      tags: [Admin, Promotions]
+      summary: List per-user usages for a promotion
+      parameters: [ { name: promoId, in: path, required: true, schema: { type: string } } ]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PromotionUsage' } } } } } }
+  /admin/reviews:
+    get: { tags: [Admin, Reviews], summary: List reviews for moderation, parameters: [ { name: moderation, in: query, schema: { type: string, enum: [pending, approved, rejected] } } ], responses: { '200': { description: OK } } }
+  /admin/reviews/{reviewId}:moderate:
+    put:
+      tags: [Admin, Reviews]
+      summary: Moderate review
+      parameters: [ { name: reviewId, in: path, required: true, schema: { type: string } } ]
+      requestBody: { content: { application/json: { schema: { type: object, required: [moderation], properties: { moderation: { type: string, enum: [approved, rejected] } } } } } }
+      responses: { '200': { description: OK } }
+  /admin/reviews/{reviewId}:store-reply:
+    post:
+      tags: [Admin, Reviews]
+      summary: Store a public reply from store
+      parameters: [ { name: reviewId, in: path, required: true, schema: { type: string } } ]
+      requestBody: { content: { application/json: { schema: { type: object, required: [body], properties: { body: { type: string }, isPublic: { type: boolean } } } } } }
+      responses: { '200': { description: OK } }
+
+  /admin/production-queues:
+    get:  { tags: [Admin], summary: List production queues, responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ProductionQueue' } } } } } } }
+    post: { tags: [Admin], summary: Create queue, requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ProductionQueue' } } } }, responses: { '201': { description: Created } } }
+  /admin/production-queues/{queueId}:
+    put:  { tags: [Admin], summary: Update queue, parameters: [ { name: queueId, in: path, required: true, schema: { type: string } } ], requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ProductionQueue' } } } }, responses: { '200': { description: OK } } }
+    delete: { tags: [Admin], summary: Delete queue, parameters: [ { name: queueId, in: path, required: true, schema: { type: string } } ], responses: { '204': { description: No Content } } }
+
+  /admin/invoices:issue:
+    post:
+      tags: [Admin]
+      summary: Issue invoice(s) and attach PDFs
+      requestBody: { content: { application/json: { schema: { type: object, properties: { orderIds: { type: array, items: { type: string } } } } } } }
+      responses: { '202': { description: Accepted } }
+
+  /admin/counters/{name}:next:
+    post:
+      tags: [Admin]
+      summary: Get next sequence number
+      parameters: [ { name: name, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { number: { type: string } } } } } }
+
+  ############################################################
+  # Webhooks (external -> this service)
+  ############################################################
+  /webhooks/payments/stripe:
+    post:
+      security: [ { WebhookHMAC: [] } ]
+      tags: [Webhooks]
+      summary: Stripe events webhook
+      requestBody: { content: { application/json: { schema: { type: object } } } }
+      responses: { '200': { description: OK } }
+
+  /webhooks/payments/paypal:
+    post:
+      security: [ { WebhookHMAC: [] } ]
+      tags: [Webhooks]
+      summary: PayPal webhook
+      requestBody: { content: { application/json: { schema: { type: object } } } }
+      responses: { '200': { description: OK } }
+
+  /webhooks/shipping/{carrier}:
+    post:
+      security: [ { WebhookHMAC: [] } ]
+      tags: [Webhooks]
+      summary: Shipping carrier webhook
+      parameters: [ { name: carrier, in: path, required: true, schema: { type: string } } ]
+      requestBody: { content: { application/json: { schema: { type: object } } } }
+      responses: { '200': { description: OK } }
+
+  /webhooks/ai/worker:
+    post:
+      security: [ { WebhookHMAC: [] } ]
+      tags: [Webhooks]
+      summary: AI worker push
+      requestBody: { content: { application/json: { schema: { type: object } } } }
+      responses: { '202': { description: Accepted } }
+
+  ############################################################
+  # Internal (server-to-server / Scheduler)
+  ############################################################
+  /internal/checkout/reserve-stock:
+    post:
+      security: [ { OIDCServer: [] } ]
+      tags: [Internal]
+      summary: Reserve stock and create /stockReservations
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/StockReservation' } } } }
+      responses: { '200': { description: OK } }
+
+  /internal/checkout/commit:
+    post:
+      security: [ { OIDCServer: [] } ]
+      tags: [Internal]
+      summary: Commit reservation after successful payment
+      requestBody: { content: { application/json: { schema: { type: object, required: [orderId], properties: { orderId: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+
+  /internal/checkout/release:
+    post:
+      security: [ { OIDCServer: [] } ]
+      tags: [Internal]
+      summary: Release reservation (payment timeout/failure)
+      requestBody: { content: { application/json: { schema: { type: object, required: [orderId], properties: { orderId: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+
+  /internal/promotions/apply:
+    post:
+      security: [ { OIDCServer: [] } ]
+      tags: [Internal]
+      summary: Atomically apply promotion usage & limits
+      requestBody: { content: { application/json: { schema: { type: object, required: [promotionId, uid], properties: { promotionId: { type: string }, uid: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+
+  /internal/maintenance/cleanup-reservations:
+    post:
+      security: [ { OIDCServer: [] } ]
+      tags: [Internal]
+      summary: Expire & release stale stock reservations
+      responses: { '200': { description: OK } }
+
+components:
+  parameters:
+    TemplateId: { name: templateId, in: path, required: true, schema: { type: string } }
+    FontId:     { name: fontId,     in: path, required: true, schema: { type: string } }
+    MaterialId: { name: materialId, in: path, required: true, schema: { type: string } }
+    ProductId:  { name: productId,  in: path, required: true, schema: { type: string } }
+    DesignId:   { name: designId,   in: path, required: true, schema: { type: string } }
+    AddressId:  { name: addressId,  in: path, required: true, schema: { type: string } }
+    OrderId:    { name: orderId,    in: path, required: true, schema: { type: string } }
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  securitySchemes:
+    FirebaseAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Firebase ID Token (end-user or staff with custom claims)
+    WebhookHMAC:
+      type: apiKey
+      in: header
+      name: X-Signature
+      description: HMAC signature for webhook verification (e.g., Stripe-Signature)
+    OIDCServer:
+      type: openIdConnect
+      openIdConnectUrl: https://accounts.google.com/.well-known/openid-configuration
+      description: Server-to-server (Cloud Scheduler / Cloud Run to Cloud Run)
+
+  schemas:
+    # Enums / primitives
+    Shape: { type: string, enum: [round, square] }
+    OrderStatus: { type: string, enum: [pending, paid, in_production, shipped, delivered, cancelled, refunded] }
+    GuideCategory: { type: string, enum: [culture, howto, policy, faq, news, other] }
+    AssetKind: { type: string, enum: [svg, png, jpg, webp, gltf, pdf, zip, mp4, mp3, json, other] }
+    AssetPurpose:
+      type: string
+      enum: [design-master, preview, 3d-model, certificate, social-mock, guide-image, page-hero, shipment-label, production-photo, receipt, other]
+
+    Error:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object }
+
+    # Users
+    User:
+      type: object
+      additionalProperties: false
+      required: [persona, preferredLang, isActive, piiMasked, createdAt, updatedAt]
+      properties:
+        displayName: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        avatarUrl: { type: [string, 'null'], format: uri }
+        persona: { type: string, enum: [foreigner, japanese] }
+        preferredLang: { type: string, enum: [ja, en] }
+        country: { type: string }
+        marketingOptIn: { type: boolean }
+        role: { type: string, enum: [user, staff, admin] }
+        isActive: { type: boolean }
+        deletedAt: { type: ['string','null'], format: date-time }
+        piiMasked: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    UserUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        displayName: { type: string }
+        preferredLang: { type: string, enum: [ja, en] }
+        country: { type: string }
+        marketingOptIn: { type: boolean }
+
+    Address:
+      type: object
+      required: [recipient, line1, city, postalCode, country]
+      additionalProperties: false
+      properties:
+        label: { type: string }
+        recipient: { type: string }
+        company: { type: string }
+        line1: { type: string }
+        line2: { type: string }
+        city: { type: string }
+        state: { type: string }
+        postalCode: { type: string }
+        country: { type: string }
+        phone: { type: string }
+        isDefault: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PaymentMethod:
+      type: object
+      required: [provider, methodType, providerRef]
+      additionalProperties: false
+      properties:
+        provider: { type: string, enum: [stripe, paypal, other] }
+        methodType: { type: string, enum: [card, wallet, bank, other] }
+        brand: { type: string }
+        last4: { type: string, pattern: '^\d{4}$' }
+        expMonth: { type: integer, minimum: 1, maximum: 12 }
+        expYear: { type: integer, minimum: 2000 }
+        fingerprint: { type: string }
+        billingName: { type: string }
+        providerRef: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Favorite:
+      type: object
+      required: [designRef, addedAt]
+      properties:
+        designRef: { type: string }
+        note: { type: string }
+        tags: { type: array, items: { type: string } }
+        addedAt: { type: string, format: date-time }
+
+    # Designs
+    Design:
+      type: object
+      additionalProperties: false
+      required: [ownerRef, status, shape, size, style, version, createdAt, updatedAt]
+      properties:
+        ownerRef: { type: string }
+        status: { type: string, enum: [draft, ready, ordered, locked] }
+        input:
+          type: object
+          required: [sourceType, rawName]
+          properties:
+            sourceType: { type: string, enum: [typed, uploaded, logo] }
+            rawName: { type: string }
+            kanji:
+              type: object
+              properties:
+                value: { type: string }
+                mappingRef: { type: string }
+        shape: { $ref: '#/components/schemas/Shape' }
+        size: { type: object, required: [mm], properties: { mm: { type: number } } }
+        style:
+          type: object
+          required: [writing]
+          properties:
+            writing: { type: string, enum: [tensho, reisho, kaisho, gyosho, koentai, custom] }
+            fontRef: { type: string }
+            templateRef: { type: string }
+            stroke: { type: object, properties: { weight: { type: number }, contrast: { type: number } } }
+            layout: { type: object, properties: { grid: { type: string }, margin: { type: number } } }
+        ai:
+          type: object
+          properties:
+            enabled: { type: boolean }
+            lastJobRef: { type: ['string','null'] }
+            qualityScore: { type: number, minimum: 0, maximum: 1 }
+            registrable: { type: boolean }
+            diagnostics: { type: array, items: { type: string } }
+        assets:
+          type: object
+          properties:
+            vectorSvg: { type: string }
+            previewPng: { type: string }
+            previewPngUrl: { type: string, format: uri }
+            stampMockUrl: { type: string, format: uri }
+        hash: { type: string }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        lastOrderedAt: { type: ['string','null'], format: date-time }
+
+    DesignVersion:
+      type: object
+      required: [version, snapshot, createdAt, createdBy]
+      properties:
+        version: { type: integer, minimum: 1 }
+        snapshot: { $ref: '#/components/schemas/Design' }
+        changeNote: { type: string }
+        createdAt: { type: string, format: date-time }
+        createdBy: { type: string }
+
+    AISuggestion:
+      type: object
+      additionalProperties: false
+      required: [jobRef, designRef, baseVersion, baseHash, score, preview, status, createdAt, createdBy]
+      properties:
+        jobRef: { type: string }
+        designRef: { type: string }
+        method: { type: string, enum: [balance, generateCandidates, vectorizeUpload, registrabilityCheck, custom] }
+        model: { type: string }
+        baseVersion: { type: integer, minimum: 1 }
+        baseHash: { type: string }
+        score: { type: number, minimum: 0, maximum: 1 }
+        scores:
+          type: object
+          properties:
+            balance: { type: number }
+            legibility: { type: number }
+            traditionMatch: { type: number }
+            styleMatch: { type: number }
+        diagnostics:
+          type: array
+          items: { type: object, required: [code], properties: { code: { type: string }, severity: { type: string, enum: [info, warn, error] }, detail: { type: string } } }
+        registrability: { type: ['boolean','null'] }
+        tags: { type: array, items: { type: string } }
+        delta:
+          type: object
+          properties:
+            absolute: { type: object, additionalProperties: true }
+            relative: { type: object, additionalProperties: { type: number } }
+            jsonPatch:
+              type: array
+              items: { type: object, required: [op, path], properties: { op: { type: string }, path: { type: string }, from: { type: string }, value: {} } }
+        preview:
+          type: object
+          required: [previewUrl]
+          properties:
+            previewUrl: { type: string, format: uri }
+            diffUrl: { type: string, format: uri }
+            assetRef: { type: string }
+            svgUrl: { type: string, format: uri }
+        status: { type: string, enum: [proposed, accepted, rejected, applied, expired] }
+        acceptedAt: { type: ['string','null'], format: date-time }
+        acceptedBy: { type: ['string','null'] }
+        rejectionReason: { type: ['string','null'] }
+        result:
+          type: object
+          properties:
+            appliesToHash: { type: string }
+            resultHash: { type: string }
+            newVersion: { type: integer }
+        notes: { type: string }
+        createdAt: { type: string, format: date-time }
+        createdBy: { type: string }
+        updatedAt: { type: string, format: date-time }
+        expiresAt: { type: ['string','null'], format: date-time }
+
+    # Catalog
+    Template:
+      type: object
+      required: [name, shape, writing, constraints, isPublic, sort, createdAt, updatedAt]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        tags: { type: array, items: { type: string } }
+        shape: { $ref: '#/components/schemas/Shape' }
+        writing: { type: string, enum: [tensho, reisho, kaisho, gyosho, koentai, custom] }
+        defaults:
+          type: object
+          properties:
+            sizeMm: { type: number, minimum: 6, maximum: 30 }
+            layout: { type: object, properties: { grid: { type: string }, margin: { type: number }, autoKern: { type: boolean }, centerBias: { type: number } } }
+            stroke: { type: object, properties: { weight: { type: number }, contrast: { type: number } } }
+            fontRef: { type: string }
+        constraints:
+          type: object
+          required: [sizeMm, strokeWeight]
+          properties:
+            sizeMm: { type: object, required: [min, max], properties: { min: { type: number }, max: { type: number }, step: { type: number } } }
+            strokeWeight: { type: object, required: [min, max], properties: { min: { type: number }, max: { type: number } } }
+            margin: { type: object, properties: { min: { type: number }, max: { type: number } } }
+            glyph:
+              type: object
+              properties:
+                maxChars: { type: integer }
+                allowRepeat: { type: boolean }
+                allowedScripts: { type: array, items: { type: string, enum: [kanji, kana, latin, digits, punct] } }
+                prohibitedChars: { type: array, items: { type: string } }
+            registrability: { type: object, properties: { jpJitsuinAllowed: { type: boolean }, bankInAllowed: { type: boolean }, notes: { type: string } } }
+        previewUrl: { type: string, format: uri }
+        exampleImages: { type: array, items: { type: string, format: uri } }
+        recommendations:
+          type: object
+          properties:
+            defaultSizeMm: { type: number }
+            materials: { type: array, items: { type: string } }
+            products: { type: array, items: { type: string } }
+        isPublic: { type: boolean }
+        sort: { type: integer }
+        version: { type: string }
+        isDeprecated: { type: boolean }
+        replacedBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Font:
+      type: object
+      required: [family, writing, license, isPublic, createdAt]
+      properties:
+        family: { type: string }
+        subfamily: { type: string }
+        vendor: { type: string }
+        version: { type: string }
+        writing: { type: string, enum: [tensho, reisho, kaisho, gyosho, koentai, custom] }
+        designClass: { type: string, enum: [serif, sans, brush, seal, engraved, other] }
+        license:
+          type: object
+          required: [type]
+          properties:
+            type: { type: string, enum: [commercial, open, custom] }
+            uri: { type: string, format: uri }
+            text: { type: string }
+            restrictions: { type: array, items: { type: string } }
+            embeddable: { type: boolean }
+            exportPermission: { type: string, enum: [none, render_png, export_svg, full] }
+        glyphCoverage: { type: array, items: { type: string } }
+        unicodeRanges: { type: array, items: { type: object, required: [start, end], properties: { start: { type: string }, end: { type: string }, label: { type: string } } } }
+        metrics:
+          type: object
+          properties:
+            unitsPerEm: { type: integer }
+            ascent: { type: number }
+            descent: { type: number }
+            capHeight: { type: number }
+            xHeight: { type: number }
+            weightRange: { type: object, properties: { min: { type: integer }, max: { type: integer } } }
+        opentype: { type: object, properties: { features: { type: array, items: { type: string } } } }
+        files: { type: object, properties: { otf: { type: string }, ttf: { type: string }, woff2: { type: string } } }
+        previewUrl: { type: string, format: uri }
+        sampleText: { type: string }
+        isPublic: { type: boolean }
+        sort: { type: integer }
+        isDeprecated: { type: boolean }
+        replacedBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Material:
+      type: object
+      required: [name, type, isActive, createdAt]
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [horn, wood, titanium, acrylic] }
+        finish: { type: string, enum: [matte, gloss, hairline] }
+        color: { type: string }
+        hardness: { type: number }
+        density: { type: number }
+        careNotes: { type: string }
+        sustainability: { type: object, properties: { certifications: { type: array, items: { type: string } }, notes: { type: string } } }
+        photos: { type: array, items: { type: string, format: uri } }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Product:
+      type: object
+      required: [sku, materialRef, shape, size, basePrice, stockPolicy, isActive, createdAt]
+      properties:
+        sku: { type: string }
+        materialRef: { type: string }
+        shape: { $ref: '#/components/schemas/Shape' }
+        size: { type: object, required: [mm], properties: { mm: { type: number } } }
+        engraveDepthMm: { type: number }
+        basePrice: { type: object, required: [amount, currency], properties: { amount: { type: integer }, currency: { type: string } } }
+        salePrice: { type: object, properties: { amount: { type: integer }, currency: { type: string }, startsAt: { type: string, format: date-time }, endsAt: { type: string, format: date-time }, active: { type: boolean } } }
+        stockPolicy: { type: string, enum: [madeToOrder, inventory] }
+        stockQuantity: { type: integer, minimum: 0 }
+        stockSafety: { type: integer, minimum: 0 }
+        photos: { type: array, items: { type: string, format: uri } }
+        shipping: { type: object, properties: { weightGr: { type: integer }, boxSize: { type: string } } }
+        attributes: { type: object, additionalProperties: true }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    # Cart
+    CartHeader:
+      type: object
+      required: [currency, itemsCount, createdAt, updatedAt]
+      properties:
+        currency: { type: string }
+        promo: { type: object, properties: { code: { type: string }, promotionRef: { type: string }, discountAmount: { type: integer } } }
+        estimates: { $ref: '#/components/schemas/Estimate' }
+        itemsCount: { type: integer, minimum: 0 }
+        checkout: { type: object, properties: { provider: { type: string, enum: [stripe, paypal] }, sessionId: { type: string }, status: { type: string, enum: [idle, pending, confirmed, failed, expired] }, lastAttemptAt: { type: string, format: date-time } } }
+        lock: { type: object, properties: { locked: { type: boolean }, by: { type: string }, at: { type: string, format: date-time } } }
+        notes: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CartHeaderPatch:
+      type: object
+      properties:
+        currency: { type: string }
+        promoCode: { type: string }
+    CartItem:
+      type: object
+      required: [designRef, productRef, qty, unitPrice, snapshot, createdAt]
+      properties:
+        designRef: { type: string }
+        productRef: { type: string }
+        qty: { type: integer, minimum: 1 }
+        unitPrice: { type: object, required: [amount, currency], properties: { amount: { type: integer }, currency: { type: string } } }
+        addons: { type: array, items: { type: object, required: [type, name, price], properties: { type: { type: string }, name: { type: string }, price: { type: object, required: [amount, currency], properties: { amount: { type: integer }, currency: { type: string } } } } } }
+        snapshot: { type: object, required: [designHash, designSizeMm, shape], properties: { designHash: { type: string }, designSizeMm: { type: number }, shape: { $ref: '#/components/schemas/Shape' } } }
+        notes: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Estimate:
+      type: object
+      properties:
+        currency: { type: string }
+        subtotal: { type: integer, minimum: 0 }
+        discount: { type: integer, minimum: 0 }
+        tax: { type: integer, minimum: 0 }
+        shipping: { type: integer, minimum: 0 }
+        total: { type: integer, minimum: 0 }
+
+    # Orders
+    Order:
+      type: object
+      required: [userRef, status, currency, amounts, items, shipping, createdAt]
+      properties:
+        userRef: { type: string }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        currency: { type: string }
+        amounts: { type: object, required: [subtotal, tax, shipping, total], properties: { subtotal: { type: integer }, discount: { type: integer }, tax: { type: integer }, shipping: { type: integer }, total: { type: integer } } }
+        items:
+          type: array
+          items:
+            type: object
+            required: [lineId, productRef, sku, qty, unitPrice, designSnapshot]
+            properties:
+              lineId: { type: string }
+              productRef: { type: string }
+              sku: { type: string }
+              qty: { type: integer }
+              unitPrice: { type: integer }
+              addons: { type: array, items: { type: object, properties: { type: { type: string }, name: { type: string }, price: { type: integer } } } }
+              designSnapshot:
+                type: object
+                required: [designId, hash, svg, shape, sizeMm, writing]
+                properties:
+                  designId: { type: string }
+                  hash: { type: string }
+                  svg: { type: string }
+                  preview: { type: string, format: uri }
+                  shape: { $ref: '#/components/schemas/Shape' }
+                  sizeMm: { type: number }
+                  writing: { type: string }
+                  templateId: { type: string }
+        shipping:
+          type: object
+          required: [address, method, requestedAt]
+          properties:
+            address: { $ref: '#/components/schemas/Address' }
+            method: { type: string, enum: [intl, domestic] }
+            requestedAt: { type: string, format: date-time }
+            tracking: { type: ['object','null'] }
+        billingAddress: { $ref: '#/components/schemas/Address' }
+        invoice: { type: object, properties: { receiptRequested: { type: boolean }, receiptIssued: { type: boolean }, receiptUrl: { type: ['string','null'], format: uri }, invoiceNumber: { type: ['string','null'] }, issuedAt: { type: ['string','null'], format: date-time } } }
+        production: { type: object, properties: { queueRef: { type: ['string','null'] }, priority: { type: string, enum: [normal, rush] }, notes: { type: string } } }
+        promotionRef: { type: ['string','null'] }
+        cancellation: { type: object, properties: { isCancelled: { type: boolean }, reason: { type: string }, note: { type: string }, at: { type: ['string','null'], format: date-time } } }
+        refund: { type: object, properties: { isRefunded: { type: boolean }, reason: { type: string }, note: { type: string }, amount: { type: integer }, at: { type: ['string','null'], format: date-time } } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        placedAt: { type: ['string','null'], format: date-time }
+        paidAt: { type: ['string','null'], format: date-time }
+
+    Payment:
+      type: object
+      required: [provider, status, amount, currency, createdAt]
+      properties:
+        provider: { type: string, enum: [stripe, paypal, other] }
+        status: { type: string, enum: [requires_action, authorized, succeeded, failed, refunded, partially_refunded, canceled] }
+        intentId: { type: string }
+        chargeId: { type: string }
+        amount: { type: integer }
+        currency: { type: string }
+        capture: { type: object, properties: { captured: { type: boolean }, capturedAt: { type: ['string','null'], format: date-time } } }
+        method: { type: object, properties: { type: { type: string }, brand: { type: string }, last4: { type: string }, expMonth: { type: integer }, expYear: { type: integer } } }
+        billingAddress: { $ref: '#/components/schemas/Address' }
+        error: { type: object, properties: { code: { type: string }, message: { type: string } } }
+        raw: { type: object, additionalProperties: true }
+        idempotencyKey: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        settledAt: { type: ['string','null'], format: date-time }
+        refundedAt: { type: ['string','null'], format: date-time }
+
+    Shipment:
+      type: object
+      required: [carrier, status, createdAt]
+      properties:
+        carrier: { type: string, enum: [JPPOST, YAMATO, SAGAWA, DHL, UPS, FEDEX, OTHER] }
+        service: { type: string }
+        trackingNumber: { type: string }
+        status: { type: string, enum: [label_created, in_transit, out_for_delivery, delivered, exception, cancelled] }
+        eta: { type: ['string','null'], format: date-time }
+        labelUrl: { type: ['string','null'], format: uri }
+        documents: { type: array, items: { type: string, format: uri } }
+        events:
+          type: array
+          items:
+            type: object
+            required: [ts, code]
+            properties:
+              ts: { type: string, format: date-time }
+              code: { type: string, enum: [label_created, picked_up, in_transit, arrived_hub, customs_clearance, out_for_delivery, delivered, exception, return_to_sender] }
+              location: { type: string }
+              note: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ProductionEvent:
+      type: object
+      required: [type, createdAt]
+      properties:
+        type: { type: string, enum: [queued, engraving, polishing, qc, packed, on_hold, rework, canceled] }
+        station: { type: string }
+        operatorRef: { type: string }
+        durationSec: { type: integer, minimum: 0 }
+        note: { type: string }
+        photoUrl: { type: ['string','null'], format: uri }
+        qc: { type: object, properties: { result: { type: string, enum: [pass, fail] }, defects: { type: array, items: { type: string } } } }
+        createdAt: { type: string, format: date-time }
+
+    # Content
+    Guide:
+      type: object
+      required: [slug, category, isPublic, createdAt, updatedAt]
+      properties:
+        slug: { type: string }
+        category: { $ref: '#/components/schemas/GuideCategory' }
+        tags: { type: array, items: { type: string } }
+        heroImageUrl: { type: ['string','null'], format: uri }
+        readingTimeMinutes: { type: integer }
+        author: { type: object, properties: { name: { type: string }, profileUrl: { type: string, format: uri } } }
+        sources: { type: array, items: { type: string, format: uri } }
+        translations: { type: object, additionalProperties: false, patternProperties: { "^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$": { type: object, required: [title, body], properties: { title: { type: string }, summary: { type: string }, body: { type: string }, seo: { type: object, properties: { metaTitle: { type: string }, metaDescription: { type: string }, ogImage: { type: string, format: uri } } } } } } }
+        isPublic: { type: boolean }
+        publishAt: { type: ['string','null'], format: date-time }
+        version: { type: string }
+        isDeprecated: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Page:
+      type: object
+      required: [slug, type, isPublic, createdAt, updatedAt]
+      properties:
+        slug: { type: string }
+        type: { type: string, enum: [landing, legal, help, faq, pricing, system, other] }
+        tags: { type: array, items: { type: string } }
+        translations:
+          type: object
+          additionalProperties: false
+          patternProperties:
+            "^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$":
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                body: { type: string }
+                blocks:
+                  type: array
+                  items: { type: object, required: [type, data], properties: { type: { type: string, enum: [hero, section, columns, cta, faq, gallery, feature-list, raw-html, custom] }, data: { type: object, additionalProperties: true } } }
+                seo: { type: object, properties: { metaTitle: { type: string }, metaDescription: { type: string }, ogImage: { type: string, format: uri } } }
+        navOrder: { type: integer }
+        isPublic: { type: boolean }
+        publishAt: { type: ['string','null'], format: date-time }
+        version: { type: string }
+        isDeprecated: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PageTemplate:
+      type: object
+      properties: { items: { type: array, items: { $ref: '#/components/schemas/Template' } }, nextPageToken: { type: string } }
+    PageFont:
+      type: object
+      properties: { items: { type: array, items: { $ref: '#/components/schemas/Font' } }, nextPageToken: { type: string } }
+    PageMaterial:
+      type: object
+      properties: { items: { type: array, items: { $ref: '#/components/schemas/Material' } }, nextPageToken: { type: string } }
+    PageProduct:
+      type: object
+      properties: { items: { type: array, items: { $ref: '#/components/schemas/Product' } }, nextPageToken: { type: string } }
+    PageDesign:
+      type: object
+      properties: { items: { type: array, items: { $ref: '#/components/schemas/Design' } }, nextPageToken: { type: string } }
+    PageOrder:
+      type: object
+      properties: { items: { type: array, items: { $ref: '#/components/schemas/Order' } }, nextPageToken: { type: string } }
+
+    # Promotions & Reviews
+    Promotion:
+      type: object
+      required: [code, kind, value, isActive, startsAt, endsAt, usageLimit, usageCount, limitPerUser, createdAt]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        kind: { type: string, enum: [percent, fixed] }
+        value: { type: number }
+        currency: { type: ['string','null'] }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        isActive: { type: boolean }
+        stacking: { type: object, properties: { combinable: { type: boolean }, withSalePrice: { type: boolean }, maxStack: { type: integer } } }
+        conditions:
+          type: object
+          properties:
+            minSubtotal: { type: integer }
+            countryIn: { type: array, items: { type: string } }
+            currencyIn: { type: array, items: { type: string } }
+            shapeIn: { type: array, items: { $ref: '#/components/schemas/Shape' } }
+            sizeMmBetween: { type: object, properties: { min: { type: number }, max: { type: number } } }
+            productRefsIn: { type: array, items: { type: string } }
+            materialRefsIn: { type: array, items: { type: string } }
+            newCustomerOnly: { type: boolean }
+        usageLimit: { type: integer }
+        usageCount: { type: integer }
+        limitPerUser: { type: integer, minimum: 1 }
+        notes: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PromotionUsage:
+      type: object
+      required: [uid, times, lastUsedAt]
+      properties:
+        uid: { type: string }
+        times: { type: integer }
+        lastUsedAt: { type: string, format: date-time }
+        firstUsedAt: { type: ['string','null'], format: date-time }
+        orderRefs: { type: array, items: { type: string } }
+        blocked: { type: boolean }
+        notes: { type: string }
+
+    Review:
+      type: object
+      required: [orderRef, userRef, rating, isPublic, createdAt]
+      properties:
+        orderRef: { type: string }
+        userRef: { type: string }
+        title: { type: string }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string }
+        photos: { type: array, items: { type: string, format: uri } }
+        isPublic: { type: boolean }
+        moderation: { type: string, enum: [approved, rejected, pending] }
+        storeReply: { type: object, properties: { body: { type: string }, createdAt: { type: string, format: date-time }, createdBy: { type: string }, isPublic: { type: boolean } } }
+        flags: { type: array, items: { type: string } }
+        helpful: { type: object, properties: { yes: { type: integer }, no: { type: integer } } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    # Assets
+    Asset:
+      type: object
+      required: [kind, purpose, storagePath, hash, createdAt]
+      properties:
+        ownerRef: { type: ['string','null'] }
+        kind: { $ref: '#/components/schemas/AssetKind' }
+        mimeType: { type: string }
+        purpose: { $ref: '#/components/schemas/AssetPurpose' }
+        storagePath: { type: string }
+        publicUrl: { type: ['string','null'], format: uri }
+        signedUrl: { type: ['string','null'], format: uri }
+        hash: { type: string }
+        sizeBytes: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+        durationSec: { type: number }
+        expiresAt: { type: ['string','null'], format: date-time }
+        tags: { type: array, items: { type: string } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    # Internal helpers
+    ProductionQueue:
+      type: object
+      required: [name, active, createdAt]
+      properties:
+        name: { type: string }
+        active: { type: boolean }
+        timezone: { type: string }
+        capacity: { type: integer }
+        stages: { type: array, items: { type: string, enum: [queued, engraving, polishing, qc, packed, on_hold, rework, done] } }
+        routing: { type: object, properties: { autoAssign: { type: boolean }, priorityDefault: { type: string, enum: [normal, rush] }, sizeConstraints: { type: object, properties: { minMm: { type: number }, maxMm: { type: number } } } } }
+        wip: { type: object, properties: { total: { type: integer }, byStage: { type: object, additionalProperties: { type: integer } } } }
+        notes: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AuditLog:
+      type: object
+      required: [actor, action, targetRef, createdAt]
+      properties:
+        actor: { type: string }
+        action: { type: string }
+        targetRef: { type: string }
+        requestId: { type: string }
+        ipHash: { type: string }
+        severity: { type: string, enum: [info, warn, error] }
+        diff: { type: object, additionalProperties: true }
+        meta: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+
+    Counter:
+      type: object
+      required: [name, value, step, format, createdAt, updatedAt]
+      properties:
+        name: { type: string }
+        scope: { type: object, additionalProperties: true }
+        value: { type: integer, minimum: 0 }
+        step: { type: integer, minimum: 1 }
+        format:
+          type: object
+          required: [padding]
+          properties:
+            prefix: { type: string }
+            dateFormat: { type: ['string','null'] }
+            separator: { type: string }
+            padding: { type: integer, minimum: 0 }
+            suffix: { type: string }
+        resetPolicy: { type: string, enum: [never, daily, monthly, yearly] }
+        lastIssued: { type: object, properties: { number: { type: string }, raw: { type: integer }, at: { type: string, format: date-time } } }
+        lock: { type: object, properties: { held: { type: boolean }, by: { type: string }, until: { type: string, format: date-time } } }
+        notes: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    StockReservation:
+      type: object
+      required: [orderRef, userRef, status, lines, expiresAt, createdAt]
+      properties:
+        orderRef: { type: string }
+        userRef: { type: string }
+        status: { type: string, enum: [reserved, released, expired, committed, failed] }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [productRef, sku, qty]
+            properties:
+              productRef: { type: string }
+              sku: { type: string }
+              qty: { type: integer, minimum: 1 }
+        idempotencyKey: { type: string }
+        reason: { type: string, enum: [checkout, manual, exchange, other] }
+        expiresAt: { type: string, format: date-time }
+        releasedAt: { type: ['string','null'], format: date-time }
+        committedAt: { type: ['string','null'], format: date-time }
+        notes: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    NameMapping:
+      type: object
+      properties:
+        input: { type: object, properties: { latin: { type: string }, locale: { type: string } } }
+        candidates: { type: array, items: { type: object, properties: { kanji: { type: string }, meanings: { type: array, items: { type: string } }, score: { type: number } } } }
+        selected: { type: string }
+        ownerRef: { type: string }
+        createdAt: { type: string, format: date-time }

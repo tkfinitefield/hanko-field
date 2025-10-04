@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "users.address.schema.json",
+  "title": "User Address",
+  "description": "ユーザーの住所帳。配送先・請求先の候補として再利用します。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recipient",
+    "line1",
+    "city",
+    "postalCode",
+    "country",
+    "createdAt"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "description": "住所のラベル（例: Home, Office）。"
+    },
+    "recipient": {
+      "type": "string",
+      "description": "受取人の氏名。領収書・伝票に印字。"
+    },
+    "company": {
+      "type": "string",
+      "description": "会社名（任意）。B2Bや職場宛の配送に使用。"
+    },
+    "line1": {
+      "type": "string",
+      "description": "番地・丁目・建物名などの主行。"
+    },
+    "line2": {
+      "type": "string",
+      "description": "部屋番号・建物の追加情報などの副行。"
+    },
+    "city": {
+      "type": "string",
+      "description": "市区町村。"
+    },
+    "state": {
+      "type": "string",
+      "description": "都道府県・州。"
+    },
+    "postalCode": {
+      "type": "string",
+      "description": "郵便番号（ハイフン可）。"
+    },
+    "country": {
+      "type": "string",
+      "description": "国（ISOコード推奨）。送料・税率に利用。"
+    },
+    "phone": {
+      "type": "string",
+      "description": "配送連絡用電話番号（任意）。"
+    },
+    "isDefault": {
+      "type": "boolean",
+      "description": "住所帳の既定選択かどうか。"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "作成日時。"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "更新日時。"
+    }
+  }
+}

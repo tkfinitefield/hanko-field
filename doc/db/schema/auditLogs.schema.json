@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "auditLogs.schema.json",
+  "title": "Audit Log",
+  "description": "監査ログ。だれが・いつ・何に対して・どのような変更を行ったかを記録する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["actor", "action", "targetRef", "createdAt"],
+  "properties": {
+    "actor": {
+      "type": "string",
+      "description": "実行主体。/users/{uid} 参照または 'system'。",
+      "pattern": "^/users/[^/]+$|^system$"
+    },
+    "action": {
+      "type": "string",
+      "description": "実行アクションの種別。",
+      "enum": [
+        "ORDER_CREATE",
+        "ORDER_STATUS_UPDATE",
+        "ORDER_CANCEL",
+        "ORDER_REFUND",
+        "PAYMENT_UPDATE",
+        "SHIPMENT_UPDATE",
+        "PRODUCTION_EVENT",
+        "DESIGN_UPDATE",
+        "PROMOTION_UPDATE",
+        "REVIEW_MODERATE",
+        "REF_DATA_EDIT",
+        "AI_JOB_RUN",
+        "USER_MASK",
+        "OTHER"
+      ]
+    },
+    "targetRef": {
+      "type": "string",
+      "description": "対象ドキュメントの参照パス（例: /orders/{id}）。"
+    },
+    "requestId": {
+      "type": "string",
+      "description": "冪等性/相関ID（FunctionsやAPIゲートウェイが付与、任意）。"
+    },
+    "ipHash": {
+      "type": "string",
+      "description": "IPアドレスのハッシュ（PII回避のためハッシュ化、任意）。"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["info", "warn", "error"],
+      "description": "重要度。"
+    },
+    "diff": {
+      "type": "object",
+      "description": "変更差分（before/after、または簡易パッチ）。取りうるキーは対象によって可変。",
+      "additionalProperties": true
+    },
+    "meta": {
+      "type": "object",
+      "description": "補足メタデータ（キャリア名、理由コード等）。",
+      "additionalProperties": true
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ログ作成時刻（イベント時刻）。"
+    }
+  }
+}
+

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "designs.version.schema.json",
+  "title": "Design Version",
+  "description": "デザインの版履歴。特定時点の完全スナップショットを保持し、差分比較やロールバックを可能にする。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "snapshot", "createdAt", "createdBy"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "この版の番号（design.version と同期）。"
+    },
+    "snapshot": {
+      "$ref": "designs.schema.json#",
+      "description": "保存時点の Design 完全スナップショット。"
+    },
+    "changeNote": {
+      "type": "string",
+      "description": "変更メモ（例: AI balance + kerning fix）。"
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "createdBy": {
+      "type": "string",
+      "pattern": "^/users/[^/]+$|^system$",
+      "description": "作成主体（ユーザー/システム）。"
+    }
+  }
+}

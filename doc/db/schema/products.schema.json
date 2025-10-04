@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "products.schema.json",
+  "title": "Product (SKU)",
+  "description": "販売SKU。素材×形状×サイズの組合せと価格・在庫・配送属性を保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sku",
+    "materialRef",
+    "shape",
+    "size",
+    "basePrice",
+    "stockPolicy",
+    "isActive",
+    "createdAt"
+  ],
+  "properties": {
+    "sku": {
+      "type": "string",
+      "description": "一意なSKUコード（例: BWB-R15）。"
+    },
+    "materialRef": {
+      "type": "string",
+      "pattern": "^/materials/[^/]+$",
+      "description": "素材ドキュメントへの参照。"
+    },
+    "shape": {
+      "type": "string",
+      "enum": ["round", "square"],
+      "description": "印面形状。"
+    },
+    "size": {
+      "type": "object",
+      "description": "サイズ属性（mm）。",
+      "additionalProperties": false,
+      "required": ["mm"],
+      "properties": {
+        "mm": { "type": "number", "description": "直径/一辺（mm）。" }
+      }
+    },
+    "engraveDepthMm": {
+      "type": "number",
+      "description": "既定の彫刻深さ（mm、任意）。"
+    },
+    "basePrice": {
+      "type": "object",
+      "description": "通常価格。",
+      "additionalProperties": false,
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": { "type": "integer", "minimum": 0, "description": "税抜/税込のどちらかは運用で統一する。" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$", "description": "ISO通貨コード（例: JPY）。" }
+      }
+    },
+    "salePrice": {
+      "type": "object",
+      "description": "SKU個別の期間限定セール価格（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "amount": { "type": "integer", "minimum": 0 },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "startsAt": { "type": "string", "format": "date-time" },
+        "endsAt": { "type": "string", "format": "date-time" },
+        "active": { "type": "boolean" }
+      }
+    },
+    "stockPolicy": {
+      "type": "string",
+      "enum": ["madeToOrder", "inventory"],
+      "description": "受注生産 or 在庫販売。"
+    },
+    "stockQuantity": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "現在在庫数（inventoryのみ利用）。"
+    },
+    "stockSafety": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "安全在庫しきい値（在庫警告用）。"
+    },
+    "photos": {
+      "type": "array",
+      "description": "商品画像URL（署名URL可）。",
+      "items": { "type": "string", "format": "uri" }
+    },
+    "shipping": {
+      "type": "object",
+      "description": "配送属性。",
+      "additionalProperties": false,
+      "properties": {
+        "weightGr": { "type": "integer", "minimum": 0, "description": "重量（g）。" },
+        "boxSize": { "type": "string", "description": "梱包サイズコード（例: S/M/L）。" }
+      }
+    },
+    "attributes": {
+      "type": "object",
+      "description": "追加属性（任意／将来拡張）。例: 角丸, 刻印方向。",
+      "additionalProperties": true
+    },
+    "isActive": {
+      "type": "boolean",
+      "description": "販売可否。false は検索/一覧から除外。"
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}
+

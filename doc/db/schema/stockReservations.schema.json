@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stockReservations.schema.json",
+  "title": "Stock Reservation",
+  "description": "決済確定までの在庫仮押さえ。SKU ごとの予約数量と期限、状態、相関IDを保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["orderRef", "userRef", "status", "lines", "expiresAt", "createdAt"],
+  "properties": {
+    "orderRef": {
+      "type": "string",
+      "pattern": "^/orders/[^/]+$",
+      "description": "対応する注文（見込み）への参照。通常は予約作成タイミングで先に orderId を採番。"
+    },
+    "userRef": {
+      "type": "string",
+      "pattern": "^/users/[^/]+$",
+      "description": "予約発行ユーザー参照。"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["reserved", "released", "expired", "committed", "failed"],
+      "description": "予約の現在状態。reserved=有効、committed=注文確定、released/expired/failed=無効。"
+    },
+    "lines": {
+      "type": "array",
+      "description": "SKU ごとの予約明細。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["productRef", "sku", "qty"],
+        "properties": {
+          "productRef": {
+            "type": "string",
+            "pattern": "^/products/[^/]+$",
+            "description": "SKU ドキュメント参照。"
+          },
+          "sku": {
+            "type": "string",
+            "description": "SKU コード（冗長保持）。"
+          },
+          "qty": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "予約数量。"
+          }
+        }
+      }
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "description": "重複予約を避けるためのキー（PSP セッションIDや自前の UUID）。"
+    },
+    "reason": {
+      "type": "string",
+      "enum": ["checkout", "manual", "exchange", "other"],
+      "description": "予約理由（任意）。"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "予約有効期限（TTL クリーンアップ対象）。"
+    },
+    "releasedAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "予約解放時刻（任意）。"
+    },
+    "committedAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "注文確定（在庫確定）時刻（任意）。"
+    },
+    "notes": { "type": "string", "description": "運用メモ（任意）。" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}
+

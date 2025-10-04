@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fonts.schema.json",
+  "title": "Font",
+  "description": "書体/フォント定義。使用ライセンス、対応文字種、メトリクス、プレビュー等を保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "family",
+    "writing",
+    "license",
+    "isPublic",
+    "createdAt"
+  ],
+  "properties": {
+    "family": {
+      "type": "string",
+      "description": "ファミリー名。例: Ryumin Tensho"
+    },
+    "subfamily": {
+      "type": "string",
+      "description": "サブファミリー/スタイル。例: Regular, Bold, Light"
+    },
+    "vendor": {
+      "type": "string",
+      "description": "フォントベンダ/鋳造所名。"
+    },
+    "version": {
+      "type": "string",
+      "description": "フォントファイルのバージョン表記。"
+    },
+
+    "writing": {
+      "type": "string",
+      "enum": ["tensho", "reisho", "kaisho", "gyosho", "koentai", "custom"],
+      "description": "このフォントが主に想定する書体分類。"
+    },
+    "designClass": {
+      "type": "string",
+      "enum": ["serif", "sans", "brush", "seal", "engraved", "other"],
+      "description": "デザイン系統（任意、UIのフィルタ用）。"
+    },
+
+    "license": {
+      "type": "object",
+      "description": "利用ライセンス情報（法務/エクスポート制御に使用）。",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["commercial", "open", "custom"],
+          "description": "商用/OSS/個別契約などの区分。"
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri",
+          "description": "ライセンス文書の参照URL（任意）。"
+        },
+        "text": {
+          "type": "string",
+          "description": "主要条件の抜粋テキスト（任意）。"
+        },
+        "restrictions": {
+          "type": "array",
+          "description": "代表的な制限（例: SVGエクスポート不可、商標利用不可）。",
+          "items": { "type": "string" }
+        },
+        "embeddable": {
+          "type": "boolean",
+          "description": "アプリ内埋め込み可否。"
+        },
+        "exportPermission": {
+          "type": "string",
+          "enum": ["none", "render_png", "export_svg", "full"],
+          "description": "デジタル出力の許可範囲。"
+        }
+      }
+    },
+
+    "glyphCoverage": {
+      "type": "array",
+      "description": "対応グリフの範囲記述。例: [\"A-Z\",\"a-z\",\"0-9\",\"常用漢字\",\"ひらがな\",\"カタカナ\"]",
+      "items": { "type": "string" }
+    },
+    "unicodeRanges": {
+      "type": "array",
+      "description": "Unicode ブロック/範囲の宣言（より厳密に管理したい場合）。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["start", "end"],
+        "properties": {
+          "start": { "type": "string", "description": "U+XXXX 形式。" },
+          "end": { "type": "string", "description": "U+XXXX 形式。" },
+          "label": { "type": "string", "description": "人間可読のラベル（任意）。" }
+        }
+      }
+    },
+
+    "metrics": {
+      "type": "object",
+      "description": "レンダリング調整用のメトリクス（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "unitsPerEm": { "type": "integer", "description": "EM 単位。" },
+        "ascent": { "type": "number", "description": "上昇量。" },
+        "descent": { "type": "number", "description": "下降量（負値可）。" },
+        "capHeight": { "type": "number", "description": "大文字高さ（任意）。" },
+        "xHeight": { "type": "number", "description": "x-height（任意）。" },
+        "weightRange": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min": { "type": "integer" },
+            "max": { "type": "integer" }
+          },
+          "description": "フォントの提供ウェイト範囲（100..900）。"
+        }
+      }
+    },
+
+    "opentype": {
+      "type": "object",
+      "description": "OT機能フラグ群（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "features": {
+          "type": "array",
+          "description": "有効な OT 機能タグ。例: [\"liga\",\"tnum\",\"kern\"]",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "files": {
+      "type": "object",
+      "description": "フォントファイル参照（Storage など、社内管理用途）。",
+      "additionalProperties": false,
+      "properties": {
+        "otf": { "type": "string", "description": "gs:// などのパス（任意）。" },
+        "ttf": { "type": "string", "description": "gs:// などのパス（任意）。" },
+        "woff2": { "type": "string", "description": "gs:// などのパス（任意）。" }
+      }
+    },
+
+    "previewUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "プレビュー画像URL。"
+    },
+    "sampleText": {
+      "type": "string",
+      "description": "プレビュー文言の既定値（任意）。"
+    },
+
+    "isPublic": {
+      "type": "boolean",
+      "description": "一般公開可否。false は管理/実験用。"
+    },
+    "sort": {
+      "type": "integer",
+      "description": "表示順制御用の昇順ソートキー（任意）。"
+    },
+    "isDeprecated": {
+      "type": "boolean",
+      "description": "非推奨フラグ。"
+    },
+    "replacedBy": {
+      "type": "string",
+      "pattern": "^/fonts/[^/]+$",
+      "description": "後継フォント参照（任意）。"
+    },
+
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}

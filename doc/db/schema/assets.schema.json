@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "assets.schema.json",
+  "title": "Asset",
+  "description": "Storage 等に格納されたファイルのメタデータ。権限や期限、派生URL、ハッシュなどを管理する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "purpose", "storagePath", "hash", "createdAt"],
+  "properties": {
+    "ownerRef": {
+      "type": ["string", "null"],
+      "pattern": "^/users/[^/]+$",
+      "description": "所有者（ユーザー生成物の場合）。システム資産は null 可。"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["svg", "png", "jpg", "webp", "gltf", "pdf", "zip", "mp4", "mp3", "json", "other"],
+      "description": "アセットの種類（概略フォーマット）。"
+    },
+    "mimeType": {
+      "type": "string",
+      "description": "正確な MIME タイプ（例: image/png, application/pdf）。"
+    },
+    "purpose": {
+      "type": "string",
+      "enum": [
+        "design-master",
+        "preview",
+        "3d-model",
+        "certificate",
+        "social-mock",
+        "guide-image",
+        "page-hero",
+        "shipment-label",
+        "production-photo",
+        "receipt",
+        "other"
+      ],
+      "description": "用途カテゴリ。UI/権限/寿命の方針に利用。"
+    },
+    "storagePath": {
+      "type": "string",
+      "description": "gs:// などのストレージ実体パス。"
+    },
+    "publicUrl": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "公開URL（公開可能な資産のみ）。"
+    },
+    "signedUrl": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "期限付きアクセスURL（Functions で発行）。"
+    },
+    "hash": {
+      "type": "string",
+      "description": "内容ハッシュ（例: sha256-…）。同一性/キャッシュ制御に利用。"
+    },
+    "sizeBytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "ファイルサイズ（バイト）。"
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "画像/動画の幅（px、該当時）。"
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "画像/動画の高さ（px、該当時）。"
+    },
+    "durationSec": {
+      "type": "number",
+      "minimum": 0,
+      "description": "音声/動画の長さ（秒、該当時）。"
+    },
+    "expiresAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "署名URLや一時資産の有効期限。恒久なら null。"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "検索/分類用タグ。"
+    },
+    "createdAt": { "type": "string", "format": "date-time", "description": "作成時刻。" },
+    "updatedAt": { "type": "string", "format": "date-time", "description": "更新時刻。" }
+  }
+}
+

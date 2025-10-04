@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "promotions.schema.json",
+  "title": "Promotion / Coupon",
+  "description": "クーポン/プロモーションの定義。割引方式、適用条件、公開・期間、利用制限を保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "code",
+    "kind",
+    "value",
+    "isActive",
+    "startsAt",
+    "endsAt",
+    "usageLimit",
+    "usageCount",
+    "limitPerUser",
+    "createdAt"
+  ],
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "クーポンコード（大文字推奨、ユニーク）。例: SAKURA10"
+    },
+    "name": {
+      "type": "string",
+      "description": "管理画面表示用の名称（任意）。"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["percent", "fixed"],
+      "description": "割引方式。percent=％割引、fixed=定額割引。"
+    },
+    "value": {
+      "type": "number",
+      "description": "割引値。percentなら0–100、fixedなら最小通貨単位の金額。"
+    },
+    "currency": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Z]{3}$",
+      "description": "fixed の通貨。percent の場合は null 可。"
+    },
+
+    "startsAt": { "type": "string", "format": "date-time", "description": "有効開始日時。" },
+    "endsAt":   { "type": "string", "format": "date-time", "description": "有効終了日時。" },
+    "isActive": { "type": "boolean", "description": "管理上の有効/無効スイッチ（期間とは独立）。" },
+
+    "stacking": {
+      "type": "object",
+      "description": "他プロモやセールとの併用ルール（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "combinable": { "type": "boolean", "description": "他クーポンと併用可否。" },
+        "withSalePrice": { "type": "boolean", "description": "SKUのセール価格と併用可否。" },
+        "maxStack": { "type": "integer", "minimum": 1, "description": "同時適用の最大数（任意）。" }
+      }
+    },
+
+    "conditions": {
+      "type": "object",
+      "description": "適用条件（全てANDで評価。配列型はORとして扱うと実装しやすい）。",
+      "additionalProperties": false,
+      "properties": {
+        "minSubtotal": { "type": "integer", "minimum": 0, "description": "小計の下限（最小通貨単位）。" },
+        "countryIn": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "配送先国コードのホワイトリスト（ISO推奨）。"
+        },
+        "currencyIn": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Z]{3}$" },
+          "description": "適用可能通貨。"
+        },
+        "shapeIn": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["round", "square"] },
+          "description": "対象形状のフィルタ。"
+        },
+        "sizeMmBetween": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min": { "type": "number" },
+            "max": { "type": "number" }
+          },
+          "description": "対象サイズ範囲（mm）。"
+        },
+        "productRefsIn": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^/products/[^/]+$" },
+          "description": "対象SKUの限定（任意）。"
+        },
+        "materialRefsIn": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^/materials/[^/]+$" },
+          "description": "対象素材の限定（任意）。"
+        },
+        "newCustomerOnly": { "type": "boolean", "description": "初回購入限定か。" }
+      }
+    },
+
+    "usageLimit":  { "type": "integer", "minimum": 0, "description": "クーポン全体の利用上限。0は無制限扱いでもよい。" },
+    "usageCount":  { "type": "integer", "minimum": 0, "description": "現在の利用回数（Functionsでインクリメント）。" },
+    "limitPerUser":{ "type": "integer", "minimum": 1, "description": "ユーザー1人あたりの利用上限。" },
+
+    "notes":      { "type": "string", "description": "内部メモ（任意）。" },
+    "createdAt":  { "type": "string", "format": "date-time" },
+    "updatedAt":  { "type": "string", "format": "date-time" }
+  }
+}
+

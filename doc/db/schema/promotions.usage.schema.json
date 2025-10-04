@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "promotions.usage.schema.json",
+  "title": "Promotion Usage (Per User)",
+  "description": "ユーザーごとのプロモ利用実績。limitPerUserの制御や不正利用検知、履歴追跡に用いる。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["uid", "times", "lastUsedAt"],
+  "properties": {
+    "uid": {
+      "type": "string",
+      "pattern": "^/users/[^/]+$",
+      "description": "対象ユーザーの DocumentReference パス。"
+    },
+    "times": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "このユーザーが当プロモを使用した延べ回数。"
+    },
+    "lastUsedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "直近の適用日時。"
+    },
+    "firstUsedAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "初回適用日時（任意）。"
+    },
+    "orderRefs": {
+      "type": "array",
+      "description": "当プロモを適用した注文の参照リスト（任意）。",
+      "items": { "type": "string", "pattern": "^/orders/[^/]+$" }
+    },
+    "blocked": {
+      "type": "boolean",
+      "description": "不正疑い等で当ユーザーへの適用をブロックするフラグ（任意）。"
+    },
+    "notes": {
+      "type": "string",
+      "description": "内部メモ（任意）。"
+    }
+  }
+}
+

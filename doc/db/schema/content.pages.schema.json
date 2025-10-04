@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "content.pages.schema.json",
+  "title": "Content Page",
+  "description": "固定ページ（法務/ヘルプ/LP 等）。多言語、ブロック構成、SEO、公開制御を保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slug", "type", "isPublic", "createdAt", "updatedAt"],
+  "properties": {
+    "slug": {
+      "type": "string",
+      "description": "URL 等で使う一意スラッグ。例: privacy-policy, pricing"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["landing", "legal", "help", "faq", "pricing", "system", "other"],
+      "description": "ページ種別。"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "分類/検索用タグ（任意）。"
+    },
+
+    "translations": {
+      "type": "object",
+      "description": "言語別のページ内容。キーは BCP-47 言語タグ（例: ja, en）。",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title"],
+          "properties": {
+            "title": { "type": "string", "description": "ページタイトル。" },
+            "body": { "type": "string", "description": "本文（Markdown/HTML、任意: ブロック未使用時）。" },
+            "blocks": {
+              "type": "array",
+              "description": "構造化ブロック（任意）。",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["type", "data"],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["hero", "section", "columns", "cta", "faq", "gallery", "feature-list", "raw-html", "custom"],
+                    "description": "ブロックタイプ。"
+                  },
+                  "data": {
+                    "type": "object",
+                    "description": "ブロック固有データ（自由形式）。",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            },
+            "seo": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "SEO メタ（任意）。",
+              "properties": {
+                "metaTitle": { "type": "string" },
+                "metaDescription": { "type": "string" },
+                "ogImage": { "type": "string", "format": "uri" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "navOrder": {
+      "type": "integer",
+      "description": "ナビ表示順のキー（任意、昇順で並ぶ）。"
+    },
+    "isPublic": { "type": "boolean", "description": "公開可否。false は下書き/非公開。" },
+    "publishAt": { "type": ["string", "null"], "format": "date-time", "description": "予約公開日時（任意）。" },
+    "version": { "type": "string", "description": "ページ版。例: v1.1.0（任意）。" },
+    "isDeprecated": { "type": "boolean", "description": "非推奨/置換予定フラグ（任意）。" },
+
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}
+

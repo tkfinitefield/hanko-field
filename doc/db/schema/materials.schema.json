@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "materials.schema.json",
+  "title": "Material",
+  "description": "印鑑素材のマスタ。硬度や仕上げ、写真、取扱い注意などを保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "type", "isActive", "createdAt"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "素材名（例: Black Water Buffalo, 柘植, Titanium）。"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["horn", "wood", "titanium", "acrylic"],
+      "description": "素材の種類。"
+    },
+    "finish": {
+      "type": "string",
+      "enum": ["matte", "gloss", "hairline"],
+      "description": "表面仕上げ。"
+    },
+    "color": {
+      "type": "string",
+      "description": "表示用カラー（CSSカラーや#RRGGBB）。"
+    },
+    "hardness": {
+      "type": "number",
+      "description": "硬度の相対指標（任意）。"
+    },
+    "density": {
+      "type": "number",
+      "description": "密度（g/cm³ など、任意）。"
+    },
+    "careNotes": {
+      "type": "string",
+      "description": "取り扱い上の注意・手入れ方法。"
+    },
+    "sustainability": {
+      "type": "object",
+      "description": "サステナビリティ情報（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "certifications": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "認証や由来情報（任意）。"
+        },
+        "notes": { "type": "string", "description": "補足メモ（任意）。" }
+      }
+    },
+    "photos": {
+      "type": "array",
+      "description": "画像URL（署名URL可）。",
+      "items": { "type": "string", "format": "uri" }
+    },
+    "isActive": {
+      "type": "boolean",
+      "description": "販売・表示対象か。false は非表示。"
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}

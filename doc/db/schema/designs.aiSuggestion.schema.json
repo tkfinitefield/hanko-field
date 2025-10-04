@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "designs.aiSuggestion.schema.json",
+  "title": "AI Suggestion for Design",
+  "description": "AI が生成したデザイン改善提案。差分適用のための delta とプレビューを持ち、採否・適用状態を追跡する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "jobRef",
+    "designRef",
+    "baseVersion",
+    "baseHash",
+    "score",
+    "preview",
+    "status",
+    "createdAt",
+    "createdBy"
+  ],
+  "properties": {
+    "jobRef": {
+      "type": "string",
+      "pattern": "^/aiJobs/[^/]+$",
+      "description": "生成元の AI ジョブ参照。"
+    },
+    "designRef": {
+      "type": "string",
+      "pattern": "^/designs/[^/]+$",
+      "description": "対象デザイン参照（親と一致が望ましい）。"
+    },
+    "method": {
+      "type": "string",
+      "enum": ["balance", "generateCandidates", "vectorizeUpload", "registrabilityCheck", "custom"],
+      "description": "生成手法の種別。"
+    },
+    "model": {
+      "type": "string",
+      "description": "使用モデル/バージョン（例: glyph-balancer@2025-09）。"
+    },
+    "baseVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "提案の基点となった design.version。"
+    },
+    "baseHash": {
+      "type": "string",
+      "description": "基点の design.hash（競合防止に使用）。"
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "提案品質の総合スコア。"
+    },
+    "scores": {
+      "type": "object",
+      "description": "サブスコア群（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "balance": { "type": "number", "minimum": 0, "maximum": 1 },
+        "legibility": { "type": "number", "minimum": 0, "maximum": 1 },
+        "traditionMatch": { "type": "number", "minimum": 0, "maximum": 1 },
+        "styleMatch": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "description": "提案の根拠・注意点などの診断。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code"],
+        "properties": {
+          "code": { "type": "string" },
+          "severity": { "type": "string", "enum": ["info", "warn", "error"] },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "registrability": {
+      "type": ["boolean", "null"],
+      "description": "実印/銀行印の規格適合推定（不明は null）。"
+    },
+    "tags": {
+      "type": "array",
+      "description": "特徴タグ（例: modern, traditional, high-contrast）。",
+      "items": { "type": "string" }
+    },
+    "delta": {
+      "type": "object",
+      "description": "デザインへ適用する差分セット。",
+      "additionalProperties": false,
+      "properties": {
+        "absolute": {
+          "type": "object",
+          "description": "絶対値で置換するパス→値（例: style.stroke.weight=0.95）。",
+          "additionalProperties": true
+        },
+        "relative": {
+          "type": "object",
+          "description": "数値パラメータへの相対加算（例: style.layout.margin += -0.02）。",
+          "additionalProperties": { "type": "number" }
+        },
+        "jsonPatch": {
+          "type": "array",
+          "description": "RFC6902 互換 JSON Patch。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["op", "path"],
+            "properties": {
+              "op": { "type": "string", "enum": ["add", "remove", "replace", "move", "copy", "test"] },
+              "path": { "type": "string" },
+              "from": { "type": "string" },
+              "value": {}
+            }
+          }
+        }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "description": "プレビュー資産（Storage 署名URL等）。",
+      "additionalProperties": false,
+      "required": ["previewUrl"],
+      "properties": {
+        "previewUrl": { "type": "string", "format": "uri" },
+        "diffUrl": { "type": "string", "format": "uri", "description": "Before/After 比較プレビュー（任意）。" },
+        "assetRef": { "type": "string", "pattern": "^/assets/[^/]+$", "description": "メタ情報への参照（任意）。" },
+        "svgUrl": { "type": "string", "format": "uri", "description": "SVG 候補（可能なら）。" }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "accepted", "rejected", "applied", "expired"],
+      "description": "提案のライフサイクル状態。"
+    },
+    "acceptedAt": { "type": ["string", "null"], "format": "date-time" },
+    "acceptedBy": {
+      "type": ["string", "null"],
+      "pattern": "^/users/[^/]+$",
+      "description": "採用したユーザー/スタッフ。"
+    },
+    "rejectionReason": {
+      "type": ["string", "null"],
+      "enum": ["not_needed", "worse_quality", "user_preference", "invalid", "other"],
+      "description": "却下理由（任意）。"
+    },
+    "result": {
+      "type": "object",
+      "description": "適用後の成果（Functions が記入）。",
+      "additionalProperties": false,
+      "properties": {
+        "appliesToHash": { "type": "string", "description": "適用前の期待ハッシュ（再掲）。" },
+        "resultHash": { "type": "string", "description": "適用後の design.hash。" },
+        "newVersion": { "type": "integer", "minimum": 1, "description": "適用後の版番号。" }
+      }
+    },
+    "notes": { "type": "string", "description": "人手メモ（任意）。" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "createdBy": {
+      "type": "string",
+      "pattern": "^/users/[^/]+$|^system$",
+      "description": "作成主体（system 許可）。"
+    },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": ["string", "null"], "format": "date-time", "description": "有効期限（任意）。" }
+  }
+}

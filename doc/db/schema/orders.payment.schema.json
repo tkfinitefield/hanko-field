@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orders.payment.schema.json",
+  "title": "Order Payment",
+  "description": "注文に紐づく決済記録。PSP(例: Stripe/PayPal)のイベントを正規化して保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["provider", "status", "amount", "currency", "createdAt"],
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": ["stripe", "paypal", "other"],
+      "description": "決済プロバイダ名。"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["requires_action", "authorized", "succeeded", "failed", "refunded", "partially_refunded", "canceled"],
+      "description": "決済状態。"
+    },
+    "intentId": {
+      "type": "string",
+      "description": "PSPのIntent/Order ID（例: Stripe PaymentIntent）。"
+    },
+    "chargeId": {
+      "type": "string",
+      "description": "PSPの最終チャージ/キャプチャID（任意）。"
+    },
+    "amount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "この決済レコードに紐付く金額（最小通貨単位）。"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO通貨コード。注文通貨と一致させる。"
+    },
+    "capture": {
+      "type": "object",
+      "description": "オーソリ→キャプチャ運用時の情報（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "captured": { "type": "boolean" },
+        "capturedAt": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "method": {
+      "type": "object",
+      "description": "支払手段スナップショット（PCI情報は保持しない）。",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["card", "wallet", "bank", "other"] },
+        "brand": { "type": "string", "description": "例: visa, mastercard" },
+        "last4": { "type": "string", "pattern": "^\\d{4}$" },
+        "expMonth": { "type": "integer", "minimum": 1, "maximum": 12 },
+        "expYear": { "type": "integer", "minimum": 2000 }
+      }
+    },
+    "billingAddress": {
+      "type": "object",
+      "description": "PSP側に渡した請求先のスナップショット（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "recipient": { "type": "string" },
+        "line1": { "type": "string" },
+        "line2": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "postalCode": { "type": "string" },
+        "country": { "type": "string" }
+      }
+    },
+    "error": {
+      "type": "object",
+      "description": "失敗時の情報（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "raw": {
+      "type": "object",
+      "description": "PSP Webhook ペイロードの必要最小限サマリ（個人情報を含めない）。",
+      "additionalProperties": true
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "description": "重複作成防止のキー（任意）。"
+    },
+    "createdAt": { "type": "string", "format": "date-time", "description": "作成時刻。" },
+    "updatedAt": { "type": "string", "format": "date-time", "description": "更新時刻。" },
+    "settledAt": { "type": ["string", "null"], "format": "date-time", "description": "入金確定時刻（任意）。" },
+    "refundedAt": { "type": ["string", "null"], "format": "date-time", "description": "返金確定時刻（任意）。" }
+  }
+}
+

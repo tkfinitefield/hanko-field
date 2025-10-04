@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "users.schema.json",
+  "title": "User",
+  "description": "アプリのユーザー基本情報。論理削除に対応し、PIIマスキングの有無を保持します。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "persona",
+    "preferredLang",
+    "isActive",
+    "piiMasked",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "displayName": {
+      "type": "string",
+      "description": "表示名。ユーザーがプロフィールに表示される名前。"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "連絡用メールアドレス。PIIマスキング対象。"
+    },
+    "phone": {
+      "type": "string",
+      "description": "電話番号（国番号含む推奨）。PIIマスキング対象。"
+    },
+    "avatarUrl": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "プロフィール画像のURL。ない場合は null。"
+    },
+    "persona": {
+      "type": "string",
+      "enum": ["foreigner", "japanese"],
+      "description": "初期の利用モード（日本が好きな外国人 / 日本人）。UIの既定値切替に利用。"
+    },
+    "preferredLang": {
+      "type": "string",
+      "enum": ["ja", "en"],
+      "description": "アプリ表示の既定言語。"
+    },
+    "country": {
+      "type": "string",
+      "description": "居住国（ISOコード推奨）。送料見積や税計算に使用。"
+    },
+    "onboarding": {
+      "type": "object",
+      "description": "オンボーディング進行状況のフラグ類（柔軟に拡張）。",
+      "additionalProperties": true
+    },
+    "marketingOptIn": {
+      "type": "boolean",
+      "description": "プロモーション配信への同意。"
+    },
+    "role": {
+      "type": "string",
+      "enum": ["user", "staff", "admin"],
+      "description": "ロール。Security Rules の custom claims と整合させること。"
+    },
+    "isActive": {
+      "type": "boolean",
+      "description": "アカウント有効フラグ。退会時は false。"
+    },
+    "deletedAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "論理削除日時。未削除なら null。"
+    },
+    "piiMasked": {
+      "type": "boolean",
+      "description": "PII（メール・電話・住所など）がマスク済みかどうか。"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "作成日時（serverTimestamp 推奨）。"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "更新日時（serverTimestamp 推奨）。"
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "productionQueues.schema.json",
+  "title": "Production Queue",
+  "description": "工房/ラインの生産キュー設定。工程ステージ、能力、優先度、稼働状態などを保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "active", "createdAt"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "キュー名（例: Default Workshop, Tokyo Line A）。"
+    },
+    "active": {
+      "type": "boolean",
+      "description": "稼働中かどうか。"
+    },
+    "timezone": {
+      "type": "string",
+      "description": "IANA タイムゾーン（例: Asia/Tokyo）。"
+    },
+    "capacity": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "1日あたりの理論処理能力（目安）。"
+    },
+    "stages": {
+      "type": "array",
+      "description": "工程ステージの順序定義（カンバン列）。",
+      "items": {
+        "type": "string",
+        "enum": ["queued", "engraving", "polishing", "qc", "packed", "on_hold", "rework", "done"]
+      }
+    },
+    "routing": {
+      "type": "object",
+      "description": "自動割当のルール（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "autoAssign": { "type": "boolean", "description": "paid → in_production 時に自動でこのキューを割当。"},
+        "priorityDefault": { "type": "string", "enum": ["normal", "rush"], "description": "既定の優先度。"},
+        "sizeConstraints": {
+          "type": "object",
+          "description": "取り扱い可能サイズ（任意）。",
+          "additionalProperties": false,
+          "properties": {
+            "minMm": { "type": "number" },
+            "maxMm": { "type": "number" }
+          }
+        }
+      }
+    },
+    "wip": {
+      "type": "object",
+      "description": "進行中（Work-In-Progress）の簡易統計（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "byStage": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 },
+          "description": "ステージ別件数。"
+        }
+      }
+    },
+    "notes": { "type": "string", "description": "運用メモ（任意）。" },
+    "createdAt": { "type": "string", "format": "date-time", "description": "作成日時。" },
+    "updatedAt": { "type": "string", "format": "date-time", "description": "更新日時。" }
+  }
+}
+

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "counters.schema.json",
+  "title": "Atomic Counter",
+  "description": "連番用の原始カウンタ。請求書番号や注文番号などの整形ルールと現在値を保持し、Functions のトランザクションでインクリメントする。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "value", "step", "format", "createdAt", "updatedAt"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "カウンタの論理名。例: invoice, order, shipment"
+    },
+    "scope": {
+      "type": "object",
+      "description": "スコープ（任意）。拠点や通貨ごと等に分割する場合に利用。",
+      "additionalProperties": false,
+      "properties": {
+        "site": { "type": "string", "description": "工房/拠点コード（任意）。" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$", "description": "通貨スコープ（任意）。" }
+      }
+    },
+    "value": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "現在の整数値。次発番時は value+step を返す（または返却後に書込）。"
+    },
+    "step": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "インクリメント幅。通常は 1。"
+    },
+    "format": {
+      "type": "object",
+      "description": "整形ルール。",
+      "additionalProperties": false,
+      "required": ["padding"],
+      "properties": {
+        "prefix": { "type": "string", "description": "固定接頭辞。例: INV-, ORD-" },
+        "dateFormat": {
+          "type": ["string", "null"],
+          "description": "日付フォーマット（任意）。例: YYYYMMDD, YYYYMM, YYYY"
+        },
+        "separator": {
+          "type": "string",
+          "description": "要素の区切り文字（任意）。例: '-', '/'"
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+            "description": "数値部のゼロ埋め桁数。例: 6 → 000123"
+        },
+        "suffix": { "type": "string", "description": "固定接尾辞（任意）。" }
+      }
+    },
+    "resetPolicy": {
+      "type": "string",
+      "enum": ["never", "daily", "monthly", "yearly"],
+      "description": "ロールオーバー方針。dateFormat と併用。"
+    },
+    "lastIssued": {
+      "type": "object",
+      "description": "直近発番の情報（監査/可視化用途）。",
+      "additionalProperties": false,
+      "properties": {
+        "number": { "type": "string", "description": "最後に交付した番号の文字列。" },
+        "raw": { "type": "integer", "description": "最後に交付した value（整数）。" },
+        "at": { "type": "string", "format": "date-time", "description": "発番時刻。" }
+      }
+    },
+    "lock": {
+      "type": "object",
+      "description": "高頻度発番時の衝突緩和用ロック（任意、短命）。",
+      "additionalProperties": false,
+      "properties": {
+        "held": { "type": "boolean" },
+        "by": { "type": "string", "description": "ロック保有主体（requestId など）。" },
+        "until": { "type": "string", "format": "date-time" }
+      }
+    },
+    "notes": { "type": "string", "description": "運用メモ（任意）。" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}
+

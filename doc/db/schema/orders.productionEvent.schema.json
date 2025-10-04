@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orders.productionEvent.schema.json",
+  "title": "Order Production Event",
+  "description": "制作工程のイベントログ。刻印→研磨→検品→梱包などの進捗、作業者、証跡画像を保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "createdAt"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["queued", "engraving", "polishing", "qc", "packed", "on_hold", "rework", "canceled"],
+      "description": "工程イベントの種別。"
+    },
+    "station": {
+      "type": "string",
+      "description": "作業ステーション名/ID（例: CNC-01, QC-02）。"
+    },
+    "operatorRef": {
+      "type": "string",
+      "pattern": "^/users/[^/]+$",
+      "description": "作業担当スタッフ参照（任意）。"
+    },
+    "durationSec": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "作業時間（秒、任意）。"
+    },
+    "note": {
+      "type": "string",
+      "description": "工程メモ（深彫り希望、再調整依頼など）。"
+    },
+    "photoUrl": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "工程写真の署名URL（任意）。"
+    },
+    "qc": {
+      "type": "object",
+      "description": "品質検査情報（QC工程で使用）。",
+      "additionalProperties": false,
+      "properties": {
+        "result": { "type": "string", "enum": ["pass", "fail"], "description": "検査結果。" },
+        "defects": {
+          "type": "array",
+          "description": "不良内容一覧（任意）。",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time", "description": "イベント作成時刻。" }
+  }
+}
+

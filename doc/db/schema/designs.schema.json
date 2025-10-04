@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "designs.schema.json",
+  "title": "Design",
+  "description": "印影デザイン本体。ユーザー入力・書体/レイアウト・AI評価・プレビュー資産・版管理を含む。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ownerRef",
+    "status",
+    "shape",
+    "size",
+    "style",
+    "version",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "ownerRef": {
+      "type": "string",
+      "pattern": "^/users/[^/]+$",
+      "description": "所有者ユーザーへの DocumentReference パス。"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "ready", "ordered", "locked"],
+      "description": "デザインの状態。"
+    },
+    "input": {
+      "type": "object",
+      "description": "ユーザー入力のソースと名前情報。",
+      "additionalProperties": false,
+      "required": ["sourceType", "rawName"],
+      "properties": {
+        "sourceType": {
+          "type": "string",
+          "enum": ["typed", "uploaded", "logo"],
+          "description": "入力ソース。"
+        },
+        "rawName": {
+          "type": "string",
+          "description": "元の入力名（ローマ字/日本語など）。"
+        },
+        "kanji": {
+          "type": "object",
+          "description": "外国人向けの漢字変換結果（任意）。",
+          "additionalProperties": false,
+          "properties": {
+            "value": { "type": "string", "description": "採用漢字。" },
+            "mappingRef": {
+              "type": "string",
+              "pattern": "^/nameMappings/[^/]+$",
+              "description": "漢字候補マッピングの参照。"
+            }
+          }
+        }
+      }
+    },
+    "shape": {
+      "type": "string",
+      "enum": ["round", "square"],
+      "description": "印面形状。"
+    },
+    "size": {
+      "type": "object",
+      "description": "印面サイズ（mm）。",
+      "additionalProperties": false,
+      "required": ["mm"],
+      "properties": {
+        "mm": { "type": "number", "minimum": 6, "maximum": 30 }
+      }
+    },
+    "style": {
+      "type": "object",
+      "description": "書体・テンプレート・ストローク/レイアウト設定。",
+      "additionalProperties": false,
+      "required": ["writing"],
+      "properties": {
+        "writing": {
+          "type": "string",
+          "enum": ["tensho", "reisho", "kaisho", "gyosho", "koentai", "custom"],
+          "description": "書体分類。"
+        },
+        "fontRef": {
+          "type": "string",
+          "pattern": "^/fonts/[^/]+$",
+          "description": "フォント定義への参照（任意）。"
+        },
+        "templateRef": {
+          "type": "string",
+          "pattern": "^/templates/[^/]+$",
+          "description": "テンプレート参照（任意）。"
+        },
+        "stroke": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "weight": { "type": "number", "description": "線の太さ（相対）。" },
+            "contrast": { "type": "number", "description": "コントラスト（相対）。" }
+          }
+        },
+        "layout": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "grid": { "type": "string", "description": "レイアウトグリッド（例: 3x3, free）。" },
+            "margin": { "type": "number", "description": "余白（相対）。" }
+          }
+        }
+      }
+    },
+    "ai": {
+      "type": "object",
+      "description": "AI 関連の評価・適合判定（任意）。",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "lastJobRef": {
+          "type": ["string", "null"],
+          "pattern": "^/aiJobs/[^/]+$",
+          "description": "直近のAIジョブ参照。"
+        },
+        "qualityScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "品質総合スコア。"
+        },
+        "registrable": {
+          "type": "boolean",
+          "description": "実印/銀行印の規格適合可否（推定）。"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "診断コード一覧。"
+        }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "description": "レンダリング資産（Storage など）。",
+      "additionalProperties": false,
+      "properties": {
+        "vectorSvg": { "type": "string", "description": "gs:// path 等。" },
+        "previewPng": { "type": "string", "description": "gs:// path 等。" },
+        "previewPngUrl": { "type": "string", "format": "uri", "description": "署名URLなど。" },
+        "stampMockUrl": { "type": "string", "format": "uri", "description": "朱肉モック画像URL。" }
+      }
+    },
+    "hash": {
+      "type": "string",
+      "description": "内容ハッシュ（整合性・再注文固定化）。"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "現在の版番号（versions 連動）。"
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "lastOrderedAt": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "users.favorites.schema.json",
+  "title": "User Favorite Design",
+  "description": "ユーザーがお気に入り登録したデザインへの参照。高速取得のためユーザー配下に保存します。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "designRef",
+    "addedAt"
+  ],
+  "properties": {
+    "designRef": {
+      "type": "string",
+      "pattern": "^/designs/[^/]+$",
+      "description": "対象デザインの DocumentReference パス。"
+    },
+    "note": {
+      "type": "string",
+      "description": "お気に入りメモ（任意）。"
+    },
+    "tags": {
+      "type": "array",
+      "description": "分類・検索用タグ（任意）。",
+      "items": { "type": "string" }
+    },
+    "addedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "お気に入り登録日時。"
+    }
+  }
+}
