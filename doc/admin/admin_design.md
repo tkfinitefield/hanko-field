@@ -1,22 +1,7 @@
-**Go + htmx**（SSR＋部分更新）前提で、管理画面（Admin Console）の**完全な画面一覧**を、
+# 管理画面
 
-* 画面URL（人が開くフルページ）
-* 部分描画用のフラグメントURL（`hx-get/hx-post`で差し替え）
-* 主アクション（並べ替え・フィルタ・一括操作）
-* ひも付くAPI（先にお渡しした OpenAPI v1 の該当エンドポイント）
-  まで紐づけて提示します。
-
-> UIフレームの原則（共通）
->
-> * レイアウト：`/admin/_layout.html`（サイドバー＋トップバー＋`<main id="content">`）
-> * 各一覧テーブルは **SSR**（初回）→ **htmxで tbody 差し替え**
-> * 検索・フィルタは `<form hx-get=".../table" hx-target="#table-body" hx-push-url="true">`
-> * モーダル：`<div id="modal" hx-target="this" class="hidden">` に `hx-get="/admin/.../modal/..."`
-> * CSRF：`<meta name="csrf-token">`＋`hx-headers='{"X-CSRF-Token":"{{.CSRF}}"}'`
-> * RBAC：`staff/admin` でサイドバー表示制御。
-> * i18n：テキストはテンプレート関数経由。
-
----
+管理画面は Go + htmx + templ + chi + TailwindCSS で開発します。
+Cloud Run で実行します。
 
 # 0. フレーム / 共通ユーティリティ
 
@@ -249,31 +234,6 @@
 | ガイド/ページ            | /admin/content/*/table              | POST/PUT/DELETE /admin/content/*                     |
 | 監査ログ               | /admin/audit-logs/table             | GET（内部実装 or Firestore読み）                             |
 | カウンタ               | /admin/system/counters/table        | POST /admin/counters/{name}:next                     |
-
----
-
-## ディレクトリ構成（例・Go `html/template`）
-
-```
-/web
-  /layouts/_base.html
-  /layouts/_modal.html
-  /partials/table_*.html
-  /admin
-    dashboard.html
-    orders_index.html
-    orders_show.html
-    orders_modal_status.html
-    shipments_tracking.html
-    production_board.html
-    catalog_{templates,fonts,materials,products}.html
-    content_{guides,pages}.html
-    promotions_index.html
-    reviews_index.html
-    customers_index.html
-    audit_logs.html
-    counters.html
-```
 
 ---
 

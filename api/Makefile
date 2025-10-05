@@ -12,7 +12,7 @@ GOVULNCHECK_VERSION := latest
 GOCOVMERGE_VERSION := latest
 
 TOOLS := \
-	golang.org/x/tools/cmd/gofumpt@$(GOFUMPT_VERSION) \
+	mvdan.cc/gofumpt@$(GOFUMPT_VERSION) \
 	github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) \
 	honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) \
 	golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) \

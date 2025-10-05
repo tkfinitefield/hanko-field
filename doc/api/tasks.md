@@ -12,7 +12,7 @@
 - [x] Configure CI/CD pipeline (lint, unit/integration tests, build, deploy) and set up environment promotion workflow.
 
 ## 2. Core Platform Services
-- [ ] Implement HTTP router under `/api/v1` with chi/echo and shared middleware stack.
+- [x] Implement HTTP router under `/api/v1` with chi/echo and shared middleware stack.
 - [ ] Implement Firebase ID token verification, role extraction, and authentication middleware for user/staff separation.
 - [ ] Implement OIDC/IAP token checker and HMAC signature validator for internal/server-to-server and webhook endpoints.
 - [ ] Implement Idempotency-Key middleware storing request fingerprint + result (Firestore or Redis) for POST/PUT/PATCH/DELETE.
