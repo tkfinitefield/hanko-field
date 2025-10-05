@@ -15,7 +15,7 @@
 - [x] Implement HTTP router under `/api/v1` with chi/echo and shared middleware stack.
 - [ ] Implement Firebase ID token verification, role extraction, and authentication middleware for user/staff separation.
 - [ ] Implement OIDC/IAP token checker and HMAC signature validator for internal/server-to-server and webhook endpoints.
-- [ ] Implement Idempotency-Key middleware storing request fingerprint + result (Firestore or Redis) for POST/PUT/PATCH/DELETE.
+- [x] Implement Idempotency-Key middleware storing request fingerprint + result (Firestore or Redis) for POST/PUT/PATCH/DELETE.
 - [ ] Implement structured logging, trace propagation (Cloud Trace), and panic/error handling middleware producing JSON error responses.
 - [ ] Provide request context helpers for pagination (pageSize/pageToken), sorting, and filter parsing.
 - [ ] Implement Firestore client factory, transaction helpers, and strongly typed repository abstractions.

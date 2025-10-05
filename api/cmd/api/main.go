@@ -3,31 +3,85 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
+
+	"cloud.google.com/go/firestore"
+	"google.golang.org/api/option"
 
 	"github.com/hanko-field/api/internal/handlers"
 	"github.com/hanko-field/api/internal/platform/auth"
 	"github.com/hanko-field/api/internal/platform/config"
+	"github.com/hanko-field/api/internal/platform/idempotency"
 )
 
 func main() {
-	cfg, err := config.Load(context.Background())
+	ctx := context.Background()
+	cfg, err := config.Load(ctx)
 	if err != nil {
 		log.Fatalf("failed to load configuration: %v", err)
 	}
 
 	logger := log.Default()
 
+	firestoreClient, err := newFirestoreClient(ctx, cfg)
+	if err != nil {
+		log.Fatalf("failed to initialise firestore client: %v", err)
+	}
+	defer func() {
+		if err := firestoreClient.Close(); err != nil {
+			logger.Printf("firestore: close error: %v", err)
+		}
+	}()
+
+	idempotencyStore := idempotency.NewFirestoreStore(firestoreClient)
+	idempotencyMiddleware := idempotency.Middleware(
+		idempotencyStore,
+		idempotency.WithHeader(cfg.Idempotency.Header),
+		idempotency.WithTTL(cfg.Idempotency.TTL),
+		idempotency.WithLogger(logger),
+	)
+
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+	var cleanupWG sync.WaitGroup
+	var cleanupTicker *time.Ticker
+	if cfg.Idempotency.CleanupInterval > 0 {
+		cleanupTicker = time.NewTicker(cfg.Idempotency.CleanupInterval)
+		cleanupWG.Add(1)
+		go func() {
+			defer cleanupWG.Done()
+			for {
+				select {
+				case <-cleanupTicker.C:
+					runCtx, cancel := context.WithTimeout(cleanupCtx, time.Minute)
+					removed, err := idempotencyStore.CleanupExpired(runCtx, time.Now().UTC(), cfg.Idempotency.CleanupBatchSize)
+					cancel()
+					if err != nil {
+						logger.Printf("idempotency cleanup error: %v", err)
+						continue
+					}
+					if removed > 0 {
+						logger.Printf("idempotency cleanup removed %d records", removed)
+					}
+				case <-cleanupCtx.Done():
+					return
+				}
+			}
+		}()
+	}
+
 	oidcMiddleware := buildOIDCMiddleware(logger, cfg)
 	hmacMiddleware := buildHMACMiddleware(logger, cfg)
 
 	var opts []handlers.Option
+	opts = append(opts, handlers.WithMiddlewares(idempotencyMiddleware))
 	if oidcMiddleware != nil {
 		opts = append(opts, handlers.WithInternalMiddlewares(oidcMiddleware))
 	}
@@ -57,9 +111,15 @@ func main() {
 	<-shutdown
 	log.Println("shutdown signal received; draining requests")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if cleanupTicker != nil {
+		cleanupTicker.Stop()
+	}
+	cleanupCancel()
+	cleanupWG.Wait()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("graceful shutdown failed: %v", err)
 	}
 }
@@ -163,4 +223,24 @@ func webhookSecretResolver(secrets map[string]string) func(*http.Request) (strin
 		}
 		return "", false
 	}
+}
+
+func newFirestoreClient(ctx context.Context, cfg config.Config) (*firestore.Client, error) {
+	projectID := strings.TrimSpace(cfg.Firestore.ProjectID)
+	if projectID == "" {
+		return nil, fmt.Errorf("firestore project id not configured")
+	}
+
+	if host := strings.TrimSpace(cfg.Firestore.EmulatorHost); host != "" {
+		if err := os.Setenv("FIRESTORE_EMULATOR_HOST", host); err != nil {
+			return nil, fmt.Errorf("failed to set FIRESTORE_EMULATOR_HOST: %w", err)
+		}
+	}
+
+	var opts []option.ClientOption
+	if credentials := strings.TrimSpace(cfg.Firebase.CredentialsFile); credentials != "" {
+		opts = append(opts, option.WithCredentialsFile(credentials))
+	}
+
+	return firestore.NewClient(ctx, projectID, opts...)
 }

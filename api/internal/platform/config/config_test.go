@@ -47,6 +47,18 @@ func TestLoadWithDefaults(t *testing.T) {
 	if cfg.Security.HMAC.SignatureHeader != defaultHMACSignatureHeader {
 		t.Errorf("expected default signature header, got %s", cfg.Security.HMAC.SignatureHeader)
 	}
+	if cfg.Idempotency.Header != defaultIdempotencyHeader {
+		t.Errorf("expected default idempotency header, got %s", cfg.Idempotency.Header)
+	}
+	if cfg.Idempotency.TTL != defaultIdempotencyTTL {
+		t.Errorf("unexpected default idempotency ttl: %s", cfg.Idempotency.TTL)
+	}
+	if cfg.Idempotency.CleanupInterval != defaultIdempotencyInterval {
+		t.Errorf("unexpected default cleanup interval: %s", cfg.Idempotency.CleanupInterval)
+	}
+	if cfg.Idempotency.CleanupBatchSize != defaultIdempotencyBatchSize {
+		t.Errorf("unexpected default cleanup batch size: %d", cfg.Idempotency.CleanupBatchSize)
+	}
 }
 
 func TestLoadWithOverridesAndSecrets(t *testing.T) {
@@ -81,6 +93,10 @@ func TestLoadWithOverridesAndSecrets(t *testing.T) {
 		"API_SECURITY_HMAC_HEADER_SIGNATURE": "X-Custom-Signature",
 		"API_SECURITY_HMAC_CLOCK_SKEW":       "3m",
 		"API_SECURITY_HMAC_NONCE_TTL":        "10m",
+		"API_IDEMPOTENCY_HEADER":             "X-Idem-Key",
+		"API_IDEMPOTENCY_TTL":                "48h",
+		"API_IDEMPOTENCY_CLEANUP_INTERVAL":   "30m",
+		"API_IDEMPOTENCY_CLEANUP_BATCH":      "500",
 	}
 
 	secrets := map[string]string{
@@ -148,6 +164,18 @@ func TestLoadWithOverridesAndSecrets(t *testing.T) {
 	}
 	if cfg.Security.HMAC.NonceTTL != 10*time.Minute {
 		t.Errorf("unexpected nonce ttl %s", cfg.Security.HMAC.NonceTTL)
+	}
+	if cfg.Idempotency.Header != "X-Idem-Key" {
+		t.Errorf("unexpected idempotency header %s", cfg.Idempotency.Header)
+	}
+	if cfg.Idempotency.TTL != 48*time.Hour {
+		t.Errorf("unexpected idempotency ttl %s", cfg.Idempotency.TTL)
+	}
+	if cfg.Idempotency.CleanupInterval != 30*time.Minute {
+		t.Errorf("unexpected cleanup interval %s", cfg.Idempotency.CleanupInterval)
+	}
+	if cfg.Idempotency.CleanupBatchSize != 500 {
+		t.Errorf("unexpected cleanup batch size %d", cfg.Idempotency.CleanupBatchSize)
 	}
 }
 

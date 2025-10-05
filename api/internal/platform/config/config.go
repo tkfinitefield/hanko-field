@@ -30,20 +30,25 @@ const (
 	defaultHMACNonceHeader       = "X-Signature-Nonce"
 	defaultHMACClockSkew         = 5 * time.Minute
 	defaultHMACNonceTTL          = 5 * time.Minute
+	defaultIdempotencyHeader     = "Idempotency-Key"
+	defaultIdempotencyTTL        = 24 * time.Hour
+	defaultIdempotencyInterval   = time.Hour
+	defaultIdempotencyBatchSize  = 200
 )
 
 // Config captures all runtime configuration organised by concern.
 type Config struct {
-	Server     ServerConfig
-	Firebase   FirebaseConfig
-	Firestore  FirestoreConfig
-	Storage    StorageConfig
-	PSP        PSPConfig
-	AI         AIConfig
-	Webhooks   WebhookConfig
-	RateLimits RateLimitConfig
-	Features   FeatureFlags
-	Security   SecurityConfig
+	Server      ServerConfig
+	Firebase    FirebaseConfig
+	Firestore   FirestoreConfig
+	Storage     StorageConfig
+	PSP         PSPConfig
+	AI          AIConfig
+	Webhooks    WebhookConfig
+	RateLimits  RateLimitConfig
+	Features    FeatureFlags
+	Security    SecurityConfig
+	Idempotency IdempotencyConfig
 }
 
 // ServerConfig configures HTTP server parameters.
@@ -129,6 +134,14 @@ type HMACConfig struct {
 	NonceHeader     string
 	ClockSkew       time.Duration
 	NonceTTL        time.Duration
+}
+
+// IdempotencyConfig controls idempotency middleware behaviour.
+type IdempotencyConfig struct {
+	Header           string
+	TTL              time.Duration
+	CleanupInterval  time.Duration
+	CleanupBatchSize int
 }
 
 // SecretResolver resolves references to external secrets (e.g. Secret Manager URIs).
@@ -315,6 +328,12 @@ func Load(ctx context.Context, opts ...Option) (Config, error) {
 				NonceTTL:        durationWithDefault(lookup, "API_SECURITY_HMAC_NONCE_TTL", defaultHMACNonceTTL),
 			},
 		},
+		Idempotency: IdempotencyConfig{
+			Header:           stringWithDefault(lookup, "API_IDEMPOTENCY_HEADER", defaultIdempotencyHeader),
+			TTL:              durationWithDefault(lookup, "API_IDEMPOTENCY_TTL", defaultIdempotencyTTL),
+			CleanupInterval:  durationWithDefault(lookup, "API_IDEMPOTENCY_CLEANUP_INTERVAL", defaultIdempotencyInterval),
+			CleanupBatchSize: intWithDefault(lookup, "API_IDEMPOTENCY_CLEANUP_BATCH", defaultIdempotencyBatchSize),
+		},
 	}
 
 	// Firestore project defaults to Firebase project when unspecified.
@@ -395,6 +414,18 @@ func validateConfig(cfg Config) error {
 	}
 	if cfg.Storage.AssetsBucket == "" {
 		missing = append(missing, "Storage.AssetsBucket")
+	}
+	if strings.TrimSpace(cfg.Idempotency.Header) == "" {
+		missing = append(missing, "Idempotency.Header")
+	}
+	if cfg.Idempotency.TTL <= 0 {
+		missing = append(missing, "Idempotency.TTL")
+	}
+	if cfg.Idempotency.CleanupInterval <= 0 {
+		missing = append(missing, "Idempotency.CleanupInterval")
+	}
+	if cfg.Idempotency.CleanupBatchSize <= 0 {
+		missing = append(missing, "Idempotency.CleanupBatchSize")
 	}
 
 	if len(missing) > 0 {
