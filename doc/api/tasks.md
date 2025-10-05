@@ -9,7 +9,7 @@
 - [ ] Initialize Go module for Cloud Run service, dependency tooling (gofumpt, staticcheck, vulncheck), and Makefile/Taskfile helpers.
 - [ ] Implement configuration loader (envvars + Secret Manager) and runtime configuration schema.
 - [ ] Provision infrastructure prerequisites (Cloud Run service, Firestore DB, Pub/Sub topics, Cloud Storage buckets, Cloud Scheduler jobs) in IaC or documented scripts.
-- [ ] Configure CI/CD pipeline (lint, unit/integration tests, build, deploy) and set up environment promotion workflow.
+- [x] Configure CI/CD pipeline (lint, unit/integration tests, build, deploy) and set up environment promotion workflow.
 
 ## 2. Core Platform Services
 - [ ] Implement HTTP router under `/api/v1` with chi/echo and shared middleware stack.

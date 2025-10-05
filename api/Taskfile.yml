@@ -10,6 +10,24 @@ tasks:
   fmt:
     cmds:
       - make fmt
+  fmt-check:
+    cmds:
+      - make fmt-check
+  test-integration:
+    cmds:
+      - make test-integration
+  test-ci:
+    cmds:
+      - make test-ci
+  cover:
+    cmds:
+      - make cover
+  docker-build:
+    cmds:
+      - make docker-build
+  docker-run:
+    cmds:
+      - make docker-run
   lint:
     cmds:
       - make lint
