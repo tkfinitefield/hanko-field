@@ -85,3 +85,23 @@ func TestNewRouter_NotFound(t *testing.T) {
 		t.Fatalf("expected route_not_found error, got %v", body["error"])
 	}
 }
+
+func TestNewRouter_GroupMiddleware(t *testing.T) {
+	webhookHeader := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Test-Middleware", "webhooks")
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	router := NewRouter(WithWebhookMiddlewares(webhookHeader))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/webhooks/sample", nil)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Header().Get("X-Test-Middleware") != "webhooks" {
+		t.Fatalf("expected webhook middleware to set header")
+	}
+}

@@ -21,6 +21,15 @@ const (
 	defaultRateLimitDefault      = 120
 	defaultRateLimitAuth         = 240
 	defaultRateLimitWebhookBurst = 60
+	defaultSecurityEnvironment   = "local"
+	defaultOIDCJWKSURL           = "https://www.googleapis.com/oauth2/v3/certs"
+	defaultSecurityIssuer        = "https://accounts.google.com"
+	defaultSecurityIAPIssuer     = "https://cloud.google.com/iap"
+	defaultHMACSignatureHeader   = "X-Signature"
+	defaultHMACTimestampHeader   = "X-Signature-Timestamp"
+	defaultHMACNonceHeader       = "X-Signature-Nonce"
+	defaultHMACClockSkew         = 5 * time.Minute
+	defaultHMACNonceTTL          = 5 * time.Minute
 )
 
 // Config captures all runtime configuration organised by concern.
@@ -34,6 +43,7 @@ type Config struct {
 	Webhooks   WebhookConfig
 	RateLimits RateLimitConfig
 	Features   FeatureFlags
+	Security   SecurityConfig
 }
 
 // ServerConfig configures HTTP server parameters.
@@ -94,6 +104,31 @@ type RateLimitConfig struct {
 type FeatureFlags struct {
 	EnableAISuggestions bool
 	EnablePromotions    bool
+}
+
+// SecurityConfig groups server-to-server authentication settings.
+type SecurityConfig struct {
+	Environment string
+	OIDC        OIDCConfig
+	HMAC        HMACConfig
+}
+
+// OIDCConfig controls Google-signed token verification.
+type OIDCConfig struct {
+	JWKSURL   string
+	Audience  string
+	Audiences map[string]string
+	Issuers   []string
+}
+
+// HMACConfig captures webhook signing expectations.
+type HMACConfig struct {
+	Secrets         map[string]string
+	SignatureHeader string
+	TimestampHeader string
+	NonceHeader     string
+	ClockSkew       time.Duration
+	NonceTTL        time.Duration
 }
 
 // SecretResolver resolves references to external secrets (e.g. Secret Manager URIs).
@@ -263,11 +298,47 @@ func Load(ctx context.Context, opts ...Option) (Config, error) {
 			EnableAISuggestions: boolWithDefault(lookup, "API_FEATURE_AISUGGESTIONS", false),
 			EnablePromotions:    boolWithDefault(lookup, "API_FEATURE_PROMOTIONS", true),
 		},
+		Security: SecurityConfig{
+			Environment: strings.ToLower(stringWithDefault(lookup, "API_SECURITY_ENVIRONMENT", defaultSecurityEnvironment)),
+			OIDC: OIDCConfig{
+				JWKSURL:   stringWithDefault(lookup, "API_SECURITY_OIDC_JWKS_URL", defaultOIDCJWKSURL),
+				Audience:  stringWithDefault(lookup, "API_SECURITY_OIDC_AUDIENCE", ""),
+				Audiences: mapWithDefault(lookup, "API_SECURITY_OIDC_AUDIENCES"),
+				Issuers:   csvWithDefault(lookup, "API_SECURITY_OIDC_ISSUERS"),
+			},
+			HMAC: HMACConfig{
+				Secrets:         mapWithDefault(lookup, "API_SECURITY_HMAC_SECRETS"),
+				SignatureHeader: stringWithDefault(lookup, "API_SECURITY_HMAC_HEADER_SIGNATURE", defaultHMACSignatureHeader),
+				TimestampHeader: stringWithDefault(lookup, "API_SECURITY_HMAC_HEADER_TIMESTAMP", defaultHMACTimestampHeader),
+				NonceHeader:     stringWithDefault(lookup, "API_SECURITY_HMAC_HEADER_NONCE", defaultHMACNonceHeader),
+				ClockSkew:       durationWithDefault(lookup, "API_SECURITY_HMAC_CLOCK_SKEW", defaultHMACClockSkew),
+				NonceTTL:        durationWithDefault(lookup, "API_SECURITY_HMAC_NONCE_TTL", defaultHMACNonceTTL),
+			},
+		},
 	}
 
 	// Firestore project defaults to Firebase project when unspecified.
 	if cfg.Firestore.ProjectID == "" {
 		cfg.Firestore.ProjectID = cfg.Firebase.ProjectID
+	}
+
+	if len(cfg.Security.OIDC.Issuers) == 0 {
+		cfg.Security.OIDC.Issuers = []string{defaultSecurityIssuer, defaultSecurityIAPIssuer}
+	}
+
+	envKey := strings.ToLower(cfg.Security.Environment)
+	if cfg.Security.OIDC.Audience == "" && cfg.Security.OIDC.Audiences != nil {
+		if audience, ok := cfg.Security.OIDC.Audiences[envKey]; ok {
+			cfg.Security.OIDC.Audience = audience
+		}
+	}
+
+	for key, value := range cfg.Security.HMAC.Secrets {
+		resolved, err := resolveSecret(ctx, value, options.secret)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.Security.HMAC.Secrets[key] = resolved
 	}
 
 	// Resolve secrets when values reference Secret Manager.
@@ -431,4 +502,30 @@ func csvWithDefault(lookup func(string) (string, bool), key string) []string {
 		}
 	}
 	return out
+}
+
+func mapWithDefault(lookup func(string) (string, bool), key string) map[string]string {
+	values := make(map[string]string)
+	raw, ok := lookup(key)
+	if !ok || strings.TrimSpace(raw) == "" {
+		return values
+	}
+	entries := strings.Split(raw, ",")
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		name := strings.ToLower(strings.TrimSpace(parts[0]))
+		secret := strings.TrimSpace(parts[1])
+		if name == "" || secret == "" {
+			continue
+		}
+		values[name] = secret
+	}
+	return values
 }

@@ -37,6 +37,17 @@ Missing required values cause the loader to return a `ValidationError` containin
 | `API_RATELIMIT_WEBHOOK_BURST` | `60` | No | Burst allowance for webhook endpoints. |
 | `API_FEATURE_AISUGGESTIONS` | `false` | No | Enable AI suggestion features. |
 | `API_FEATURE_PROMOTIONS` | `true` | No | Enable promotions-related flows. |
+| `API_SECURITY_ENVIRONMENT` | `local` | No | Environment label (e.g., `dev`, `stg`, `prod`) used to select audience defaults. |
+| `API_SECURITY_OIDC_JWKS_URL` | `https://www.googleapis.com/oauth2/v3/certs` | No | JWKS endpoint for verifying Google-signed OIDC/IAP tokens. |
+| `API_SECURITY_OIDC_AUDIENCE` | _empty_ | No | Audience expected for OIDC tokens in the current environment. |
+| `API_SECURITY_OIDC_AUDIENCES` | _empty_ | No | Comma-separated map (`dev=aud,stg=aud`) supplying per-environment audiences. |
+| `API_SECURITY_OIDC_ISSUERS` | `https://accounts.google.com, https://cloud.google.com/iap` | No | Allowed token issuers for internal authentication. |
+| `API_SECURITY_HMAC_SECRETS` | _empty_ | No | Comma-separated map (`payments/stripe=secret,shipping=secret`) resolving webhook HMAC secrets; supports `sm://` references. |
+| `API_SECURITY_HMAC_HEADER_SIGNATURE` | `X-Signature` | No | Header carrying the webhook HMAC signature. |
+| `API_SECURITY_HMAC_HEADER_TIMESTAMP` | `X-Signature-Timestamp` | No | Header carrying the signature timestamp. |
+| `API_SECURITY_HMAC_HEADER_NONCE` | `X-Signature-Nonce` | No | Header carrying the nonce used for replay protection. |
+| `API_SECURITY_HMAC_CLOCK_SKEW` | `5m` | No | Maximum allowed difference between the request timestamp and server time. |
+| `API_SECURITY_HMAC_NONCE_TTL` | `5m` | No | Duration to retain used nonces to detect replays. |
 
 ## Secret References
 

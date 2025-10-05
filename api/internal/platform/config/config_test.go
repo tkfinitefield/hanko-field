@@ -35,32 +35,52 @@ func TestLoadWithDefaults(t *testing.T) {
 	if len(cfg.Webhooks.AllowedHosts) != 0 {
 		t.Errorf("expected no allowed hosts, got %v", cfg.Webhooks.AllowedHosts)
 	}
+	if cfg.Security.Environment != "local" {
+		t.Errorf("expected default security environment local, got %s", cfg.Security.Environment)
+	}
+	if cfg.Security.OIDC.JWKSURL != defaultOIDCJWKSURL {
+		t.Errorf("expected default jwks url %s, got %s", defaultOIDCJWKSURL, cfg.Security.OIDC.JWKSURL)
+	}
+	if len(cfg.Security.OIDC.Issuers) != 2 {
+		t.Errorf("expected default issuers, got %v", cfg.Security.OIDC.Issuers)
+	}
+	if cfg.Security.HMAC.SignatureHeader != defaultHMACSignatureHeader {
+		t.Errorf("expected default signature header, got %s", cfg.Security.HMAC.SignatureHeader)
+	}
 }
 
 func TestLoadWithOverridesAndSecrets(t *testing.T) {
 	env := map[string]string{
-		"API_SERVER_PORT":               "9090",
-		"API_SERVER_READ_TIMEOUT":       "20s",
-		"API_SERVER_WRITE_TIMEOUT":      "25s",
-		"API_SERVER_IDLE_TIMEOUT":       "2m",
-		"API_FIREBASE_PROJECT_ID":       "hf-prod",
-		"API_FIRESTORE_PROJECT_ID":      "hf-fire",
-		"API_STORAGE_ASSETS_BUCKET":     "assets-prod",
-		"API_STORAGE_LOGS_BUCKET":       "logs-prod",
-		"API_STORAGE_EXPORTS_BUCKET":    "exports-prod",
-		"API_PSP_STRIPE_API_KEY":        "sm://stripe/api",
-		"API_PSP_STRIPE_WEBHOOK_SECRET": "sm://stripe/webhook",
-		"API_PSP_PAYPAL_CLIENT_ID":      "paypal-client",
-		"API_PSP_PAYPAL_SECRET":         "sm://paypal/secret",
-		"API_AI_SUGGESTION_ENDPOINT":    "https://ai.example.com",
-		"API_AI_AUTH_TOKEN":             "sm://ai/token",
-		"API_WEBHOOK_SIGNING_SECRET":    "sm://webhook/secret",
-		"API_WEBHOOK_ALLOWED_HOSTS":     "https://example.com, https://foo.bar",
-		"API_RATELIMIT_DEFAULT_PER_MIN": "150",
-		"API_RATELIMIT_AUTH_PER_MIN":    "300",
-		"API_RATELIMIT_WEBHOOK_BURST":   "80",
-		"API_FEATURE_AISUGGESTIONS":     "true",
-		"API_FEATURE_PROMOTIONS":        "false",
+		"API_SERVER_PORT":                    "9090",
+		"API_SERVER_READ_TIMEOUT":            "20s",
+		"API_SERVER_WRITE_TIMEOUT":           "25s",
+		"API_SERVER_IDLE_TIMEOUT":            "2m",
+		"API_FIREBASE_PROJECT_ID":            "hf-prod",
+		"API_FIRESTORE_PROJECT_ID":           "hf-fire",
+		"API_STORAGE_ASSETS_BUCKET":          "assets-prod",
+		"API_STORAGE_LOGS_BUCKET":            "logs-prod",
+		"API_STORAGE_EXPORTS_BUCKET":         "exports-prod",
+		"API_PSP_STRIPE_API_KEY":             "sm://stripe/api",
+		"API_PSP_STRIPE_WEBHOOK_SECRET":      "sm://stripe/webhook",
+		"API_PSP_PAYPAL_CLIENT_ID":           "paypal-client",
+		"API_PSP_PAYPAL_SECRET":              "sm://paypal/secret",
+		"API_AI_SUGGESTION_ENDPOINT":         "https://ai.example.com",
+		"API_AI_AUTH_TOKEN":                  "sm://ai/token",
+		"API_WEBHOOK_SIGNING_SECRET":         "sm://webhook/secret",
+		"API_WEBHOOK_ALLOWED_HOSTS":          "https://example.com, https://foo.bar",
+		"API_RATELIMIT_DEFAULT_PER_MIN":      "150",
+		"API_RATELIMIT_AUTH_PER_MIN":         "300",
+		"API_RATELIMIT_WEBHOOK_BURST":        "80",
+		"API_FEATURE_AISUGGESTIONS":          "true",
+		"API_FEATURE_PROMOTIONS":             "false",
+		"API_SECURITY_ENVIRONMENT":           "prod",
+		"API_SECURITY_OIDC_AUDIENCE":         "https://service.example.com",
+		"API_SECURITY_OIDC_ISSUERS":          "https://accounts.google.com, https://cloud.google.com/iap",
+		"API_SECURITY_OIDC_JWKS_URL":         "https://example.com/jwks.json",
+		"API_SECURITY_HMAC_SECRETS":          "payments/stripe=sm://hmac/stripe,shipping=shipping-secret",
+		"API_SECURITY_HMAC_HEADER_SIGNATURE": "X-Custom-Signature",
+		"API_SECURITY_HMAC_CLOCK_SKEW":       "3m",
+		"API_SECURITY_HMAC_NONCE_TTL":        "10m",
 	}
 
 	secrets := map[string]string{
@@ -69,6 +89,7 @@ func TestLoadWithOverridesAndSecrets(t *testing.T) {
 		"sm://paypal/secret":  "paypal-secret",
 		"sm://ai/token":       "ai-token",
 		"sm://webhook/secret": "webhook-secret",
+		"sm://hmac/stripe":    "stripe-hmac",
 	}
 
 	resolver := SecretResolverFunc(func(_ context.Context, ref string) (string, error) {
@@ -103,6 +124,30 @@ func TestLoadWithOverridesAndSecrets(t *testing.T) {
 	}
 	if cfg.Features.EnablePromotions {
 		t.Errorf("expected promotions flag disabled")
+	}
+	if cfg.Security.Environment != "prod" {
+		t.Errorf("expected security environment prod, got %s", cfg.Security.Environment)
+	}
+	if cfg.Security.OIDC.Audience != "https://service.example.com" {
+		t.Errorf("unexpected oidc audience %s", cfg.Security.OIDC.Audience)
+	}
+	if cfg.Security.OIDC.JWKSURL != "https://example.com/jwks.json" {
+		t.Errorf("unexpected jwks url %s", cfg.Security.OIDC.JWKSURL)
+	}
+	if cfg.Security.HMAC.Secrets["payments/stripe"] != "stripe-hmac" {
+		t.Errorf("expected resolved stripe hmac secret, got %s", cfg.Security.HMAC.Secrets["payments/stripe"])
+	}
+	if cfg.Security.HMAC.Secrets["shipping"] != "shipping-secret" {
+		t.Errorf("expected shipping secret fallback, got %s", cfg.Security.HMAC.Secrets["shipping"])
+	}
+	if cfg.Security.HMAC.SignatureHeader != "X-Custom-Signature" {
+		t.Errorf("unexpected signature header %s", cfg.Security.HMAC.SignatureHeader)
+	}
+	if cfg.Security.HMAC.ClockSkew != 3*time.Minute {
+		t.Errorf("unexpected clock skew %s", cfg.Security.HMAC.ClockSkew)
+	}
+	if cfg.Security.HMAC.NonceTTL != 10*time.Minute {
+		t.Errorf("unexpected nonce ttl %s", cfg.Security.HMAC.NonceTTL)
 	}
 }
 

@@ -25,6 +25,9 @@ type routerConfig struct {
 	admin    RouteRegistrar
 	webhooks RouteRegistrar
 	internal RouteRegistrar
+
+	webhookMiddlewares  []func(http.Handler) http.Handler
+	internalMiddlewares []func(http.Handler) http.Handler
 }
 
 // Option customises the router configuration before construction.
@@ -73,8 +76,13 @@ func NewRouter(opts ...Option) chi.Router {
 	r.Get("/healthz", health)
 
 	r.Route(cfg.basePath, func(api chi.Router) {
-		mount := func(path string, registrar RouteRegistrar, name string) {
+		mount := func(path string, registrar RouteRegistrar, name string, groupMW []func(http.Handler) http.Handler) {
 			api.Route(path, func(group chi.Router) {
+				for _, mw := range groupMW {
+					if mw != nil {
+						group.Use(mw)
+					}
+				}
 				if registrar != nil {
 					registrar(group)
 					return
@@ -83,14 +91,14 @@ func NewRouter(opts ...Option) chi.Router {
 			})
 		}
 
-		mount("/public", cfg.public, "public")
-		mount("/me", cfg.me, "me")
-		mount("/designs", cfg.designs, "designs")
-		mount("/cart", cfg.cart, "cart")
-		mount("/orders", cfg.orders, "orders")
-		mount("/admin", cfg.admin, "admin")
-		mount("/webhooks", cfg.webhooks, "webhooks")
-		mount("/internal", cfg.internal, "internal")
+		mount("/public", cfg.public, "public", nil)
+		mount("/me", cfg.me, "me", nil)
+		mount("/designs", cfg.designs, "designs", nil)
+		mount("/cart", cfg.cart, "cart", nil)
+		mount("/orders", cfg.orders, "orders", nil)
+		mount("/admin", cfg.admin, "admin", nil)
+		mount("/webhooks", cfg.webhooks, "webhooks", cfg.webhookMiddlewares)
+		mount("/internal", cfg.internal, "internal", cfg.internalMiddlewares)
 	})
 
 	return r
@@ -152,10 +160,24 @@ func WithWebhookRoutes(reg RouteRegistrar) Option {
 	}
 }
 
+// WithWebhookMiddlewares configures middlewares applied to the /webhooks group.
+func WithWebhookMiddlewares(mw ...func(http.Handler) http.Handler) Option {
+	return func(cfg *routerConfig) {
+		cfg.webhookMiddlewares = append(cfg.webhookMiddlewares, mw...)
+	}
+}
+
 // WithInternalRoutes configures the registrar responsible for internal endpoints.
 func WithInternalRoutes(reg RouteRegistrar) Option {
 	return func(cfg *routerConfig) {
 		cfg.internal = reg
+	}
+}
+
+// WithInternalMiddlewares configures middlewares applied to the /internal group.
+func WithInternalMiddlewares(mw ...func(http.Handler) http.Handler) Option {
+	return func(cfg *routerConfig) {
+		cfg.internalMiddlewares = append(cfg.internalMiddlewares, mw...)
 	}
 }
 
