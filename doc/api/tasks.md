@@ -17,7 +17,7 @@
 - [ ] Implement OIDC/IAP token checker and HMAC signature validator for internal/server-to-server and webhook endpoints.
 - [x] Implement Idempotency-Key middleware storing request fingerprint + result (Firestore or Redis) for POST/PUT/PATCH/DELETE.
 - [ ] Implement structured logging, trace propagation (Cloud Trace), and panic/error handling middleware producing JSON error responses.
-- [ ] Provide request context helpers for pagination (pageSize/pageToken), sorting, and filter parsing.
+- [x] Provide request context helpers for pagination (pageSize/pageToken), sorting, and filter parsing.
 - [ ] Implement Firestore client factory, transaction helpers, and strongly typed repository abstractions.
 - [ ] Provide Cloud Storage signed URL helper for asset upload/download.
 - [ ] Integrate secrets (PSP keys, HMAC secrets) through Secret Manager bindings.
