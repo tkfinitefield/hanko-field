@@ -3,7 +3,10 @@ package di
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
+	"github.com/hanko-field/api/internal/platform/auth"
 	"github.com/hanko-field/api/internal/platform/config"
 	"github.com/hanko-field/api/internal/repositories"
 	"github.com/hanko-field/api/internal/services"
@@ -64,11 +67,30 @@ func (c *Container) Close(ctx context.Context) error {
 }
 
 func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Config) (Services, error) {
-	// Placeholder wiring; concrete implementation will compose services via constructors once
-	// repositories are implemented. During planning we return zero-valued interfaces so the
-	// package compiles and tests can inject their own doubles.
-	_ = ctx
-	_ = reg
-	_ = cfg
-	return Services{}, nil
+	var svc Services
+	if reg == nil {
+		return svc, nil
+	}
+
+	if usersRepo := reg.Users(); usersRepo != nil && cfg.Firebase.ProjectID != "" {
+		firebase, err := auth.NewFirebaseVerifier(ctx, cfg.Firebase)
+		if err != nil {
+			return Services{}, fmt.Errorf("build firebase verifier: %w", err)
+		}
+		userSvc, err := services.NewUserService(services.UserServiceDeps{
+			Users:          usersRepo,
+			Addresses:      reg.Addresses(),
+			PaymentMethods: reg.PaymentMethods(),
+			Favorites:      reg.Favorites(),
+			Audit:          reg.AuditLogs(),
+			Firebase:       firebase,
+			Clock:          time.Now,
+		})
+		if err != nil {
+			return Services{}, fmt.Errorf("build user service: %w", err)
+		}
+		svc.Users = userSvc
+	}
+
+	return svc, nil
 }

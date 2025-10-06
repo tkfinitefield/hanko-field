@@ -117,7 +117,10 @@ type PromotionService interface {
 // UserService manages profile, address, payment method, and favorite surfaces.
 type UserService interface {
 	GetProfile(ctx context.Context, userID string) (UserProfile, error)
+	GetByUID(ctx context.Context, userID string) (UserProfile, error)
 	UpdateProfile(ctx context.Context, cmd UpdateProfileCommand) (UserProfile, error)
+	MaskProfile(ctx context.Context, cmd MaskProfileCommand) (UserProfile, error)
+	SetUserActive(ctx context.Context, cmd SetUserActiveCommand) (UserProfile, error)
 	ListAddresses(ctx context.Context, userID string) ([]Address, error)
 	UpsertAddress(ctx context.Context, cmd UpsertAddressCommand) (Address, error)
 	DeleteAddress(ctx context.Context, cmd DeleteAddressCommand) error
@@ -393,11 +396,29 @@ type PromotionUsageFilter struct {
 }
 
 type UpdateProfileCommand struct {
-	UserID         string
-	DisplayName    *string
-	PreferredLang  *string
-	Country        *string
-	MarketingOptIn *bool
+	UserID             string
+	ActorID            string
+	DisplayName        *string
+	PreferredLanguage  *string
+	Locale             *string
+	NotificationPrefs  map[string]bool
+	AvatarAssetID      *string
+	ExpectedSyncTime   *time.Time
+}
+
+type MaskProfileCommand struct {
+	UserID   string
+	ActorID  string
+	Reason   string
+	Occurred time.Time
+}
+
+type SetUserActiveCommand struct {
+	UserID           string
+	ActorID          string
+	IsActive         bool
+	Reason           string
+	ExpectedSyncTime *time.Time
 }
 
 type UpsertAddressCommand struct {

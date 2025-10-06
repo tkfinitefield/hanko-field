@@ -222,16 +222,37 @@ type Address struct {
 	Phone      *string
 }
 
-// UserProfile captures editable user profile fields.
+// NotificationPreferences stores per-channel notification opt-in flags.
+type NotificationPreferences map[string]bool
+
+// AuthProvider records linked Firebase identity provider metadata.
+type AuthProvider struct {
+	ProviderID  string
+	UID         string
+	Email       string
+	DisplayName string
+	PhoneNumber string
+	PhotoURL    string
+}
+
+// UserProfile captures the canonical projection of a Firebase Auth user.
 type UserProfile struct {
-	ID             string
-	DisplayName    string
-	Persona        string
-	PreferredLang  string
-	Country        string
-	MarketingOptIn bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID                string
+	DisplayName       string
+	Email             string
+	PhoneNumber       string
+	PhotoURL          string
+	AvatarAssetID     *string
+	PreferredLanguage string
+	Locale            string
+	Roles             []string
+	IsActive          bool
+	NotificationPrefs NotificationPreferences
+	ProviderData      []AuthProvider
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	PiiMaskedAt       *time.Time
+	LastSyncTime      time.Time
 }
 
 // FavoriteDesign ties a user to a design ID for fast lookups.

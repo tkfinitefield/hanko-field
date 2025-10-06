@@ -16,8 +16,13 @@ Maintain a projection of Firebase Auth users inside Firestore with profile metad
 - Sub-collections: `addresses`, `paymentMethods` (token references).
 
 ## Steps
-1. Implement `UserRepository` for Firestore CRUD with optimistic locking (updateTime precondition).
-2. Implement `UserService` with methods `GetByUID`, `UpdateProfile`, `ListAddresses`, etc., enforcing editable fields.
-3. Integrate with Firebase Admin SDK to fetch canonical email/phone when needed.
-4. Emit audit logs on profile changes via audit service.
-5. Write unit tests covering update validation, masking logic, and error handling.
+- [x] Implement `UserRepository` for Firestore CRUD with optimistic locking (updateTime precondition).
+- [x] Implement `UserService` with methods `GetByUID`, `UpdateProfile`, `ListAddresses`, etc., enforcing editable fields.
+- [x] Integrate with Firebase Admin SDK to fetch canonical email/phone when needed.
+- [x] Emit audit logs on profile changes via audit service.
+- [x] Write unit tests covering update validation, masking logic, and error handling.
+
+## Completion Notes
+- Added Firestore-backed `UserRepository` with transactional update-time checks to enforce optimistic locking.
+- Expanded domain profile model, implemented `UserService` with Firebase seeding, validation, masking, activation flows, and audit logging plus comprehensive unit tests.
+- Wired the service into the DI container when Firestore and Firebase dependencies are available.
