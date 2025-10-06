@@ -12,7 +12,11 @@ Abstract Firestore client creation, transactions, and typed access patterns to m
 - Provide context deadlines and retry/backoff configuration.
 
 ## Steps
-1. Implement provider with thread-safe initialisation and graceful shutdown hook.
-2. Add repository base struct exposing helper methods (Get, Set, Update, Query) with error wrapping.
-3. Provide transaction helper that surfaces context cancellation and convert Firestore errors to domain errors.
-4. Create integration tests using Firestore emulator docker container.
+- [x] Implement provider with thread-safe initialisation and graceful shutdown hook.
+- [x] Add repository base struct exposing helper methods (Get, Set, Update, Query) with error wrapping.
+- [x] Provide transaction helper that surfaces context cancellation and convert Firestore errors to domain errors.
+- [x] Create integration tests using Firestore emulator docker container.
+
+## Work Summary
+- Added `api/internal/platform/firestore` package with provider, error classification, transaction helper, and generic repository base/codec utilities.
+- Added integration test (`api/internal/platform/firestore/firestore_integration_test.go`) that launches the Firestore emulator via Docker and validates typed repository operations and transaction behaviour.
