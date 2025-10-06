@@ -72,13 +72,13 @@ func TestLoadWithOverridesAndSecrets(t *testing.T) {
 		"API_STORAGE_ASSETS_BUCKET":          "assets-prod",
 		"API_STORAGE_LOGS_BUCKET":            "logs-prod",
 		"API_STORAGE_EXPORTS_BUCKET":         "exports-prod",
-		"API_PSP_STRIPE_API_KEY":             "sm://stripe/api",
-		"API_PSP_STRIPE_WEBHOOK_SECRET":      "sm://stripe/webhook",
+		"API_PSP_STRIPE_API_KEY":             "secret://stripe/api",
+		"API_PSP_STRIPE_WEBHOOK_SECRET":      "secret://stripe/webhook",
 		"API_PSP_PAYPAL_CLIENT_ID":           "paypal-client",
-		"API_PSP_PAYPAL_SECRET":              "sm://paypal/secret",
+		"API_PSP_PAYPAL_SECRET":              "secret://paypal/secret",
 		"API_AI_SUGGESTION_ENDPOINT":         "https://ai.example.com",
-		"API_AI_AUTH_TOKEN":                  "sm://ai/token",
-		"API_WEBHOOK_SIGNING_SECRET":         "sm://webhook/secret",
+		"API_AI_AUTH_TOKEN":                  "secret://ai/token",
+		"API_WEBHOOK_SIGNING_SECRET":         "secret://webhook/secret",
 		"API_WEBHOOK_ALLOWED_HOSTS":          "https://example.com, https://foo.bar",
 		"API_RATELIMIT_DEFAULT_PER_MIN":      "150",
 		"API_RATELIMIT_AUTH_PER_MIN":         "300",
@@ -89,7 +89,7 @@ func TestLoadWithOverridesAndSecrets(t *testing.T) {
 		"API_SECURITY_OIDC_AUDIENCE":         "https://service.example.com",
 		"API_SECURITY_OIDC_ISSUERS":          "https://accounts.google.com, https://cloud.google.com/iap",
 		"API_SECURITY_OIDC_JWKS_URL":         "https://example.com/jwks.json",
-		"API_SECURITY_HMAC_SECRETS":          "payments/stripe=sm://hmac/stripe,shipping=shipping-secret",
+		"API_SECURITY_HMAC_SECRETS":          "payments/stripe=secret://hmac/stripe,shipping=shipping-secret",
 		"API_SECURITY_HMAC_HEADER_SIGNATURE": "X-Custom-Signature",
 		"API_SECURITY_HMAC_CLOCK_SKEW":       "3m",
 		"API_SECURITY_HMAC_NONCE_TTL":        "10m",
@@ -100,12 +100,12 @@ func TestLoadWithOverridesAndSecrets(t *testing.T) {
 	}
 
 	secrets := map[string]string{
-		"sm://stripe/api":     "stripe-key",
-		"sm://stripe/webhook": "stripe-webhook",
-		"sm://paypal/secret":  "paypal-secret",
-		"sm://ai/token":       "ai-token",
-		"sm://webhook/secret": "webhook-secret",
-		"sm://hmac/stripe":    "stripe-hmac",
+		"secret://stripe/api":     "stripe-key",
+		"secret://stripe/webhook": "stripe-webhook",
+		"secret://paypal/secret":  "paypal-secret",
+		"secret://ai/token":       "ai-token",
+		"secret://webhook/secret": "webhook-secret",
+		"secret://hmac/stripe":    "stripe-hmac",
 	}
 
 	resolver := SecretResolverFunc(func(_ context.Context, ref string) (string, error) {
@@ -214,7 +214,7 @@ func TestLoadSecretResolverError(t *testing.T) {
 	env := map[string]string{
 		"API_FIREBASE_PROJECT_ID":   "hf-dev",
 		"API_STORAGE_ASSETS_BUCKET": "assets",
-		"API_PSP_STRIPE_API_KEY":    "sm://missing",
+		"API_PSP_STRIPE_API_KEY":    "secret://missing",
 	}
 
 	_, err := Load(context.Background(), WithEnvMap(env), WithoutSystemEnv(), WithEnvFile(""))
@@ -225,7 +225,128 @@ func TestLoadSecretResolverError(t *testing.T) {
 	if !errors.As(err, &secretErr) {
 		t.Fatalf("expected SecretError, got %T", err)
 	}
-	if secretErr.Ref != "sm://missing" {
+	if secretErr.Ref != "secret://missing" {
 		t.Errorf("unexpected secret ref %s", secretErr.Ref)
+	}
+}
+
+func TestEnvironmentValuesMergesSources(t *testing.T) {
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, ".env.test")
+	content := "API_FIREBASE_PROJECT_ID=dot-project\nAPI_SECRET_FALLBACK_FILE=.dot.local\n"
+	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed writing env file: %v", err)
+	}
+
+	t.Setenv("API_FIREBASE_PROJECT_ID", "os-project")
+	t.Setenv("API_SECRET_PROJECT_IDS", "prod=project-prod")
+
+	overrides := map[string]string{
+		"API_FIREBASE_PROJECT_ID": "override-project",
+		"API_SECRET_VERSION_PINS": "secret://stripe/api=5",
+	}
+
+	values, err := EnvironmentValues(WithEnvFile(envPath), WithEnvMap(overrides))
+	if err != nil {
+		t.Fatalf("EnvironmentValues returned error: %v", err)
+	}
+
+	if got := values["API_FIREBASE_PROJECT_ID"]; got != "override-project" {
+		t.Fatalf("expected override project, got %s", got)
+	}
+	if got := values["API_SECRET_FALLBACK_FILE"]; got != ".dot.local" {
+		t.Fatalf("expected dotenv fallback file, got %s", got)
+	}
+	if got := values["API_SECRET_PROJECT_IDS"]; got != "prod=project-prod" {
+		t.Fatalf("expected system env project map, got %s", got)
+	}
+	if got := values["API_SECRET_VERSION_PINS"]; got != "secret://stripe/api=5" {
+		t.Fatalf("expected override version pin, got %s", got)
+	}
+}
+
+func TestLoadMissingRequiredSecrets(t *testing.T) {
+	env := map[string]string{
+		"API_FIREBASE_PROJECT_ID":   "hf-dev",
+		"API_STORAGE_ASSETS_BUCKET": "assets",
+	}
+
+	_, err := Load(context.Background(),
+		WithEnvMap(env),
+		WithoutSystemEnv(),
+		WithEnvFile(""),
+		WithRequiredSecrets("Webhooks.SigningSecret"),
+	)
+	if err == nil {
+		t.Fatal("expected missing secrets error, got nil")
+	}
+	var missing *MissingSecretsError
+	if !errors.As(err, &missing) {
+		t.Fatalf("expected MissingSecretsError, got %T", err)
+	}
+	expectedRedacted := redactSecretName("Webhooks.SigningSecret")
+	if got := missing.RedactedNames(); len(got) != 1 || got[0] != expectedRedacted {
+		t.Fatalf("unexpected redacted names %v", got)
+	}
+}
+
+func TestLoadMissingRequiredSecretsPanic(t *testing.T) {
+	env := map[string]string{
+		"API_FIREBASE_PROJECT_ID":   "hf-dev",
+		"API_STORAGE_ASSETS_BUCKET": "assets",
+	}
+
+	defer func() {
+		rec := recover()
+		if rec == nil {
+			t.Fatal("expected panic when required secrets missing")
+		}
+		missing, ok := rec.(*MissingSecretsError)
+		if !ok {
+			t.Fatalf("expected MissingSecretsError panic, got %T", rec)
+		}
+		if len(missing.Names()) != 1 || missing.Names()[0] != "Webhooks.SigningSecret" {
+			t.Fatalf("unexpected missing secrets %v", missing.Names())
+		}
+	}()
+
+	Load(context.Background(),
+		WithEnvMap(env),
+		WithoutSystemEnv(),
+		WithEnvFile(""),
+		WithRequiredSecrets("Webhooks.SigningSecret"),
+		WithPanicOnMissingSecrets(),
+	)
+}
+
+func TestLoadSupportsLegacySecretScheme(t *testing.T) {
+	env := map[string]string{
+		"API_FIREBASE_PROJECT_ID":    "hf-dev",
+		"API_STORAGE_ASSETS_BUCKET":  "assets",
+		"API_WEBHOOK_SIGNING_SECRET": "sm://webhook/secret",
+	}
+
+	secrets := map[string]string{
+		"secret://webhook/secret": "legacy-secret",
+	}
+
+	resolver := SecretResolverFunc(func(_ context.Context, ref string) (string, error) {
+		if v, ok := secrets[ref]; ok {
+			return v, nil
+		}
+		return "", &SecretError{Ref: ref, Err: errors.New("not found")}
+	})
+
+	cfg, err := Load(context.Background(),
+		WithEnvMap(env),
+		WithoutSystemEnv(),
+		WithEnvFile(""),
+		WithSecretResolver(resolver),
+	)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.Webhooks.SigningSecret != "legacy-secret" {
+		t.Fatalf("expected legacy secret, got %s", cfg.Webhooks.SigningSecret)
 	}
 }

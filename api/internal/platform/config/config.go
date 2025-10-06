@@ -3,10 +3,13 @@ package config
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -188,16 +191,129 @@ func (e *SecretError) Error() string {
 // Unwrap exposes the underlying error.
 func (e *SecretError) Unwrap() error { return e.Err }
 
+// MissingSecretsError indicates that one or more required secrets failed to resolve.
+type MissingSecretsError struct {
+	secrets []missingSecret
+}
+
+type missingSecret struct {
+	name     string
+	redacted string
+}
+
+// Error implements the error interface.
+func (e *MissingSecretsError) Error() string {
+	if e == nil || len(e.secrets) == 0 {
+		return "missing required secrets"
+	}
+	names := make([]string, 0, len(e.secrets))
+	for _, secret := range e.secrets {
+		names = append(names, secret.redacted)
+	}
+	sort.Strings(names)
+	return fmt.Sprintf("missing required secrets [%s]", strings.Join(names, ", "))
+}
+
+// RedactedNames returns a copy of the redacted secret identifiers.
+func (e *MissingSecretsError) RedactedNames() []string {
+	if e == nil || len(e.secrets) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(e.secrets))
+	for _, secret := range e.secrets {
+		out = append(out, secret.redacted)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Names returns the underlying secret identifiers.
+func (e *MissingSecretsError) Names() []string {
+	if e == nil || len(e.secrets) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(e.secrets))
+	for _, secret := range e.secrets {
+		out = append(out, secret.name)
+	}
+	sort.Strings(out)
+	return out
+}
+
 var errSecretResolverNotConfigured = errors.New("secret resolver not configured")
 
 // Option customises Load behaviour.
 type Option func(*loaderOptions)
 
 type loaderOptions struct {
-	envFile      string
-	envMap       map[string]string
-	useSystemEnv bool
-	secret       SecretResolver
+	envFile               string
+	envMap                map[string]string
+	useSystemEnv          bool
+	secret                SecretResolver
+	requiredSecrets       []string
+	panicOnMissingSecrets bool
+}
+
+// Snapshot captures the resolved environment values used during loading so callers can construct
+// dependent components (e.g., secret fetcher) with the same inputs.
+type Snapshot struct {
+	EnvFile         string
+	Values          map[string]string
+	ResolvedSecrets map[string]string
+}
+
+// EnvironmentValues returns the effective key/value environment map after applying the same precedence
+// rules as Load (dotenv < OS env < explicit env map). Callers can use the result to initialise
+// dependencies before invoking Load.
+func EnvironmentValues(opts ...Option) (map[string]string, error) {
+	options := loaderOptions{
+		envFile:      defaultEnvFile,
+		useSystemEnv: true,
+	}
+
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	dotEnvValues, err := loadDotEnv(options.envFile)
+	if err != nil {
+		return nil, err
+	}
+
+	values := make(map[string]string)
+	merge := func(source map[string]string) {
+		if source == nil {
+			return
+		}
+		for key, value := range source {
+			values[key] = value
+		}
+	}
+
+	merge(dotEnvValues)
+
+	if options.useSystemEnv {
+		system := make(map[string]string)
+		for _, entry := range os.Environ() {
+			if entry == "" {
+				continue
+			}
+			parts := strings.SplitN(entry, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			if key == "" {
+				continue
+			}
+			system[key] = parts[1]
+		}
+		merge(system)
+	}
+
+	merge(options.envMap)
+
+	return values, nil
 }
 
 // WithEnvFile overrides the .env file path used for local overrides.
@@ -226,6 +342,22 @@ func WithoutSystemEnv() Option {
 func WithSecretResolver(resolver SecretResolver) Option {
 	return func(o *loaderOptions) {
 		o.secret = resolver
+	}
+}
+
+// WithRequiredSecrets marks the provided secret identifiers as mandatory.
+// Identifiers should match the config field names recorded by the loader
+// (e.g. "PSP.StripeAPIKey" or "Security.HMAC.Secrets[payments]").
+func WithRequiredSecrets(names ...string) Option {
+	return func(o *loaderOptions) {
+		o.requiredSecrets = append(o.requiredSecrets, names...)
+	}
+}
+
+// WithPanicOnMissingSecrets causes Load to panic when required secrets are missing.
+func WithPanicOnMissingSecrets() Option {
+	return func(o *loaderOptions) {
+		o.panicOnMissingSecrets = true
 	}
 }
 
@@ -336,6 +468,20 @@ func Load(ctx context.Context, opts ...Option) (Config, error) {
 		},
 	}
 
+	resolvedSecrets := make(map[string]string)
+	recordSecret := func(name, value string) {
+		resolvedSecrets[name] = strings.TrimSpace(value)
+	}
+	resolveField := func(name string, field *string) error {
+		resolved, err := resolveSecret(ctx, *field, options.secret)
+		if err != nil {
+			return err
+		}
+		*field = resolved
+		recordSecret(name, resolved)
+		return nil
+	}
+
 	// Firestore project defaults to Firebase project when unspecified.
 	if cfg.Firestore.ProjectID == "" {
 		cfg.Firestore.ProjectID = cfg.Firebase.ProjectID
@@ -353,31 +499,42 @@ func Load(ctx context.Context, opts ...Option) (Config, error) {
 	}
 
 	for key, value := range cfg.Security.HMAC.Secrets {
+		fieldName := fmt.Sprintf("Security.HMAC.Secrets[%s]", key)
 		resolved, err := resolveSecret(ctx, value, options.secret)
 		if err != nil {
 			return Config{}, err
 		}
 		cfg.Security.HMAC.Secrets[key] = resolved
+		recordSecret(fieldName, resolved)
 	}
 
 	// Resolve secrets when values reference Secret Manager.
-	secretFields := []*string{
-		&cfg.PSP.StripeAPIKey,
-		&cfg.PSP.StripeWebhookSecret,
-		&cfg.PSP.PayPalSecret,
-		&cfg.AI.AuthToken,
-		&cfg.Webhooks.SigningSecret,
+	secretFields := []struct {
+		name  string
+		field *string
+	}{
+		{"PSP.StripeAPIKey", &cfg.PSP.StripeAPIKey},
+		{"PSP.StripeWebhookSecret", &cfg.PSP.StripeWebhookSecret},
+		{"PSP.PayPalSecret", &cfg.PSP.PayPalSecret},
+		{"AI.AuthToken", &cfg.AI.AuthToken},
+		{"Webhooks.SigningSecret", &cfg.Webhooks.SigningSecret},
 	}
-	for _, field := range secretFields {
-		resolved, err := resolveSecret(ctx, *field, options.secret)
-		if err != nil {
+	for _, target := range secretFields {
+		if err := resolveField(target.name, target.field); err != nil {
 			return Config{}, err
 		}
-		*field = resolved
 	}
 
 	if err := validateConfig(cfg); err != nil {
 		return Config{}, err
+	}
+
+	if missing := findMissingSecrets(options.requiredSecrets, resolvedSecrets); missing != nil {
+		if options.panicOnMissingSecrets {
+			fmt.Fprintf(os.Stderr, "config: %s\n", missing.Error())
+			panic(missing)
+		}
+		return Config{}, missing
 	}
 
 	return cfg, nil
@@ -387,15 +544,17 @@ func resolveSecret(ctx context.Context, value string, resolver SecretResolver) (
 	if value == "" {
 		return value, nil
 	}
-	if !strings.HasPrefix(value, "sm://") {
+	if !isSecretReference(value) {
 		return value, nil
 	}
 	if resolver == nil {
-		return "", &SecretError{Ref: value, Err: errSecretResolverNotConfigured}
+		normalized := normalizeSecretReference(value)
+		return "", &SecretError{Ref: normalized, Err: errSecretResolverNotConfigured}
 	}
-	secret, err := resolver.ResolveSecret(ctx, value)
+	normalized := normalizeSecretReference(value)
+	secret, err := resolver.ResolveSecret(ctx, normalized)
 	if err != nil {
-		return "", &SecretError{Ref: value, Err: err}
+		return "", &SecretError{Ref: normalized, Err: err}
 	}
 	return secret, nil
 }
@@ -432,6 +591,53 @@ func validateConfig(cfg Config) error {
 		return &ValidationError{fields: missing}
 	}
 	return nil
+}
+
+func findMissingSecrets(required []string, resolved map[string]string) *MissingSecretsError {
+	if len(required) == 0 {
+		return nil
+	}
+	missing := make([]missingSecret, 0, len(required))
+	seen := make(map[string]struct{})
+	for _, name := range required {
+		trimmed := strings.TrimSpace(name)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		if value := strings.TrimSpace(resolved[trimmed]); value != "" {
+			continue
+		}
+		missing = append(missing, missingSecret{
+			name:     trimmed,
+			redacted: redactSecretName(trimmed),
+		})
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return &MissingSecretsError{secrets: missing}
+}
+
+func isSecretReference(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	return strings.HasPrefix(trimmed, "secret://") || strings.HasPrefix(trimmed, "sm://")
+}
+
+func normalizeSecretReference(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "sm://") {
+		return "secret://" + strings.TrimPrefix(trimmed, "sm://")
+	}
+	return trimmed
+}
+
+func redactSecretName(name string) string {
+	sum := sha256.Sum256([]byte(name))
+	return hex.EncodeToString(sum[:8])
 }
 
 func loadDotEnv(path string) (map[string]string, error) {

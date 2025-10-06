@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -21,16 +22,11 @@ import (
 	"github.com/hanko-field/api/internal/platform/config"
 	"github.com/hanko-field/api/internal/platform/idempotency"
 	"github.com/hanko-field/api/internal/platform/observability"
+	"github.com/hanko-field/api/internal/platform/secrets"
 )
 
 func main() {
 	ctx := context.Background()
-
-	cfg, err := config.Load(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load configuration: %v\n", err)
-		os.Exit(1)
-	}
 
 	baseLogger, err := observability.NewLogger()
 	if err != nil {
@@ -43,6 +39,34 @@ func main() {
 
 	logger := baseLogger.Named("api")
 	ctx = observability.WithLogger(ctx, logger)
+
+	envValues, err := config.EnvironmentValues()
+	if err != nil {
+		logger.Fatal("failed to read environment values", zap.Error(err))
+	}
+
+	fetcher, err := newSecretFetcher(ctx, logger, envValues)
+	if err != nil {
+		logger.Fatal("failed to initialise secret fetcher", zap.Error(err))
+	}
+	defer func() {
+		if err := fetcher.Close(); err != nil {
+			logger.Warn("secret fetcher close error", zap.Error(err))
+		}
+	}()
+
+	requiredSecrets := requiredSecretNames(envValues)
+	cfg, err := config.Load(ctx,
+		config.WithSecretResolver(config.SecretResolverFunc(fetcher.Resolve)),
+		config.WithRequiredSecrets(requiredSecrets...),
+	)
+	if err != nil {
+		var missing *config.MissingSecretsError
+		if errors.As(err, &missing) {
+			logger.Fatal("missing required secrets", zap.Strings("secrets", missing.RedactedNames()))
+		}
+		logger.Fatal("failed to load configuration", zap.Error(err))
+	}
 
 	firestoreClient, err := newFirestoreClient(ctx, cfg)
 	if err != nil {
@@ -280,4 +304,203 @@ func traceProjectID(cfg config.Config) string {
 		return id
 	}
 	return strings.TrimSpace(cfg.Firestore.ProjectID)
+}
+
+func newSecretFetcher(ctx context.Context, logger *zap.Logger, env map[string]string) (*secrets.Fetcher, error) {
+	lookup := func(key string) string {
+		if env == nil {
+			return ""
+		}
+		if value, ok := env[key]; ok {
+			return strings.TrimSpace(value)
+		}
+		return ""
+	}
+
+	envLabel := strings.ToLower(lookup("API_SECURITY_ENVIRONMENT"))
+	if envLabel == "" {
+		envLabel = "local"
+	}
+	projectMap := secretProjectMapFromEnv(env)
+	defaultProject := lookup("API_SECRET_DEFAULT_PROJECT_ID")
+	if defaultProject == "" {
+		defaultProject = lookup("API_FIREBASE_PROJECT_ID")
+	}
+	fallbackPath := lookup("API_SECRET_FALLBACK_FILE")
+	if fallbackPath == "" {
+		fallbackPath = ".secrets.local"
+	}
+	versionPins := secretVersionPinsFromEnv(env)
+	credentialsFile := lookup("API_FIREBASE_CREDENTIALS_FILE")
+
+	opts := []secrets.Option{
+		secrets.WithEnvironment(envLabel),
+		secrets.WithLogger(logger.Named("secrets")),
+		secrets.WithFallbackFile(fallbackPath),
+	}
+	if len(projectMap) > 0 {
+		opts = append(opts, secrets.WithProjectMap(projectMap))
+	}
+	if defaultProject != "" {
+		opts = append(opts, secrets.WithDefaultProject(defaultProject))
+	}
+	if len(versionPins) > 0 {
+		opts = append(opts, secrets.WithVersionPins(versionPins))
+	}
+	if credentialsFile != "" {
+		opts = append(opts, secrets.WithClientOptions(option.WithCredentialsFile(credentialsFile)))
+	}
+
+	return secrets.NewFetcher(ctx, opts...)
+}
+
+func requiredSecretNames(env map[string]string) []string {
+	required := []string{
+		"PSP.StripeAPIKey",
+		"PSP.StripeWebhookSecret",
+		"Webhooks.SigningSecret",
+	}
+
+	hmacRaw := ""
+	if env != nil {
+		hmacRaw = strings.TrimSpace(env["API_SECURITY_HMAC_SECRETS"])
+		if secret := strings.TrimSpace(env["API_PSP_PAYPAL_SECRET"]); secret != "" {
+			required = append(required, "PSP.PayPalSecret")
+		}
+	}
+	for _, key := range parseHMACSecretKeys(hmacRaw) {
+		required = append(required, fmt.Sprintf("Security.HMAC.Secrets[%s]", key))
+	}
+
+	return uniqueStrings(required)
+}
+
+func secretProjectMapFromEnv(env map[string]string) map[string]string {
+	raw := ""
+	if env != nil {
+		raw = env["API_SECRET_PROJECT_IDS"]
+	}
+	raw = strings.TrimSpace(raw)
+	projects := make(map[string]string)
+	if raw == "" {
+		return projects
+	}
+	entries := strings.Split(raw, ",")
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		envLabel := strings.ToLower(strings.TrimSpace(parts[0]))
+		project := strings.TrimSpace(parts[1])
+		if envLabel == "" || project == "" {
+			continue
+		}
+		projects[envLabel] = project
+	}
+	return projects
+}
+
+func secretVersionPinsFromEnv(env map[string]string) map[string]string {
+	raw := ""
+	if env != nil {
+		raw = env["API_SECRET_VERSION_PINS"]
+	}
+	raw = strings.TrimSpace(raw)
+	pins := make(map[string]string)
+	if raw == "" {
+		return pins
+	}
+	entries := strings.Split(raw, ",")
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		ref := strings.TrimSpace(parts[0])
+		version := strings.TrimSpace(parts[1])
+		if ref == "" || version == "" {
+			continue
+		}
+		var prefix string
+		if idx := strings.Index(ref, ":"); idx > 0 {
+			schemeSplit := strings.Index(ref, "://")
+			if schemeSplit == -1 || idx < schemeSplit {
+				prefix = strings.ToLower(strings.TrimSpace(ref[:idx])) + ":"
+				ref = strings.TrimSpace(ref[idx+1:])
+			}
+		}
+		if strings.HasPrefix(ref, "sm://") {
+			ref = "secret://" + strings.TrimPrefix(ref, "sm://")
+		} else if !strings.HasPrefix(ref, "secret://") {
+			ref = "secret://" + ref
+		}
+		ref = prefix + ref
+		pins[ref] = version
+	}
+	return pins
+}
+
+func parseHMACSecretKeys(raw string) []string {
+	values := parseKeyValueList(raw)
+	if len(values) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, strings.ToLower(key))
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func parseKeyValueList(raw string) map[string]string {
+	result := make(map[string]string)
+	if strings.TrimSpace(raw) == "" {
+		return result
+	}
+	entries := strings.Split(raw, ",")
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		if key == "" || value == "" {
+			continue
+		}
+		result[key] = value
+	}
+	return result
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{})
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	sort.Strings(out)
+	return out
 }
