@@ -16,3 +16,6 @@ Provide structured JSON logging, panic recovery, and tracing propagation compati
 2. Implement middleware wrapping handler to log request start/finish with latency.
 3. Sanitize log fields to avoid PII leakage; centralize redaction helpers.
 4. Provide structured error response builder ensuring consistent JSON format.
+
+## Completion
+- 2025-10-06: Added zap-based structured logging with Cloud Trace propagation, panic recovery middleware returning JSON errors, and centralized error/field sanitisation integrated into the API router.

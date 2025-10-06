@@ -1,13 +1,14 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/hanko-field/api/internal/platform/httpx"
 )
 
 // RouteRegistrar registers a set of routes against the provided router.
@@ -36,7 +37,6 @@ type Option func(*routerConfig)
 const (
 	defaultAPIPrefix  = "/api/v1"
 	defaultTimeout    = 60 * time.Second
-	errorContentType  = "application/json"
 	errorNotFoundCode = "route_not_found"
 )
 
@@ -47,8 +47,6 @@ func NewRouter(opts ...Option) chi.Router {
 		middlewares: []func(http.Handler) http.Handler{
 			middleware.RequestID,
 			middleware.RealIP,
-			middleware.Logger,
-			middleware.Recoverer,
 			middleware.Timeout(defaultTimeout),
 		},
 	}
@@ -66,11 +64,11 @@ func NewRouter(opts ...Option) chi.Router {
 	}
 
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
-		writeJSONError(w, http.StatusNotFound, errorNotFoundCode, fmt.Sprintf("no route for %s", req.URL.Path))
+		httpx.WriteError(req.Context(), w, httpx.NewError(errorNotFoundCode, fmt.Sprintf("no route for %s", req.URL.Path), http.StatusNotFound))
 	})
 
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", fmt.Sprintf("method %s not allowed on %s", req.Method, req.URL.Path))
+		httpx.WriteError(req.Context(), w, httpx.NewError("method_not_allowed", fmt.Sprintf("method %s not allowed on %s", req.Method, req.URL.Path), http.StatusMethodNotAllowed))
 	})
 
 	r.Get("/healthz", health)
@@ -183,21 +181,10 @@ func WithInternalMiddlewares(mw ...func(http.Handler) http.Handler) Option {
 
 func registerNotImplemented(r chi.Router, name string) {
 	handler := func(w http.ResponseWriter, req *http.Request) {
-		writeJSONError(w, http.StatusNotImplemented, "not_implemented", fmt.Sprintf("%s routes not implemented", name))
+		httpx.WriteError(req.Context(), w, httpx.NewError("not_implemented", fmt.Sprintf("%s routes not implemented", name), http.StatusNotImplemented))
 	}
 	r.HandleFunc("/*", handler)
 	r.HandleFunc("/", handler)
 	r.NotFound(handler)
 	r.MethodNotAllowed(handler)
-}
-
-func writeJSONError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", errorContentType)
-	w.WriteHeader(status)
-
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error":   code,
-		"message": message,
-		"status":  status,
-	})
 }

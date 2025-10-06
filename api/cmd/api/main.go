@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,30 +13,44 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"go.uber.org/zap"
 	"google.golang.org/api/option"
 
 	"github.com/hanko-field/api/internal/handlers"
 	"github.com/hanko-field/api/internal/platform/auth"
 	"github.com/hanko-field/api/internal/platform/config"
 	"github.com/hanko-field/api/internal/platform/idempotency"
+	"github.com/hanko-field/api/internal/platform/observability"
 )
 
 func main() {
 	ctx := context.Background()
+
 	cfg, err := config.Load(ctx)
 	if err != nil {
-		log.Fatalf("failed to load configuration: %v", err)
+		fmt.Fprintf(os.Stderr, "failed to load configuration: %v\n", err)
+		os.Exit(1)
 	}
 
-	logger := log.Default()
+	baseLogger, err := observability.NewLogger()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialise logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer func() {
+		_ = baseLogger.Sync()
+	}()
+
+	logger := baseLogger.Named("api")
+	ctx = observability.WithLogger(ctx, logger)
 
 	firestoreClient, err := newFirestoreClient(ctx, cfg)
 	if err != nil {
-		log.Fatalf("failed to initialise firestore client: %v", err)
+		logger.Fatal("failed to initialise firestore client", zap.Error(err))
 	}
 	defer func() {
 		if err := firestoreClient.Close(); err != nil {
-			logger.Printf("firestore: close error: %v", err)
+			logger.Warn("firestore close error", zap.Error(err))
 		}
 	}()
 
@@ -46,7 +59,7 @@ func main() {
 		idempotencyStore,
 		idempotency.WithHeader(cfg.Idempotency.Header),
 		idempotency.WithTTL(cfg.Idempotency.TTL),
-		idempotency.WithLogger(logger),
+		idempotency.WithLogger(observability.NewPrintfAdapter(logger.Named("idempotency"))),
 	)
 
 	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
@@ -57,6 +70,7 @@ func main() {
 		cleanupWG.Add(1)
 		go func() {
 			defer cleanupWG.Done()
+			cleanupLogger := logger.Named("idempotency")
 			for {
 				select {
 				case <-cleanupTicker.C:
@@ -64,11 +78,11 @@ func main() {
 					removed, err := idempotencyStore.CleanupExpired(runCtx, time.Now().UTC(), cfg.Idempotency.CleanupBatchSize)
 					cancel()
 					if err != nil {
-						logger.Printf("idempotency cleanup error: %v", err)
+						cleanupLogger.Error("idempotency cleanup error", zap.Error(err))
 						continue
 					}
 					if removed > 0 {
-						logger.Printf("idempotency cleanup removed %d records", removed)
+						cleanupLogger.Info("idempotency cleanup removed records", zap.Int("count", removed))
 					}
 				case <-cleanupCtx.Done():
 					return
@@ -77,11 +91,20 @@ func main() {
 		}()
 	}
 
-	oidcMiddleware := buildOIDCMiddleware(logger, cfg)
-	hmacMiddleware := buildHMACMiddleware(logger, cfg)
+	oidcMiddleware := buildOIDCMiddleware(logger.Named("auth"), cfg)
+	hmacMiddleware := buildHMACMiddleware(logger.Named("auth"), cfg)
+
+	projectID := traceProjectID(cfg)
+	middlewares := []func(http.Handler) http.Handler{
+		observability.InjectLoggerMiddleware(logger.Named("http")),
+		observability.TraceMiddleware(projectID),
+		observability.RecoveryMiddleware(logger.Named("http")),
+		observability.RequestLoggerMiddleware(projectID),
+		idempotencyMiddleware,
+	}
 
 	var opts []handlers.Option
-	opts = append(opts, handlers.WithMiddlewares(idempotencyMiddleware))
+	opts = append(opts, handlers.WithMiddlewares(middlewares...))
 	if oidcMiddleware != nil {
 		opts = append(opts, handlers.WithInternalMiddlewares(oidcMiddleware))
 	}
@@ -101,15 +124,16 @@ func main() {
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
+	serverLogger := logger.Named("http").With(zap.String("addr", server.Addr))
 	go func() {
-		log.Printf("hanko-field api listening on %s", server.Addr)
+		serverLogger.Info("hanko-field api listening")
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("http server error: %v", err)
+			serverLogger.Fatal("http server error", zap.Error(err))
 		}
 	}()
 
 	<-shutdown
-	log.Println("shutdown signal received; draining requests")
+	logger.Info("shutdown signal received; draining requests")
 
 	if cleanupTicker != nil {
 		cleanupTicker.Stop()
@@ -120,31 +144,36 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("graceful shutdown failed: %v", err)
+		logger.Error("graceful shutdown failed", zap.Error(err))
 	}
 }
 
-func buildOIDCMiddleware(logger *log.Logger, cfg config.Config) func(http.Handler) http.Handler {
+func buildOIDCMiddleware(logger *zap.Logger, cfg config.Config) func(http.Handler) http.Handler {
 	if strings.TrimSpace(cfg.Security.OIDC.JWKSURL) == "" {
 		return nil
 	}
 
-	cache := auth.NewJWKSCache(cfg.Security.OIDC.JWKSURL, auth.WithJWKSLogger(logger))
-	validator := auth.NewOIDCValidator(cache, auth.WithOIDCLogger(logger))
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
+	adapter := observability.NewPrintfAdapter(logger)
+	cache := auth.NewJWKSCache(cfg.Security.OIDC.JWKSURL, auth.WithJWKSLogger(adapter))
+	validator := auth.NewOIDCValidator(cache, auth.WithOIDCLogger(adapter))
 
 	audience := strings.TrimSpace(cfg.Security.OIDC.Audience)
 	if audience == "" {
-		logger.Printf("auth: OIDC audience not configured; internal routes will reject requests")
+		logger.Warn("auth: OIDC audience not configured; internal routes will reject requests")
 	}
 	issuers := cfg.Security.OIDC.Issuers
 	if len(issuers) == 0 {
-		logger.Printf("auth: OIDC issuers not configured; internal routes will reject requests")
+		logger.Warn("auth: OIDC issuers not configured; internal routes will reject requests")
 	}
 
 	return validator.RequireOIDC(audience, issuers)
 }
 
-func buildHMACMiddleware(logger *log.Logger, cfg config.Config) func(http.Handler) http.Handler {
+func buildHMACMiddleware(logger *zap.Logger, cfg config.Config) func(http.Handler) http.Handler {
 	secrets := make(map[string]string)
 	for key, value := range cfg.Security.HMAC.Secrets {
 		if strings.TrimSpace(value) == "" {
@@ -163,8 +192,9 @@ func buildHMACMiddleware(logger *log.Logger, cfg config.Config) func(http.Handle
 
 	provider := staticSecretProvider{secrets: secrets}
 	nonces := auth.NewInMemoryNonceStore()
+	adapter := observability.NewPrintfAdapter(logger)
 	validator := auth.NewHMACValidator(provider, nonces,
-		auth.WithHMACLogger(logger),
+		auth.WithHMACLogger(adapter),
 		auth.WithHMACHeaders(cfg.Security.HMAC.SignatureHeader, cfg.Security.HMAC.TimestampHeader, cfg.Security.HMAC.NonceHeader),
 		auth.WithHMACClockSkew(cfg.Security.HMAC.ClockSkew),
 		auth.WithHMACNonceTTL(cfg.Security.HMAC.NonceTTL),
@@ -243,4 +273,11 @@ func newFirestoreClient(ctx context.Context, cfg config.Config) (*firestore.Clie
 	}
 
 	return firestore.NewClient(ctx, projectID, opts...)
+}
+
+func traceProjectID(cfg config.Config) string {
+	if id := strings.TrimSpace(cfg.Firebase.ProjectID); id != "" {
+		return id
+	}
+	return strings.TrimSpace(cfg.Firestore.ProjectID)
 }
