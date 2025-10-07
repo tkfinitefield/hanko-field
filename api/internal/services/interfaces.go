@@ -18,6 +18,11 @@ type (
 	CartPromotion             = domain.CartPromotion
 	CartItem                  = domain.CartItem
 	CartEstimate              = domain.CartEstimate
+	PricingBreakdown          = domain.PricingBreakdown
+	ItemPricingBreakdown      = domain.ItemPricingBreakdown
+	DiscountBreakdown         = domain.DiscountBreakdown
+	TaxBreakdown              = domain.TaxBreakdown
+	ShippingBreakdown         = domain.ShippingBreakdown
 	CheckoutSession           = domain.CheckoutSession
 	Order                     = domain.Order
 	OrderTotals               = domain.OrderTotals

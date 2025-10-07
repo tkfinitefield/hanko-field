@@ -61,13 +61,16 @@ type AISuggestion struct {
 
 // Cart aggregates the mutable shopping cart state for a user.
 type Cart struct {
-	ID        string
-	UserID    string
-	Currency  string
-	Promotion *CartPromotion
-	Items     []CartItem
-	Estimate  *CartEstimate
-	UpdatedAt time.Time
+	ID              string
+	UserID          string
+	Currency        string
+	BillingAddress  *Address
+	ShippingAddress *Address
+	Promotion       *CartPromotion
+	Items           []CartItem
+	Estimate        *CartEstimate
+	Metadata        map[string]any
+	UpdatedAt       time.Time
 }
 
 // CartPromotion captures the applied promotion snapshot.
@@ -79,17 +82,21 @@ type CartPromotion struct {
 
 // CartItem stores a single SKU entry within a cart.
 type CartItem struct {
-	ID            string
-	ProductID     string
-	SKU           string
-	Quantity      int
-	UnitPrice     int64
-	Currency      string
-	Customization map[string]any
-	DesignRef     *string
-	Estimates     map[string]int64
-	AddedAt       time.Time
-	UpdatedAt     *time.Time
+	ID               string
+	ProductID        string
+	SKU              string
+	Quantity         int
+	UnitPrice        int64
+	Currency         string
+	WeightGrams      int
+	TaxCode          string
+	RequiresShipping bool
+	Customization    map[string]any
+	DesignRef        *string
+	Estimates        map[string]int64
+	Metadata         map[string]any
+	AddedAt          time.Time
+	UpdatedAt        *time.Time
 }
 
 // CartEstimate summarizes totals calculated for the cart.
