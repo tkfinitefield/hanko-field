@@ -92,5 +92,16 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 		svc.Users = userSvc
 	}
 
+	if inventoryRepo := reg.Inventory(); inventoryRepo != nil {
+		inventorySvc, err := services.NewInventoryService(services.InventoryServiceDeps{
+			Inventory: inventoryRepo,
+			Clock:     time.Now,
+		})
+		if err != nil {
+			return Services{}, fmt.Errorf("build inventory service: %w", err)
+		}
+		svc.Inventory = inventorySvc
+	}
+
 	return svc, nil
 }

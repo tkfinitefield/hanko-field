@@ -15,7 +15,7 @@ type Registry interface {
 	DesignVersions() DesignVersionRepository
 	AISuggestions() AISuggestionRepository
 	Carts() CartRepository
-	InventoryReservations() InventoryReservationRepository
+	Inventory() InventoryRepository
 	Orders() OrderRepository
 	OrderPayments() OrderPaymentRepository
 	OrderShipments() OrderShipmentRepository
@@ -76,12 +76,58 @@ type CartRepository interface {
 	ReplaceItems(ctx context.Context, userID string, items []domain.CartItem) (domain.Cart, error)
 }
 
-// InventoryReservationRepository manages short-lived stock reservations.
-type InventoryReservationRepository interface {
-	Reserve(ctx context.Context, reservations []domain.InventoryReservation) error
-	UpdateStatus(ctx context.Context, reservationID string, status string) error
-	GetByID(ctx context.Context, reservationID string) (domain.InventoryReservation, error)
-	ListExpired(ctx context.Context, before time.Time, limit int) ([]domain.InventoryReservation, error)
+// InventoryRepository manages stock levels and reservation lifecycle with transactional guarantees.
+type InventoryRepository interface {
+	Reserve(ctx context.Context, req InventoryReserveRequest) (InventoryReserveResult, error)
+	Commit(ctx context.Context, req InventoryCommitRequest) (InventoryCommitResult, error)
+	Release(ctx context.Context, req InventoryReleaseRequest) (InventoryReleaseResult, error)
+	GetReservation(ctx context.Context, reservationID string) (domain.InventoryReservation, error)
+	ListLowStock(ctx context.Context, query InventoryLowStockQuery) (domain.CursorPage[domain.InventoryStock], error)
+}
+
+// InventoryReserveRequest encapsulates reservation creation metadata for the repository.
+type InventoryReserveRequest struct {
+	Reservation domain.InventoryReservation
+	Now         time.Time
+}
+
+// InventoryReserveResult returns the saved reservation and updated stock projections.
+type InventoryReserveResult struct {
+	Reservation domain.InventoryReservation
+	Stocks      map[string]domain.InventoryStock
+}
+
+// InventoryCommitRequest finalises a reservation and decrements on-hand counts.
+type InventoryCommitRequest struct {
+	ReservationID string
+	OrderRef      string
+	Now           time.Time
+}
+
+// InventoryCommitResult reports the updated reservation and stock metrics after commit.
+type InventoryCommitResult struct {
+	Reservation domain.InventoryReservation
+	Stocks      map[string]domain.InventoryStock
+}
+
+// InventoryReleaseRequest restores reserved stock back to availability.
+type InventoryReleaseRequest struct {
+	ReservationID string
+	Reason        string
+	Now           time.Time
+}
+
+// InventoryReleaseResult reports the reservation and stock metrics after release.
+type InventoryReleaseResult struct {
+	Reservation domain.InventoryReservation
+	Stocks      map[string]domain.InventoryStock
+}
+
+// InventoryLowStockQuery controls pagination and threshold filtering for low stock listings.
+type InventoryLowStockQuery struct {
+	Threshold int
+	PageSize  int
+	PageToken string
 }
 
 // OrderRepository persists order headers and provides query helpers for users and admins.

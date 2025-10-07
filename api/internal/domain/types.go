@@ -280,23 +280,68 @@ type PaymentMethod struct {
 	CreatedAt time.Time
 }
 
+// InventoryReservationLine stores per-SKU quantities for a reservation.
+type InventoryReservationLine struct {
+	ProductRef string
+	SKU        string
+	Quantity   int
+}
+
 // InventoryReservation holds temporary or committed stock reservations.
 type InventoryReservation struct {
-	ID        string
-	OrderID   string
-	ProductID string
-	Quantity  int
-	Status    string
-	ExpiresAt *time.Time
-	CreatedAt time.Time
+	ID             string
+	OrderRef       string
+	UserRef        string
+	Status         string
+	Lines          []InventoryReservationLine
+	IdempotencyKey string
+	Reason         string
+	ExpiresAt      time.Time
+	ReleasedAt     *time.Time
+	CommittedAt    *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// InventoryStock represents current stock metrics tracked per SKU.
+type InventoryStock struct {
+	SKU         string
+	ProductRef  string
+	OnHand      int
+	Reserved    int
+	Available   int
+	SafetyStock int
+	SafetyDelta int
+	UpdatedAt   time.Time
 }
 
 // InventorySnapshot exposes aggregated stock levels for admin surfaces.
 type InventorySnapshot struct {
-	ProductID string
-	Available int
-	Reserved  int
-	Threshold int
+	SKU         string
+	ProductRef  string
+	OnHand      int
+	Reserved    int
+	Available   int
+	SafetyStock int
+	SafetyDelta int
+	UpdatedAt   time.Time
+}
+
+// InventoryStockEvent captures stock adjustments for downstream analytics/audit.
+type InventoryStockEvent struct {
+	Type          string
+	ReservationID string
+	OrderRef      string
+	UserRef       string
+	SKU           string
+	ProductRef    string
+	DeltaOnHand   int
+	DeltaReserved int
+	OnHand        int
+	Reserved      int
+	SafetyStock   int
+	OccurredAt    time.Time
+	Metadata      map[string]any
 }
 
 // ContentPage describes CMS-managed content accessible via public endpoints.

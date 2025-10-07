@@ -24,7 +24,7 @@
 
 ## 3. Shared Domain Services
 - [ ] Implement user profile service mapping Firebase Auth users to Firestore documents.
-- [ ] Implement inventory service managing stock quantities, reservations, and safety thresholds.
+- [x] Implement inventory service managing stock quantities, reservations, and safety thresholds.
 - [ ] Implement promotion service covering eligibility evaluation, usage accounting, and validations.
 - [ ] Implement cart pricing engine (tax, shipping, discounts) with pluggable rules.
 - [ ] Implement payment integration abstraction (Stripe, PayPal) for checkout session management and reconciliation.

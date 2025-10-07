@@ -31,8 +31,11 @@ type (
 	Address                   = domain.Address
 	UserProfile               = domain.UserProfile
 	FavoriteDesign            = domain.FavoriteDesign
+	InventoryReservationLine  = domain.InventoryReservationLine
 	InventoryReservation      = domain.InventoryReservation
 	InventorySnapshot         = domain.InventorySnapshot
+	InventoryStock            = domain.InventoryStock
+	InventoryStockEvent       = domain.InventoryStockEvent
 	ContentPage               = domain.ContentPage
 	ContentGuide              = domain.ContentGuide
 	TemplateSummary           = domain.TemplateSummary
@@ -131,12 +134,17 @@ type UserService interface {
 	ToggleFavorite(ctx context.Context, cmd ToggleFavoriteCommand) error
 }
 
+// InventoryEventPublisher accepts inventory stock change notifications for downstream processing.
+type InventoryEventPublisher interface {
+	PublishInventoryEvent(ctx context.Context, event InventoryStockEvent) error
+}
+
 // InventoryService centralizes stock reservation, commit, and release workflows.
 type InventoryService interface {
-	Reserve(ctx context.Context, cmd InventoryReserveCommand) ([]InventoryReservation, error)
-	Commit(ctx context.Context, cmd InventoryCommitCommand) error
-	Release(ctx context.Context, cmd InventoryReleaseCommand) error
-	ListLowStock(ctx context.Context, filter InventoryLowStockFilter) ([]InventorySnapshot, error)
+	ReserveStocks(ctx context.Context, cmd InventoryReserveCommand) (InventoryReservation, error)
+	CommitReservation(ctx context.Context, cmd InventoryCommitCommand) (InventoryReservation, error)
+	ReleaseReservation(ctx context.Context, cmd InventoryReleaseCommand) (InventoryReservation, error)
+	ListLowStock(ctx context.Context, filter InventoryLowStockFilter) (domain.CursorPage[InventorySnapshot], error)
 }
 
 // ContentService provides read/write access to CMS content for public and admin usage.
@@ -396,14 +404,14 @@ type PromotionUsageFilter struct {
 }
 
 type UpdateProfileCommand struct {
-	UserID             string
-	ActorID            string
-	DisplayName        *string
-	PreferredLanguage  *string
-	Locale             *string
-	NotificationPrefs  map[string]bool
-	AvatarAssetID      *string
-	ExpectedSyncTime   *time.Time
+	UserID            string
+	ActorID           string
+	DisplayName       *string
+	PreferredLanguage *string
+	Locale            *string
+	NotificationPrefs map[string]bool
+	AvatarAssetID     *string
+	ExpectedSyncTime  *time.Time
 }
 
 type MaskProfileCommand struct {
@@ -452,10 +460,12 @@ type ToggleFavoriteCommand struct {
 }
 
 type InventoryReserveCommand struct {
-	OrderID string
-	UserID  string
-	Lines   []InventoryLine
-	TTL     time.Duration
+	OrderID        string
+	UserID         string
+	Lines          []InventoryLine
+	TTL            time.Duration
+	Reason         string
+	IdempotencyKey string
 }
 
 type InventoryCommitCommand struct {
