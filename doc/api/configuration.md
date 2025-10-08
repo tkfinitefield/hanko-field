@@ -26,8 +26,6 @@ Missing required values cause the loader to return a `ValidationError` containin
 | `API_STORAGE_EXPORTS_BUCKET` | _empty_ | No | Optional bucket for scheduled exports. |
 | `API_PSP_STRIPE_API_KEY` | _empty_ | No | Stripe secret key or `secret://` reference. |
 | `API_PSP_STRIPE_WEBHOOK_SECRET` | _empty_ | No | Stripe webhook signing secret or `secret://` reference. |
-| `API_PSP_PAYPAL_CLIENT_ID` | _empty_ | No | PayPal client identifier. |
-| `API_PSP_PAYPAL_SECRET` | _empty_ | No | PayPal client secret or `secret://` reference. |
 | `API_AI_SUGGESTION_ENDPOINT` | _empty_ | No | Base URL for the AI suggestion worker. |
 | `API_AI_AUTH_TOKEN` | _empty_ | No | Token for authenticating with AI workers; supports `secret://`. |
 | `API_WEBHOOK_SIGNING_SECRET` | _empty_ | No | Shared secret for verifying inbound webhooks (`secret://` supported). |
@@ -97,5 +95,5 @@ API_SERVER_PORT=8081
 
 - `config.Load` returns a fully populated `config.Config` struct; pass the struct into the DI container (`di.NewContainer`).
 - Required values: `Firebase.ProjectID`, `Firestore.ProjectID` (defaults to Firebase), and `Storage.AssetsBucket`.
-- Secrets (`StripeAPIKey`, `StripeWebhookSecret`, `PayPalSecret`, `AI.AuthToken`, `Webhooks.SigningSecret`) are resolved via the injected resolver before validation.
+- Secrets (`StripeAPIKey`, `StripeWebhookSecret`, `AI.AuthToken`, `Webhooks.SigningSecret`) are resolved via the injected resolver before validation.
 - The default bootstrap path (`cmd/api/main.go`) registers the fetcher, enforces required secrets, and panics on start if any are missing.

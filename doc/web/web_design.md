@@ -163,7 +163,7 @@ Cloud Run で実行します。
 
 ### `/checkout/payment`（FP）
 
-* PSP セッションボタン（Stripe/PayPal）→ `POST /checkout/session`
+* PSP セッションボタン（Stripe）→ `POST /checkout/session`
 * 完了後 `POST /checkout/confirm`（表示は `/checkout/complete` へ）
 
 ### `/checkout/review`（FP）

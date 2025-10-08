@@ -9,7 +9,7 @@ Protect internal and webhook endpoints via Google-signed IAP/OIDC tokens or HMAC
 ## Design
 - Provide middleware `RequireOIDC(audience, issuers)` verifying Google-signed JWT (audience, issuer, expiry) with JWKS caching.
 - Provide middleware `RequireHMAC(secretName)` verifying `X-Signature` built from canonical request string + timestamp, with replay protection using nonce store.
-- Apply OIDC to `/internal/*`; apply HMAC to `/webhooks/*` (Stripe, PayPal, shipping, AI) using provider-specific logic.
+- Apply OIDC to `/internal/*`; apply HMAC to `/webhooks/*` (Stripe, shipping, AI) using provider-specific logic.
 
 ## Steps
 1. Implement JWKS fetcher with background refresh and environment-specific audiences.
@@ -19,6 +19,6 @@ Protect internal and webhook endpoints via Google-signed IAP/OIDC tokens or HMAC
 
 ## Progress 2025-05-15
 - [x] Added `auth.JWKSCache` with cached refresh, background prefetch, and `OIDCValidator` middleware wiring audience/issuer checks into the router's `/internal` group.
-- [x] Implemented HMAC middleware with canonical request hashing, nonce replay protection, pluggable secret provider, and resolver support for Stripe/PayPal/shipping/AI webhooks.
+- [x] Implemented HMAC middleware with canonical request hashing, nonce replay protection, pluggable secret provider, and resolver support for Stripe/shipping/AI webhooks.
 - [x] Extended configuration to surface security settings (`API_SECURITY_*`), allowing environment-specific audiences, JWKS URLs, and per-provider HMAC secrets.
 - [x] Updated the API server bootstrap to load security config, attach middlewares via `handlers.WithInternalMiddlewares` and `WithWebhookMiddlewares`, and documented the new environment variables in `doc/api/configuration.md`.

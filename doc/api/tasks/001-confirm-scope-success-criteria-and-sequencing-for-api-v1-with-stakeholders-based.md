@@ -32,7 +32,7 @@ Align stakeholders on the MVP scope of API v1 described in `doc/api/api_design.m
 
 ### Decision Log
 - ✅ MVP scope covers Public catalogue reads, Authenticated user profile/design/cart/order flows, Stripe-based checkout, core admin catalogue + order ops, essential webhooks, and internal stock reservation + checkout commit services.
-- ✅ Deferred to Beta: admin CMS bulk import/export, advanced production queue analytics, reviews moderation responses, BigQuery export job, PayPal webhook handling.
+- ✅ Deferred to Beta: admin CMS bulk import/export, advanced production queue analytics, reviews moderation responses, BigQuery export job.
 - ✅ Deferred to GA: multi-carrier shipping webhooks beyond Yamato, AI worker autoscaling policies, PSP-agnostic payment method vaulting, system diagnostics endpoints.
 - ✅ Firestore remains single-region (asia-northeast1) for v1 with daily export; global multi-region resilience flagged as GA stretch.
 - ❓ Open questions: PSP agreement finalization date, AI model SLA for suggestion latency, dedicated ops runbook for incident response.
@@ -42,10 +42,10 @@ Align stakeholders on the MVP scope of API v1 described in `doc/api/api_design.m
   - Surfaces: Public catalogue, Authenticated design builder (create/list/update), Cart + Estimate, Checkout (Stripe test mode), Internal reserve/commit, basic admin product management.
   - Criteria: End-to-end order from staff test account succeeds with manual shipment update; idempotency + error logging verified in Cloud Logging; Ops checklist reviewed.
 - **Beta (invite users, Target: 2025-07-01)**
-  - Adds: Promotions apply/remove, Order cancel/invoice request, Admin promotions + order status transitions, Reviews creation, Stripe live mode, PayPal webhook stub, production queue assignment.
-  - Criteria: 95% of beta orders process without manual intervention; latency p95 < 400ms for read endpoints; Stripe + PayPal reconciliation reports match tracker.
+  - Adds: Promotions apply/remove, Order cancel/invoice request, Admin promotions + order status transitions, Reviews creation, Stripe live mode, production queue assignment.
+  - Criteria: 95% of beta orders process without manual intervention; latency p95 < 400ms for read endpoints; Stripe reconciliation reports match tracker.
 - **GA (public launch, Target: 2025-09-10)**
-  - Adds: Multi-carrier shipping webhooks, AI suggestion accept/reject loop, Reviews moderation, audit log export, PayPal full support, BigQuery export job.
+  - Adds: Multi-carrier shipping webhooks, AI suggestion accept/reject loop, Reviews moderation, audit log export, BigQuery export job.
   - Criteria: SLA 99.5% uptime (30d); AI suggestions round-trip < 90s p95; webhook retry backlog < 10 pending; no P1 incidents during launch week.
 
 ### Dependencies & Owners
@@ -67,7 +67,7 @@ Align stakeholders on the MVP scope of API v1 described in `doc/api/api_design.m
 | Operations & monitoring | C | C | C | C | A |
 
 ### Risk & Mitigation Register
-- PSP integration delays → Mitigation: maintain Stripe-first path, simulate PayPal via sandbox until contract signed; review status weekly.
+- PSP integration delays → Mitigation: maintain Stripe-first path; review status weekly.
 - AI suggestions latency impacting UX → Mitigation: async polling with graceful fallbacks; add feature flag per environment.
 - Firestore quota spikes from idempotency storage → Mitigation: configure TTL indexes, monitor metrics dashboard prior to beta.
 - Webhook delivery failures → Mitigation: implement exponential retry with dead-letter queue ahead of beta; rehearse incident playbook.

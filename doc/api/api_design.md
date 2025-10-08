@@ -65,7 +65,7 @@ API は Cloud Run (Go) で実装します。
 * `GET /cart/items` / `POST /cart/items` / `PUT /cart/items/{itemId}` / `DELETE …`
 * `POST /cart:estimate` … 税・送料・割引見積
 * `POST /cart:apply-promo` / `DELETE /cart:remove-promo`
-* `POST /checkout/session` … PSP セッション作成（Stripe/PayPal 等）
+* `POST /checkout/session` … PSP セッション作成（Stripe）
 * `POST /checkout/confirm` … クライアント側で完了通知（最終確定は Webhook）
 
 ## Orders / Payments / Shipments

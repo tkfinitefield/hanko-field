@@ -666,14 +666,6 @@ paths:
       requestBody: { content: { application/json: { schema: { type: object } } } }
       responses: { '200': { description: OK } }
 
-  /webhooks/payments/paypal:
-    post:
-      security: [ { WebhookHMAC: [] } ]
-      tags: [Webhooks]
-      summary: PayPal webhook
-      requestBody: { content: { application/json: { schema: { type: object } } } }
-      responses: { '200': { description: OK } }
-
   /webhooks/shipping/{carrier}:
     post:
       security: [ { WebhookHMAC: [] } ]

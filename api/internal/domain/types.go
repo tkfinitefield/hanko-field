@@ -158,6 +158,7 @@ type Payment struct {
 	ID         string
 	OrderID    string
 	Provider   string
+	IntentID   string
 	Status     string
 	Amount     int64
 	Currency   string

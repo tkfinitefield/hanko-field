@@ -27,7 +27,7 @@
 - [x] Implement inventory service managing stock quantities, reservations, and safety thresholds.
 - [ ] Implement promotion service covering eligibility evaluation, usage accounting, and validations.
 - [ ] Implement cart pricing engine (tax, shipping, discounts) with pluggable rules.
-- [ ] Implement payment integration abstraction (Stripe, PayPal) for checkout session management and reconciliation.
+- [ ] Implement payment integration abstraction (Stripe) for checkout session management and reconciliation.
 - [ ] Implement order lifecycle service (cart → order creation, status transitions, production events, shipment updates).
 - [ ] Implement AI suggestion job dispatcher interface (enqueuing jobs, tracking status, storing results).
 - [ ] Implement audit log writer service for write operations across domains.
@@ -135,7 +135,6 @@
 
 ## 7. Webhooks (Inbound)
 - [ ] Implement Stripe webhook handler validating signature and processing payment intent succeeded/failed and refund events.
-- [ ] Implement PayPal webhook handler validating signature and handling payment/refund lifecycle.
 - [ ] Implement shipping carrier webhook handler accepting updates per carrier and mapping payloads to shipment events.
 - [ ] Implement AI worker webhook handler updating AI job status and persisting generated suggestions.
 - [ ] Implement webhook security middleware (IP filtering, replay protection) and monitoring.
