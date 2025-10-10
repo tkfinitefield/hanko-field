@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -197,12 +199,18 @@ func (s *auditLogService) hashAny(value any) string {
 		return s.hashString(v)
 	case fmt.Stringer:
 		return s.hashString(v.String())
+	case []byte:
+		return s.hashString(string(v))
 	default:
-		b, err := json.Marshal(v)
-		if err != nil {
-			return s.hashString(fmt.Sprintf("%v", v))
+		if b, err := json.Marshal(v); err == nil {
+			return s.hashString(string(b))
 		}
-		return s.hashString(string(b))
+		if normalized := normalizeForHash(value); normalized != nil {
+			if b, err := json.Marshal(normalized); err == nil {
+				return s.hashString(string(b))
+			}
+		}
+		return s.hashString(fmt.Sprintf("%T", value))
 	}
 }
 
@@ -275,6 +283,136 @@ func sanitizeDiffValue(value any) any {
 		return sanitizeText(v.String(), 512)
 	default:
 		return v
+	}
+}
+
+type normalizedKV struct {
+	Key   string `json:"key"`
+	Value any    `json:"value"`
+}
+
+func normalizeForHash(value any) any {
+	return normalizeValueForHash(reflect.ValueOf(value))
+}
+
+func normalizeValueForHash(v reflect.Value) any {
+	if !v.IsValid() {
+		return nil
+	}
+
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if v.IsNil() {
+			return nil
+		}
+		return normalizeValueForHash(v.Elem())
+	case reflect.Map:
+		if v.IsNil() {
+			return nil
+		}
+		keys := v.MapKeys()
+		if len(keys) == 0 {
+			return []normalizedKV{}
+		}
+		pairs := make([]normalizedKV, 0, len(keys))
+		for _, key := range keys {
+			pairs = append(pairs, normalizedKV{
+				Key:   formatHashKey(key),
+				Value: normalizeValueForHash(v.MapIndex(key)),
+			})
+		}
+		sort.Slice(pairs, func(i, j int) bool { return pairs[i].Key < pairs[j].Key })
+		return pairs
+	case reflect.Slice:
+		if v.IsNil() {
+			return nil
+		}
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			bytes := make([]byte, v.Len())
+			for i := 0; i < v.Len(); i++ {
+				bytes[i] = byte(v.Index(i).Uint())
+			}
+			return bytes
+		}
+		fallthrough
+	case reflect.Array:
+		length := v.Len()
+		result := make([]any, length)
+		for i := 0; i < length; i++ {
+			result[i] = normalizeValueForHash(v.Index(i))
+		}
+		return result
+	case reflect.Struct:
+		t := v.Type()
+		pairs := make([]normalizedKV, 0, v.NumField())
+		for i := 0; i < v.NumField(); i++ {
+			field := t.Field(i)
+			if field.PkgPath != "" {
+				continue // unexported
+			}
+			name := field.Name
+			if tag := field.Tag.Get("json"); tag != "" {
+				parts := strings.Split(tag, ",")
+				if len(parts) > 0 && parts[0] == "-" {
+					continue
+				}
+				if len(parts) > 0 && parts[0] != "" {
+					name = parts[0]
+				}
+			}
+			pairs = append(pairs, normalizedKV{
+				Key:   name,
+				Value: normalizeValueForHash(v.Field(i)),
+			})
+		}
+		sort.Slice(pairs, func(i, j int) bool { return pairs[i].Key < pairs[j].Key })
+		return pairs
+	case reflect.Bool:
+		return v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint()
+	case reflect.Float32, reflect.Float64:
+		return v.Float()
+	case reflect.String:
+		return v.String()
+	default:
+		if v.CanInterface() {
+			return v.Interface()
+		}
+		return fmt.Sprintf("<unexported:%s>", v.Type().String())
+	}
+}
+
+func formatHashKey(v reflect.Value) string {
+	if !v.IsValid() {
+		return ""
+	}
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if v.IsNil() {
+			return "<nil>"
+		}
+		return formatHashKey(v.Elem())
+	case reflect.String:
+		return v.String()
+	case reflect.Bool:
+		if v.Bool() {
+			return "true"
+		}
+		return "false"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return fmt.Sprintf("%d", v.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return fmt.Sprintf("%d", v.Uint())
+	case reflect.Float32, reflect.Float64:
+		return fmt.Sprintf("%g", v.Float())
+	default:
+		if v.CanInterface() {
+			return fmt.Sprintf("%#v", v.Interface())
+		}
+		return v.Type().String()
 	}
 }
 

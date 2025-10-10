@@ -210,3 +210,33 @@ func TestAuditLogServiceListDelegates(t *testing.T) {
 		t.Fatalf("expected page token untouched, got %q", repo.listFilter.Pagination.PageToken)
 	}
 }
+
+func TestAuditLogServiceHashAnyProducesStableHashes(t *testing.T) {
+	repo := &stubAuditRepo{}
+	service, err := NewAuditLogService(AuditLogServiceDeps{
+		Repository: repo,
+	})
+	if err != nil {
+		t.Fatalf("new audit log service: %v", err)
+	}
+	impl := service.(*auditLogService)
+
+	t1 := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2024, 6, 2, 10, 0, 0, 0, time.UTC)
+
+	first := map[time.Time]string{
+		t1: "alpha",
+		t2: "bravo",
+	}
+	second := map[time.Time]string{
+		t2: "bravo",
+		t1: "alpha",
+	}
+
+	hash1 := impl.hashAny(first)
+	hash2 := impl.hashAny(second)
+
+	if hash1 != hash2 {
+		t.Fatalf("expected stable hash, got %q and %q", hash1, hash2)
+	}
+}
