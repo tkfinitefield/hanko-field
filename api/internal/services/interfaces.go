@@ -336,15 +336,15 @@ type CreateOrderFromCartCommand struct {
 	ReservationID  string
 	OrderNumber    *string
 	Metadata       map[string]any
-	ExpectedStatus *string
+	ExpectedStatus *OrderStatus
 }
 
 type OrderStatusTransitionCommand struct {
 	OrderID        string
-	TargetStatus   string
+	TargetStatus   OrderStatus
 	ActorID        string
 	Reason         string
-	ExpectedStatus *string
+	ExpectedStatus *OrderStatus
 	Metadata       map[string]any
 }
 
@@ -353,7 +353,7 @@ type CancelOrderCommand struct {
 	ActorID        string
 	Reason         string
 	ReservationID  string
-	ExpectedStatus *string
+	ExpectedStatus *OrderStatus
 	Metadata       map[string]any
 }
 
@@ -361,7 +361,7 @@ type RequestInvoiceCommand struct {
 	OrderID        string
 	ActorID        string
 	Notes          string
-	ExpectedStatus *string
+	ExpectedStatus *OrderStatus
 }
 
 type AppendProductionEventCommand struct {

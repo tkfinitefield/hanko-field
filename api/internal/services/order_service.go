@@ -40,35 +40,60 @@ var (
 	errOrderProductionRepositoryUnavailable = errors.New("order: production repository not configured")
 )
 
-var orderStateTransitions = map[string][]string{
-	string(domain.OrderStatusDraft):          {string(domain.OrderStatusPendingPayment), string(domain.OrderStatusCanceled)},
-	string(domain.OrderStatusPendingPayment): {string(domain.OrderStatusPaid), string(domain.OrderStatusCanceled)},
-	string(domain.OrderStatusPaid):           {string(domain.OrderStatusInProduction), string(domain.OrderStatusReadyToShip), string(domain.OrderStatusCanceled)},
-	string(domain.OrderStatusInProduction):   {string(domain.OrderStatusReadyToShip), string(domain.OrderStatusShipped), string(domain.OrderStatusCanceled)},
-	string(domain.OrderStatusReadyToShip):    {string(domain.OrderStatusShipped), string(domain.OrderStatusCanceled)},
-	string(domain.OrderStatusShipped):        {string(domain.OrderStatusDelivered)},
-	string(domain.OrderStatusDelivered):      {string(domain.OrderStatusCompleted)},
+var orderStateTransitions = map[domain.OrderStatus][]domain.OrderStatus{
+	domain.OrderStatusDraft:          {domain.OrderStatusPendingPayment, domain.OrderStatusCanceled},
+	domain.OrderStatusPendingPayment: {domain.OrderStatusPaid, domain.OrderStatusCanceled},
+	domain.OrderStatusPaid:           {domain.OrderStatusInProduction, domain.OrderStatusReadyToShip, domain.OrderStatusCanceled},
+	domain.OrderStatusInProduction:   {domain.OrderStatusReadyToShip, domain.OrderStatusShipped, domain.OrderStatusCanceled},
+	domain.OrderStatusReadyToShip:    {domain.OrderStatusShipped, domain.OrderStatusCanceled},
+	domain.OrderStatusShipped:        {domain.OrderStatusDelivered},
+	domain.OrderStatusDelivered:      {domain.OrderStatusCompleted},
 }
 
-var cancellableStatuses = []string{
-	string(domain.OrderStatusDraft),
-	string(domain.OrderStatusPendingPayment),
-	string(domain.OrderStatusPaid),
-	string(domain.OrderStatusInProduction),
-	string(domain.OrderStatusReadyToShip),
+var cancellableStatuses = []domain.OrderStatus{
+	domain.OrderStatusDraft,
+	domain.OrderStatusPendingPayment,
+	domain.OrderStatusPaid,
+	domain.OrderStatusInProduction,
+	domain.OrderStatusReadyToShip,
 }
 
-var productionEventStatusMapping = map[string]string{
-	"queued":     string(domain.OrderStatusInProduction),
-	"engraving":  string(domain.OrderStatusInProduction),
-	"polishing":  string(domain.OrderStatusInProduction),
-	"qc":         string(domain.OrderStatusInProduction),
-	"on_hold":    string(domain.OrderStatusInProduction),
-	"rework":     string(domain.OrderStatusInProduction),
-	"packed":     string(domain.OrderStatusReadyToShip),
-	"canceled":   string(domain.OrderStatusCanceled),
-	"completed":  string(domain.OrderStatusReadyToShip),
-	"in_transit": string(domain.OrderStatusShipped),
+var productionEventStatusMapping = map[string]domain.OrderStatus{
+	"queued":     domain.OrderStatusInProduction,
+	"engraving":  domain.OrderStatusInProduction,
+	"polishing":  domain.OrderStatusInProduction,
+	"qc":         domain.OrderStatusInProduction,
+	"on_hold":    domain.OrderStatusInProduction,
+	"rework":     domain.OrderStatusInProduction,
+	"packed":     domain.OrderStatusReadyToShip,
+	"canceled":   domain.OrderStatusCanceled,
+	"completed":  domain.OrderStatusReadyToShip,
+	"in_transit": domain.OrderStatusShipped,
+}
+
+var validOrderStatuses = map[domain.OrderStatus]struct{}{
+	domain.OrderStatusDraft:          {},
+	domain.OrderStatusPendingPayment: {},
+	domain.OrderStatusPaid:           {},
+	domain.OrderStatusInProduction:   {},
+	domain.OrderStatusReadyToShip:    {},
+	domain.OrderStatusShipped:        {},
+	domain.OrderStatusDelivered:      {},
+	domain.OrderStatusCompleted:      {},
+	domain.OrderStatusCanceled:       {},
+}
+
+var validProductionEventTypes = map[string]struct{}{
+	"queued":     {},
+	"engraving":  {},
+	"polishing":  {},
+	"qc":         {},
+	"on_hold":    {},
+	"rework":     {},
+	"packed":     {},
+	"canceled":   {},
+	"completed":  {},
+	"in_transit": {},
 }
 
 var productionHoldEvents = map[string]bool{
@@ -183,12 +208,19 @@ func (s *orderService) CreateFromCart(ctx context.Context, cmd CreateOrderFromCa
 		return Order{}, fmt.Errorf("%w: cart currency is required", ErrOrderInvalidInput)
 	}
 
+	for _, item := range cmd.Cart.Items {
+		itemCurrency := strings.TrimSpace(item.Currency)
+		if itemCurrency != "" && itemCurrency != currency {
+			return Order{}, fmt.Errorf("%w: cart item currency mismatch for sku %s", ErrOrderInvalidInput, strings.TrimSpace(item.SKU))
+		}
+	}
+
 	now := s.now()
 
 	order := Order{
 		ID:              s.nextOrderID(),
 		UserID:          userID,
-		Status:          string(domain.OrderStatusPendingPayment),
+		Status:          domain.OrderStatusPendingPayment,
 		Currency:        currency,
 		Totals:          buildOrderTotals(cmd.Cart),
 		Items:           buildOrderLineItems(cmd.Cart.Items),
@@ -318,7 +350,7 @@ func (s *orderService) GetOrder(ctx context.Context, orderID string, opts OrderR
 
 func (s *orderService) TransitionStatus(ctx context.Context, cmd OrderStatusTransitionCommand) (Order, error) {
 	orderID := strings.TrimSpace(cmd.OrderID)
-	target := strings.TrimSpace(cmd.TargetStatus)
+	target := normalizeStatus(cmd.TargetStatus)
 
 	if orderID == "" {
 		return Order{}, fmt.Errorf("%w: order id is required", ErrOrderInvalidInput)
@@ -326,14 +358,20 @@ func (s *orderService) TransitionStatus(ctx context.Context, cmd OrderStatusTran
 	if target == "" {
 		return Order{}, fmt.Errorf("%w: target status is required", ErrOrderInvalidInput)
 	}
+	if _, ok := validOrderStatuses[target]; !ok {
+		return Order{}, fmt.Errorf("%w: target status %q is not supported", ErrOrderInvalidInput, target)
+	}
 
 	order, err := s.orders.FindByID(ctx, orderID)
 	if err != nil {
 		return Order{}, s.mapRepositoryError(err)
 	}
 
-	if cmd.ExpectedStatus != nil && order.Status != strings.TrimSpace(*cmd.ExpectedStatus) {
-		return Order{}, fmt.Errorf("%w: expected status %q but was %q", ErrOrderConflict, *cmd.ExpectedStatus, order.Status)
+	if cmd.ExpectedStatus != nil {
+		expected := normalizeStatus(*cmd.ExpectedStatus)
+		if expected != "" && order.Status != expected {
+			return Order{}, fmt.Errorf("%w: expected status %q but was %q", ErrOrderConflict, expected, order.Status)
+		}
 	}
 
 	actor := strings.TrimSpace(cmd.ActorID)
@@ -364,8 +402,8 @@ func (s *orderService) TransitionStatus(ctx context.Context, cmd OrderStatusTran
 		Type:           orderEventStatusChanged,
 		OrderID:        order.ID,
 		OrderNumber:    order.OrderNumber,
-		PreviousStatus: prevStatus,
-		CurrentStatus:  order.Status,
+		PreviousStatus: string(prevStatus),
+		CurrentStatus:  string(order.Status),
 		ActorID:        actor,
 		OccurredAt:     now,
 		Metadata:       metadata,
@@ -389,8 +427,11 @@ func (s *orderService) Cancel(ctx context.Context, cmd CancelOrderCommand) (Orde
 		return Order{}, fmt.Errorf("%w: order status %q cannot be canceled", ErrOrderInvalidState, order.Status)
 	}
 
-	if cmd.ExpectedStatus != nil && order.Status != strings.TrimSpace(*cmd.ExpectedStatus) {
-		return Order{}, fmt.Errorf("%w: expected status %q but was %q", ErrOrderConflict, *cmd.ExpectedStatus, order.Status)
+	if cmd.ExpectedStatus != nil {
+		expected := normalizeStatus(*cmd.ExpectedStatus)
+		if expected != "" && order.Status != expected {
+			return Order{}, fmt.Errorf("%w: expected status %q but was %q", ErrOrderConflict, expected, order.Status)
+		}
 	}
 
 	now := s.now()
@@ -400,7 +441,7 @@ func (s *orderService) Cancel(ctx context.Context, cmd CancelOrderCommand) (Orde
 	order.CancelReason = optionalString(reason)
 	order.CanceledAt = &now
 
-	if _, err := s.applyStatusTransition(&order, string(domain.OrderStatusCanceled), strings.TrimSpace(cmd.ActorID), now); err != nil {
+	if _, err := s.applyStatusTransition(&order, domain.OrderStatusCanceled, strings.TrimSpace(cmd.ActorID), now); err != nil {
 		return Order{}, err
 	}
 
@@ -437,8 +478,8 @@ func (s *orderService) Cancel(ctx context.Context, cmd CancelOrderCommand) (Orde
 		Type:           orderEventStatusChanged,
 		OrderID:        order.ID,
 		OrderNumber:    order.OrderNumber,
-		PreviousStatus: prevStatus,
-		CurrentStatus:  order.Status,
+		PreviousStatus: string(prevStatus),
+		CurrentStatus:  string(order.Status),
 		ActorID:        cmd.ActorID,
 		OccurredAt:     now,
 		Metadata:       metadata,
@@ -459,6 +500,9 @@ func (s *orderService) AppendProductionEvent(ctx context.Context, cmd AppendProd
 	eventType := strings.TrimSpace(cmd.Event.Type)
 	if eventType == "" {
 		return OrderProductionEvent{}, fmt.Errorf("%w: event type is required", ErrOrderInvalidInput)
+	}
+	if _, ok := validProductionEventTypes[eventType]; !ok {
+		return OrderProductionEvent{}, fmt.Errorf("%w: production event type %q is not supported", ErrOrderInvalidInput, eventType)
 	}
 
 	order, err := s.orders.FindByID(ctx, orderID)
@@ -538,8 +582,8 @@ func (s *orderService) AppendProductionEvent(ctx context.Context, cmd AppendProd
 			Type:           orderEventStatusChanged,
 			OrderID:        order.ID,
 			OrderNumber:    order.OrderNumber,
-			PreviousStatus: prevStatus,
-			CurrentStatus:  order.Status,
+			PreviousStatus: string(prevStatus),
+			CurrentStatus:  string(order.Status),
 			ActorID:        cmd.ActorID,
 			OccurredAt:     now,
 			Metadata:       metadata,
@@ -569,8 +613,11 @@ func (s *orderService) RequestInvoice(ctx context.Context, cmd RequestInvoiceCom
 		return Order{}, s.mapRepositoryError(err)
 	}
 
-	if cmd.ExpectedStatus != nil && order.Status != strings.TrimSpace(*cmd.ExpectedStatus) {
-		return Order{}, fmt.Errorf("%w: expected status %q but was %q", ErrOrderConflict, *cmd.ExpectedStatus, order.Status)
+	if cmd.ExpectedStatus != nil {
+		expected := normalizeStatus(*cmd.ExpectedStatus)
+		if expected != "" && order.Status != expected {
+			return Order{}, fmt.Errorf("%w: expected status %q but was %q", ErrOrderConflict, expected, order.Status)
+		}
 	}
 
 	now := s.now()
@@ -622,7 +669,7 @@ func (s *orderService) CloneForReorder(ctx context.Context, cmd CloneForReorderC
 		return Order{}, s.mapRepositoryError(err)
 	}
 
-	if !slices.Contains([]string{string(domain.OrderStatusDelivered), string(domain.OrderStatusCompleted)}, source.Status) {
+	if !slices.Contains([]domain.OrderStatus{domain.OrderStatusDelivered, domain.OrderStatusCompleted}, source.Status) {
 		return Order{}, fmt.Errorf("%w: reorder only allowed from delivered/completed orders", ErrOrderInvalidState)
 	}
 
@@ -630,7 +677,7 @@ func (s *orderService) CloneForReorder(ctx context.Context, cmd CloneForReorderC
 	reorder := Order{
 		ID:              s.nextOrderID(),
 		UserID:          source.UserID,
-		Status:          string(domain.OrderStatusDraft),
+		Status:          domain.OrderStatusDraft,
 		Currency:        source.Currency,
 		Totals:          source.Totals,
 		Items:           cloneOrderItems(source.Items),
@@ -677,7 +724,7 @@ func (s *orderService) CloneForReorder(ctx context.Context, cmd CloneForReorderC
 		OrderID:        reorder.ID,
 		OrderNumber:    reorder.OrderNumber,
 		PreviousStatus: string(domain.OrderStatusDraft),
-		CurrentStatus:  reorder.Status,
+		CurrentStatus:  string(reorder.Status),
 		ActorID:        cmd.ActorID,
 		OccurredAt:     now,
 		Metadata:       reorder.Metadata,
@@ -686,9 +733,13 @@ func (s *orderService) CloneForReorder(ctx context.Context, cmd CloneForReorderC
 	return reorder, nil
 }
 
-func (s *orderService) applyStatusTransition(order *Order, target string, actor string, now time.Time) (string, error) {
-	current := strings.TrimSpace(order.Status)
-	target = strings.TrimSpace(target)
+func (s *orderService) applyStatusTransition(order *Order, target domain.OrderStatus, actor string, now time.Time) (domain.OrderStatus, error) {
+	current := normalizeStatus(order.Status)
+	target = normalizeStatus(target)
+
+	if target == "" {
+		return current, fmt.Errorf("%w: target status is required", ErrOrderInvalidInput)
+	}
 
 	if current == target {
 		order.UpdatedAt = now
@@ -699,7 +750,7 @@ func (s *orderService) applyStatusTransition(order *Order, target string, actor 
 	}
 
 	if !canTransition(current, target) {
-		return "", fmt.Errorf("%w: %s → %s", ErrOrderInvalidState, current, target)
+		return current, fmt.Errorf("%w: %s → %s", ErrOrderInvalidState, current, target)
 	}
 
 	order.Status = target
@@ -713,21 +764,21 @@ func (s *orderService) applyStatusTransition(order *Order, target string, actor 
 	return current, nil
 }
 
-func (s *orderService) updateTimestamps(order *Order, status string, now time.Time) {
+func (s *orderService) updateTimestamps(order *Order, status domain.OrderStatus, now time.Time) {
 	switch status {
-	case string(domain.OrderStatusPendingPayment):
+	case domain.OrderStatusPendingPayment:
 		if order.PlacedAt == nil {
 			order.PlacedAt = &now
 		}
-	case string(domain.OrderStatusPaid):
+	case domain.OrderStatusPaid:
 		order.PaidAt = &now
-	case string(domain.OrderStatusShipped):
+	case domain.OrderStatusShipped:
 		order.ShippedAt = &now
-	case string(domain.OrderStatusDelivered):
+	case domain.OrderStatusDelivered:
 		order.DeliveredAt = &now
-	case string(domain.OrderStatusCompleted):
+	case domain.OrderStatusCompleted:
 		order.CompletedAt = &now
-	case string(domain.OrderStatusCanceled):
+	case domain.OrderStatusCanceled:
 		if order.CanceledAt == nil {
 			order.CanceledAt = &now
 		}
@@ -834,10 +885,16 @@ func buildOrderTotals(cart Cart) OrderTotals {
 func buildOrderLineItems(items []CartItem) []OrderLineItem {
 	lines := make([]OrderLineItem, 0, len(items))
 	for _, item := range items {
+		name := ""
+		if item.Metadata != nil {
+			if label, ok := item.Metadata["name"].(string); ok {
+				name = strings.TrimSpace(label)
+			}
+		}
 		line := OrderLineItem{
 			ProductRef: strings.TrimSpace(item.ProductID),
 			SKU:        strings.TrimSpace(item.SKU),
-			Name:       "",
+			Name:       name,
 			Options:    cloneMap(item.Customization),
 			Quantity:   item.Quantity,
 			UnitPrice:  item.UnitPrice,
@@ -904,6 +961,10 @@ func cloneMap(src map[string]any) map[string]any {
 	return maps.Clone(src)
 }
 
+func normalizeStatus(status domain.OrderStatus) domain.OrderStatus {
+	return domain.OrderStatus(strings.TrimSpace(string(status)))
+}
+
 func cloneAndMergeMetadata(base map[string]any, extra map[string]any) map[string]any {
 	if base == nil && extra == nil {
 		return nil
@@ -940,7 +1001,7 @@ func optionalString(v string) *string {
 	return &ref
 }
 
-func canTransition(current, target string) bool {
+func canTransition(current, target domain.OrderStatus) bool {
 	if current == target {
 		return true
 	}

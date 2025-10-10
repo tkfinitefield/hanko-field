@@ -147,7 +147,7 @@ type Order struct {
 	OrderNumber      string
 	UserID           string
 	CartRef          *string
-	Status           string
+	Status           OrderStatus
 	Currency         string
 	Totals           OrderTotals
 	Promotion        *CartPromotion

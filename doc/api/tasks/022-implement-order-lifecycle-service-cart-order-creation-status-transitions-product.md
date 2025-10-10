@@ -21,6 +21,7 @@ Manage transition from cart to order, handle status changes, production events, 
 
 ## Completion Notes
 - Expanded shared domain models for orders, line items, production events, and supporting structs, adding status constants and timeline metadata (`api/internal/domain/types.go`).
+- Tightened status handling by switching `Order.Status` to use the `OrderStatus` enum and validating transition targets and production event types (`api/internal/domain/types.go`, `api/internal/services/order_service.go`).
 - Added repository contracts for order production events and wired the order service into the DI container (`api/internal/repositories/interfaces.go`, `api/internal/di/container.go`).
 - Implemented `orderService` handling cart conversion, state transitions, cancellation with inventory coordination, production event updates, invoice requests, and reorder cloning, with domain event publishing hooks (`api/internal/services/order_service.go`).
 - Created comprehensive unit tests covering creation, transitions, cancellation, production events, and reorders (`api/internal/services/order_service_test.go`).

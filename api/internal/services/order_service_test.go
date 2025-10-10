@@ -194,7 +194,7 @@ func TestOrderServiceCreateFromCart(t *testing.T) {
 	if order.ID != "ord_000TEST" {
 		t.Fatalf("unexpected order id %s", order.ID)
 	}
-	if order.Status != string(domain.OrderStatusPendingPayment) {
+	if order.Status != domain.OrderStatusPendingPayment {
 		t.Fatalf("expected status pending_payment got %s", order.Status)
 	}
 	if order.OrderNumber != "HF-2025-000042" {
@@ -222,7 +222,7 @@ func TestOrderServiceTransitionStatus(t *testing.T) {
 	now := time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)
 	orderRepo := &stubOrderRepo{}
 	orderRepo.findFn = func(_ context.Context, id string) (domain.Order, error) {
-		return domain.Order{ID: id, Status: string(domain.OrderStatusPendingPayment), OrderNumber: "HF-2025-000001", Currency: "JPY"}, nil
+		return domain.Order{ID: id, Status: domain.OrderStatusPendingPayment, OrderNumber: "HF-2025-000001", Currency: "JPY"}, nil
 	}
 	var updated domain.Order
 	orderRepo.updateFn = func(_ context.Context, order domain.Order) error {
@@ -245,16 +245,16 @@ func TestOrderServiceTransitionStatus(t *testing.T) {
 
 	order, err := svc.TransitionStatus(ctx, OrderStatusTransitionCommand{
 		OrderID:      "order-1",
-		TargetStatus: string(domain.OrderStatusPaid),
+		TargetStatus: domain.OrderStatusPaid,
 		ActorID:      "staff-1",
 	})
 	if err != nil {
 		t.Fatalf("transition: %v", err)
 	}
-	if order.Status != string(domain.OrderStatusPaid) {
+	if order.Status != domain.OrderStatusPaid {
 		t.Fatalf("expected status paid got %s", order.Status)
 	}
-	if updated.Status != string(domain.OrderStatusPaid) {
+	if updated.Status != domain.OrderStatusPaid {
 		t.Fatalf("repository update not invoked with paid status")
 	}
 	if updated.PaidAt == nil {
@@ -263,7 +263,7 @@ func TestOrderServiceTransitionStatus(t *testing.T) {
 
 	if _, err := svc.TransitionStatus(ctx, OrderStatusTransitionCommand{
 		OrderID:      "order-1",
-		TargetStatus: string(domain.OrderStatusShipped),
+		TargetStatus: domain.OrderStatusShipped,
 		ActorID:      "staff-1",
 	}); err == nil {
 		t.Fatalf("expected invalid transition error")
@@ -275,7 +275,7 @@ func TestOrderServiceCancelReleasesReservation(t *testing.T) {
 	now := time.Date(2025, 7, 1, 8, 0, 0, 0, time.UTC)
 	orderRepo := &stubOrderRepo{}
 	orderRepo.findFn = func(_ context.Context, id string) (domain.Order, error) {
-		return domain.Order{ID: id, Status: string(domain.OrderStatusPendingPayment), OrderNumber: "HF-2025-000010", Currency: "JPY"}, nil
+		return domain.Order{ID: id, Status: domain.OrderStatusPendingPayment, OrderNumber: "HF-2025-000010", Currency: "JPY"}, nil
 	}
 	var updated domain.Order
 	orderRepo.updateFn = func(_ context.Context, order domain.Order) error {
@@ -314,7 +314,7 @@ func TestOrderServiceCancelReleasesReservation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
-	if order.Status != string(domain.OrderStatusCanceled) {
+	if order.Status != domain.OrderStatusCanceled {
 		t.Fatalf("expected canceled status got %s", order.Status)
 	}
 	if updated.CancelReason == nil || *updated.CancelReason != "changed mind" {
@@ -333,7 +333,7 @@ func TestOrderServiceAppendProductionEventAdvancesStatus(t *testing.T) {
 	now := time.Date(2025, 7, 10, 12, 0, 0, 0, time.UTC)
 	orderRepo := &stubOrderRepo{}
 	orderRepo.findFn = func(_ context.Context, id string) (domain.Order, error) {
-		return domain.Order{ID: id, Status: string(domain.OrderStatusPaid), OrderNumber: "HF-2025-000020", Currency: "JPY"}, nil
+		return domain.Order{ID: id, Status: domain.OrderStatusPaid, OrderNumber: "HF-2025-000020", Currency: "JPY"}, nil
 	}
 	var updated domain.Order
 	orderRepo.updateFn = func(_ context.Context, order domain.Order) error {
@@ -375,7 +375,7 @@ func TestOrderServiceAppendProductionEventAdvancesStatus(t *testing.T) {
 	if event.ID != "ope_PEVID" {
 		t.Fatalf("expected prefixed event id got %s", event.ID)
 	}
-	if updated.Status != string(domain.OrderStatusInProduction) {
+	if updated.Status != domain.OrderStatusInProduction {
 		t.Fatalf("expected status in_production got %s", updated.Status)
 	}
 	if len(events.events) == 0 {
@@ -390,7 +390,7 @@ func TestOrderServiceCloneForReorder(t *testing.T) {
 	orderRepo.findFn = func(_ context.Context, id string) (domain.Order, error) {
 		return domain.Order{
 			ID:          id,
-			Status:      string(domain.OrderStatusDelivered),
+			Status:      domain.OrderStatusDelivered,
 			UserID:      "user-9",
 			Currency:    "JPY",
 			OrderNumber: "HF-2025-000030",
@@ -427,7 +427,7 @@ func TestOrderServiceCloneForReorder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("clone for reorder: %v", err)
 	}
-	if reorder.Status != string(domain.OrderStatusDraft) {
+	if reorder.Status != domain.OrderStatusDraft {
 		t.Fatalf("expected draft status got %s", reorder.Status)
 	}
 	if inserted.Metadata["reorderOf"] != "order-original" {
