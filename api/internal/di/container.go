@@ -103,5 +103,22 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 		svc.Inventory = inventorySvc
 	}
 
+	if ordersRepo := reg.Orders(); ordersRepo != nil && reg.Counters() != nil {
+		orderSvc, err := services.NewOrderService(services.OrderServiceDeps{
+			Orders:     ordersRepo,
+			Payments:   reg.OrderPayments(),
+			Shipments:  reg.OrderShipments(),
+			Production: reg.OrderProductionEvents(),
+			Counters:   reg.Counters(),
+			Inventory:  svc.Inventory,
+			UnitOfWork: reg,
+			Clock:      time.Now,
+		})
+		if err != nil {
+			return Services{}, fmt.Errorf("build order service: %w", err)
+		}
+		svc.Orders = orderSvc
+	}
+
 	return svc, nil
 }

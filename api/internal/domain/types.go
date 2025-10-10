@@ -117,20 +117,62 @@ type CheckoutSession struct {
 	ExpiresAt    time.Time
 }
 
+// OrderStatus enumerates valid lifecycle states for orders.
+type OrderStatus string
+
+const (
+	// OrderStatusDraft indicates the order is yet to be confirmed or checkout is incomplete.
+	OrderStatusDraft OrderStatus = "draft"
+	// OrderStatusPendingPayment indicates the order awaits payment completion.
+	OrderStatusPendingPayment OrderStatus = "pending_payment"
+	// OrderStatusPaid indicates payment succeeded and production can begin.
+	OrderStatusPaid OrderStatus = "paid"
+	// OrderStatusInProduction indicates the order is actively being produced.
+	OrderStatusInProduction OrderStatus = "in_production"
+	// OrderStatusReadyToShip indicates production is complete and order awaits shipment handoff.
+	OrderStatusReadyToShip OrderStatus = "ready_to_ship"
+	// OrderStatusShipped indicates the order has been shipped.
+	OrderStatusShipped OrderStatus = "shipped"
+	// OrderStatusDelivered indicates the order has been delivered to the customer.
+	OrderStatusDelivered OrderStatus = "delivered"
+	// OrderStatusCompleted indicates the order has been completed (post-delivery confirmation).
+	OrderStatusCompleted OrderStatus = "completed"
+	// OrderStatusCanceled indicates the order has been canceled.
+	OrderStatusCanceled OrderStatus = "canceled"
+)
+
 // Order captures order headers returned to handlers/services.
 type Order struct {
-	ID          string
-	OrderNumber string
-	UserID      string
-	Status      string
-	Currency    string
-	Totals      OrderTotals
-	Promotion   *CartPromotion
-	Items       []OrderLineItem
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	PaidAt      *time.Time
-	ShippedAt   *time.Time
+	ID               string
+	OrderNumber      string
+	UserID           string
+	CartRef          *string
+	Status           string
+	Currency         string
+	Totals           OrderTotals
+	Promotion        *CartPromotion
+	Items            []OrderLineItem
+	ShippingAddress  *Address
+	BillingAddress   *Address
+	Contact          *OrderContact
+	Fulfillment      OrderFulfillment
+	Production       OrderProduction
+	Notes            map[string]any
+	Flags            OrderFlags
+	Audit            OrderAudit
+	Metadata         map[string]any
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	PlacedAt         *time.Time
+	PaidAt           *time.Time
+	ShippedAt        *time.Time
+	DeliveredAt      *time.Time
+	CompletedAt      *time.Time
+	CanceledAt       *time.Time
+	CancelReason     *string
+	Payments         []Payment
+	Shipments        []Shipment
+	ProductionEvents []OrderProductionEvent
 }
 
 // OrderTotals holds rolled-up monetary fields in the smallest currency unit.
@@ -145,12 +187,71 @@ type OrderTotals struct {
 
 // OrderLineItem mirrors cart items at the time of checkout.
 type OrderLineItem struct {
-	ProductID string
-	SKU       string
-	Name      string
-	Quantity  int
-	UnitPrice int64
-	Total     int64
+	ProductRef     string
+	SKU            string
+	Name           string
+	Options        map[string]any
+	DesignRef      *string
+	DesignSnapshot map[string]any
+	Quantity       int
+	UnitPrice      int64
+	Total          int64
+	Metadata       map[string]any
+}
+
+// OrderContact stores user contact snapshot for notifications.
+type OrderContact struct {
+	Email string
+	Phone string
+}
+
+// OrderFulfillment holds requested and estimated fulfillment timestamps.
+type OrderFulfillment struct {
+	RequestedAt           *time.Time
+	EstimatedShipDate     *time.Time
+	EstimatedDeliveryDate *time.Time
+}
+
+// OrderProduction stores production assignment metadata for an order.
+type OrderProduction struct {
+	QueueRef        *string
+	AssignedStation *string
+	OperatorRef     *string
+	LastEventType   string
+	LastEventAt     *time.Time
+	OnHold          bool
+}
+
+// OrderFlags stores boolean indicators for manual handling requirements.
+type OrderFlags struct {
+	ManualReview bool
+	Gift         bool
+}
+
+// OrderAudit records the actors responsible for creating/updating the order.
+type OrderAudit struct {
+	CreatedBy *string
+	UpdatedBy *string
+}
+
+// OrderProductionEvent stores timestamped production workflow events.
+type OrderProductionEvent struct {
+	ID          string
+	OrderID     string
+	Type        string
+	Station     string
+	OperatorRef *string
+	DurationSec *int
+	Note        string
+	PhotoURL    *string
+	QC          *OrderProductionQC
+	CreatedAt   time.Time
+}
+
+// OrderProductionQC stores QC-specific payload for production events.
+type OrderProductionQC struct {
+	Result  string
+	Defects []string
 }
 
 // Payment encapsulates payment status and PSP references for an order.

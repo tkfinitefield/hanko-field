@@ -19,6 +19,7 @@ type Registry interface {
 	Orders() OrderRepository
 	OrderPayments() OrderPaymentRepository
 	OrderShipments() OrderShipmentRepository
+	OrderProductionEvents() OrderProductionEventRepository
 	Promotions() PromotionRepository
 	PromotionUsage() PromotionUsageRepository
 	Users() UserRepository
@@ -150,6 +151,12 @@ type OrderShipmentRepository interface {
 	Insert(ctx context.Context, shipment domain.Shipment) error
 	Update(ctx context.Context, shipment domain.Shipment) error
 	List(ctx context.Context, orderID string) ([]domain.Shipment, error)
+}
+
+// OrderProductionEventRepository stores production timeline events for an order.
+type OrderProductionEventRepository interface {
+	Insert(ctx context.Context, event domain.OrderProductionEvent) (domain.OrderProductionEvent, error)
+	List(ctx context.Context, orderID string) ([]domain.OrderProductionEvent, error)
 }
 
 // PromotionRepository maintains promotion definitions and usage counters.

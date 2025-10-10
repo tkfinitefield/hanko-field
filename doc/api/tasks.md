@@ -28,7 +28,7 @@
 - [ ] Implement promotion service covering eligibility evaluation, usage accounting, and validations.
 - [ ] Implement cart pricing engine (tax, shipping, discounts) with pluggable rules.
 - [ ] Implement payment integration abstraction (Stripe) for checkout session management and reconciliation.
-- [ ] Implement order lifecycle service (cart → order creation, status transitions, production events, shipment updates).
+- [x] Implement order lifecycle service (cart → order creation, status transitions, production events, shipment updates).
 - [ ] Implement AI suggestion job dispatcher interface (enqueuing jobs, tracking status, storing results).
 - [ ] Implement audit log writer service for write operations across domains.
 - [ ] Implement review moderation service (status transitions, replies, visibility).

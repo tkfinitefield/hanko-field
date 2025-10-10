@@ -5,6 +5,7 @@ import (
 	"time"
 
 	domain "github.com/hanko-field/api/internal/domain"
+	"github.com/hanko-field/api/internal/repositories"
 )
 
 // Type aliases expose domain models to the services package without reversing dependency direction.
@@ -27,6 +28,14 @@ type (
 	Order                     = domain.Order
 	OrderTotals               = domain.OrderTotals
 	OrderLineItem             = domain.OrderLineItem
+	OrderProductionEvent      = domain.OrderProductionEvent
+	OrderProductionQC         = domain.OrderProductionQC
+	OrderStatus               = domain.OrderStatus
+	OrderContact              = domain.OrderContact
+	OrderFulfillment          = domain.OrderFulfillment
+	OrderProduction           = domain.OrderProduction
+	OrderFlags                = domain.OrderFlags
+	OrderAudit                = domain.OrderAudit
 	Payment                   = domain.Payment
 	Shipment                  = domain.Shipment
 	ShipmentEvent             = domain.ShipmentEvent
@@ -88,11 +97,14 @@ type CheckoutService interface {
 
 // OrderService encapsulates order read/write flows including cancellation and reorders.
 type OrderService interface {
+	CreateFromCart(ctx context.Context, cmd CreateOrderFromCartCommand) (Order, error)
 	ListOrders(ctx context.Context, filter OrderListFilter) (domain.CursorPage[Order], error)
 	GetOrder(ctx context.Context, orderID string, opts OrderReadOptions) (Order, error)
-	CancelOrder(ctx context.Context, cmd CancelOrderCommand) (Order, error)
-	RequestInvoice(ctx context.Context, cmd RequestInvoiceCommand) error
-	Reorder(ctx context.Context, cmd ReorderCommand) (Order, error)
+	TransitionStatus(ctx context.Context, cmd OrderStatusTransitionCommand) (Order, error)
+	Cancel(ctx context.Context, cmd CancelOrderCommand) (Order, error)
+	AppendProductionEvent(ctx context.Context, cmd AppendProductionEventCommand) (OrderProductionEvent, error)
+	RequestInvoice(ctx context.Context, cmd RequestInvoiceCommand) (Order, error)
+	CloneForReorder(ctx context.Context, cmd CloneForReorderCommand) (Order, error)
 }
 
 // PaymentService handles idempotent PSP webhook processing and admin adjustments.
@@ -310,33 +322,58 @@ type ConfirmCheckoutCommand struct {
 	SessionID string
 }
 
-type OrderListFilter struct {
-	UserID     string
-	Status     []string
-	DateRange  domain.RangeQuery[time.Time]
-	Pagination Pagination
-}
+type OrderListFilter = repositories.OrderListFilter
 
 type OrderReadOptions struct {
-	IncludePayments  bool
-	IncludeShipments bool
-	IncludeEvents    bool
+	IncludePayments         bool
+	IncludeShipments        bool
+	IncludeProductionEvents bool
+}
+
+type CreateOrderFromCartCommand struct {
+	Cart           Cart
+	ActorID        string
+	ReservationID  string
+	OrderNumber    *string
+	Metadata       map[string]any
+	ExpectedStatus *string
+}
+
+type OrderStatusTransitionCommand struct {
+	OrderID        string
+	TargetStatus   string
+	ActorID        string
+	Reason         string
+	ExpectedStatus *string
+	Metadata       map[string]any
 }
 
 type CancelOrderCommand struct {
-	OrderID     string
-	RequestedBy string
-	Reason      string
+	OrderID        string
+	ActorID        string
+	Reason         string
+	ReservationID  string
+	ExpectedStatus *string
+	Metadata       map[string]any
 }
 
 type RequestInvoiceCommand struct {
+	OrderID        string
+	ActorID        string
+	Notes          string
+	ExpectedStatus *string
+}
+
+type AppendProductionEventCommand struct {
 	OrderID string
+	Event   OrderProductionEvent
 	ActorID string
 }
 
-type ReorderCommand struct {
-	OrderID string
-	UserID  string
+type CloneForReorderCommand struct {
+	OrderID  string
+	ActorID  string
+	Metadata map[string]any
 }
 
 type PaymentWebhookCommand struct {
