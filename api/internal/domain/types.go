@@ -59,6 +59,62 @@ type AISuggestion struct {
 	ExpiresAt *time.Time
 }
 
+// AIJobKind enumerates supported AI job categories.
+type AIJobKind string
+
+const (
+	// AIJobKindDesignSuggestion represents AI jobs generating design suggestions.
+	AIJobKindDesignSuggestion AIJobKind = "design_suggestion"
+)
+
+// AIJobStatus describes lifecycle states for AI jobs.
+type AIJobStatus string
+
+const (
+	// AIJobStatusQueued indicates the job is waiting to be processed.
+	AIJobStatusQueued AIJobStatus = "queued"
+	// AIJobStatusInProgress indicates a worker is currently handling the job.
+	AIJobStatusInProgress AIJobStatus = "in_progress"
+	// AIJobStatusSucceeded indicates the job completed successfully.
+	AIJobStatusSucceeded AIJobStatus = "succeeded"
+	// AIJobStatusFailed indicates the job failed and requires operator attention.
+	AIJobStatusFailed AIJobStatus = "failed"
+	// AIJobStatusCanceled indicates the job was canceled prior to completion.
+	AIJobStatusCanceled AIJobStatus = "canceled"
+)
+
+// AIJobError captures structured failure information for AI jobs.
+type AIJobError struct {
+	Code      string
+	Message   string
+	Retryable bool
+}
+
+// AIJobAttempt stores retry metadata for a job.
+type AIJobAttempt struct {
+	Count           int
+	LastAttemptedAt *time.Time
+}
+
+// AIJob represents an asynchronous AI workflow tracked in Firestore.
+type AIJob struct {
+	ID          string
+	Kind        AIJobKind
+	Status      AIJobStatus
+	Priority    int
+	Payload     map[string]any
+	ResultRef   *string
+	Error       *AIJobError
+	Attempt     AIJobAttempt
+	ScheduledAt *time.Time
+	LockedBy    *string
+	LockedAt    *time.Time
+	CompletedAt *time.Time
+	ExpiresAt   *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 // Cart aggregates the mutable shopping cart state for a user.
 type Cart struct {
 	ID              string

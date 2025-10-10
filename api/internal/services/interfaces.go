@@ -205,7 +205,10 @@ type SystemService interface {
 
 // BackgroundJobDispatcher schedules asynchronous processing such as AI jobs, cleanup tasks, and notifications.
 type BackgroundJobDispatcher interface {
-	EnqueueAISuggestion(ctx context.Context, payload AISuggestionJobPayload) (string, error)
+	QueueAISuggestion(ctx context.Context, cmd QueueAISuggestionCommand) (QueueAISuggestionResult, error)
+	GetAIJob(ctx context.Context, jobID string) (domain.AIJob, error)
+	CompleteAISuggestion(ctx context.Context, cmd CompleteAISuggestionCommand) (CompleteAISuggestionResult, error)
+	GetSuggestion(ctx context.Context, designID string, suggestionID string) (AISuggestion, error)
 	EnqueueRegistrabilityCheck(ctx context.Context, payload RegistrabilityJobPayload) (string, error)
 	EnqueueStockCleanup(ctx context.Context, payload StockCleanupPayload) error
 }
@@ -621,11 +624,41 @@ type CounterCommand struct {
 	Step      int64
 }
 
-type AISuggestionJobPayload struct {
+// QueueAISuggestionCommand packages inputs for an AI suggestion job request.
+type QueueAISuggestionCommand struct {
+	DesignID       string
+	Method         string
+	Model          string
+	Prompt         string
+	Snapshot       map[string]any
+	Parameters     map[string]any
+	Metadata       map[string]any
+	IdempotencyKey string
+	Priority       int
+	RequestedBy    string
+}
+
+// QueueAISuggestionResult reports identifiers generated for a queued AI job.
+type QueueAISuggestionResult struct {
+	JobID        string
 	SuggestionID string
-	DesignID     string
-	Method       string
-	Model        string
+	Status       domain.AIJobStatus
+	QueuedAt     time.Time
+}
+
+// CompleteAISuggestionCommand encapsulates AI worker outputs for persisting suggestion results.
+type CompleteAISuggestionCommand struct {
+	JobID      string
+	Suggestion AISuggestion
+	Error      *domain.AIJobError
+	Outputs    map[string]any
+	Metadata   map[string]any
+}
+
+// CompleteAISuggestionResult returns the persisted job and optional suggestion outputs.
+type CompleteAISuggestionResult struct {
+	Job        domain.AIJob
+	Suggestion *AISuggestion
 }
 
 type RegistrabilityJobPayload struct {

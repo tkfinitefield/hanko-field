@@ -14,6 +14,7 @@ type Registry interface {
 	Designs() DesignRepository
 	DesignVersions() DesignVersionRepository
 	AISuggestions() AISuggestionRepository
+	AIJobs() AIJobRepository
 	Carts() CartRepository
 	Inventory() InventoryRepository
 	Orders() OrderRepository
@@ -66,8 +67,30 @@ type DesignVersionRepository interface {
 // AISuggestionRepository stores AI suggestion records and status transitions.
 type AISuggestionRepository interface {
 	Insert(ctx context.Context, suggestion domain.AISuggestion) error
+	FindByID(ctx context.Context, designID string, suggestionID string) (domain.AISuggestion, error)
 	UpdateStatus(ctx context.Context, designID string, suggestionID string, status string, metadata map[string]any) (domain.AISuggestion, error)
 	ListByDesign(ctx context.Context, designID string, pager domain.Pagination) (domain.CursorPage[domain.AISuggestion], error)
+}
+
+// AIJobRepository persists AI job metadata and lifecycle state.
+type AIJobRepository interface {
+	Insert(ctx context.Context, job domain.AIJob) (domain.AIJob, error)
+	FindByID(ctx context.Context, jobID string) (domain.AIJob, error)
+	FindByIdempotencyKey(ctx context.Context, key string) (domain.AIJob, error)
+	UpdateStatus(ctx context.Context, jobID string, status domain.AIJobStatus, update AIJobStatusUpdate) (domain.AIJob, error)
+}
+
+// AIJobStatusUpdate carries optional fields to mutate during a status transition.
+type AIJobStatusUpdate struct {
+	Payload     map[string]any
+	ResultRef   *string
+	Error       *domain.AIJobError
+	Attempt     *domain.AIJobAttempt
+	LockedBy    *string
+	LockedAt    *time.Time
+	CompletedAt *time.Time
+	ExpiresAt   *time.Time
+	Metadata    map[string]any
 }
 
 // CartRepository owns cart header + items persistence with optimistic locking guarantees.
