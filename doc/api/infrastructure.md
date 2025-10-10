@@ -64,6 +64,13 @@ Terraform outputs the Cloud Run URL, bucket names, secret IDs, and service accou
 - Enable [Terraform Cloud/Google Cloud Storage] state locking to prevent concurrent applies.
 - Audit IAM modifications regularly; service account bindings are managed exclusively through Terraform.
 
+## Audit Log Retention & Export
+
+- `/auditLogs` in Firestore is append-only; entries are hashed for IP/PII values by the API service before persistence.
+- Cloud Scheduler triggers `export-audit-logs` once per night, invoking a Cloud Run job that batches the previous day's documents into BigQuery dataset `ops_audit_logs.audit_events` (partitioned by `createdAt`).
+- A monthly Dataflow template copies the same range to Cloud Storage (`gs://hanko-field-exports/audit-logs/YYYY/MM/`) with a 7-year bucket retention policy for long-term compliance.
+- Ops should monitor the Scheduler and Dataflow jobs (Stackdriver alerts are configured) and re-run the export job manually when replaying missed windows after incidents.
+
 ## Additional Notes
 
 - Pub/Sub subscriptions default to pull with customizable ack deadlines and optional push/Dead Letter Queue configuration.

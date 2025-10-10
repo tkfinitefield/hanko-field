@@ -41,7 +41,7 @@ type UserServiceDeps struct {
 	Addresses      repositories.AddressRepository
 	PaymentMethods repositories.PaymentMethodRepository
 	Favorites      repositories.FavoriteRepository
-	Audit          repositories.AuditLogRepository
+	Audit          AuditLogService
 	Firebase       auth.UserGetter
 	Clock          func() time.Time
 }
@@ -51,7 +51,7 @@ type userService struct {
 	addresses      repositories.AddressRepository
 	paymentMethods repositories.PaymentMethodRepository
 	favorites      repositories.FavoriteRepository
-	audit          repositories.AuditLogRepository
+	audit          AuditLogService
 	firebase       auth.UserGetter
 	clock          func() time.Time
 }
@@ -368,14 +368,31 @@ func (s *userService) appendAudit(ctx context.Context, action string, actorID st
 	if s.audit == nil {
 		return nil
 	}
-	entry := domain.AuditLogEntry{
-		ActorRef:  strings.TrimSpace(actorID),
-		TargetRef: fmt.Sprintf("user:%s", strings.TrimSpace(userID)),
-		Action:    action,
-		Diff:      diff,
-		CreatedAt: s.clock(),
+	record := AuditLogRecord{
+		Actor:      strings.TrimSpace(actorID),
+		Action:     action,
+		TargetRef:  fmt.Sprintf("/users/%s", strings.TrimSpace(userID)),
+		OccurredAt: s.clock(),
 	}
-	return s.audit.Append(ctx, entry)
+	diffPayload, sensitive, metadata := splitAuditChanges(diff)
+	if len(diffPayload) > 0 {
+		record.Diff = diffPayload
+		record.SensitiveDiffKeys = sensitive
+	}
+	if len(metadata) > 0 {
+		if record.Metadata == nil {
+			record.Metadata = make(map[string]any, len(metadata))
+		}
+		for k, v := range metadata {
+			record.Metadata[k] = v
+		}
+	}
+	if record.Metadata == nil {
+		record.Metadata = map[string]any{}
+	}
+	record.Metadata["service"] = "user"
+	s.audit.Record(ctx, record)
+	return nil
 }
 
 func validateDisplayName(name string) error {
@@ -461,6 +478,48 @@ func diffValue(from, to any) map[string]any {
 	return map[string]any{
 		"from": from,
 		"to":   to,
+	}
+}
+
+func splitAuditChanges(changes map[string]any) (map[string]AuditLogDiff, []string, map[string]any) {
+	if len(changes) == 0 {
+		return nil, nil, nil
+	}
+	diff := make(map[string]AuditLogDiff)
+	metadata := make(map[string]any)
+	var sensitive []string
+	for key, value := range changes {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			continue
+		}
+		if changeMap, ok := value.(map[string]any); ok {
+			diff[trimmedKey] = AuditLogDiff{
+				Before: changeMap["from"],
+				After:  changeMap["to"],
+			}
+			if isSensitiveAuditField(trimmedKey) {
+				sensitive = append(sensitive, trimmedKey)
+			}
+			continue
+		}
+		metadata[trimmedKey] = value
+	}
+	if len(diff) == 0 {
+		diff = nil
+	}
+	if len(metadata) == 0 {
+		metadata = nil
+	}
+	return diff, sensitive, metadata
+}
+
+func isSensitiveAuditField(field string) bool {
+	switch strings.ToLower(strings.TrimSpace(field)) {
+	case "displayname", "email", "phonenumber", "notificationprefs":
+		return true
+	default:
+		return false
 	}
 }
 

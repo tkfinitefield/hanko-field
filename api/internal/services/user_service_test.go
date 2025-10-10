@@ -61,17 +61,16 @@ func (m *memoryUserRepo) UpdateProfile(_ context.Context, profile domain.UserPro
 	return cloneProfile(profile), nil
 }
 
-type captureAuditRepo struct {
-	entries []domain.AuditLogEntry
+type captureAuditService struct {
+	records []AuditLogRecord
 }
 
-func (c *captureAuditRepo) Append(_ context.Context, entry domain.AuditLogEntry) error {
-	c.entries = append(c.entries, entry)
-	return nil
+func (c *captureAuditService) Record(_ context.Context, record AuditLogRecord) {
+	c.records = append(c.records, record)
 }
 
-func (c *captureAuditRepo) List(_ context.Context, _ repositories.AuditLogFilter) (domain.CursorPage[domain.AuditLogEntry], error) {
-	return domain.CursorPage[domain.AuditLogEntry]{Items: append([]domain.AuditLogEntry(nil), c.entries...)}, nil
+func (c *captureAuditService) List(_ context.Context, _ AuditLogFilter) (domain.CursorPage[domain.AuditLogEntry], error) {
+	return domain.CursorPage[domain.AuditLogEntry]{}, nil
 }
 
 type stubFirebase struct {
@@ -116,7 +115,7 @@ func TestUserServiceGetProfileSeedsFromFirebase(t *testing.T) {
 			},
 		},
 	}}
-	audits := &captureAuditRepo{}
+	audits := &captureAuditService{}
 
 	svc, err := NewUserService(UserServiceDeps{
 		Users:    repo,
@@ -160,7 +159,7 @@ func TestUserServiceUpdateProfileValidation(t *testing.T) {
 	}
 	repo := newMemoryUserRepo(clock)
 	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
-	audits := &captureAuditRepo{}
+	audits := &captureAuditService{}
 
 	svc, err := NewUserService(UserServiceDeps{
 		Users:    repo,
@@ -198,7 +197,7 @@ func TestUserServiceUpdateProfileSuccess(t *testing.T) {
 	}
 	repo := newMemoryUserRepo(clock)
 	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
-	audits := &captureAuditRepo{}
+	audits := &captureAuditService{}
 
 	svc, err := NewUserService(UserServiceDeps{
 		Users:    repo,
@@ -246,10 +245,10 @@ func TestUserServiceUpdateProfileSuccess(t *testing.T) {
 		t.Fatalf("expected avatar asset id, got %v", updated.AvatarAssetID)
 	}
 
-	if len(audits.entries) != 1 {
-		t.Fatalf("expected 1 audit entry, got %d", len(audits.entries))
+	if len(audits.records) != 1 {
+		t.Fatalf("expected 1 audit entry, got %d", len(audits.records))
 	}
-	entry := audits.entries[0]
+	entry := audits.records[0]
 	if entry.Action != auditActionProfileUpdate {
 		t.Fatalf("unexpected audit action %s", entry.Action)
 	}
@@ -268,7 +267,7 @@ func TestUserServiceMaskProfile(t *testing.T) {
 	}
 	repo := newMemoryUserRepo(clock)
 	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
-	audits := &captureAuditRepo{}
+	audits := &captureAuditService{}
 
 	svc, err := NewUserService(UserServiceDeps{
 		Users:    repo,
@@ -320,7 +319,7 @@ func TestUserServiceMaskProfile(t *testing.T) {
 	if masked.IsActive {
 		t.Fatalf("expected user inactive after masking")
 	}
-	if len(audits.entries) != 1 || audits.entries[0].Action != auditActionProfileMask {
+	if len(audits.records) != 1 || audits.records[0].Action != auditActionProfileMask {
 		t.Fatalf("expected mask audit entry")
 	}
 }
@@ -335,7 +334,7 @@ func TestUserServiceSetUserActiveConflict(t *testing.T) {
 	}
 	repo := newMemoryUserRepo(clock)
 	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
-	audits := &captureAuditRepo{}
+	audits := &captureAuditService{}
 
 	svc, err := NewUserService(UserServiceDeps{
 		Users:    repo,
@@ -391,4 +390,4 @@ func cloneProfile(profile domain.UserProfile) domain.UserProfile {
 }
 
 var _ repositories.UserRepository = (*memoryUserRepo)(nil)
-var _ repositories.AuditLogRepository = (*captureAuditRepo)(nil)
+var _ AuditLogService = (*captureAuditService)(nil)

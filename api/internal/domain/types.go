@@ -584,10 +584,16 @@ type SystemHealthReport struct {
 // AuditLogEntry stores normalized audit information for admin use.
 type AuditLogEntry struct {
 	ID        string
-	ActorRef  string
-	TargetRef string
+	Actor     string
+	ActorType string
 	Action    string
+	TargetRef string
+	Metadata  map[string]any
 	Diff      map[string]any
+	IPHash    string
+	UserAgent string
+	Severity  string
+	RequestID string
 	CreatedAt time.Time
 }
 

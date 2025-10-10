@@ -332,7 +332,10 @@ type ContentGuideFilter struct {
 
 type AuditLogFilter struct {
 	TargetRef  string
-	ActorRef   string
+	Actor      string
+	ActorType  string
+	Action     string
+	DateRange  domain.RangeQuery[time.Time]
 	Pagination domain.Pagination
 }
 

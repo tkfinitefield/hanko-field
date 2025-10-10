@@ -30,6 +30,7 @@ type Services struct {
 	System     services.SystemService
 	Jobs       services.BackgroundJobDispatcher
 	Errors     services.ErrorTranslator
+	Audit      services.AuditLogService
 }
 
 // Container wires repositories, services, and background infrastructure for runtime use.
@@ -72,6 +73,17 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 		return svc, nil
 	}
 
+	if auditRepo := reg.AuditLogs(); auditRepo != nil {
+		auditSvc, err := services.NewAuditLogService(services.AuditLogServiceDeps{
+			Repository: auditRepo,
+			Clock:      time.Now,
+		})
+		if err != nil {
+			return Services{}, fmt.Errorf("build audit log service: %w", err)
+		}
+		svc.Audit = auditSvc
+	}
+
 	if usersRepo := reg.Users(); usersRepo != nil && cfg.Firebase.ProjectID != "" {
 		firebase, err := auth.NewFirebaseVerifier(ctx, cfg.Firebase)
 		if err != nil {
@@ -82,7 +94,7 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 			Addresses:      reg.Addresses(),
 			PaymentMethods: reg.PaymentMethods(),
 			Favorites:      reg.Favorites(),
-			Audit:          reg.AuditLogs(),
+			Audit:          svc.Audit,
 			Firebase:       firebase,
 			Clock:          time.Now,
 		})

@@ -203,6 +203,12 @@ type SystemService interface {
 	NextCounterValue(ctx context.Context, cmd CounterCommand) (int64, error)
 }
 
+// AuditLogService centralizes immutable audit log persistence and retrieval.
+type AuditLogService interface {
+	Record(ctx context.Context, record AuditLogRecord)
+	List(ctx context.Context, filter AuditLogFilter) (domain.CursorPage[AuditLogEntry], error)
+}
+
 // BackgroundJobDispatcher schedules asynchronous processing such as AI jobs, cleanup tasks, and notifications.
 type BackgroundJobDispatcher interface {
 	QueueAISuggestion(ctx context.Context, cmd QueueAISuggestionCommand) (QueueAISuggestionResult, error)
@@ -613,9 +619,35 @@ type SignedDownloadCommand struct {
 	AssetID string
 }
 
+// AuditLogRecord defines the payload accepted by the audit writer service.
+type AuditLogRecord struct {
+	Actor                 string
+	ActorType             string
+	Action                string
+	TargetRef             string
+	Severity              string
+	RequestID             string
+	OccurredAt            time.Time
+	Metadata              map[string]any
+	Diff                  map[string]AuditLogDiff
+	SensitiveMetadataKeys []string
+	SensitiveDiffKeys     []string
+	IPAddress             string
+	UserAgent             string
+}
+
+// AuditLogDiff captures before/after values for tracked fields.
+type AuditLogDiff struct {
+	Before any
+	After  any
+}
+
 type AuditLogFilter struct {
 	TargetRef  string
-	ActorRef   string
+	Actor      string
+	ActorType  string
+	Action     string
+	DateRange  domain.RangeQuery[time.Time]
 	Pagination Pagination
 }
 
