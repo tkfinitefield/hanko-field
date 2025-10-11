@@ -56,6 +56,8 @@ type (
 	ContentPage               = domain.ContentPage
 	ContentGuide              = domain.ContentGuide
 	TemplateSummary           = domain.TemplateSummary
+	Template                  = domain.Template
+	TemplateSort              = domain.TemplateSort
 	FontSummary               = domain.FontSummary
 	MaterialSummary           = domain.MaterialSummary
 	ProductSummary            = domain.ProductSummary
@@ -196,7 +198,8 @@ type ContentService interface {
 // CatalogService manages templates, fonts, materials, and products for admin-facing operations.
 type CatalogService interface {
 	ListTemplates(ctx context.Context, filter TemplateFilter) (domain.CursorPage[TemplateSummary], error)
-	UpsertTemplate(ctx context.Context, cmd UpsertTemplateCommand) (TemplateSummary, error)
+	GetTemplate(ctx context.Context, templateID string) (Template, error)
+	UpsertTemplate(ctx context.Context, cmd UpsertTemplateCommand) (Template, error)
 	DeleteTemplate(ctx context.Context, templateID string) error
 	ListFonts(ctx context.Context, filter FontFilter) (domain.CursorPage[FontSummary], error)
 	UpsertFont(ctx context.Context, cmd UpsertFontCommand) (FontSummary, error)
@@ -611,14 +614,17 @@ type UpsertContentPageCommand struct {
 }
 
 type TemplateFilter struct {
-	Shape      *string
-	Writing    *string
-	IsPublic   *bool
-	Pagination Pagination
+	Category      *string
+	Style         *string
+	Tags          []string
+	SortBy        domain.TemplateSort
+	SortOrder     SortOrder
+	PublishedOnly bool
+	Pagination    Pagination
 }
 
 type UpsertTemplateCommand struct {
-	Template TemplateSummary
+	Template Template
 	ActorID  string
 }
 

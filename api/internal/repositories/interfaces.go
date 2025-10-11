@@ -239,7 +239,8 @@ type FavoriteRepository interface {
 // CatalogRepository bundles template/font/material/product storage with shared transactions.
 type CatalogRepository interface {
 	ListTemplates(ctx context.Context, filter TemplateFilter) (domain.CursorPage[domain.TemplateSummary], error)
-	UpsertTemplate(ctx context.Context, template domain.TemplateSummary) (domain.TemplateSummary, error)
+	GetTemplate(ctx context.Context, templateID string) (domain.Template, error)
+	UpsertTemplate(ctx context.Context, template domain.Template) (domain.Template, error)
 	DeleteTemplate(ctx context.Context, templateID string) error
 
 	ListFonts(ctx context.Context, filter FontFilter) (domain.CursorPage[domain.FontSummary], error)
@@ -317,10 +318,13 @@ type ReviewModerationUpdate struct {
 }
 
 type TemplateFilter struct {
-	Shape      *string
-	Writing    *string
-	IsPublic   *bool
-	Pagination domain.Pagination
+	Category      *string
+	Style         *string
+	Tags          []string
+	OnlyPublished bool
+	SortBy        domain.TemplateSort
+	SortOrder     domain.SortOrder
+	Pagination    domain.Pagination
 }
 
 type FontFilter struct {

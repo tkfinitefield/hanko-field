@@ -26,6 +26,16 @@ type RangeQuery[T comparable] struct {
 	To   *T
 }
 
+// TemplateSort indicates the field used to order template listings.
+type TemplateSort string
+
+const (
+	// TemplateSortPopularity sorts templates by popularity (higher first).
+	TemplateSortPopularity TemplateSort = "popularity"
+	// TemplateSortCreatedAt sorts templates by creation time (newest first).
+	TemplateSortCreatedAt TemplateSort = "createdAt"
+)
+
 // Design encapsulates user-created seal design metadata shared across layers.
 type Design struct {
 	ID        string
@@ -571,12 +581,23 @@ type ContentGuide struct {
 
 // TemplateSummary describes catalog templates for listing endpoints.
 type TemplateSummary struct {
-	ID       string
-	Name     string
-	Shape    string
-	Writing  string
-	IsPublic bool
-	Sort     int
+	ID               string
+	Name             string
+	Description      string
+	Category         string
+	Style            string
+	Tags             []string
+	PreviewImagePath string
+	Popularity       int
+	IsPublished      bool
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// Template represents full template metadata for detail endpoints.
+type Template struct {
+	TemplateSummary
+	SVGPath string
 }
 
 // FontSummary captures metadata required by rendering services.
