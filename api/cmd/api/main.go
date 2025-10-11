@@ -17,6 +17,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/hanko-field/api/internal/handlers"
 	"github.com/hanko-field/api/internal/platform/auth"
@@ -228,11 +230,22 @@ func newSystemService(ctx context.Context, client *firestore.Client, fetcher *se
 		})
 	}
 	if fetcher != nil {
+		const secretHealthReference = "secret://system/healthz?version=latest"
 		checks = append(checks, repositories.DependencyCheck{
 			Name:    "secretManager",
 			Timeout: time.Second,
-			Check: func(context.Context) error {
-				return nil
+			Check: func(ctx context.Context) error {
+				_, err := fetcher.Resolve(ctx, secretHealthReference)
+				if err == nil {
+					return nil
+				}
+				if st, ok := status.FromError(err); ok {
+					switch st.Code() {
+					case codes.NotFound:
+						return nil
+					}
+				}
+				return err
 			},
 		})
 	}
