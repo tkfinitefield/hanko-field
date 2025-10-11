@@ -173,6 +173,29 @@ func TestCatalogServiceGetTemplate(t *testing.T) {
 	})
 }
 
+func TestCatalogServiceGetFont(t *testing.T) {
+	stubRepo := &stubCatalogRepository{
+		fontGetPublished: domain.Font{
+			FontSummary: domain.FontSummary{ID: "font_001", IsPublished: true},
+		},
+	}
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: stubRepo})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	font, err := svc.GetFont(context.Background(), " font_001 ")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if font.ID != "font_001" {
+		t.Fatalf("expected font id font_001, got %s", font.ID)
+	}
+	if stubRepo.fontGetPublishedID != "font_001" {
+		t.Fatalf("expected repository to receive trimmed id font_001, got %q", stubRepo.fontGetPublishedID)
+	}
+}
+
 func TestCatalogServiceDeleteTemplate(t *testing.T) {
 	stubRepo := &stubCatalogRepository{}
 	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: stubRepo})

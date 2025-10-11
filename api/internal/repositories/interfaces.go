@@ -244,8 +244,12 @@ type CatalogRepository interface {
 	UpsertTemplate(ctx context.Context, template domain.Template) (domain.Template, error)
 	DeleteTemplate(ctx context.Context, templateID string) error
 
+	// ListFonts returns a paginated collection of fonts respecting the provided filter.
 	ListFonts(ctx context.Context, filter FontFilter) (domain.CursorPage[domain.FontSummary], error)
+	// GetPublishedFont retrieves a single font that is publicly published. Should return a RepositoryError with
+	// IsNotFound when the font is absent or unpublished.
 	GetPublishedFont(ctx context.Context, fontID string) (domain.Font, error)
+	// GetFont retrieves a font regardless of publication state (for admin/internal usage).
 	GetFont(ctx context.Context, fontID string) (domain.Font, error)
 	UpsertFont(ctx context.Context, font domain.FontSummary) (domain.FontSummary, error)
 	DeleteFont(ctx context.Context, fontID string) error

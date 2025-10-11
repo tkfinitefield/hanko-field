@@ -211,6 +211,7 @@ func TestPublicHandlers_ListFonts(t *testing.T) {
 					PreviewImagePath: "fonts/font_001.png",
 					LetterSpacing:    0.05,
 					IsPremium:        true,
+					IsPublished:      true,
 					SupportedWeights: []string{"400", "700"},
 					License: services.FontLicense{
 						Name: "Commercial",
@@ -316,6 +317,7 @@ func TestPublicHandlers_GetFont(t *testing.T) {
 			PreviewImagePath: "fonts/font_002.png",
 			LetterSpacing:    0.1,
 			IsPremium:        false,
+			IsPublished:      true,
 			SupportedWeights: []string{"400"},
 			License: services.FontLicense{
 				Name: "Commercial",
@@ -358,6 +360,33 @@ func TestPublicHandlers_GetFont(t *testing.T) {
 	}
 	if stubService.fontGetID != "font_002" {
 		t.Fatalf("expected service to receive trimmed id font_002 got %s", stubService.fontGetID)
+	}
+}
+
+func TestPublicHandlers_GetFont_Unpublished(t *testing.T) {
+	stubService := &stubCatalogService{
+		fontGetFont: services.Font{
+			FontSummary: services.FontSummary{
+				ID:          "font_003",
+				DisplayName: "Hidden Font",
+				IsPublished: false,
+			},
+		},
+	}
+	publicHandlers := NewPublicHandlers(WithPublicCatalogService(stubService))
+	router := chi.NewRouter()
+	router.Route("/", publicHandlers.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/fonts/font_003", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 got %d", rec.Code)
+	}
+	if cache := rec.Result().Header.Get("Cache-Control"); cache != "" {
+		t.Fatalf("expected cache control to be empty on error, got %q", cache)
 	}
 }
 

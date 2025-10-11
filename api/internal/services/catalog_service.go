@@ -142,11 +142,7 @@ func (s *catalogService) GetFont(ctx context.Context, fontID string) (Font, erro
 	if s.repo == nil {
 		return Font{}, ErrCatalogRepositoryMissing
 	}
-	fontID = strings.TrimSpace(fontID)
-	if fontID == "" {
-		return Font{}, errors.New("catalog service: font id is required")
-	}
-	font, err := s.repo.GetPublishedFont(ctx, fontID)
+	font, err := s.repo.GetPublishedFont(ctx, strings.TrimSpace(fontID))
 	if err != nil {
 		return Font{}, err
 	}

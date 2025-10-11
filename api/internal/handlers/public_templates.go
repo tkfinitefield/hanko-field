@@ -263,6 +263,10 @@ func (h *PublicHandlers) getFont(w http.ResponseWriter, r *http.Request) {
 		writeCatalogError(r.Context(), w, err, "font")
 		return
 	}
+	if !font.IsPublished {
+		httpx.WriteError(r.Context(), w, httpx.NewError("font_not_found", "font not found", http.StatusNotFound))
+		return
+	}
 
 	previewURL, err := h.resolveAsset(r.Context(), h.previewResolver, font.PreviewImagePath)
 	if err != nil {
