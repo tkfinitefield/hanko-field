@@ -39,6 +39,9 @@ type (
 	Payment                   = domain.Payment
 	Shipment                  = domain.Shipment
 	ShipmentEvent             = domain.ShipmentEvent
+	Review                    = domain.Review
+	ReviewReply               = domain.ReviewReply
+	ReviewStatus              = domain.ReviewStatus
 	Promotion                 = domain.Promotion
 	PromotionValidationResult = domain.PromotionValidationResult
 	RegistrabilityCheckResult = domain.RegistrabilityCheckResult
@@ -121,6 +124,15 @@ type ShipmentService interface {
 	UpdateShipmentStatus(ctx context.Context, cmd UpdateShipmentCommand) (Shipment, error)
 	ListShipments(ctx context.Context, orderID string) ([]Shipment, error)
 	RecordCarrierEvent(ctx context.Context, cmd ShipmentEventCommand) error
+}
+
+// ReviewService coordinates review lifecycle and moderation workflows.
+type ReviewService interface {
+	Create(ctx context.Context, cmd CreateReviewCommand) (Review, error)
+	GetByOrder(ctx context.Context, orderID string) (Review, error)
+	ListByUser(ctx context.Context, cmd ListUserReviewsCommand) (domain.CursorPage[Review], error)
+	Moderate(ctx context.Context, cmd ModerateReviewCommand) (Review, error)
+	StoreReply(ctx context.Context, cmd StoreReviewReplyCommand) (Review, error)
 }
 
 // PromotionService exposes promotion lifecycle and validation operations.
@@ -430,6 +442,32 @@ type ShipmentEventCommand struct {
 	ShipmentID string
 	Carrier    string
 	Event      ShipmentEvent
+}
+
+type CreateReviewCommand struct {
+	OrderID string
+	UserID  string
+	Rating  int
+	Comment string
+	ActorID string
+}
+
+type ListUserReviewsCommand struct {
+	UserID     string
+	Pagination Pagination
+}
+
+type ModerateReviewCommand struct {
+	ReviewID string
+	ActorID  string
+	Status   ReviewStatus
+}
+
+type StoreReviewReplyCommand struct {
+	ReviewID string
+	ActorID  string
+	Message  string
+	Visible  bool
 }
 
 type ValidatePromotionCommand struct {

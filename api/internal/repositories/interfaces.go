@@ -18,6 +18,7 @@ type Registry interface {
 	Carts() CartRepository
 	Inventory() InventoryRepository
 	Orders() OrderRepository
+	Reviews() ReviewRepository
 	OrderPayments() OrderPaymentRepository
 	OrderShipments() OrderShipmentRepository
 	OrderProductionEvents() OrderProductionEventRepository
@@ -176,6 +177,16 @@ type OrderShipmentRepository interface {
 	List(ctx context.Context, orderID string) ([]domain.Shipment, error)
 }
 
+// ReviewRepository stores product reviews and their moderation meta.
+type ReviewRepository interface {
+	Insert(ctx context.Context, review domain.Review) (domain.Review, error)
+	FindByID(ctx context.Context, reviewID string) (domain.Review, error)
+	FindByOrder(ctx context.Context, orderID string) (domain.Review, error)
+	ListByUser(ctx context.Context, userID string, pager domain.Pagination) (domain.CursorPage[domain.Review], error)
+	UpdateStatus(ctx context.Context, reviewID string, status domain.ReviewStatus, update ReviewModerationUpdate) (domain.Review, error)
+	UpdateReply(ctx context.Context, reviewID string, reply *domain.ReviewReply, updatedAt time.Time) (domain.Review, error)
+}
+
 // OrderProductionEventRepository stores production timeline events for an order.
 type OrderProductionEventRepository interface {
 	Insert(ctx context.Context, event domain.OrderProductionEvent) (domain.OrderProductionEvent, error)
@@ -296,6 +307,12 @@ type OrderListFilter struct {
 type PromotionListFilter struct {
 	Status     []string
 	Pagination domain.Pagination
+}
+
+// ReviewModerationUpdate carries moderation metadata for status transitions.
+type ReviewModerationUpdate struct {
+	ModeratedBy string
+	ModeratedAt time.Time
 }
 
 type TemplateFilter struct {

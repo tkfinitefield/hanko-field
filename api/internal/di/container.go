@@ -19,6 +19,7 @@ type Services struct {
 	Cart       services.CartService
 	Checkout   services.CheckoutService
 	Orders     services.OrderService
+	Reviews    services.ReviewService
 	Payments   services.PaymentService
 	Shipments  services.ShipmentService
 	Promotions services.PromotionService
@@ -115,7 +116,8 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 		svc.Inventory = inventorySvc
 	}
 
-	if ordersRepo := reg.Orders(); ordersRepo != nil && reg.Counters() != nil {
+	ordersRepo := reg.Orders()
+	if ordersRepo != nil && reg.Counters() != nil {
 		orderSvc, err := services.NewOrderService(services.OrderServiceDeps{
 			Orders:     ordersRepo,
 			Payments:   reg.OrderPayments(),
@@ -130,6 +132,18 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 			return Services{}, fmt.Errorf("build order service: %w", err)
 		}
 		svc.Orders = orderSvc
+	}
+
+	if reviewRepo := reg.Reviews(); reviewRepo != nil && ordersRepo != nil {
+		reviewSvc, err := services.NewReviewService(services.ReviewServiceDeps{
+			Reviews: reviewRepo,
+			Orders:  ordersRepo,
+			Clock:   time.Now,
+		})
+		if err != nil {
+			return Services{}, fmt.Errorf("build review service: %w", err)
+		}
+		svc.Reviews = reviewSvc
 	}
 
 	return svc, nil

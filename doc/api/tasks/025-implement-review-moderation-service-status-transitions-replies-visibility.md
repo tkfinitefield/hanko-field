@@ -12,7 +12,13 @@ Manage review submission, moderation status transitions, and staff replies in su
 - Support admin moderation actions and notifications.
 
 ## Steps
-1. Implement `ReviewService` with methods `Create`, `GetByOrder`, `ListByUser`, `Moderate`, `StoreReply`.
-2. Enforce text sanitization and profanity filters at creation time.
-3. Emit events or notifications when reviews approved/rejected to update storefront.
-4. Add tests covering moderation rules and duplicate prevention.
+- [x] Implement `ReviewService` with methods `Create`, `GetByOrder`, `ListByUser`, `Moderate`, `StoreReply`.
+- [x] Enforce text sanitization and profanity filters at creation time.
+- [x] Emit events or notifications when reviews approved/rejected to update storefront.
+- [x] Add tests covering moderation rules and duplicate prevention.
+
+## Completion Notes
+- Added review domain models and repository contracts, including moderation metadata and reply support (`api/internal/domain/types.go`, `api/internal/repositories/interfaces.go`).
+- Implemented `ReviewService` with validation, duplicate prevention, moderation transitions, replies, and event emission (`api/internal/services/review_service.go`).
+- Wired service into DI and exposed via the services facade (`api/internal/services/interfaces.go`, `api/internal/di/container.go`).
+- Created unit tests covering creation sanitization, duplicate guarding, moderation transitions, and reply management (`api/internal/services/review_service_test.go`).

@@ -346,6 +346,42 @@ type ShipmentEvent struct {
 	Details    map[string]any
 }
 
+// ReviewStatus indicates the moderation state of a review.
+type ReviewStatus string
+
+const (
+	// ReviewStatusPending indicates the review awaits moderation.
+	ReviewStatusPending ReviewStatus = "pending"
+	// ReviewStatusApproved indicates the review has been approved and is visible.
+	ReviewStatusApproved ReviewStatus = "approved"
+	// ReviewStatusRejected indicates the review has been rejected and is hidden.
+	ReviewStatusRejected ReviewStatus = "rejected"
+)
+
+// Review captures user-generated feedback associated with an order.
+type Review struct {
+	ID          string
+	OrderRef    string
+	UserRef     string
+	Rating      int
+	Comment     string
+	Status      ReviewStatus
+	ModeratedBy *string
+	ModeratedAt *time.Time
+	Reply       *ReviewReply
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// ReviewReply stores staff responses to a user review.
+type ReviewReply struct {
+	Message   string
+	AuthorRef string
+	Visible   bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 // Promotion describes promotional rules persisted by admin services.
 type Promotion struct {
 	ID          string
