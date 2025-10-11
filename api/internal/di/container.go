@@ -20,6 +20,7 @@ type Services struct {
 	Checkout   services.CheckoutService
 	Orders     services.OrderService
 	Reviews    services.ReviewService
+	Counters   services.CounterService
 	Payments   services.PaymentService
 	Shipments  services.ShipmentService
 	Promotions services.PromotionService
@@ -116,14 +117,26 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 		svc.Inventory = inventorySvc
 	}
 
+	counterRepo := reg.Counters()
+	if counterRepo != nil {
+		counterSvc, err := services.NewCounterService(services.CounterServiceDeps{
+			Repository: counterRepo,
+			Clock:      time.Now,
+		})
+		if err != nil {
+			return Services{}, fmt.Errorf("build counter service: %w", err)
+		}
+		svc.Counters = counterSvc
+	}
+
 	ordersRepo := reg.Orders()
-	if ordersRepo != nil && reg.Counters() != nil {
+	if ordersRepo != nil && counterRepo != nil {
 		orderSvc, err := services.NewOrderService(services.OrderServiceDeps{
 			Orders:     ordersRepo,
 			Payments:   reg.OrderPayments(),
 			Shipments:  reg.OrderShipments(),
 			Production: reg.OrderProductionEvents(),
-			Counters:   reg.Counters(),
+			Counters:   counterRepo,
 			Inventory:  svc.Inventory,
 			UnitOfWork: reg,
 			Clock:      time.Now,

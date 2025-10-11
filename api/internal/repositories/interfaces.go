@@ -283,6 +283,7 @@ type AuditLogRepository interface {
 // CounterRepository provides transaction-safe sequence numbers.
 type CounterRepository interface {
 	Next(ctx context.Context, counterID string, step int64) (int64, error)
+	Configure(ctx context.Context, counterID string, cfg CounterConfig) error
 }
 
 // HealthRepository exposes status of downstream dependencies for health checks.
@@ -369,4 +370,11 @@ type SignedUploadRecord struct {
 type SignedDownloadRecord struct {
 	ActorID string
 	AssetID string
+}
+
+// CounterConfig customises increment behaviour and bounds for a counter.
+type CounterConfig struct {
+	Step         int64
+	MaxValue     *int64
+	InitialValue *int64
 }

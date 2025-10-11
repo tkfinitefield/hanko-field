@@ -75,6 +75,10 @@ func (s *stubCounterRepo) Next(ctx context.Context, counterID string, step int64
 	return 0, nil
 }
 
+func (s *stubCounterRepo) Configure(context.Context, string, repositories.CounterConfig) error {
+	return nil
+}
+
 type stubInventoryService struct {
 	commitFn  func(context.Context, InventoryCommitCommand) (InventoryReservation, error)
 	releaseFn func(context.Context, InventoryReleaseCommand) (InventoryReservation, error)

@@ -135,6 +135,13 @@ type ReviewService interface {
 	StoreReply(ctx context.Context, cmd StoreReviewReplyCommand) (Review, error)
 }
 
+// CounterService coordinates sequence generation for formatted identifiers.
+type CounterService interface {
+	Next(ctx context.Context, scope, name string, opts CounterGenerationOptions) (CounterValue, error)
+	NextOrderNumber(ctx context.Context) (string, error)
+	NextInvoiceNumber(ctx context.Context) (string, error)
+}
+
 // PromotionService exposes promotion lifecycle and validation operations.
 type PromotionService interface {
 	GetPublicPromotion(ctx context.Context, code string) (PromotionValidationResult, error)
@@ -698,6 +705,21 @@ type AuditLogFilter struct {
 type CounterCommand struct {
 	CounterID string
 	Step      int64
+}
+
+type CounterGenerationOptions struct {
+	Step         int64
+	MaxValue     *int64
+	InitialValue *int64
+	Prefix       string
+	Suffix       string
+	PadLength    int
+	Formatter    func(time.Time, int64) string
+}
+
+type CounterValue struct {
+	Value     int64
+	Formatted string
 }
 
 // QueueAISuggestionCommand packages inputs for an AI suggestion job request.
