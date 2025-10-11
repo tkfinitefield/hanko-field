@@ -129,7 +129,7 @@ type ShipmentService interface {
 // ReviewService coordinates review lifecycle and moderation workflows.
 type ReviewService interface {
 	Create(ctx context.Context, cmd CreateReviewCommand) (Review, error)
-	GetByOrder(ctx context.Context, orderID string) (Review, error)
+	GetByOrder(ctx context.Context, cmd GetReviewByOrderCommand) (Review, error)
 	ListByUser(ctx context.Context, cmd ListUserReviewsCommand) (domain.CursorPage[Review], error)
 	Moderate(ctx context.Context, cmd ModerateReviewCommand) (Review, error)
 	StoreReply(ctx context.Context, cmd StoreReviewReplyCommand) (Review, error)
@@ -455,6 +455,12 @@ type CreateReviewCommand struct {
 type ListUserReviewsCommand struct {
 	UserID     string
 	Pagination Pagination
+}
+
+type GetReviewByOrderCommand struct {
+	OrderID    string
+	ActorID    string
+	AllowStaff bool
 }
 
 type ModerateReviewCommand struct {

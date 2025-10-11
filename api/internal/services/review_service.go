@@ -27,6 +27,8 @@ var (
 	ErrReviewInvalidInput = errors.New("review: invalid input")
 	// ErrReviewNotFound indicates a review could not be located.
 	ErrReviewNotFound = errors.New("review: not found")
+	// ErrReviewUnauthorized indicates the actor is not allowed to access the review.
+	ErrReviewUnauthorized = errors.New("review: unauthorized")
 	// ErrReviewConflict signals duplicate submissions or conflicting updates.
 	ErrReviewConflict = errors.New("review: conflict")
 	// ErrReviewInvalidState is returned when an invalid status transition is attempted.
@@ -35,25 +37,26 @@ var (
 
 // ReviewServiceDeps bundles collaborators required to construct a ReviewService.
 type ReviewServiceDeps struct {
-	Reviews          repositories.ReviewRepository
-	Orders           repositories.OrderRepository
-	Clock            func() time.Time
-	IDGenerator      func() string
-	Sanitizer        func(string) string
-	ProfanityChecker func(string) bool
-	Events           ReviewEventPublisher
+	Reviews              repositories.ReviewRepository
+	Orders               repositories.OrderRepository
+	Clock                func() time.Time
+	IDGenerator          func() string
+	Sanitizer            func(string) string
+	ProfanityChecker     func(string) bool
+	Events               ReviewEventPublisher
+	AllowedOrderStatuses []domain.OrderStatus
 }
 
 type reviewService struct {
-	reviews           repositories.ReviewRepository
-	orders            repositories.OrderRepository
-	clock             func() time.Time
-	newID             func() string
-	sanitize          func(string) string
-	isProfane         func(string) bool
-	events            ReviewEventPublisher
-	allowedStatuses   map[domain.ReviewStatus]struct{}
-	completedStatuses map[domain.OrderStatus]struct{}
+	reviews                repositories.ReviewRepository
+	orders                 repositories.OrderRepository
+	clock                  func() time.Time
+	newID                  func() string
+	sanitize               func(string) string
+	isProfane              func(string) bool
+	events                 ReviewEventPublisher
+	allowedStatuses        map[domain.ReviewStatus]struct{}
+	completedOrderStatuses map[domain.OrderStatus]struct{}
 }
 
 // NewReviewService wires dependencies into a concrete ReviewService implementation.
@@ -81,7 +84,20 @@ func NewReviewService(deps ReviewServiceDeps) (ReviewService, error) {
 	}
 	profanity := deps.ProfanityChecker
 	if profanity == nil {
-		profanity = func(string) bool { return false }
+		profanity = basicProfanityChecker
+	}
+
+	orderStatuses := deps.AllowedOrderStatuses
+	if len(orderStatuses) == 0 {
+		orderStatuses = []domain.OrderStatus{
+			domain.OrderStatusCompleted,
+			domain.OrderStatusDelivered,
+		}
+	}
+
+	completed := make(map[domain.OrderStatus]struct{}, len(orderStatuses))
+	for _, status := range orderStatuses {
+		completed[status] = struct{}{}
 	}
 
 	return &reviewService{
@@ -98,10 +114,7 @@ func NewReviewService(deps ReviewServiceDeps) (ReviewService, error) {
 			domain.ReviewStatusApproved: {},
 			domain.ReviewStatusRejected: {},
 		},
-		completedStatuses: map[domain.OrderStatus]struct{}{
-			domain.OrderStatusCompleted: {},
-			domain.OrderStatusDelivered: {},
-		},
+		completedOrderStatuses: completed,
 	}, nil
 }
 
@@ -118,7 +131,7 @@ func (s *reviewService) Create(ctx context.Context, cmd CreateReviewCommand) (Re
 	if order.UserID != cmd.UserID {
 		return Review{}, fmt.Errorf("%w: order does not belong to user", ErrReviewInvalidInput)
 	}
-	if _, ok := s.completedStatuses[order.Status]; !ok {
+	if _, ok := s.completedOrderStatuses[order.Status]; !ok {
 		return Review{}, fmt.Errorf("%w: order must be completed before review submission", ErrReviewInvalidInput)
 	}
 
@@ -148,13 +161,17 @@ func (s *reviewService) Create(ctx context.Context, cmd CreateReviewCommand) (Re
 	return created, nil
 }
 
-func (s *reviewService) GetByOrder(ctx context.Context, orderID string) (Review, error) {
-	if strings.TrimSpace(orderID) == "" {
-		return Review{}, fmt.Errorf("%w: order id is required", ErrReviewInvalidInput)
+func (s *reviewService) GetByOrder(ctx context.Context, cmd GetReviewByOrderCommand) (Review, error) {
+	if err := s.validateGetByOrderCommand(cmd); err != nil {
+		return Review{}, err
 	}
-	review, err := s.reviews.FindByOrder(ctx, orderID)
+
+	review, err := s.reviews.FindByOrder(ctx, cmd.OrderID)
 	if err != nil {
 		return Review{}, s.mapReviewError(err)
+	}
+	if !cmd.AllowStaff && review.UserRef != cmd.ActorID {
+		return Review{}, ErrReviewUnauthorized
 	}
 	return review, nil
 }
@@ -303,6 +320,16 @@ func (s *reviewService) validateReplyCommand(cmd StoreReviewReplyCommand) error 
 	return nil
 }
 
+func (s *reviewService) validateGetByOrderCommand(cmd GetReviewByOrderCommand) error {
+	if strings.TrimSpace(cmd.OrderID) == "" {
+		return fmt.Errorf("%w: order id is required", ErrReviewInvalidInput)
+	}
+	if strings.TrimSpace(cmd.ActorID) == "" {
+		return fmt.Errorf("%w: actor id is required", ErrReviewInvalidInput)
+	}
+	return nil
+}
+
 func (s *reviewService) ensureNoExistingReview(ctx context.Context, orderID string) error {
 	_, err := s.reviews.FindByOrder(ctx, orderID)
 	if err == nil {
@@ -383,23 +410,60 @@ type ReviewEvent struct {
 	Metadata   map[string]any
 }
 
-// sanitizeReviewText trims whitespace, strips control characters, and collapses whitespace.
+var defaultProfanityTerms = map[string]struct{}{
+	"ass":     {},
+	"asshole": {},
+	"bastard": {},
+	"bitch":   {},
+	"bloody":  {},
+	"damn":    {},
+	"fuck":    {},
+	"fucker":  {},
+	"fucking": {},
+	"shit":    {},
+	"shitty":  {},
+	"slut":    {},
+	"whore":   {},
+}
+
+func basicProfanityChecker(input string) bool {
+	if input == "" {
+		return false
+	}
+
+	normalized := strings.ToLower(input)
+	words := strings.FieldsFunc(normalized, func(r rune) bool {
+		return !(unicode.IsLetter(r) || unicode.IsNumber(r))
+	})
+
+	for _, word := range words {
+		if _, ok := defaultProfanityTerms[word]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// sanitizeReviewText trims whitespace, strips unsafe control characters, and normalises spacing while
+// preserving intentional newlines for readability.
 func sanitizeReviewText(input string) string {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
 		return ""
 	}
 
-	mapped := strings.Map(func(r rune) rune {
-		switch r {
-		case '\n', '\r', '\t':
-			return ' '
-		}
-		if unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, trimmed)
+	normalized := strings.ReplaceAll(strings.ReplaceAll(trimmed, "\r\n", "\n"), "\r", "\n")
+	lines := strings.Split(normalized, "\n")
+	for i, line := range lines {
+		line = strings.Map(func(r rune) rune {
+			if unicode.IsControl(r) && r != '\n' {
+				return -1
+			}
+			return r
+		}, line)
+		lines[i] = strings.Join(strings.Fields(line), " ")
+	}
 
-	return strings.Join(strings.Fields(mapped), " ")
+	result := strings.Join(lines, "\n")
+	return strings.TrimSpace(result)
 }

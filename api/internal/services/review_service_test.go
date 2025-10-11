@@ -3,8 +3,12 @@ package services
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
+
+	"slices"
 
 	domain "github.com/hanko-field/api/internal/domain"
 	"github.com/hanko-field/api/internal/repositories"
@@ -52,8 +56,8 @@ func TestReviewServiceCreateSanitizesAndEmitsEvent(t *testing.T) {
 	if review.ID != "rev_test" {
 		t.Fatalf("expected review id rev_test, got %s", review.ID)
 	}
-	if review.Comment != "Great product" {
-		t.Fatalf("expected sanitized comment 'Great product', got %q", review.Comment)
+	if review.Comment != "Great\nproduct" {
+		t.Fatalf("expected sanitized comment with newline preserved, got %q", review.Comment)
 	}
 	if review.Status != domain.ReviewStatusPending {
 		t.Fatalf("expected status pending, got %s", review.Status)
@@ -122,6 +126,42 @@ func TestReviewServiceCreatePreventsDuplicateReviews(t *testing.T) {
 	})
 	if !errors.Is(err, ErrReviewConflict) {
 		t.Fatalf("expected conflict error, got %v", err)
+	}
+}
+
+func TestReviewServiceCreateRejectsProfanity(t *testing.T) {
+	now := time.Date(2025, 5, 20, 11, 30, 0, 0, time.UTC)
+	repo := newMemoryReviewRepo()
+	orderRepo := &stubOrderRepository{
+		orders: map[string]domain.Order{
+			"order-1": {
+				ID:     "order-1",
+				UserID: "user-1",
+				Status: domain.OrderStatusCompleted,
+			},
+		},
+	}
+
+	svc, err := NewReviewService(ReviewServiceDeps{
+		Reviews: repo,
+		Orders:  orderRepo,
+		Clock: func() time.Time {
+			return now
+		},
+	})
+	if err != nil {
+		t.Fatalf("new review service: %v", err)
+	}
+
+	_, err = svc.Create(context.Background(), CreateReviewCommand{
+		OrderID: "order-1",
+		UserID:  "user-1",
+		Rating:  4,
+		Comment: "This product is shit",
+		ActorID: "user-1",
+	})
+	if !errors.Is(err, ErrReviewInvalidInput) {
+		t.Fatalf("expected invalid input error for profanity, got %v", err)
 	}
 }
 
@@ -194,6 +234,70 @@ func TestReviewServiceModerateTransitionsAndEmitsEvent(t *testing.T) {
 	}
 }
 
+func TestReviewServiceGetByOrderAuthorization(t *testing.T) {
+	now := time.Date(2025, 5, 20, 12, 30, 0, 0, time.UTC)
+	repo := newMemoryReviewRepo()
+	review := domain.Review{
+		ID:        "rev_auth",
+		OrderRef:  "order-1",
+		UserRef:   "user-1",
+		Rating:    5,
+		Comment:   "great",
+		Status:    domain.ReviewStatusApproved,
+		CreatedAt: now.Add(-time.Hour),
+		UpdatedAt: now.Add(-time.Hour),
+	}
+	if _, err := repo.Insert(context.Background(), review); err != nil {
+		t.Fatalf("seed insert: %v", err)
+	}
+
+	orderRepo := &stubOrderRepository{}
+	svc, err := NewReviewService(ReviewServiceDeps{
+		Reviews: repo,
+		Orders:  orderRepo,
+		Clock: func() time.Time {
+			return now
+		},
+	})
+	if err != nil {
+		t.Fatalf("new review service: %v", err)
+	}
+
+	// Owner can access
+	result, err := svc.GetByOrder(context.Background(), GetReviewByOrderCommand{
+		OrderID: "order-1",
+		ActorID: "user-1",
+	})
+	if err != nil {
+		t.Fatalf("get by order: %v", err)
+	}
+	if result.ID != "rev_auth" {
+		t.Fatalf("expected review rev_auth, got %s", result.ID)
+	}
+
+	// Other user blocked
+	_, err = svc.GetByOrder(context.Background(), GetReviewByOrderCommand{
+		OrderID: "order-1",
+		ActorID: "user-2",
+	})
+	if !errors.Is(err, ErrReviewUnauthorized) {
+		t.Fatalf("expected unauthorized error, got %v", err)
+	}
+
+	// Staff override allowed
+	result, err = svc.GetByOrder(context.Background(), GetReviewByOrderCommand{
+		OrderID:    "order-1",
+		ActorID:    "admin-1",
+		AllowStaff: true,
+	})
+	if err != nil {
+		t.Fatalf("staff get by order: %v", err)
+	}
+	if result.ID != "rev_auth" {
+		t.Fatalf("expected review rev_auth for staff, got %s", result.ID)
+	}
+}
+
 func TestReviewServiceStoreReplySanitizesAndClears(t *testing.T) {
 	now := time.Date(2025, 5, 20, 13, 0, 0, 0, time.UTC)
 	repo := newMemoryReviewRepo()
@@ -247,8 +351,8 @@ func TestReviewServiceStoreReplySanitizesAndClears(t *testing.T) {
 	if withReply.Reply == nil {
 		t.Fatalf("expected reply to be set")
 	}
-	if withReply.Reply.Message != "Thanks for your feedback!" {
-		t.Fatalf("expected sanitized message, got %q", withReply.Reply.Message)
+	if withReply.Reply.Message != "Thanks\nfor your feedback!" {
+		t.Fatalf("expected sanitized message with newline preserved, got %q", withReply.Reply.Message)
 	}
 	if withReply.Reply.AuthorRef != "staff-1" {
 		t.Fatalf("expected author staff-1, got %s", withReply.Reply.AuthorRef)
@@ -330,14 +434,65 @@ func (m *memoryReviewRepo) FindByOrder(_ context.Context, orderID string) (domai
 	return copyReview(m.reviews[reviewID]), nil
 }
 
-func (m *memoryReviewRepo) ListByUser(_ context.Context, userID string, _ domain.Pagination) (domain.CursorPage[domain.Review], error) {
+func (m *memoryReviewRepo) ListByUser(_ context.Context, userID string, pager domain.Pagination) (domain.CursorPage[domain.Review], error) {
 	var results []domain.Review
 	for _, review := range m.reviews {
 		if review.UserRef == userID {
 			results = append(results, copyReview(review))
 		}
 	}
-	return domain.CursorPage[domain.Review]{Items: results}, nil
+
+	slices.SortFunc(results, func(a, b domain.Review) int {
+		switch {
+		case a.CreatedAt.After(b.CreatedAt):
+			return -1
+		case a.CreatedAt.Before(b.CreatedAt):
+			return 1
+		default:
+			return strings.Compare(a.ID, b.ID)
+		}
+	})
+
+	start := 0
+	if token, err := strconv.Atoi(pager.PageToken); err == nil {
+		switch {
+		case token < 0:
+			start = 0
+		case token >= len(results):
+			start = len(results)
+		default:
+			start = token
+		}
+	}
+
+	pageSize := pager.PageSize
+	remaining := len(results) - start
+	if remaining < 0 {
+		remaining = 0
+	}
+	if pageSize <= 0 || pageSize > remaining {
+		pageSize = remaining
+	}
+
+	end := start + pageSize
+	if end > len(results) {
+		end = len(results)
+	}
+
+	var pageItems []domain.Review
+	if start < len(results) {
+		pageItems = results[start:end]
+	}
+
+	nextToken := ""
+	if end < len(results) {
+		nextToken = strconv.Itoa(end)
+	}
+
+	return domain.CursorPage[domain.Review]{
+		Items:         pageItems,
+		NextPageToken: nextToken,
+	}, nil
 }
 
 func (m *memoryReviewRepo) UpdateStatus(_ context.Context, reviewID string, status domain.ReviewStatus, update repositories.ReviewModerationUpdate) (domain.Review, error) {
