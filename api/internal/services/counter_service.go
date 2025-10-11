@@ -73,16 +73,12 @@ func (s *counterService) Next(ctx context.Context, scope, name string, opts Coun
 	}
 
 	counterID := scope + ":" + name
-	increment := opts.Step
-	if increment <= 0 {
-		increment = 1
-	}
 
 	if err := s.ensureConfiguration(ctx, counterID, opts); err != nil {
 		return CounterValue{}, err
 	}
 
-	value, err := s.repo.Next(ctx, counterID, increment)
+	value, err := s.repo.Next(ctx, counterID, opts.Step)
 	if err != nil {
 		var counterErr *repositories.CounterError
 		if errors.As(err, &counterErr) {
