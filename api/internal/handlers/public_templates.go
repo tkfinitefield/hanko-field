@@ -119,9 +119,6 @@ func (h *PublicHandlers) listTemplates(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]templatePayload, 0, len(page.Items))
 	for _, tpl := range page.Items {
-		if !tpl.IsPublished {
-			continue
-		}
 		previewURL, err := h.resolveAsset(r.Context(), h.previewResolver, tpl.PreviewImagePath)
 		if err != nil {
 			httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
@@ -165,11 +162,6 @@ func (h *PublicHandlers) getTemplate(w http.ResponseWriter, r *http.Request) {
 		writeCatalogError(r.Context(), w, err)
 		return
 	}
-	if !template.IsPublished {
-		httpx.WriteError(r.Context(), w, httpx.NewError("template_not_found", "template not found", http.StatusNotFound))
-		return
-	}
-
 	previewURL, err := h.resolveAsset(r.Context(), h.previewResolver, template.PreviewImagePath)
 	if err != nil {
 		httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
@@ -366,7 +358,7 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 
 type templateListResponse struct {
 	Templates     []templatePayload `json:"templates"`
-	NextPageToken string            `json:"nextPageToken,omitempty"`
+	NextPageToken string            `json:"next_page_token,omitempty"`
 }
 
 type templatePayload struct {
@@ -376,11 +368,11 @@ type templatePayload struct {
 	Category    string   `json:"category,omitempty"`
 	Style       string   `json:"style,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
-	PreviewURL  string   `json:"previewUrl,omitempty"`
-	SVGURL      string   `json:"svgUrl,omitempty"`
+	PreviewURL  string   `json:"preview_url,omitempty"`
+	SVGURL      string   `json:"svg_url,omitempty"`
 	Popularity  int      `json:"popularity,omitempty"`
-	CreatedAt   string   `json:"createdAt,omitempty"`
-	UpdatedAt   string   `json:"updatedAt,omitempty"`
+	CreatedAt   string   `json:"created_at,omitempty"`
+	UpdatedAt   string   `json:"updated_at,omitempty"`
 }
 
 func formatTimestamp(ts time.Time) string {

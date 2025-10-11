@@ -143,7 +143,7 @@ func TestCatalogServiceListTemplates(t *testing.T) {
 
 func TestCatalogServiceGetTemplate(t *testing.T) {
 	stubRepo := &stubCatalogRepository{
-		getTemplate: domain.Template{
+		getPublished: domain.Template{
 			TemplateSummary: domain.TemplateSummary{ID: "tpl_001"},
 			SVGPath:         "svg/path.svg",
 		},
@@ -167,8 +167,8 @@ func TestCatalogServiceGetTemplate(t *testing.T) {
 		if template.ID != "tpl_001" {
 			t.Fatalf("expected template id tpl_001, got %s", template.ID)
 		}
-		if stubRepo.getID != "tpl_001" {
-			t.Fatalf("expected repository to receive trimmed id tpl_001, got %q", stubRepo.getID)
+		if stubRepo.getPublishedID != "tpl_001" {
+			t.Fatalf("expected repository to receive trimmed id tpl_001, got %q", stubRepo.getPublishedID)
 		}
 	})
 }
@@ -197,6 +197,10 @@ type stubCatalogRepository struct {
 	listResp   domain.CursorPage[domain.TemplateSummary]
 	listErr    error
 
+	getPublishedID  string
+	getPublished    domain.Template
+	getPublishedErr error
+
 	getID       string
 	getTemplate domain.Template
 	getErr      error
@@ -212,6 +216,20 @@ type stubCatalogRepository struct {
 func (s *stubCatalogRepository) ListTemplates(_ context.Context, filter repositories.TemplateFilter) (domain.CursorPage[domain.TemplateSummary], error) {
 	s.listFilter = filter
 	return s.listResp, s.listErr
+}
+
+func (s *stubCatalogRepository) GetPublishedTemplate(_ context.Context, templateID string) (domain.Template, error) {
+	s.getPublishedID = templateID
+	if s.getPublishedErr != nil {
+		return domain.Template{}, s.getPublishedErr
+	}
+	if s.getPublished.ID != "" {
+		return s.getPublished, nil
+	}
+	if s.getTemplate.ID != "" {
+		return s.getTemplate, nil
+	}
+	return domain.Template{}, nil
 }
 
 func (s *stubCatalogRepository) GetTemplate(_ context.Context, templateID string) (domain.Template, error) {

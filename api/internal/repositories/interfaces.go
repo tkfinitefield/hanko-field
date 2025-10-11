@@ -239,6 +239,7 @@ type FavoriteRepository interface {
 // CatalogRepository bundles template/font/material/product storage with shared transactions.
 type CatalogRepository interface {
 	ListTemplates(ctx context.Context, filter TemplateFilter) (domain.CursorPage[domain.TemplateSummary], error)
+	GetPublishedTemplate(ctx context.Context, templateID string) (domain.Template, error)
 	GetTemplate(ctx context.Context, templateID string) (domain.Template, error)
 	UpsertTemplate(ctx context.Context, template domain.Template) (domain.Template, error)
 	DeleteTemplate(ctx context.Context, templateID string) error

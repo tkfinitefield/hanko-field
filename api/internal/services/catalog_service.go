@@ -78,7 +78,11 @@ func (s *catalogService) GetTemplate(ctx context.Context, templateID string) (Te
 	if templateID == "" {
 		return Template{}, errors.New("catalog service: template id is required")
 	}
-	return s.repo.GetTemplate(ctx, templateID)
+	template, err := s.repo.GetPublishedTemplate(ctx, templateID)
+	if err != nil {
+		return Template{}, err
+	}
+	return Template(template), nil
 }
 
 func (s *catalogService) UpsertTemplate(ctx context.Context, cmd UpsertTemplateCommand) (Template, error) {
