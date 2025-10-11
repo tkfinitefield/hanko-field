@@ -137,3 +137,37 @@ func TestCounterServiceNextOrderNumber(t *testing.T) {
 		t.Fatalf("expected counter id orders:2025, got %s", repo.nextCalls[0].ID)
 	}
 }
+
+func TestCounterServicePassesZeroStepToRepositoryWhenUnset(t *testing.T) {
+	repo := &stubCounterRepository{}
+	call := 0
+	repo.nextFn = func(context.Context, string, int64) (int64, error) {
+		call++
+		return int64(call), nil
+	}
+
+	svc, err := NewCounterService(CounterServiceDeps{Repository: repo})
+	if err != nil {
+		t.Fatalf("new counter service: %v", err)
+	}
+
+	ctx := context.Background()
+	if _, err := svc.Next(ctx, "scope", "name", CounterGenerationOptions{Step: 5}); err != nil {
+		t.Fatalf("first next: %v", err)
+	}
+	if _, err := svc.Next(ctx, "scope", "name", CounterGenerationOptions{}); err != nil {
+		t.Fatalf("second next: %v", err)
+	}
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if len(repo.nextCalls) != 2 {
+		t.Fatalf("expected two next calls, got %d", len(repo.nextCalls))
+	}
+	if repo.nextCalls[0].Step != 5 {
+		t.Fatalf("expected first call step 5, got %d", repo.nextCalls[0].Step)
+	}
+	if repo.nextCalls[1].Step != 0 {
+		t.Fatalf("expected second call step 0 to defer to repo config, got %d", repo.nextCalls[1].Step)
+	}
+}
