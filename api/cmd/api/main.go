@@ -15,6 +15,7 @@ import (
 
 	"cloud.google.com/go/firestore"
 	"go.uber.org/zap"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 
 	"github.com/hanko-field/api/internal/handlers"
@@ -23,10 +24,13 @@ import (
 	"github.com/hanko-field/api/internal/platform/idempotency"
 	"github.com/hanko-field/api/internal/platform/observability"
 	"github.com/hanko-field/api/internal/platform/secrets"
+	"github.com/hanko-field/api/internal/repositories"
+	"github.com/hanko-field/api/internal/services"
 )
 
 func main() {
 	ctx := context.Background()
+	startedAt := time.Now().UTC()
 
 	baseLogger, err := observability.NewLogger()
 	if err != nil {
@@ -68,6 +72,8 @@ func main() {
 		logger.Fatal("failed to load configuration", zap.Error(err))
 	}
 
+	buildInfo := buildInfoFromEnv(envValues, cfg, startedAt)
+
 	firestoreClient, err := newFirestoreClient(ctx, cfg)
 	if err != nil {
 		logger.Fatal("failed to initialise firestore client", zap.Error(err))
@@ -77,6 +83,11 @@ func main() {
 			logger.Warn("firestore close error", zap.Error(err))
 		}
 	}()
+
+	systemService, err := newSystemService(ctx, firestoreClient, fetcher, buildInfo)
+	if err != nil {
+		logger.Warn("health: system service init failed", zap.Error(err))
+	}
 
 	idempotencyStore := idempotency.NewFirestoreStore(firestoreClient)
 	idempotencyMiddleware := idempotency.Middleware(
@@ -127,8 +138,14 @@ func main() {
 		idempotencyMiddleware,
 	}
 
+	healthHandlers := handlers.NewHealthHandlers(
+		handlers.WithHealthBuildInfo(buildInfo),
+		handlers.WithHealthSystemService(systemService),
+	)
+
 	var opts []handlers.Option
 	opts = append(opts, handlers.WithMiddlewares(middlewares...))
+	opts = append(opts, handlers.WithHealthHandlers(healthHandlers))
 	if oidcMiddleware != nil {
 		opts = append(opts, handlers.WithInternalMiddlewares(oidcMiddleware))
 	}
@@ -170,6 +187,67 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown failed", zap.Error(err))
 	}
+}
+
+func buildInfoFromEnv(env map[string]string, cfg config.Config, started time.Time) services.BuildInfo {
+	version := strings.TrimSpace(env["API_BUILD_VERSION"])
+	if version == "" {
+		version = "dev"
+	}
+	commit := strings.TrimSpace(env["API_BUILD_COMMIT_SHA"])
+	if commit == "" {
+		commit = "unknown"
+	}
+	environment := strings.TrimSpace(cfg.Security.Environment)
+	if environment == "" {
+		environment = "local"
+	}
+	return services.BuildInfo{
+		Version:     version,
+		CommitSHA:   commit,
+		Environment: environment,
+		StartedAt:   started,
+	}
+}
+
+func newSystemService(ctx context.Context, client *firestore.Client, fetcher *secrets.Fetcher, build services.BuildInfo) (services.SystemService, error) {
+	checks := make([]repositories.DependencyCheck, 0, 4)
+	if client != nil {
+		c := client
+		checks = append(checks, repositories.DependencyCheck{
+			Name:    "firestore",
+			Timeout: 1500 * time.Millisecond,
+			Check: func(ctx context.Context) error {
+				iter := c.Collections(ctx)
+				_, err := iter.Next()
+				if errors.Is(err, iterator.Done) {
+					return nil
+				}
+				return err
+			},
+		})
+	}
+	if fetcher != nil {
+		checks = append(checks, repositories.DependencyCheck{
+			Name:    "secretManager",
+			Timeout: time.Second,
+			Check: func(context.Context) error {
+				return nil
+			},
+		})
+	}
+	if len(checks) == 0 {
+		return nil, errors.New("health: no dependency checks configured")
+	}
+	repo, err := repositories.NewDependencyHealthRepository(checks)
+	if err != nil {
+		return nil, err
+	}
+	return services.NewSystemService(services.SystemServiceDeps{
+		HealthRepository: repo,
+		Clock:            time.Now,
+		Build:            build,
+	})
 }
 
 func buildOIDCMiddleware(logger *zap.Logger, cfg config.Config) func(http.Handler) http.Handler {

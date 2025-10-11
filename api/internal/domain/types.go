@@ -609,12 +609,33 @@ type ProductSummary struct {
 	Price      int64
 }
 
+const (
+	// HealthStatusOK indicates all dependencies are healthy.
+	HealthStatusOK = "ok"
+	// HealthStatusDegraded indicates at least one dependency is degraded but service remains running.
+	HealthStatusDegraded = "degraded"
+	// HealthStatusError indicates the service or a critical dependency is unavailable.
+	HealthStatusError = "error"
+)
+
+// SystemHealthCheck describes the outcome of an individual dependency probe.
+type SystemHealthCheck struct {
+	Status    string
+	Detail    string
+	Error     string
+	Latency   time.Duration
+	CheckedAt time.Time
+}
+
 // SystemHealthReport aggregates dependency status for health endpoints.
 type SystemHealthReport struct {
-	Status  string
-	Checks  map[string]string
-	Version string
-	Uptime  time.Duration
+	Status      string
+	Checks      map[string]SystemHealthCheck
+	Version     string
+	CommitSHA   string
+	Environment string
+	Uptime      time.Duration
+	GeneratedAt time.Time
 }
 
 // AuditLogEntry stores normalized audit information for admin use.

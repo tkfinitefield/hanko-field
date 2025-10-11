@@ -17,6 +17,7 @@ type RouteRegistrar func(r chi.Router)
 type routerConfig struct {
 	basePath    string
 	middlewares []func(http.Handler) http.Handler
+	health      *HealthHandlers
 
 	public   RouteRegistrar
 	me       RouteRegistrar
@@ -57,6 +58,10 @@ func NewRouter(opts ...Option) chi.Router {
 
 	r := chi.NewRouter()
 
+	if cfg.health == nil {
+		cfg.health = NewHealthHandlers()
+	}
+
 	for _, mw := range cfg.middlewares {
 		if mw != nil {
 			r.Use(mw)
@@ -71,7 +76,8 @@ func NewRouter(opts ...Option) chi.Router {
 		httpx.WriteError(req.Context(), w, httpx.NewError("method_not_allowed", fmt.Sprintf("method %s not allowed on %s", req.Method, req.URL.Path), http.StatusMethodNotAllowed))
 	})
 
-	r.Get("/healthz", health)
+	r.Get("/healthz", cfg.health.Healthz)
+	r.Get("/readyz", cfg.health.Readyz)
 
 	r.Route(cfg.basePath, func(api chi.Router) {
 		mount := func(path string, registrar RouteRegistrar, name string, groupMW []func(http.Handler) http.Handler) {
@@ -106,6 +112,13 @@ func NewRouter(opts ...Option) chi.Router {
 func WithMiddlewares(mw ...func(http.Handler) http.Handler) Option {
 	return func(cfg *routerConfig) {
 		cfg.middlewares = append(cfg.middlewares, mw...)
+	}
+}
+
+// WithHealthHandlers overrides the handlers used for /healthz and /readyz endpoints.
+func WithHealthHandlers(h *HealthHandlers) Option {
+	return func(cfg *routerConfig) {
+		cfg.health = h
 	}
 }
 

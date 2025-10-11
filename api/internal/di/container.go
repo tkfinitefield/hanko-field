@@ -129,6 +129,23 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 		svc.Counters = counterSvc
 	}
 
+	if healthRepo := reg.Health(); healthRepo != nil {
+		systemSvc, err := services.NewSystemService(services.SystemServiceDeps{
+			HealthRepository: healthRepo,
+			Clock:            time.Now,
+			Build: services.BuildInfo{
+				Environment: cfg.Security.Environment,
+				StartedAt:   time.Now().UTC(),
+			},
+			Audit:    svc.Audit,
+			Counters: svc.Counters,
+		})
+		if err != nil {
+			return Services{}, fmt.Errorf("build system service: %w", err)
+		}
+		svc.System = systemSvc
+	}
+
 	ordersRepo := reg.Orders()
 	if ordersRepo != nil && counterRepo != nil {
 		orderSvc, err := services.NewOrderService(services.OrderServiceDeps{
