@@ -58,7 +58,9 @@ type (
 	TemplateSummary           = domain.TemplateSummary
 	Template                  = domain.Template
 	TemplateSort              = domain.TemplateSort
+	Font                      = domain.Font
 	FontSummary               = domain.FontSummary
+	FontLicense               = domain.FontLicense
 	MaterialSummary           = domain.MaterialSummary
 	ProductSummary            = domain.ProductSummary
 	SystemHealthReport        = domain.SystemHealthReport
@@ -202,6 +204,7 @@ type CatalogService interface {
 	UpsertTemplate(ctx context.Context, cmd UpsertTemplateCommand) (Template, error)
 	DeleteTemplate(ctx context.Context, templateID string) error
 	ListFonts(ctx context.Context, filter FontFilter) (domain.CursorPage[FontSummary], error)
+	GetFont(ctx context.Context, fontID string) (Font, error)
 	UpsertFont(ctx context.Context, cmd UpsertFontCommand) (FontSummary, error)
 	DeleteFont(ctx context.Context, fontID string) error
 	ListMaterials(ctx context.Context, filter MaterialFilter) (domain.CursorPage[MaterialSummary], error)
@@ -629,8 +632,10 @@ type UpsertTemplateCommand struct {
 }
 
 type FontFilter struct {
-	Writing    *string
-	Pagination Pagination
+	Script        *string
+	IsPremium     *bool
+	PublishedOnly bool
+	Pagination    Pagination
 }
 
 type UpsertFontCommand struct {

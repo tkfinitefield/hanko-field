@@ -600,13 +600,31 @@ type Template struct {
 	SVGPath string
 }
 
+// FontLicense captures public licensing metadata for fonts.
+type FontLicense struct {
+	Name string
+	URL  string
+}
+
 // FontSummary captures metadata required by rendering services.
 type FontSummary struct {
-	ID         string
-	Family     string
-	Subfamily  string
-	Writing    string
-	PreviewURL string
+	ID               string
+	DisplayName      string
+	Family           string
+	Scripts          []string
+	PreviewImagePath string
+	LetterSpacing    float64
+	IsPremium        bool
+	SupportedWeights []string
+	License          FontLicense
+	IsPublished      bool
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// Font represents full font metadata for detail endpoints.
+type Font struct {
+	FontSummary
 }
 
 // MaterialSummary stores material metadata for product configuration.

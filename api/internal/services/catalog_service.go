@@ -127,10 +127,30 @@ func (s *catalogService) ListFonts(ctx context.Context, filter FontFilter) (doma
 		return domain.CursorPage[FontSummary]{}, ErrCatalogRepositoryMissing
 	}
 	repoFilter := repositories.FontFilter{
-		Writing:    normalizeFilterPointer(filter.Writing),
-		Pagination: domain.Pagination{PageSize: filter.Pagination.PageSize, PageToken: strings.TrimSpace(filter.Pagination.PageToken)},
+		Script:        normalizeFilterPointer(filter.Script),
+		IsPremium:     normalizeBoolPointer(filter.IsPremium),
+		PublishedOnly: filter.PublishedOnly,
+		Pagination: domain.Pagination{
+			PageSize:  filter.Pagination.PageSize,
+			PageToken: strings.TrimSpace(filter.Pagination.PageToken),
+		},
 	}
 	return s.repo.ListFonts(ctx, repoFilter)
+}
+
+func (s *catalogService) GetFont(ctx context.Context, fontID string) (Font, error) {
+	if s.repo == nil {
+		return Font{}, ErrCatalogRepositoryMissing
+	}
+	fontID = strings.TrimSpace(fontID)
+	if fontID == "" {
+		return Font{}, errors.New("catalog service: font id is required")
+	}
+	font, err := s.repo.GetPublishedFont(ctx, fontID)
+	if err != nil {
+		return Font{}, err
+	}
+	return Font(font), nil
 }
 
 func (s *catalogService) UpsertFont(ctx context.Context, cmd UpsertFontCommand) (FontSummary, error) {

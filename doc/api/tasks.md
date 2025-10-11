@@ -37,7 +37,7 @@
 ## 4. Public Endpoints (Unauthenticated)
 - [ ] Implement `/healthz` and `/readyz` checks (DB, upstream dependencies) with fast responses.
 - [ ] Implement templates listing/detail endpoints with optional filters and CDN URLs.
-- [ ] Implement fonts listing/detail endpoints with metadata needed for rendering.
+- [x] Implement fonts listing/detail endpoints with metadata needed for rendering.
 - [ ] Implement materials listing/detail endpoints, including availability flags.
 - [ ] Implement products list/detail with filtering by shape/size/material and pagination.
 - [ ] Implement localized guide content endpoints (`/content/guides`) with language/category query support.

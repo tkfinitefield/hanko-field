@@ -193,17 +193,26 @@ func TestCatalogServiceDeleteTemplate(t *testing.T) {
 }
 
 type stubCatalogRepository struct {
-	listFilter repositories.TemplateFilter
-	listResp   domain.CursorPage[domain.TemplateSummary]
-	listErr    error
+	listFilter     repositories.TemplateFilter
+	listResp       domain.CursorPage[domain.TemplateSummary]
+	listErr        error
+	fontListFilter repositories.FontFilter
+	fontListResp   domain.CursorPage[domain.FontSummary]
+	fontListErr    error
 
-	getPublishedID  string
-	getPublished    domain.Template
-	getPublishedErr error
+	getPublishedID      string
+	getPublished        domain.Template
+	getPublishedErr     error
+	fontGetPublishedID  string
+	fontGetPublished    domain.Font
+	fontGetPublishedErr error
 
 	getID       string
 	getTemplate domain.Template
 	getErr      error
+	fontGetID   string
+	fontGet     domain.Font
+	fontGetErr  error
 
 	upsertInput  domain.Template
 	upsertResult domain.Template
@@ -253,8 +262,28 @@ func (s *stubCatalogRepository) DeleteTemplate(_ context.Context, templateID str
 	return s.deleteErr
 }
 
-func (s *stubCatalogRepository) ListFonts(context.Context, repositories.FontFilter) (domain.CursorPage[domain.FontSummary], error) {
-	return domain.CursorPage[domain.FontSummary]{}, errors.New("not implemented")
+func (s *stubCatalogRepository) ListFonts(_ context.Context, filter repositories.FontFilter) (domain.CursorPage[domain.FontSummary], error) {
+	s.fontListFilter = filter
+	return s.fontListResp, s.fontListErr
+}
+
+func (s *stubCatalogRepository) GetPublishedFont(_ context.Context, fontID string) (domain.Font, error) {
+	s.fontGetPublishedID = fontID
+	if s.fontGetPublishedErr != nil {
+		return domain.Font{}, s.fontGetPublishedErr
+	}
+	if s.fontGetPublished.ID != "" {
+		return s.fontGetPublished, nil
+	}
+	if s.fontGet.ID != "" {
+		return s.fontGet, nil
+	}
+	return domain.Font{}, nil
+}
+
+func (s *stubCatalogRepository) GetFont(_ context.Context, fontID string) (domain.Font, error) {
+	s.fontGetID = fontID
+	return s.fontGet, s.fontGetErr
 }
 
 func (s *stubCatalogRepository) UpsertFont(context.Context, domain.FontSummary) (domain.FontSummary, error) {

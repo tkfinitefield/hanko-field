@@ -245,6 +245,8 @@ type CatalogRepository interface {
 	DeleteTemplate(ctx context.Context, templateID string) error
 
 	ListFonts(ctx context.Context, filter FontFilter) (domain.CursorPage[domain.FontSummary], error)
+	GetPublishedFont(ctx context.Context, fontID string) (domain.Font, error)
+	GetFont(ctx context.Context, fontID string) (domain.Font, error)
 	UpsertFont(ctx context.Context, font domain.FontSummary) (domain.FontSummary, error)
 	DeleteFont(ctx context.Context, fontID string) error
 
@@ -329,8 +331,10 @@ type TemplateFilter struct {
 }
 
 type FontFilter struct {
-	Writing    *string
-	Pagination domain.Pagination
+	Script        *string
+	IsPremium     *bool
+	PublishedOnly bool
+	Pagination    domain.Pagination
 }
 
 type MaterialFilter struct {

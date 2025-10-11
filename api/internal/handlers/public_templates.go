@@ -22,6 +22,9 @@ import (
 const (
 	defaultTemplatePageSize = 24
 	maxTemplatePageSize     = 100
+	defaultFontPageSize     = 50
+	maxFontPageSize         = 100
+	fontCacheControl        = "public, max-age=300"
 )
 
 // AssetURLResolver resolves storage paths to externally accessible URLs (e.g. CDN or signed links).
@@ -96,6 +99,8 @@ func (h *PublicHandlers) Routes(r chi.Router) {
 	}
 	r.Get("/templates", h.listTemplates)
 	r.Get("/templates/{templateID}", h.getTemplate)
+	r.Get("/fonts", h.listFonts)
+	r.Get("/fonts/{fontID}", h.getFont)
 }
 
 func (h *PublicHandlers) listTemplates(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +118,7 @@ func (h *PublicHandlers) listTemplates(w http.ResponseWriter, r *http.Request) {
 
 	page, err := h.catalog.ListTemplates(r.Context(), filter)
 	if err != nil {
-		writeCatalogError(r.Context(), w, err)
+		writeCatalogError(r.Context(), w, err, "template")
 		return
 	}
 
@@ -159,7 +164,7 @@ func (h *PublicHandlers) getTemplate(w http.ResponseWriter, r *http.Request) {
 
 	template, err := h.catalog.GetTemplate(r.Context(), templateID)
 	if err != nil {
-		writeCatalogError(r.Context(), w, err)
+		writeCatalogError(r.Context(), w, err, "template")
 		return
 	}
 	previewURL, err := h.resolveAsset(r.Context(), h.previewResolver, template.PreviewImagePath)
@@ -186,6 +191,103 @@ func (h *PublicHandlers) getTemplate(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:   formatTimestamp(template.CreatedAt),
 		UpdatedAt:   formatTimestamp(template.UpdatedAt),
 	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (h *PublicHandlers) listFonts(w http.ResponseWriter, r *http.Request) {
+	if h.catalog == nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("catalog_unavailable", "catalog service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	filter, err := parseFontListFilter(r)
+	if err != nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+	filter.PublishedOnly = true
+
+	page, err := h.catalog.ListFonts(r.Context(), filter)
+	if err != nil {
+		writeCatalogError(r.Context(), w, err, "font")
+		return
+	}
+
+	items := make([]fontPayload, 0, len(page.Items))
+	for _, font := range page.Items {
+		previewURL, err := h.resolveAsset(r.Context(), h.previewResolver, font.PreviewImagePath)
+		if err != nil {
+			httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
+			return
+		}
+		items = append(items, fontPayload{
+			ID:               font.ID,
+			DisplayName:      font.DisplayName,
+			Family:           font.Family,
+			Scripts:          copyStringSlice(font.Scripts),
+			PreviewURL:       previewURL,
+			LetterSpacing:    font.LetterSpacing,
+			IsPremium:        font.IsPremium,
+			SupportedWeights: copyStringSlice(font.SupportedWeights),
+			License: fontLicensePayload{
+				Name: font.License.Name,
+				URL:  strings.TrimSpace(font.License.URL),
+			},
+			CreatedAt: formatTimestamp(font.CreatedAt),
+			UpdatedAt: formatTimestamp(font.UpdatedAt),
+		})
+	}
+
+	w.Header().Set("Cache-Control", fontCacheControl)
+	response := fontListResponse{
+		Fonts:         items,
+		NextPageToken: page.NextPageToken,
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *PublicHandlers) getFont(w http.ResponseWriter, r *http.Request) {
+	if h.catalog == nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("catalog_unavailable", "catalog service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	fontID := strings.TrimSpace(chi.URLParam(r, "fontID"))
+	if fontID == "" {
+		httpx.WriteError(r.Context(), w, httpx.NewError("invalid_font_id", "font id is required", http.StatusBadRequest))
+		return
+	}
+
+	font, err := h.catalog.GetFont(r.Context(), fontID)
+	if err != nil {
+		writeCatalogError(r.Context(), w, err, "font")
+		return
+	}
+
+	previewURL, err := h.resolveAsset(r.Context(), h.previewResolver, font.PreviewImagePath)
+	if err != nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
+		return
+	}
+
+	payload := fontPayload{
+		ID:               font.ID,
+		DisplayName:      font.DisplayName,
+		Family:           font.Family,
+		Scripts:          copyStringSlice(font.Scripts),
+		PreviewURL:       previewURL,
+		LetterSpacing:    font.LetterSpacing,
+		IsPremium:        font.IsPremium,
+		SupportedWeights: copyStringSlice(font.SupportedWeights),
+		License: fontLicensePayload{
+			Name: font.License.Name,
+			URL:  strings.TrimSpace(font.License.URL),
+		},
+		CreatedAt: formatTimestamp(font.CreatedAt),
+		UpdatedAt: formatTimestamp(font.UpdatedAt),
+	}
+
+	w.Header().Set("Cache-Control", fontCacheControl)
 	writeJSON(w, http.StatusOK, payload)
 }
 
@@ -243,21 +345,44 @@ func parseTemplateListFilter(r *http.Request) (services.TemplateFilter, error) {
 	return filter, nil
 }
 
+func parseFontListFilter(r *http.Request) (services.FontFilter, error) {
+	if r == nil {
+		return services.FontFilter{}, errors.New("request cannot be nil")
+	}
+	values := r.URL.Query()
+
+	filter := services.FontFilter{
+		Pagination: services.Pagination{
+			PageToken: strings.TrimSpace(values.Get("pageToken")),
+		},
+	}
+
+	if script := strings.TrimSpace(values.Get("script")); script != "" {
+		normalized := strings.ToLower(script)
+		filter.Script = &normalized
+	}
+
+	if premium, err := parseOptionalBoolParam("isPremium", values.Get("isPremium")); err != nil {
+		return services.FontFilter{}, err
+	} else {
+		filter.IsPremium = premium
+	}
+
+	if pageSize, err := parseFontPageSize(values.Get("pageSize")); err != nil {
+		return services.FontFilter{}, err
+	} else {
+		filter.Pagination.PageSize = pageSize
+	}
+
+	return filter, nil
+}
+
 func parsePageSize(raw string) (int, error) {
-	if strings.TrimSpace(raw) == "" {
-		return defaultTemplatePageSize, nil
-	}
-	value, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil {
-		return 0, fmt.Errorf("invalid pageSize: %w", err)
-	}
-	if value <= 0 {
-		return 0, errors.New("pageSize must be greater than zero")
-	}
-	if value > maxTemplatePageSize {
-		value = maxTemplatePageSize
-	}
-	return value, nil
+	return parseLimitedPageSize(raw, defaultTemplatePageSize, maxTemplatePageSize)
+}
+
+func parseFontPageSize(raw string) (int, error) {
+	return parseLimitedPageSize(raw, defaultFontPageSize, maxFontPageSize)
 }
 
 func parseSort(raw string) (domain.TemplateSort, domain.SortOrder, error) {
@@ -322,10 +447,45 @@ func parseTagParameters(values url.Values) []string {
 	return result
 }
 
-func writeCatalogError(ctx context.Context, w http.ResponseWriter, err error) {
+func parseLimitedPageSize(raw string, defaultSize, maxSize int) (int, error) {
+	if strings.TrimSpace(raw) == "" {
+		return defaultSize, nil
+	}
+	value, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return 0, fmt.Errorf("invalid pageSize: %w", err)
+	}
+	if value <= 0 {
+		return 0, errors.New("pageSize must be greater than zero")
+	}
+	if value > maxSize {
+		value = maxSize
+	}
+	return value, nil
+}
+
+func parseOptionalBoolParam(name string, raw string) (*bool, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	value, err := strconv.ParseBool(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s: %w", name, err)
+	}
+	return &value, nil
+}
+
+func writeCatalogError(ctx context.Context, w http.ResponseWriter, err error, resource string) {
 	if err == nil {
 		return
 	}
+	resource = strings.TrimSpace(resource)
+	if resource == "" {
+		resource = "resource"
+	}
+	codePrefix := strings.ToLower(resource)
+
 	switch {
 	case errors.Is(err, services.ErrCatalogRepositoryMissing):
 		httpx.WriteError(ctx, w, httpx.NewError("catalog_unavailable", "catalog service is unavailable", http.StatusServiceUnavailable))
@@ -336,7 +496,7 @@ func writeCatalogError(ctx context.Context, w http.ResponseWriter, err error) {
 	if errors.As(err, &repoErr) {
 		switch {
 		case repoErr.IsNotFound():
-			httpx.WriteError(ctx, w, httpx.NewError("template_not_found", "template not found", http.StatusNotFound))
+			httpx.WriteError(ctx, w, httpx.NewError(fmt.Sprintf("%s_not_found", codePrefix), fmt.Sprintf("%s not found", resource), http.StatusNotFound))
 			return
 		case repoErr.IsUnavailable():
 			httpx.WriteError(ctx, w, httpx.NewError("catalog_unavailable", "catalog repository unavailable", http.StatusServiceUnavailable))
@@ -373,6 +533,30 @@ type templatePayload struct {
 	Popularity  int      `json:"popularity,omitempty"`
 	CreatedAt   string   `json:"created_at,omitempty"`
 	UpdatedAt   string   `json:"updated_at,omitempty"`
+}
+
+type fontListResponse struct {
+	Fonts         []fontPayload `json:"fonts"`
+	NextPageToken string        `json:"next_page_token,omitempty"`
+}
+
+type fontPayload struct {
+	ID               string             `json:"id"`
+	DisplayName      string             `json:"display_name"`
+	Family           string             `json:"family"`
+	Scripts          []string           `json:"scripts,omitempty"`
+	PreviewURL       string             `json:"preview_url,omitempty"`
+	LetterSpacing    float64            `json:"letter_spacing"`
+	IsPremium        bool               `json:"is_premium"`
+	SupportedWeights []string           `json:"supported_weights,omitempty"`
+	License          fontLicensePayload `json:"license"`
+	CreatedAt        string             `json:"created_at,omitempty"`
+	UpdatedAt        string             `json:"updated_at,omitempty"`
+}
+
+type fontLicensePayload struct {
+	Name string `json:"name,omitempty"`
+	URL  string `json:"url,omitempty"`
 }
 
 func formatTimestamp(ts time.Time) string {
