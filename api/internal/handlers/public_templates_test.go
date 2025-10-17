@@ -653,6 +653,254 @@ func TestPublicHandlers_GetMaterial_NotAvailable(t *testing.T) {
 	}
 }
 
+func TestPublicHandlers_ListProducts(t *testing.T) {
+	createdAt := time.Date(2024, time.August, 1, 10, 0, 0, 0, time.UTC)
+	updatedAt := time.Date(2024, time.August, 2, 10, 0, 0, 0, time.UTC)
+	stubService := &stubCatalogService{
+		productListResp: domain.CursorPage[services.ProductSummary]{
+			Items: []services.ProductSummary{
+				{
+					ID:                    "prod_round",
+					SKU:                   "SKU-001",
+					Name:                  "Round Hanko",
+					Description:           "Classic round seal",
+					Shape:                 "round",
+					SizesMm:               []int{45, 60},
+					DefaultMaterialID:     "mat_wood",
+					MaterialIDs:           []string{"mat_wood", "mat_titanium"},
+					BasePrice:             5500,
+					Currency:              "JPY",
+					ImagePaths:            []string{"products/round.png", "products/round_alt.png"},
+					IsCustomizable:        true,
+					InventoryStatus:       "in_stock",
+					CompatibleTemplateIDs: []string{"tpl_classic"},
+					LeadTimeDays:          5,
+					CreatedAt:             createdAt,
+					UpdatedAt:             updatedAt,
+				},
+			},
+			NextPageToken: "next-product",
+		},
+	}
+
+	handler := NewPublicHandlers(
+		WithPublicCatalogService(stubService),
+		WithPublicPreviewResolver(AssetURLResolverFunc(func(_ context.Context, path string) (string, error) {
+			return "https://cdn.example.com/" + strings.TrimPrefix(path, "/"), nil
+		})),
+		WithPublicPriceDisplayMode(priceDisplayModeExclusive),
+	)
+
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/products", nil)
+	values := req.URL.Query()
+	values.Set("shape", "Round")
+	values.Set("size", "45mm")
+	values.Set("material", " mat_wood ")
+	values.Set("isCustomizable", "true")
+	values.Set("pageSize", "12")
+	values.Set("pageToken", " token ")
+	req.URL.RawQuery = values.Encode()
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 got %d", rec.Code)
+	}
+	if cache := rec.Result().Header.Get("Cache-Control"); cache != productCacheControl {
+		t.Fatalf("expected cache control %q got %q", productCacheControl, cache)
+	}
+
+	var payload productListResponse
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.PriceDisplay != priceDisplayModeExclusive {
+		t.Fatalf("expected price display %q got %q", priceDisplayModeExclusive, payload.PriceDisplay)
+	}
+	if payload.NextPageToken != "next-product" {
+		t.Fatalf("expected next page token next-product got %s", payload.NextPageToken)
+	}
+	if len(payload.Products) != 1 {
+		t.Fatalf("expected 1 product got %d", len(payload.Products))
+	}
+
+	product := payload.Products[0]
+	if product.ID != "prod_round" {
+		t.Fatalf("expected product id prod_round got %s", product.ID)
+	}
+	if product.PriceDisplay != priceDisplayModeExclusive {
+		t.Fatalf("expected product price display %q got %q", priceDisplayModeExclusive, product.PriceDisplay)
+	}
+	if product.PreviewURL != "https://cdn.example.com/products/round.png" {
+		t.Fatalf("expected resolved preview url got %s", product.PreviewURL)
+	}
+	if len(product.ImageURLs) != 2 || product.ImageURLs[1] != "https://cdn.example.com/products/round_alt.png" {
+		t.Fatalf("expected resolved image urls got %#v", product.ImageURLs)
+	}
+	if product.BasePrice != 5500 || product.Currency != "JPY" {
+		t.Fatalf("expected price 5500 JPY got %d %s", product.BasePrice, product.Currency)
+	}
+	if product.CreatedAt != createdAt.Format(time.RFC3339) {
+		t.Fatalf("expected created_at %s got %s", createdAt.Format(time.RFC3339), product.CreatedAt)
+	}
+	if product.UpdatedAt != updatedAt.Format(time.RFC3339) {
+		t.Fatalf("expected updated_at %s got %s", updatedAt.Format(time.RFC3339), product.UpdatedAt)
+	}
+
+	if stubService.productListFilter.Shape == nil || *stubService.productListFilter.Shape != "round" {
+		t.Fatalf("expected shape filter round got %#v", stubService.productListFilter.Shape)
+	}
+	if stubService.productListFilter.SizeMm == nil || *stubService.productListFilter.SizeMm != 45 {
+		t.Fatalf("expected size filter 45 got %#v", stubService.productListFilter.SizeMm)
+	}
+	if stubService.productListFilter.MaterialID == nil || *stubService.productListFilter.MaterialID != "mat_wood" {
+		t.Fatalf("expected material filter mat_wood got %#v", stubService.productListFilter.MaterialID)
+	}
+	if stubService.productListFilter.IsCustomizable == nil || !*stubService.productListFilter.IsCustomizable {
+		t.Fatalf("expected customizable filter true got %#v", stubService.productListFilter.IsCustomizable)
+	}
+	if stubService.productListFilter.Pagination.PageSize != 12 {
+		t.Fatalf("expected page size 12 got %d", stubService.productListFilter.Pagination.PageSize)
+	}
+	if stubService.productListFilter.Pagination.PageToken != "token" {
+		t.Fatalf("expected trimmed page token got %q", stubService.productListFilter.Pagination.PageToken)
+	}
+}
+
+func TestPublicHandlers_ListProducts_InvalidSize(t *testing.T) {
+	handler := NewPublicHandlers(WithPublicCatalogService(&stubCatalogService{}))
+
+	req := httptest.NewRequest(http.MethodGet, "/products?size=abc", nil)
+	rec := httptest.NewRecorder()
+
+	handler.listProducts(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 got %d", rec.Code)
+	}
+}
+
+func TestPublicHandlers_GetProduct(t *testing.T) {
+	createdAt := time.Date(2024, time.September, 1, 11, 0, 0, 0, time.UTC)
+	updatedAt := time.Date(2024, time.September, 2, 11, 0, 0, 0, time.UTC)
+	stubService := &stubCatalogService{
+		productGetProd: services.Product{
+			ProductSummary: services.ProductSummary{
+				ID:                    "prod_square",
+				SKU:                   "SKU-900",
+				Name:                  "Square Hanko",
+				Description:           "Modern square seal",
+				Shape:                 "square",
+				SizesMm:               []int{30},
+				DefaultMaterialID:     "mat_titanium",
+				MaterialIDs:           []string{"mat_titanium"},
+				BasePrice:             7800,
+				Currency:              "JPY",
+				ImagePaths:            []string{"products/square.png"},
+				IsCustomizable:        false,
+				InventoryStatus:       "made_to_order",
+				CompatibleTemplateIDs: []string{"tpl_modern"},
+				LeadTimeDays:          7,
+				CreatedAt:             createdAt,
+				UpdatedAt:             updatedAt,
+			},
+			PriceTiers: []services.ProductPriceTier{
+				{MinQuantity: 1, UnitPrice: 7800},
+				{MinQuantity: 10, UnitPrice: 7300},
+			},
+		},
+	}
+
+	handler := NewPublicHandlers(
+		WithPublicCatalogService(stubService),
+		WithPublicPreviewResolver(AssetURLResolverFunc(func(_ context.Context, path string) (string, error) {
+			return "https://cdn.example.com/" + strings.TrimPrefix(path, "/"), nil
+		})),
+	)
+
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/products/prod_square", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 got %d", rec.Code)
+	}
+	if cache := rec.Result().Header.Get("Cache-Control"); cache != productCacheControl {
+		t.Fatalf("expected cache control %q got %q", productCacheControl, cache)
+	}
+
+	var payload productDetailPayload
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.ID != "prod_square" {
+		t.Fatalf("expected id prod_square got %s", payload.ID)
+	}
+	if payload.PreviewURL != "https://cdn.example.com/products/square.png" {
+		t.Fatalf("expected preview url got %s", payload.PreviewURL)
+	}
+	if payload.InventoryStatus != "made_to_order" {
+		t.Fatalf("expected inventory status made_to_order got %s", payload.InventoryStatus)
+	}
+	if payload.PriceDisplay != priceDisplayModeInclusive {
+		t.Fatalf("expected price display default inclusive got %s", payload.PriceDisplay)
+	}
+	if len(payload.PriceTiers) != 2 {
+		t.Fatalf("expected 2 price tiers got %d", len(payload.PriceTiers))
+	}
+	if payload.PriceTiers[1].MinQuantity != 10 || payload.PriceTiers[1].UnitPrice != 7300 {
+		t.Fatalf("unexpected price tier payload %#v", payload.PriceTiers[1])
+	}
+	if payload.PriceTiers[1].Currency != "JPY" {
+		t.Fatalf("expected price tier currency JPY got %s", payload.PriceTiers[1].Currency)
+	}
+	if stubService.productGetID != "prod_square" {
+		t.Fatalf("expected service to receive trimmed product id got %s", stubService.productGetID)
+	}
+}
+
+func TestPublicHandlers_GetProduct_NotFound(t *testing.T) {
+	handler := NewPublicHandlers(WithPublicCatalogService(&stubCatalogService{
+		productGetErr: newRepositoryError(true, false, false),
+	}))
+
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/products/missing", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404 got %d", rec.Code)
+	}
+}
+
+func TestPublicHandlers_GetProduct_InvalidID(t *testing.T) {
+	handler := NewPublicHandlers(WithPublicCatalogService(&stubCatalogService{}))
+
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/products/%20", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 got %d", rec.Code)
+	}
+}
+
 type stubCatalogService struct {
 	listFilter         services.TemplateFilter
 	listResponse       domain.CursorPage[domain.TemplateSummary]
@@ -663,6 +911,9 @@ type stubCatalogService struct {
 	materialListFilter services.MaterialFilter
 	materialListResp   domain.CursorPage[services.MaterialSummary]
 	materialListErr    error
+	productListFilter  services.ProductFilter
+	productListResp    domain.CursorPage[services.ProductSummary]
+	productListErr     error
 
 	getID          string
 	getTemplate    domain.Template
@@ -673,6 +924,9 @@ type stubCatalogService struct {
 	materialGetID  string
 	materialGetMat services.Material
 	materialGetErr error
+	productGetID   string
+	productGetProd services.Product
+	productGetErr  error
 }
 
 func (s *stubCatalogService) ListTemplates(_ context.Context, filter services.TemplateFilter) (domain.CursorPage[domain.TemplateSummary], error) {
@@ -738,8 +992,17 @@ func (s *stubCatalogService) DeleteMaterial(context.Context, string) error {
 	return errors.New("not implemented")
 }
 
-func (s *stubCatalogService) ListProducts(context.Context, services.ProductFilter) (domain.CursorPage[services.ProductSummary], error) {
-	return domain.CursorPage[services.ProductSummary]{}, errors.New("not implemented")
+func (s *stubCatalogService) ListProducts(_ context.Context, filter services.ProductFilter) (domain.CursorPage[services.ProductSummary], error) {
+	s.productListFilter = filter
+	return s.productListResp, s.productListErr
+}
+
+func (s *stubCatalogService) GetProduct(_ context.Context, productID string) (services.Product, error) {
+	s.productGetID = productID
+	if s.productGetErr != nil {
+		return services.Product{}, s.productGetErr
+	}
+	return s.productGetProd, nil
 }
 
 func (s *stubCatalogService) UpsertProduct(context.Context, services.UpsertProductCommand) (services.ProductSummary, error) {

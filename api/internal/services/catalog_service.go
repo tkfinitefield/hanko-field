@@ -223,12 +223,28 @@ func (s *catalogService) ListProducts(ctx context.Context, filter ProductFilter)
 		return domain.CursorPage[ProductSummary]{}, ErrCatalogRepositoryMissing
 	}
 	repoFilter := repositories.ProductFilter{
-		Shape:      normalizeFilterPointer(filter.Shape),
-		SizeMm:     filter.SizeMm,
-		MaterialID: normalizeFilterPointer(filter.MaterialID),
-		Pagination: domain.Pagination{PageSize: filter.Pagination.PageSize, PageToken: strings.TrimSpace(filter.Pagination.PageToken)},
+		Shape:          normalizeFilterPointer(filter.Shape),
+		SizeMm:         filter.SizeMm,
+		MaterialID:     normalizeFilterPointer(filter.MaterialID),
+		IsCustomizable: normalizeBoolPointer(filter.IsCustomizable),
+		Pagination:     domain.Pagination{PageSize: filter.Pagination.PageSize, PageToken: strings.TrimSpace(filter.Pagination.PageToken)},
 	}
 	return s.repo.ListProducts(ctx, repoFilter)
+}
+
+func (s *catalogService) GetProduct(ctx context.Context, productID string) (Product, error) {
+	if s.repo == nil {
+		return Product{}, ErrCatalogRepositoryMissing
+	}
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return Product{}, errors.New("catalog service: product id is required")
+	}
+	product, err := s.repo.GetPublishedProduct(ctx, productID)
+	if err != nil {
+		return Product{}, err
+	}
+	return Product(product), nil
 }
 
 func (s *catalogService) UpsertProduct(ctx context.Context, cmd UpsertProductCommand) (ProductSummary, error) {

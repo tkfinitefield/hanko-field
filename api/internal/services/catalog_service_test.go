@@ -196,6 +196,91 @@ func TestCatalogServiceGetFont(t *testing.T) {
 	}
 }
 
+func TestCatalogServiceListProducts(t *testing.T) {
+	stubRepo := &stubCatalogRepository{
+		productListResp: domain.CursorPage[domain.ProductSummary]{
+			Items: []domain.ProductSummary{{ID: "prod_001"}},
+		},
+	}
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: stubRepo})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	shape := " Round "
+	material := " mat_wood "
+	size := 45
+	customizable := true
+	filter := ProductFilter{
+		Shape:          &shape,
+		SizeMm:         &size,
+		MaterialID:     &material,
+		IsCustomizable: &customizable,
+		Pagination: Pagination{
+			PageSize:  50,
+			PageToken: " token ",
+		},
+	}
+
+	page, err := svc.ListProducts(context.Background(), filter)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(page, stubRepo.productListResp) {
+		t.Fatalf("expected repository response, got %#v", page)
+	}
+
+	if stubRepo.productListFilter.Shape == nil || *stubRepo.productListFilter.Shape != "Round" {
+		t.Fatalf("expected trimmed shape Round got %#v", stubRepo.productListFilter.Shape)
+	}
+	if stubRepo.productListFilter.SizeMm == nil || *stubRepo.productListFilter.SizeMm != 45 {
+		t.Fatalf("expected size 45 got %#v", stubRepo.productListFilter.SizeMm)
+	}
+	if stubRepo.productListFilter.MaterialID == nil || *stubRepo.productListFilter.MaterialID != "mat_wood" {
+		t.Fatalf("expected trimmed material mat_wood got %#v", stubRepo.productListFilter.MaterialID)
+	}
+	if stubRepo.productListFilter.IsCustomizable == nil || !*stubRepo.productListFilter.IsCustomizable {
+		t.Fatalf("expected customizable flag true got %#v", stubRepo.productListFilter.IsCustomizable)
+	}
+	if stubRepo.productListFilter.Pagination.PageSize != 50 {
+		t.Fatalf("expected page size 50 got %d", stubRepo.productListFilter.Pagination.PageSize)
+	}
+	if stubRepo.productListFilter.Pagination.PageToken != "token" {
+		t.Fatalf("expected trimmed page token got %q", stubRepo.productListFilter.Pagination.PageToken)
+	}
+}
+
+func TestCatalogServiceGetProduct(t *testing.T) {
+	stubRepo := &stubCatalogRepository{
+		productGetPublished: domain.Product{
+			ProductSummary: domain.ProductSummary{ID: "prod_001"},
+		},
+	}
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: stubRepo})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	t.Run("validates id", func(t *testing.T) {
+		if _, err := svc.GetProduct(context.Background(), " "); err == nil {
+			t.Fatalf("expected error when product id empty")
+		}
+	})
+
+	t.Run("delegates to repository", func(t *testing.T) {
+		product, err := svc.GetProduct(context.Background(), " prod_001 ")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if product.ID != "prod_001" {
+			t.Fatalf("expected product id prod_001 got %s", product.ID)
+		}
+		if stubRepo.productGetPublishedID != "prod_001" {
+			t.Fatalf("expected repository to receive trimmed id prod_001 got %q", stubRepo.productGetPublishedID)
+		}
+	})
+}
+
 func TestCatalogServiceDeleteTemplate(t *testing.T) {
 	stubRepo := &stubCatalogRepository{}
 	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: stubRepo})
@@ -225,6 +310,9 @@ type stubCatalogRepository struct {
 	materialListFilter repositories.MaterialFilter
 	materialListResp   domain.CursorPage[domain.MaterialSummary]
 	materialListErr    error
+	productListFilter  repositories.ProductFilter
+	productListResp    domain.CursorPage[domain.ProductSummary]
+	productListErr     error
 
 	getPublishedID          string
 	getPublished            domain.Template
@@ -235,6 +323,9 @@ type stubCatalogRepository struct {
 	materialGetPublishedID  string
 	materialGetPublished    domain.Material
 	materialGetPublishedErr error
+	productGetPublishedID   string
+	productGetPublished     domain.Product
+	productGetPublishedErr  error
 
 	getID          string
 	getTemplate    domain.Template
@@ -245,6 +336,9 @@ type stubCatalogRepository struct {
 	materialGetID  string
 	materialGet    domain.Material
 	materialGetErr error
+	productGetID   string
+	productGet     domain.Product
+	productGetErr  error
 
 	upsertInput  domain.Template
 	upsertResult domain.Template
@@ -358,8 +452,28 @@ func (s *stubCatalogRepository) DeleteMaterial(context.Context, string) error {
 	return errors.New("not implemented")
 }
 
-func (s *stubCatalogRepository) ListProducts(context.Context, repositories.ProductFilter) (domain.CursorPage[domain.ProductSummary], error) {
-	return domain.CursorPage[domain.ProductSummary]{}, errors.New("not implemented")
+func (s *stubCatalogRepository) ListProducts(_ context.Context, filter repositories.ProductFilter) (domain.CursorPage[domain.ProductSummary], error) {
+	s.productListFilter = filter
+	return s.productListResp, s.productListErr
+}
+
+func (s *stubCatalogRepository) GetPublishedProduct(_ context.Context, productID string) (domain.Product, error) {
+	s.productGetPublishedID = productID
+	if s.productGetPublishedErr != nil {
+		return domain.Product{}, s.productGetPublishedErr
+	}
+	if s.productGetPublished.ID != "" {
+		return s.productGetPublished, nil
+	}
+	if s.productGet.ID != "" {
+		return s.productGet, nil
+	}
+	return domain.Product{}, nil
+}
+
+func (s *stubCatalogRepository) GetProduct(_ context.Context, productID string) (domain.Product, error) {
+	s.productGetID = productID
+	return s.productGet, s.productGetErr
 }
 
 func (s *stubCatalogRepository) UpsertProduct(context.Context, domain.ProductSummary) (domain.ProductSummary, error) {

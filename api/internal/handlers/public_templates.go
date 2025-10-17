@@ -20,15 +20,20 @@ import (
 )
 
 const (
-	defaultTemplatePageSize = 24
-	maxTemplatePageSize     = 100
-	defaultFontPageSize     = 50
-	maxFontPageSize         = 100
-	defaultMaterialPageSize = 32
-	maxMaterialPageSize     = 100
-	fontCacheControl        = "public, max-age=300"
-	materialCacheControl    = "public, max-age=900"
-	defaultMaterialLocale   = "ja"
+	defaultTemplatePageSize   = 24
+	maxTemplatePageSize       = 100
+	defaultFontPageSize       = 50
+	maxFontPageSize           = 100
+	defaultMaterialPageSize   = 32
+	maxMaterialPageSize       = 100
+	defaultProductPageSize    = 24
+	maxProductPageSize        = 100
+	fontCacheControl          = "public, max-age=300"
+	materialCacheControl      = "public, max-age=900"
+	productCacheControl       = "public, max-age=300"
+	defaultMaterialLocale     = "ja"
+	priceDisplayModeInclusive = "tax_inclusive"
+	priceDisplayModeExclusive = "tax_exclusive"
 )
 
 // AssetURLResolver resolves storage paths to externally accessible URLs (e.g. CDN or signed links).
@@ -49,9 +54,10 @@ func (fn AssetURLResolverFunc) ResolveURL(ctx context.Context, path string) (str
 
 // PublicHandlers exposes unauthenticated catalog endpoints.
 type PublicHandlers struct {
-	catalog         services.CatalogService
-	previewResolver AssetURLResolver
-	vectorResolver  AssetURLResolver
+	catalog          services.CatalogService
+	previewResolver  AssetURLResolver
+	vectorResolver   AssetURLResolver
+	priceDisplayMode string
 }
 
 // PublicOption customises construction of PublicHandlers.
@@ -78,6 +84,16 @@ func WithPublicVectorResolver(resolver AssetURLResolver) PublicOption {
 	}
 }
 
+// WithPublicPriceDisplayMode sets the price display mode surfaced to clients.
+func WithPublicPriceDisplayMode(mode string) PublicOption {
+	return func(h *PublicHandlers) {
+		if h == nil {
+			return
+		}
+		h.priceDisplayMode = normalizePriceDisplayMode(mode)
+	}
+}
+
 // NewPublicHandlers constructs handlers for public catalog endpoints.
 func NewPublicHandlers(opts ...PublicOption) *PublicHandlers {
 	handler := &PublicHandlers{
@@ -87,6 +103,7 @@ func NewPublicHandlers(opts ...PublicOption) *PublicHandlers {
 		vectorResolver: AssetURLResolverFunc(func(_ context.Context, path string) (string, error) {
 			return path, nil
 		}),
+		priceDisplayMode: priceDisplayModeInclusive,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -107,6 +124,8 @@ func (h *PublicHandlers) Routes(r chi.Router) {
 	r.Get("/fonts/{fontID}", h.getFont)
 	r.Get("/materials", h.listMaterials)
 	r.Get("/materials/{materialID}", h.getMaterial)
+	r.Get("/products", h.listProducts)
+	r.Get("/products/{productID}", h.getProduct)
 }
 
 func (h *PublicHandlers) listTemplates(w http.ResponseWriter, r *http.Request) {
@@ -429,6 +448,74 @@ func (h *PublicHandlers) getMaterial(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, payload)
 }
 
+func (h *PublicHandlers) listProducts(w http.ResponseWriter, r *http.Request) {
+	if h.catalog == nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("catalog_unavailable", "catalog service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	filter, err := parseProductListFilter(r)
+	if err != nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+	if filter.Pagination.PageSize == 0 {
+		filter.Pagination.PageSize = defaultProductPageSize
+	}
+
+	page, err := h.catalog.ListProducts(r.Context(), filter)
+	if err != nil {
+		writeCatalogError(r.Context(), w, err, "product")
+		return
+	}
+
+	items := make([]productPayload, 0, len(page.Items))
+	for _, product := range page.Items {
+		payload, err := h.buildProductPayload(r.Context(), product)
+		if err != nil {
+			httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
+			return
+		}
+		items = append(items, payload)
+	}
+
+	w.Header().Set("Cache-Control", productCacheControl)
+	response := productListResponse{
+		Products:      items,
+		NextPageToken: page.NextPageToken,
+		PriceDisplay:  h.currentPriceDisplayMode(),
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *PublicHandlers) getProduct(w http.ResponseWriter, r *http.Request) {
+	if h.catalog == nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("catalog_unavailable", "catalog service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	productID := strings.TrimSpace(chi.URLParam(r, "productID"))
+	if productID == "" {
+		httpx.WriteError(r.Context(), w, httpx.NewError("invalid_product_id", "product id is required", http.StatusBadRequest))
+		return
+	}
+
+	product, err := h.catalog.GetProduct(r.Context(), productID)
+	if err != nil {
+		writeCatalogError(r.Context(), w, err, "product")
+		return
+	}
+
+	payload, err := h.buildProductDetailPayload(r.Context(), product)
+	if err != nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
+		return
+	}
+
+	w.Header().Set("Cache-Control", productCacheControl)
+	writeJSON(w, http.StatusOK, payload)
+}
+
 func (h *PublicHandlers) resolveAsset(ctx context.Context, resolver AssetURLResolver, path string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -441,6 +528,76 @@ func (h *PublicHandlers) resolveAsset(ctx context.Context, resolver AssetURLReso
 		return path, nil
 	}
 	return resolver.ResolveURL(ctx, path)
+}
+
+func (h *PublicHandlers) buildProductPayload(ctx context.Context, product services.ProductSummary) (productPayload, error) {
+	imageURLs := make([]string, 0, len(product.ImagePaths))
+	for _, path := range product.ImagePaths {
+		resolved, err := h.resolveAsset(ctx, h.previewResolver, path)
+		if err != nil {
+			return productPayload{}, err
+		}
+		if strings.TrimSpace(resolved) != "" {
+			imageURLs = append(imageURLs, resolved)
+		}
+	}
+
+	preview := ""
+	if len(imageURLs) > 0 {
+		preview = imageURLs[0]
+	}
+
+	payload := productPayload{
+		ID:                    strings.TrimSpace(product.ID),
+		SKU:                   strings.TrimSpace(product.SKU),
+		Name:                  strings.TrimSpace(product.Name),
+		Description:           strings.TrimSpace(product.Description),
+		Shape:                 strings.TrimSpace(product.Shape),
+		SizesMm:               copyIntSlice(product.SizesMm),
+		DefaultMaterialID:     strings.TrimSpace(product.DefaultMaterialID),
+		MaterialIDs:           copyStringSlice(product.MaterialIDs),
+		BasePrice:             product.BasePrice,
+		Currency:              strings.TrimSpace(product.Currency),
+		PreviewURL:            preview,
+		ImageURLs:             imageURLs,
+		IsCustomizable:        product.IsCustomizable,
+		InventoryStatus:       strings.TrimSpace(product.InventoryStatus),
+		CompatibleTemplateIDs: copyStringSlice(product.CompatibleTemplateIDs),
+		LeadTimeDays:          product.LeadTimeDays,
+		PriceDisplay:          h.currentPriceDisplayMode(),
+		CreatedAt:             formatTimestamp(product.CreatedAt),
+		UpdatedAt:             formatTimestamp(product.UpdatedAt),
+	}
+
+	return payload, nil
+}
+
+func (h *PublicHandlers) buildProductDetailPayload(ctx context.Context, product services.Product) (productDetailPayload, error) {
+	base, err := h.buildProductPayload(ctx, product.ProductSummary)
+	if err != nil {
+		return productDetailPayload{}, err
+	}
+
+	tiers := make([]productPriceTierPayload, 0, len(product.PriceTiers))
+	for _, tier := range product.PriceTiers {
+		if tier.MinQuantity <= 0 && tier.UnitPrice == 0 {
+			continue
+		}
+		tiers = append(tiers, productPriceTierPayload{
+			MinQuantity: tier.MinQuantity,
+			UnitPrice:   tier.UnitPrice,
+			Currency:    base.Currency,
+		})
+	}
+
+	return productDetailPayload{
+		productPayload: base,
+		PriceTiers:     tiers,
+	}, nil
+}
+
+func (h *PublicHandlers) currentPriceDisplayMode() string {
+	return normalizePriceDisplayMode(h.priceDisplayMode)
 }
 
 func parseTemplateListFilter(r *http.Request) (services.TemplateFilter, error) {
@@ -547,6 +704,58 @@ func parseMaterialListFilter(r *http.Request) (services.MaterialFilter, error) {
 	return filter, nil
 }
 
+func parseProductListFilter(r *http.Request) (services.ProductFilter, error) {
+	if r == nil {
+		return services.ProductFilter{}, errors.New("request cannot be nil")
+	}
+	values := r.URL.Query()
+
+	filter := services.ProductFilter{
+		Pagination: services.Pagination{
+			PageToken: strings.TrimSpace(values.Get("pageToken")),
+		},
+	}
+
+	if shape := strings.TrimSpace(values.Get("shape")); shape != "" {
+		normalized := strings.ToLower(shape)
+		filter.Shape = &normalized
+	}
+
+	if size := strings.TrimSpace(values.Get("size")); size != "" {
+		normalized := strings.TrimSpace(size)
+		if len(normalized) > 2 && strings.EqualFold(normalized[len(normalized)-2:], "mm") {
+			normalized = strings.TrimSpace(normalized[:len(normalized)-2])
+		}
+		value, err := strconv.Atoi(normalized)
+		if err != nil {
+			return services.ProductFilter{}, fmt.Errorf("invalid size: %w", err)
+		}
+		if value <= 0 {
+			return services.ProductFilter{}, errors.New("size must be greater than zero")
+		}
+		filter.SizeMm = &value
+	}
+
+	if material := strings.TrimSpace(values.Get("material")); material != "" {
+		materialID := material
+		filter.MaterialID = &materialID
+	}
+
+	if customizable, err := parseOptionalBoolParam("isCustomizable", values.Get("isCustomizable")); err != nil {
+		return services.ProductFilter{}, err
+	} else {
+		filter.IsCustomizable = customizable
+	}
+
+	if pageSize, err := parseProductPageSize(values.Get("pageSize")); err != nil {
+		return services.ProductFilter{}, err
+	} else {
+		filter.Pagination.PageSize = pageSize
+	}
+
+	return filter, nil
+}
+
 func parsePageSize(raw string) (int, error) {
 	return parseLimitedPageSize(raw, defaultTemplatePageSize, maxTemplatePageSize)
 }
@@ -557,6 +766,10 @@ func parseFontPageSize(raw string) (int, error) {
 
 func parseMaterialPageSize(raw string) (int, error) {
 	return parseLimitedPageSize(raw, defaultMaterialPageSize, maxMaterialPageSize)
+}
+
+func parseProductPageSize(raw string) (int, error) {
+	return parseLimitedPageSize(raw, defaultProductPageSize, maxProductPageSize)
 }
 
 func parseSort(raw string) (domain.TemplateSort, domain.SortOrder, error) {
@@ -657,6 +870,17 @@ func normalizeLocale(raw string) string {
 	}
 	normalized := strings.ReplaceAll(trimmed, "_", "-")
 	return strings.ToLower(normalized)
+}
+
+func normalizePriceDisplayMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case priceDisplayModeExclusive:
+		return priceDisplayModeExclusive
+	case priceDisplayModeInclusive:
+		return priceDisplayModeInclusive
+	default:
+		return priceDisplayModeInclusive
+	}
 }
 
 func resolveMaterialLocalization(material services.MaterialSummary, requestedLocale string) (string, string, string) {
@@ -845,6 +1069,45 @@ type materialSustainabilityPayload struct {
 	Notes          string   `json:"notes,omitempty"`
 }
 
+type productListResponse struct {
+	Products      []productPayload `json:"products"`
+	NextPageToken string           `json:"next_page_token,omitempty"`
+	PriceDisplay  string           `json:"price_display,omitempty"`
+}
+
+type productPayload struct {
+	ID                    string   `json:"id"`
+	SKU                   string   `json:"sku,omitempty"`
+	Name                  string   `json:"name"`
+	Description           string   `json:"description,omitempty"`
+	Shape                 string   `json:"shape,omitempty"`
+	SizesMm               []int    `json:"sizes_mm,omitempty"`
+	DefaultMaterialID     string   `json:"default_material_id,omitempty"`
+	MaterialIDs           []string `json:"material_ids,omitempty"`
+	BasePrice             int64    `json:"base_price,omitempty"`
+	Currency              string   `json:"currency,omitempty"`
+	PreviewURL            string   `json:"preview_url,omitempty"`
+	ImageURLs             []string `json:"image_urls,omitempty"`
+	IsCustomizable        bool     `json:"is_customizable"`
+	InventoryStatus       string   `json:"inventory_status,omitempty"`
+	CompatibleTemplateIDs []string `json:"compatible_template_ids,omitempty"`
+	LeadTimeDays          int      `json:"lead_time_days,omitempty"`
+	PriceDisplay          string   `json:"price_display,omitempty"`
+	CreatedAt             string   `json:"created_at,omitempty"`
+	UpdatedAt             string   `json:"updated_at,omitempty"`
+}
+
+type productDetailPayload struct {
+	productPayload
+	PriceTiers []productPriceTierPayload `json:"price_tiers,omitempty"`
+}
+
+type productPriceTierPayload struct {
+	MinQuantity int    `json:"min_quantity"`
+	UnitPrice   int64  `json:"unit_price"`
+	Currency    string `json:"currency,omitempty"`
+}
+
 func formatTimestamp(ts time.Time) string {
 	if ts.IsZero() {
 		return ""
@@ -857,6 +1120,15 @@ func copyStringSlice(in []string) []string {
 		return nil
 	}
 	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}
+
+func copyIntSlice(in []int) []int {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]int, len(in))
 	copy(out, in)
 	return out
 }

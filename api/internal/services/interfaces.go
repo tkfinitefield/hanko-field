@@ -65,7 +65,9 @@ type (
 	MaterialSummary           = domain.MaterialSummary
 	MaterialTranslation       = domain.MaterialTranslation
 	MaterialSustainability    = domain.MaterialSustainability
+	Product                   = domain.Product
 	ProductSummary            = domain.ProductSummary
+	ProductPriceTier          = domain.ProductPriceTier
 	SystemHealthReport        = domain.SystemHealthReport
 	AuditLogEntry             = domain.AuditLogEntry
 	SignedAssetResponse       = domain.SignedAssetResponse
@@ -215,6 +217,7 @@ type CatalogService interface {
 	UpsertMaterial(ctx context.Context, cmd UpsertMaterialCommand) (MaterialSummary, error)
 	DeleteMaterial(ctx context.Context, materialID string) error
 	ListProducts(ctx context.Context, filter ProductFilter) (domain.CursorPage[ProductSummary], error)
+	GetProduct(ctx context.Context, productID string) (Product, error)
 	UpsertProduct(ctx context.Context, cmd UpsertProductCommand) (ProductSummary, error)
 	DeleteProduct(ctx context.Context, productID string) error
 }
@@ -660,10 +663,11 @@ type UpsertMaterialCommand struct {
 }
 
 type ProductFilter struct {
-	Shape      *string
-	SizeMm     *int
-	MaterialID *string
-	Pagination Pagination
+	Shape          *string
+	SizeMm         *int
+	MaterialID     *string
+	IsCustomizable *bool
+	Pagination     Pagination
 }
 
 type UpsertProductCommand struct {

@@ -670,15 +670,36 @@ type MaterialSustainability struct {
 
 // ProductSummary represents public-facing product information.
 type ProductSummary struct {
-	ID         string
-	SKU        string
-	TemplateID string
-	MaterialID string
-	FontID     string
-	Shape      string
-	SizeMm     int
-	IsPublic   bool
-	Price      int64
+	ID                    string
+	SKU                   string
+	Name                  string
+	Description           string
+	Shape                 string
+	SizesMm               []int
+	DefaultMaterialID     string
+	MaterialIDs           []string
+	BasePrice             int64
+	Currency              string
+	ImagePaths            []string
+	IsPublished           bool
+	IsCustomizable        bool
+	InventoryStatus       string
+	CompatibleTemplateIDs []string
+	LeadTimeDays          int
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
+// Product captures detailed product information for public/detail endpoints.
+type Product struct {
+	ProductSummary
+	PriceTiers []ProductPriceTier
+}
+
+// ProductPriceTier describes unit pricing for volume tiers.
+type ProductPriceTier struct {
+	MinQuantity int
+	UnitPrice   int64
 }
 
 const (

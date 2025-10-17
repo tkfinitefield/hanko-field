@@ -261,6 +261,8 @@ type CatalogRepository interface {
 	DeleteMaterial(ctx context.Context, materialID string) error
 
 	ListProducts(ctx context.Context, filter ProductFilter) (domain.CursorPage[domain.ProductSummary], error)
+	GetPublishedProduct(ctx context.Context, productID string) (domain.Product, error)
+	GetProduct(ctx context.Context, productID string) (domain.Product, error)
 	UpsertProduct(ctx context.Context, product domain.ProductSummary) (domain.ProductSummary, error)
 	DeleteProduct(ctx context.Context, productID string) error
 }
@@ -351,10 +353,11 @@ type MaterialFilter struct {
 }
 
 type ProductFilter struct {
-	Shape      *string
-	SizeMm     *int
-	MaterialID *string
-	Pagination domain.Pagination
+	Shape          *string
+	SizeMm         *int
+	MaterialID     *string
+	IsCustomizable *bool
+	Pagination     domain.Pagination
 }
 
 type ContentGuideFilter struct {
