@@ -216,26 +216,35 @@ func TestCatalogServiceDeleteTemplate(t *testing.T) {
 }
 
 type stubCatalogRepository struct {
-	listFilter     repositories.TemplateFilter
-	listResp       domain.CursorPage[domain.TemplateSummary]
-	listErr        error
-	fontListFilter repositories.FontFilter
-	fontListResp   domain.CursorPage[domain.FontSummary]
-	fontListErr    error
+	listFilter         repositories.TemplateFilter
+	listResp           domain.CursorPage[domain.TemplateSummary]
+	listErr            error
+	fontListFilter     repositories.FontFilter
+	fontListResp       domain.CursorPage[domain.FontSummary]
+	fontListErr        error
+	materialListFilter repositories.MaterialFilter
+	materialListResp   domain.CursorPage[domain.MaterialSummary]
+	materialListErr    error
 
-	getPublishedID      string
-	getPublished        domain.Template
-	getPublishedErr     error
-	fontGetPublishedID  string
-	fontGetPublished    domain.Font
-	fontGetPublishedErr error
+	getPublishedID          string
+	getPublished            domain.Template
+	getPublishedErr         error
+	fontGetPublishedID      string
+	fontGetPublished        domain.Font
+	fontGetPublishedErr     error
+	materialGetPublishedID  string
+	materialGetPublished    domain.Material
+	materialGetPublishedErr error
 
-	getID       string
-	getTemplate domain.Template
-	getErr      error
-	fontGetID   string
-	fontGet     domain.Font
-	fontGetErr  error
+	getID          string
+	getTemplate    domain.Template
+	getErr         error
+	fontGetID      string
+	fontGet        domain.Font
+	fontGetErr     error
+	materialGetID  string
+	materialGet    domain.Material
+	materialGetErr error
 
 	upsertInput  domain.Template
 	upsertResult domain.Template
@@ -317,8 +326,28 @@ func (s *stubCatalogRepository) DeleteFont(context.Context, string) error {
 	return errors.New("not implemented")
 }
 
-func (s *stubCatalogRepository) ListMaterials(context.Context, repositories.MaterialFilter) (domain.CursorPage[domain.MaterialSummary], error) {
-	return domain.CursorPage[domain.MaterialSummary]{}, errors.New("not implemented")
+func (s *stubCatalogRepository) ListMaterials(_ context.Context, filter repositories.MaterialFilter) (domain.CursorPage[domain.MaterialSummary], error) {
+	s.materialListFilter = filter
+	return s.materialListResp, s.materialListErr
+}
+
+func (s *stubCatalogRepository) GetPublishedMaterial(_ context.Context, materialID string) (domain.Material, error) {
+	s.materialGetPublishedID = materialID
+	if s.materialGetPublishedErr != nil {
+		return domain.Material{}, s.materialGetPublishedErr
+	}
+	if s.materialGetPublished.ID != "" {
+		return s.materialGetPublished, nil
+	}
+	if s.materialGet.ID != "" {
+		return s.materialGet, nil
+	}
+	return domain.Material{}, nil
+}
+
+func (s *stubCatalogRepository) GetMaterial(_ context.Context, materialID string) (domain.Material, error) {
+	s.materialGetID = materialID
+	return s.materialGet, s.materialGetErr
 }
 
 func (s *stubCatalogRepository) UpsertMaterial(context.Context, domain.MaterialSummary) (domain.MaterialSummary, error) {

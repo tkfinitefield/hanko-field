@@ -171,12 +171,33 @@ func (s *catalogService) ListMaterials(ctx context.Context, filter MaterialFilte
 	if s.repo == nil {
 		return domain.CursorPage[MaterialSummary]{}, ErrCatalogRepositoryMissing
 	}
+	var isAvailable *bool
+	if filter.OnlyAvailable {
+		trueVal := true
+		isAvailable = &trueVal
+	}
 	repoFilter := repositories.MaterialFilter{
-		Texture:    normalizeFilterPointer(filter.Texture),
-		IsPublic:   normalizeBoolPointer(filter.IsPublic),
-		Pagination: domain.Pagination{PageSize: filter.Pagination.PageSize, PageToken: strings.TrimSpace(filter.Pagination.PageToken)},
+		Category:    normalizeFilterPointer(filter.Category),
+		IsAvailable: isAvailable,
+		Locale:      strings.TrimSpace(filter.Locale),
+		Pagination:  domain.Pagination{PageSize: filter.Pagination.PageSize, PageToken: strings.TrimSpace(filter.Pagination.PageToken)},
 	}
 	return s.repo.ListMaterials(ctx, repoFilter)
+}
+
+func (s *catalogService) GetMaterial(ctx context.Context, materialID string, _ string) (Material, error) {
+	if s.repo == nil {
+		return Material{}, ErrCatalogRepositoryMissing
+	}
+	materialID = strings.TrimSpace(materialID)
+	if materialID == "" {
+		return Material{}, errors.New("catalog service: material id is required")
+	}
+	material, err := s.repo.GetPublishedMaterial(ctx, materialID)
+	if err != nil {
+		return Material{}, err
+	}
+	return Material(material), nil
 }
 
 func (s *catalogService) UpsertMaterial(ctx context.Context, cmd UpsertMaterialCommand) (MaterialSummary, error) {

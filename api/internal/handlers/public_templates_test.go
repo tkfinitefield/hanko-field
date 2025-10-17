@@ -408,20 +408,264 @@ func TestPublicHandlers_GetFont_NotFound(t *testing.T) {
 	}
 }
 
-type stubCatalogService struct {
-	listFilter     services.TemplateFilter
-	listResponse   domain.CursorPage[domain.TemplateSummary]
-	listErr        error
-	fontListFilter services.FontFilter
-	fontListResp   domain.CursorPage[services.FontSummary]
-	fontListErr    error
+func TestPublicHandlers_ListMaterials(t *testing.T) {
+	createdAt := time.Date(2024, time.May, 1, 12, 0, 0, 0, time.UTC)
+	updatedAt := time.Date(2024, time.May, 2, 12, 0, 0, 0, time.UTC)
+	stubService := &stubCatalogService{
+		materialListResp: domain.CursorPage[services.MaterialSummary]{
+			Items: []services.MaterialSummary{
+				{
+					ID:               "mat_wood",
+					Name:             "柘植",
+					Description:      "和風の木材",
+					Category:         "wood",
+					Grain:            "fine",
+					Color:            "#aa7733",
+					IsAvailable:      true,
+					LeadTimeDays:     3,
+					PreviewImagePath: "materials/mat_wood.png",
+					DefaultLocale:    "ja",
+					Translations: map[string]services.MaterialTranslation{
+						"en": {
+							Locale:      "en",
+							Name:        "Boxwood",
+							Description: "Traditional Japanese hardwood",
+						},
+					},
+					CreatedAt: createdAt,
+					UpdatedAt: updatedAt,
+				},
+			},
+			NextPageToken: "next-material",
+		},
+	}
 
-	getID       string
-	getTemplate domain.Template
-	getErr      error
-	fontGetID   string
-	fontGetFont services.Font
-	fontGetErr  error
+	handler := NewPublicHandlers(
+		WithPublicCatalogService(stubService),
+		WithPublicPreviewResolver(AssetURLResolverFunc(func(_ context.Context, path string) (string, error) {
+			return "https://cdn.example.com/" + strings.TrimPrefix(path, "/"), nil
+		})),
+	)
+
+	values := url.Values{}
+	values.Set("lang", "en-US")
+	values.Set("category", "  Wood ")
+	values.Set("pageToken", " nxt ")
+	values.Set("pageSize", "200")
+
+	req := httptest.NewRequest(http.MethodGet, "/materials?"+values.Encode(), nil)
+	rec := httptest.NewRecorder()
+
+	handler.listMaterials(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 got %d", rec.Code)
+	}
+	if cache := rec.Result().Header.Get("Cache-Control"); cache != materialCacheControl {
+		t.Fatalf("expected cache header %q got %q", materialCacheControl, cache)
+	}
+
+	var payload materialListResponse
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.NextPageToken != "next-material" {
+		t.Fatalf("expected next token next-material got %q", payload.NextPageToken)
+	}
+	if len(payload.Materials) != 1 {
+		t.Fatalf("expected 1 material got %d", len(payload.Materials))
+	}
+	item := payload.Materials[0]
+	if item.ID != "mat_wood" {
+		t.Fatalf("expected material id mat_wood got %s", item.ID)
+	}
+	if item.Name != "Boxwood" {
+		t.Fatalf("expected translated name Boxwood got %s", item.Name)
+	}
+	if item.Description != "Traditional Japanese hardwood" {
+		t.Fatalf("expected translated description got %s", item.Description)
+	}
+	if item.Locale != "en" {
+		t.Fatalf("expected resolved locale en got %s", item.Locale)
+	}
+	if item.PreviewURL != "https://cdn.example.com/materials/mat_wood.png" {
+		t.Fatalf("expected resolved preview url got %s", item.PreviewURL)
+	}
+	if item.CreatedAt == "" || item.UpdatedAt == "" {
+		t.Fatalf("expected timestamps to be present")
+	}
+
+	filter := stubService.materialListFilter
+	if filter.Locale != "en-us" {
+		t.Fatalf("expected locale filter en-us got %s", filter.Locale)
+	}
+	if filter.Category == nil || *filter.Category != "wood" {
+		t.Fatalf("expected category filter wood got %#v", filter.Category)
+	}
+	if !filter.OnlyAvailable {
+		t.Fatalf("expected OnlyAvailable flag true")
+	}
+	if filter.Pagination.PageSize != maxMaterialPageSize {
+		t.Fatalf("expected page size capped to %d got %d", maxMaterialPageSize, filter.Pagination.PageSize)
+	}
+	if filter.Pagination.PageToken != "nxt" {
+		t.Fatalf("expected trimmed page token nxt got %q", filter.Pagination.PageToken)
+	}
+}
+
+func TestPublicHandlers_ListMaterials_InvalidPageSize(t *testing.T) {
+	handler := NewPublicHandlers(WithPublicCatalogService(&stubCatalogService{}))
+	req := httptest.NewRequest(http.MethodGet, "/materials?pageSize=0", nil)
+	rec := httptest.NewRecorder()
+
+	handler.listMaterials(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 got %d", rec.Code)
+	}
+}
+
+func TestPublicHandlers_GetMaterial(t *testing.T) {
+	createdAt := time.Date(2024, time.June, 1, 8, 30, 0, 0, time.UTC)
+	updatedAt := time.Date(2024, time.June, 2, 8, 30, 0, 0, time.UTC)
+	stubService := &stubCatalogService{
+		materialGetMat: services.Material{
+			MaterialSummary: services.MaterialSummary{
+				ID:               "mat_titanium",
+				Name:             "チタン",
+				Description:      "高耐久の素材",
+				Category:         "metal",
+				Grain:            "smooth",
+				Color:            "#cccccc",
+				IsAvailable:      true,
+				LeadTimeDays:     5,
+				PreviewImagePath: "materials/titanium.png",
+				DefaultLocale:    "ja",
+				Translations: map[string]services.MaterialTranslation{
+					"en": {
+						Locale:      "en",
+						Name:        "Titanium",
+						Description: "Durable metal",
+					},
+				},
+				CreatedAt: createdAt,
+				UpdatedAt: updatedAt,
+			},
+			Finish:    "matte",
+			Hardness:  9.5,
+			Density:   4.5,
+			CareNotes: "Wipe with dry cloth.",
+			Sustainability: services.MaterialSustainability{
+				Certifications: []string{"ISO9001"},
+				Notes:          "Recyclable",
+			},
+			Photos: []string{"materials/titanium_detail.png"},
+		},
+	}
+
+	publicHandlers := NewPublicHandlers(
+		WithPublicCatalogService(stubService),
+		WithPublicPreviewResolver(AssetURLResolverFunc(func(_ context.Context, path string) (string, error) {
+			return "https://cdn.example.com/" + strings.TrimPrefix(path, "/"), nil
+		})),
+	)
+
+	router := chi.NewRouter()
+	router.Route("/", publicHandlers.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/materials/mat_titanium?lang=en", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 got %d", rec.Code)
+	}
+	if cache := rec.Result().Header.Get("Cache-Control"); cache != materialCacheControl {
+		t.Fatalf("expected cache-control %q got %q", materialCacheControl, cache)
+	}
+
+	var payload materialDetailPayload
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Name != "Titanium" {
+		t.Fatalf("expected translated name Titanium got %s", payload.Name)
+	}
+	if payload.Description != "Durable metal" {
+		t.Fatalf("expected translated description got %s", payload.Description)
+	}
+	if payload.Locale != "en" {
+		t.Fatalf("expected resolved locale en got %s", payload.Locale)
+	}
+	if payload.PreviewURL != "https://cdn.example.com/materials/titanium.png" {
+		t.Fatalf("expected resolved preview url got %s", payload.PreviewURL)
+	}
+	if payload.Finish != "matte" {
+		t.Fatalf("expected finish matte got %s", payload.Finish)
+	}
+	if len(payload.Photos) != 1 || payload.Photos[0] != "https://cdn.example.com/materials/titanium_detail.png" {
+		t.Fatalf("expected resolved photo url got %#v", payload.Photos)
+	}
+	if payload.Sustainability == nil || len(payload.Sustainability.Certifications) != 1 {
+		t.Fatalf("expected sustainability payload got %#v", payload.Sustainability)
+	}
+	if stubService.materialGetID != "mat_titanium" {
+		t.Fatalf("expected service to receive trimmed id mat_titanium got %s", stubService.materialGetID)
+	}
+	if stubService.materialGetLocale != "en" {
+		t.Fatalf("expected locale en got %s", stubService.materialGetLocale)
+	}
+}
+
+func TestPublicHandlers_GetMaterial_NotAvailable(t *testing.T) {
+	stubService := &stubCatalogService{
+		materialGetMat: services.Material{
+			MaterialSummary: services.MaterialSummary{
+				ID:          "mat_hidden",
+				Name:        "非公開素材",
+				IsAvailable: false,
+			},
+		},
+	}
+	publicHandlers := NewPublicHandlers(WithPublicCatalogService(stubService))
+	router := chi.NewRouter()
+	router.Route("/", publicHandlers.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/materials/mat_hidden", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404 got %d", rec.Code)
+	}
+	if cache := rec.Result().Header.Get("Cache-Control"); cache != "" {
+		t.Fatalf("expected no cache header on error got %q", cache)
+	}
+}
+
+type stubCatalogService struct {
+	listFilter         services.TemplateFilter
+	listResponse       domain.CursorPage[domain.TemplateSummary]
+	listErr            error
+	fontListFilter     services.FontFilter
+	fontListResp       domain.CursorPage[services.FontSummary]
+	fontListErr        error
+	materialListFilter services.MaterialFilter
+	materialListResp   domain.CursorPage[services.MaterialSummary]
+	materialListErr    error
+
+	getID             string
+	getTemplate       domain.Template
+	getErr            error
+	fontGetID         string
+	fontGetFont       services.Font
+	fontGetErr        error
+	materialGetID     string
+	materialGetLocale string
+	materialGetMat    services.Material
+	materialGetErr    error
 }
 
 func (s *stubCatalogService) ListTemplates(_ context.Context, filter services.TemplateFilter) (domain.CursorPage[domain.TemplateSummary], error) {
@@ -466,8 +710,18 @@ func (s *stubCatalogService) DeleteFont(context.Context, string) error {
 	return errors.New("not implemented")
 }
 
-func (s *stubCatalogService) ListMaterials(context.Context, services.MaterialFilter) (domain.CursorPage[services.MaterialSummary], error) {
-	return domain.CursorPage[services.MaterialSummary]{}, errors.New("not implemented")
+func (s *stubCatalogService) ListMaterials(_ context.Context, filter services.MaterialFilter) (domain.CursorPage[services.MaterialSummary], error) {
+	s.materialListFilter = filter
+	return s.materialListResp, s.materialListErr
+}
+
+func (s *stubCatalogService) GetMaterial(_ context.Context, materialID string, locale string) (services.Material, error) {
+	s.materialGetID = materialID
+	s.materialGetLocale = locale
+	if s.materialGetErr != nil {
+		return services.Material{}, s.materialGetErr
+	}
+	return s.materialGetMat, nil
 }
 
 func (s *stubCatalogService) UpsertMaterial(context.Context, services.UpsertMaterialCommand) (services.MaterialSummary, error) {

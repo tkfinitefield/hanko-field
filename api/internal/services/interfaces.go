@@ -61,7 +61,10 @@ type (
 	Font                      = domain.Font
 	FontSummary               = domain.FontSummary
 	FontLicense               = domain.FontLicense
+	Material                  = domain.Material
 	MaterialSummary           = domain.MaterialSummary
+	MaterialTranslation       = domain.MaterialTranslation
+	MaterialSustainability    = domain.MaterialSustainability
 	ProductSummary            = domain.ProductSummary
 	SystemHealthReport        = domain.SystemHealthReport
 	AuditLogEntry             = domain.AuditLogEntry
@@ -208,6 +211,7 @@ type CatalogService interface {
 	UpsertFont(ctx context.Context, cmd UpsertFontCommand) (FontSummary, error)
 	DeleteFont(ctx context.Context, fontID string) error
 	ListMaterials(ctx context.Context, filter MaterialFilter) (domain.CursorPage[MaterialSummary], error)
+	GetMaterial(ctx context.Context, materialID string, locale string) (Material, error)
 	UpsertMaterial(ctx context.Context, cmd UpsertMaterialCommand) (MaterialSummary, error)
 	DeleteMaterial(ctx context.Context, materialID string) error
 	ListProducts(ctx context.Context, filter ProductFilter) (domain.CursorPage[ProductSummary], error)
@@ -644,9 +648,10 @@ type UpsertFontCommand struct {
 }
 
 type MaterialFilter struct {
-	Texture    *string
-	IsPublic   *bool
-	Pagination Pagination
+	Category      *string
+	OnlyAvailable bool
+	Locale        string
+	Pagination    Pagination
 }
 
 type UpsertMaterialCommand struct {

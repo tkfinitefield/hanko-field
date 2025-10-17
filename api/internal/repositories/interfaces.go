@@ -255,6 +255,8 @@ type CatalogRepository interface {
 	DeleteFont(ctx context.Context, fontID string) error
 
 	ListMaterials(ctx context.Context, filter MaterialFilter) (domain.CursorPage[domain.MaterialSummary], error)
+	GetPublishedMaterial(ctx context.Context, materialID string) (domain.Material, error)
+	GetMaterial(ctx context.Context, materialID string) (domain.Material, error)
 	UpsertMaterial(ctx context.Context, material domain.MaterialSummary) (domain.MaterialSummary, error)
 	DeleteMaterial(ctx context.Context, materialID string) error
 
@@ -342,9 +344,10 @@ type FontFilter struct {
 }
 
 type MaterialFilter struct {
-	Texture    *string
-	IsPublic   *bool
-	Pagination domain.Pagination
+	Category    *string
+	IsAvailable *bool
+	Locale      string
+	Pagination  domain.Pagination
 }
 
 type ProductFilter struct {

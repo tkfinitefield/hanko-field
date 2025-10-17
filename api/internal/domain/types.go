@@ -627,12 +627,45 @@ type Font struct {
 	FontSummary
 }
 
-// MaterialSummary stores material metadata for product configuration.
+// MaterialTranslation stores localized strings for material presentation.
+type MaterialTranslation struct {
+	Locale      string
+	Name        string
+	Description string
+}
+
+// MaterialSummary stores material metadata for product configuration and public listings.
 type MaterialSummary struct {
-	ID       string
-	Name     string
-	Texture  string
-	IsPublic bool
+	ID               string
+	Name             string
+	Description      string
+	Category         string
+	Grain            string
+	Color            string
+	IsAvailable      bool
+	LeadTimeDays     int
+	PreviewImagePath string
+	DefaultLocale    string
+	Translations     map[string]MaterialTranslation
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// Material represents detailed material information for public/detail endpoints.
+type Material struct {
+	MaterialSummary
+	Finish         string
+	Hardness       float64
+	Density        float64
+	CareNotes      string
+	Sustainability MaterialSustainability
+	Photos         []string
+}
+
+// MaterialSustainability captures sustainability metadata for a material.
+type MaterialSustainability struct {
+	Certifications []string
+	Notes          string
 }
 
 // ProductSummary represents public-facing product information.

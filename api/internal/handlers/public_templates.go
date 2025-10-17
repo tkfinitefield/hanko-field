@@ -24,7 +24,11 @@ const (
 	maxTemplatePageSize     = 100
 	defaultFontPageSize     = 50
 	maxFontPageSize         = 100
+	defaultMaterialPageSize = 32
+	maxMaterialPageSize     = 100
 	fontCacheControl        = "public, max-age=300"
+	materialCacheControl    = "public, max-age=900"
+	defaultMaterialLocale   = "ja"
 )
 
 // AssetURLResolver resolves storage paths to externally accessible URLs (e.g. CDN or signed links).
@@ -101,6 +105,8 @@ func (h *PublicHandlers) Routes(r chi.Router) {
 	r.Get("/templates/{templateID}", h.getTemplate)
 	r.Get("/fonts", h.listFonts)
 	r.Get("/fonts/{fontID}", h.getFont)
+	r.Get("/materials", h.listMaterials)
+	r.Get("/materials/{materialID}", h.getMaterial)
 }
 
 func (h *PublicHandlers) listTemplates(w http.ResponseWriter, r *http.Request) {
@@ -295,6 +301,138 @@ func (h *PublicHandlers) getFont(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, payload)
 }
 
+func (h *PublicHandlers) listMaterials(w http.ResponseWriter, r *http.Request) {
+	if h.catalog == nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("catalog_unavailable", "catalog service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	filter, err := parseMaterialListFilter(r)
+	if err != nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+	filter.OnlyAvailable = true
+
+	page, err := h.catalog.ListMaterials(r.Context(), filter)
+	if err != nil {
+		writeCatalogError(r.Context(), w, err, "material")
+		return
+	}
+
+	items := make([]materialPayload, 0, len(page.Items))
+	for _, material := range page.Items {
+		name, description, resolvedLocale := resolveMaterialLocalization(material, filter.Locale)
+		previewURL, err := h.resolveAsset(r.Context(), h.previewResolver, material.PreviewImagePath)
+		if err != nil {
+			httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
+			return
+		}
+		items = append(items, materialPayload{
+			ID:           material.ID,
+			Name:         name,
+			Description:  description,
+			Category:     material.Category,
+			Grain:        material.Grain,
+			Color:        material.Color,
+			IsAvailable:  material.IsAvailable,
+			LeadTimeDays: material.LeadTimeDays,
+			PreviewURL:   previewURL,
+			Locale:       resolvedLocale,
+			CreatedAt:    formatTimestamp(material.CreatedAt),
+			UpdatedAt:    formatTimestamp(material.UpdatedAt),
+		})
+	}
+
+	w.Header().Set("Cache-Control", materialCacheControl)
+	response := materialListResponse{
+		Materials:     items,
+		NextPageToken: page.NextPageToken,
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *PublicHandlers) getMaterial(w http.ResponseWriter, r *http.Request) {
+	if h.catalog == nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("catalog_unavailable", "catalog service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	materialID := strings.TrimSpace(chi.URLParam(r, "materialID"))
+	if materialID == "" {
+		httpx.WriteError(r.Context(), w, httpx.NewError("invalid_material_id", "material id is required", http.StatusBadRequest))
+		return
+	}
+
+	locale := normalizeLocale(r.URL.Query().Get("lang"))
+	if locale == "" {
+		locale = defaultMaterialLocale
+	}
+
+	material, err := h.catalog.GetMaterial(r.Context(), materialID, locale)
+	if err != nil {
+		writeCatalogError(r.Context(), w, err, "material")
+		return
+	}
+	if !material.IsAvailable {
+		httpx.WriteError(r.Context(), w, httpx.NewError("material_not_found", "material not found", http.StatusNotFound))
+		return
+	}
+
+	name, description, resolvedLocale := resolveMaterialLocalization(material.MaterialSummary, locale)
+	previewURL, err := h.resolveAsset(r.Context(), h.previewResolver, material.PreviewImagePath)
+	if err != nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
+		return
+	}
+
+	photoURLs := make([]string, 0, len(material.Photos))
+	for _, photo := range material.Photos {
+		resolved, err := h.resolveAsset(r.Context(), h.previewResolver, photo)
+		if err != nil {
+			httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
+			return
+		}
+		if resolved != "" {
+			photoURLs = append(photoURLs, resolved)
+		}
+	}
+
+	var sustainability *materialSustainabilityPayload
+	if len(material.Sustainability.Certifications) > 0 || strings.TrimSpace(material.Sustainability.Notes) != "" {
+		sustainability = &materialSustainabilityPayload{
+			Certifications: copyStringSlice(material.Sustainability.Certifications),
+			Notes:          strings.TrimSpace(material.Sustainability.Notes),
+		}
+	}
+
+	payload := materialDetailPayload{
+		materialPayload: materialPayload{
+			ID:           material.ID,
+			Name:         name,
+			Description:  description,
+			Category:     material.Category,
+			Grain:        material.Grain,
+			Color:        material.Color,
+			IsAvailable:  material.IsAvailable,
+			LeadTimeDays: material.LeadTimeDays,
+			PreviewURL:   previewURL,
+			Locale:       resolvedLocale,
+			CreatedAt:    formatTimestamp(material.CreatedAt),
+			UpdatedAt:    formatTimestamp(material.UpdatedAt),
+		},
+		Finish:         strings.TrimSpace(material.Finish),
+		Hardness:       material.Hardness,
+		Density:        material.Density,
+		CareNotes:      strings.TrimSpace(material.CareNotes),
+		Photos:         photoURLs,
+		Sustainability: sustainability,
+	}
+
+	w.Header().Set("Cache-Control", materialCacheControl)
+	writeJSON(w, http.StatusOK, payload)
+}
+
 func (h *PublicHandlers) resolveAsset(ctx context.Context, resolver AssetURLResolver, path string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -381,12 +519,48 @@ func parseFontListFilter(r *http.Request) (services.FontFilter, error) {
 	return filter, nil
 }
 
+func parseMaterialListFilter(r *http.Request) (services.MaterialFilter, error) {
+	if r == nil {
+		return services.MaterialFilter{}, errors.New("request cannot be nil")
+	}
+	values := r.URL.Query()
+
+	locale := normalizeLocale(values.Get("lang"))
+	if locale == "" {
+		locale = defaultMaterialLocale
+	}
+
+	filter := services.MaterialFilter{
+		Locale: locale,
+		Pagination: services.Pagination{
+			PageToken: strings.TrimSpace(values.Get("pageToken")),
+		},
+	}
+
+	if category := strings.TrimSpace(values.Get("category")); category != "" {
+		normalized := strings.ToLower(category)
+		filter.Category = &normalized
+	}
+
+	if pageSize, err := parseMaterialPageSize(values.Get("pageSize")); err != nil {
+		return services.MaterialFilter{}, err
+	} else {
+		filter.Pagination.PageSize = pageSize
+	}
+
+	return filter, nil
+}
+
 func parsePageSize(raw string) (int, error) {
 	return parseLimitedPageSize(raw, defaultTemplatePageSize, maxTemplatePageSize)
 }
 
 func parseFontPageSize(raw string) (int, error) {
 	return parseLimitedPageSize(raw, defaultFontPageSize, maxFontPageSize)
+}
+
+func parseMaterialPageSize(raw string) (int, error) {
+	return parseLimitedPageSize(raw, defaultMaterialPageSize, maxMaterialPageSize)
 }
 
 func parseSort(raw string) (domain.TemplateSort, domain.SortOrder, error) {
@@ -480,6 +654,83 @@ func parseOptionalBoolParam(name string, raw string) (*bool, error) {
 	return &value, nil
 }
 
+func normalizeLocale(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	normalized := strings.ReplaceAll(trimmed, "_", "-")
+	return strings.ToLower(normalized)
+}
+
+func resolveMaterialLocalization(material services.MaterialSummary, requestedLocale string) (string, string, string) {
+	baseName := strings.TrimSpace(material.Name)
+	baseDescription := strings.TrimSpace(material.Description)
+	defaultLocale := normalizeLocale(material.DefaultLocale)
+	if defaultLocale == "" {
+		defaultLocale = defaultMaterialLocale
+	}
+
+	requested := normalizeLocale(requestedLocale)
+	if requested == "" {
+		requested = defaultLocale
+	}
+
+	name := fallbackNonEmpty(baseName, material.Name)
+	description := fallbackNonEmpty(baseDescription, material.Description)
+	resolvedLocale := defaultLocale
+
+	if translation, ok := findMaterialTranslation(material, requested); ok {
+		name = fallbackNonEmpty(strings.TrimSpace(translation.Name), name)
+		description = fallbackNonEmpty(strings.TrimSpace(translation.Description), description)
+		if loc := normalizeLocale(translation.Locale); loc != "" {
+			resolvedLocale = loc
+		} else {
+			resolvedLocale = requested
+		}
+		return name, description, resolvedLocale
+	}
+
+	if dash := strings.Index(requested, "-"); dash > 0 {
+		base := requested[:dash]
+		if translation, ok := findMaterialTranslation(material, base); ok {
+			name = fallbackNonEmpty(strings.TrimSpace(translation.Name), name)
+			description = fallbackNonEmpty(strings.TrimSpace(translation.Description), description)
+			if loc := normalizeLocale(translation.Locale); loc != "" {
+				resolvedLocale = loc
+			} else {
+				resolvedLocale = base
+			}
+			return name, description, resolvedLocale
+		}
+	}
+
+	return name, description, resolvedLocale
+}
+
+func findMaterialTranslation(material services.MaterialSummary, locale string) (services.MaterialTranslation, bool) {
+	target := normalizeLocale(locale)
+	if target == "" || len(material.Translations) == 0 {
+		return services.MaterialTranslation{}, false
+	}
+	for key, translation := range material.Translations {
+		if normalizeLocale(key) == target {
+			return translation, true
+		}
+		if normalizeLocale(translation.Locale) == target {
+			return translation, true
+		}
+	}
+	return services.MaterialTranslation{}, false
+}
+
+func fallbackNonEmpty(value string, fallback string) string {
+	if strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	return strings.TrimSpace(fallback)
+}
+
 func writeCatalogError(ctx context.Context, w http.ResponseWriter, err error, resource string) {
 	if err == nil {
 		return
@@ -561,6 +812,41 @@ type fontPayload struct {
 type fontLicensePayload struct {
 	Name string `json:"name,omitempty"`
 	URL  string `json:"url,omitempty"`
+}
+
+type materialListResponse struct {
+	Materials     []materialPayload `json:"materials"`
+	NextPageToken string            `json:"next_page_token,omitempty"`
+}
+
+type materialPayload struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Description  string `json:"description,omitempty"`
+	Category     string `json:"category,omitempty"`
+	Grain        string `json:"grain,omitempty"`
+	Color        string `json:"color,omitempty"`
+	IsAvailable  bool   `json:"is_available"`
+	LeadTimeDays int    `json:"lead_time_days,omitempty"`
+	PreviewURL   string `json:"preview_url,omitempty"`
+	Locale       string `json:"locale,omitempty"`
+	CreatedAt    string `json:"created_at,omitempty"`
+	UpdatedAt    string `json:"updated_at,omitempty"`
+}
+
+type materialDetailPayload struct {
+	materialPayload
+	Finish         string                         `json:"finish,omitempty"`
+	Hardness       float64                        `json:"hardness,omitempty"`
+	Density        float64                        `json:"density,omitempty"`
+	CareNotes      string                         `json:"care_notes,omitempty"`
+	Photos         []string                       `json:"photos,omitempty"`
+	Sustainability *materialSustainabilityPayload `json:"sustainability,omitempty"`
+}
+
+type materialSustainabilityPayload struct {
+	Certifications []string `json:"certifications,omitempty"`
+	Notes          string   `json:"notes,omitempty"`
 }
 
 func formatTimestamp(ts time.Time) string {
