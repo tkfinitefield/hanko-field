@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -553,8 +554,14 @@ func (h *PublicHandlers) listGuides(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	summaries := make([]guideSummaryPayload, 0, len(page.Items))
-	for _, guide := range page.Items {
+	ordered := make([]services.ContentGuide, len(page.Items))
+	copy(ordered, page.Items)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return guideLess(ordered[i], ordered[j])
+	})
+
+	summaries := make([]guideSummaryPayload, 0, len(ordered))
+	for _, guide := range ordered {
 		summary, err := h.buildGuideSummaryPayload(r.Context(), guide)
 		if err != nil {
 			httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
@@ -564,7 +571,7 @@ func (h *PublicHandlers) listGuides(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", guideCacheControl)
-	etag := computeGuideListETag(page.Items)
+	etag := computeGuideListETag(ordered, locale)
 	if etag != "" {
 		w.Header().Set("ETag", etag)
 		if matchesETag(r, etag) {
@@ -1327,11 +1334,6 @@ func (h *PublicHandlers) buildGuideSummaryPayload(ctx context.Context, guide ser
 		locale = defaultGuideLocale
 	}
 
-	isPublished := guide.IsPublished
-	if !isPublished && strings.TrimSpace(guide.Status) != "" {
-		isPublished = strings.EqualFold(strings.TrimSpace(guide.Status), "published")
-	}
-
 	return guideSummaryPayload{
 		Slug:         strings.TrimSpace(guide.Slug),
 		Locale:       locale,
@@ -1340,7 +1342,7 @@ func (h *PublicHandlers) buildGuideSummaryPayload(ctx context.Context, guide ser
 		Summary:      strings.TrimSpace(guide.Summary),
 		HeroImageURL: heroURL,
 		Tags:         normalizeGuideTags(guide.Tags),
-		IsPublished:  isPublished,
+		IsPublished:  guide.IsPublished,
 		PublishedAt:  formatTimestamp(guide.PublishedAt),
 		UpdatedAt:    formatTimestamp(guide.UpdatedAt),
 		CreatedAt:    formatTimestamp(guide.CreatedAt),
@@ -1391,37 +1393,95 @@ func normalizeGuideTags(tags []string) []string {
 	return cleaned
 }
 
-func computeGuideListETag(guides []services.ContentGuide) string {
+func computeGuideListETag(guides []services.ContentGuide, locale string) string {
 	if len(guides) == 0 {
 		return ""
 	}
-	hash := sha256.New()
+
+	type entry struct {
+		slug      string
+		locale    string
+		updated   string
+		published string
+	}
+
+	entries := make([]entry, 0, len(guides))
 	for _, guide := range guides {
-		slug := strings.TrimSpace(guide.Slug)
-		if slug == "" {
-			slug = guide.ID
+		slug, guideLocale, updated, published := guideOrderingFields(guide)
+		entries = append(entries, entry{
+			slug:      slug,
+			locale:    guideLocale,
+			updated:   updated,
+			published: published,
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].slug != entries[j].slug {
+			return entries[i].slug < entries[j].slug
 		}
-		hash.Write([]byte(slug))
+		if entries[i].locale != entries[j].locale {
+			return entries[i].locale < entries[j].locale
+		}
+		if entries[i].updated != entries[j].updated {
+			return entries[i].updated < entries[j].updated
+		}
+		return entries[i].published < entries[j].published
+	})
+
+	hash := sha256.New()
+	hash.Write([]byte(normalizeLocale(locale)))
+	hash.Write([]byte("|"))
+	for _, entry := range entries {
+		hash.Write([]byte(entry.slug))
 		hash.Write([]byte("|"))
-		hash.Write([]byte(formatTimestamp(guide.UpdatedAt)))
+		hash.Write([]byte(entry.locale))
 		hash.Write([]byte("|"))
-		hash.Write([]byte(formatTimestamp(guide.PublishedAt)))
+		hash.Write([]byte(entry.updated))
+		hash.Write([]byte("|"))
+		hash.Write([]byte(entry.published))
+		hash.Write([]byte("|"))
 	}
 	return fmt.Sprintf("W/\"%x\"", hash.Sum(nil))
 }
 
 func computeGuideETag(guide services.ContentGuide) string {
-	slug := strings.TrimSpace(guide.Slug)
-	if slug == "" {
-		slug = guide.ID
-	}
+	slug, locale, updated, published := guideOrderingFields(guide)
 	hash := sha256.New()
 	hash.Write([]byte(slug))
 	hash.Write([]byte("|"))
-	hash.Write([]byte(formatTimestamp(guide.UpdatedAt)))
+	hash.Write([]byte(locale))
 	hash.Write([]byte("|"))
-	hash.Write([]byte(formatTimestamp(guide.PublishedAt)))
+	hash.Write([]byte(updated))
+	hash.Write([]byte("|"))
+	hash.Write([]byte(published))
 	return fmt.Sprintf("W/\"%x\"", hash.Sum(nil))
+}
+
+func guideOrderingFields(guide services.ContentGuide) (slug string, locale string, updated string, published string) {
+	slug = strings.TrimSpace(guide.Slug)
+	if slug == "" {
+		slug = guide.ID
+	}
+	locale = normalizeLocale(guide.Locale)
+	updated = formatTimestamp(guide.UpdatedAt)
+	published = formatTimestamp(guide.PublishedAt)
+	return
+}
+
+func guideLess(a, b services.ContentGuide) bool {
+	aslug, alocale, aupdated, apublished := guideOrderingFields(a)
+	bslug, blocale, bupdated, bpublished := guideOrderingFields(b)
+	if aslug != bslug {
+		return aslug < bslug
+	}
+	if alocale != blocale {
+		return alocale < blocale
+	}
+	if aupdated != bupdated {
+		return aupdated < bupdated
+	}
+	return apublished < bpublished
 }
 
 func matchesETag(r *http.Request, etag string) bool {

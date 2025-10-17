@@ -171,6 +171,33 @@ func TestContentService_GetGuideBySlug_Fallback(t *testing.T) {
 	}
 }
 
+func TestContentService_ListGuides_PageSizeValidation(t *testing.T) {
+	t.Helper()
+
+	stubRepo := &stubContentRepository{}
+	service, err := NewContentService(ContentServiceDeps{
+		Repository: stubRepo,
+	})
+	if err != nil {
+		t.Fatalf("NewContentService: %v", err)
+	}
+
+	if _, err := service.ListGuides(context.Background(), ContentGuideFilter{}); err != nil {
+		t.Fatalf("ListGuides default: %v", err)
+	}
+	if stubRepo.listFilters[0].Pagination.PageSize != defaultGuidePageSize {
+		t.Fatalf("expected default page size %d got %d", defaultGuidePageSize, stubRepo.listFilters[0].Pagination.PageSize)
+	}
+
+	large := ContentGuideFilter{Pagination: Pagination{PageSize: 500}}
+	if _, err := service.ListGuides(context.Background(), large); err != nil {
+		t.Fatalf("ListGuides large: %v", err)
+	}
+	if stubRepo.listFilters[1].Pagination.PageSize != maxGuidePageSize {
+		t.Fatalf("expected capped page size %d got %d", maxGuidePageSize, stubRepo.listFilters[1].Pagination.PageSize)
+	}
+}
+
 type stubContentRepository struct {
 	listFilters    []repositories.ContentGuideFilter
 	listResponse   domain.CursorPage[domain.ContentGuide]

@@ -918,6 +918,7 @@ func TestPublicHandlers_ListGuides(t *testing.T) {
 					HeroImage:   "images/hero.jpg",
 					Tags:        []string{"Etiquette", " etiquette"},
 					Status:      "published",
+					IsPublished: true,
 					PublishedAt: time.Date(2024, time.January, 2, 0, 0, 0, 0, time.UTC),
 					UpdatedAt:   time.Date(2024, time.January, 3, 0, 0, 0, 0, time.UTC),
 					CreatedAt:   time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC),
@@ -1006,6 +1007,7 @@ func TestPublicHandlers_GetGuide_SanitizesHTML(t *testing.T) {
 		BodyHTML:    "<p>Safe</p><script>alert('x')</script>",
 		HeroImage:   "images/hero.jpg",
 		Status:      "published",
+		IsPublished: true,
 		UpdatedAt:   time.Date(2024, time.February, 10, 0, 0, 0, 0, time.UTC),
 		PublishedAt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
 	}
@@ -1053,11 +1055,12 @@ func TestPublicHandlers_GetGuide_SanitizesHTML(t *testing.T) {
 
 func TestPublicHandlers_GetGuide_NotModified(t *testing.T) {
 	guide := services.ContentGuide{
-		ID:        "guide_1",
-		Slug:      "tea-ceremony",
-		Locale:    "ja",
-		Status:    "published",
-		UpdatedAt: time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC),
+		ID:          "guide_1",
+		Slug:        "tea-ceremony",
+		Locale:      "ja",
+		Status:      "published",
+		IsPublished: true,
+		UpdatedAt:   time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC),
 	}
 	stub := &stubContentService{detailGuide: guide}
 

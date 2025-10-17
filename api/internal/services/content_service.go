@@ -10,7 +10,11 @@ import (
 	"github.com/hanko-field/api/internal/repositories"
 )
 
-const defaultContentLocale = "ja"
+const (
+	defaultContentLocale = "ja"
+	defaultGuidePageSize = 20
+	maxGuidePageSize     = 60
+)
 
 // ContentServiceDeps groups constructor parameters for the content service.
 type ContentServiceDeps struct {
@@ -63,6 +67,14 @@ func (s *contentService) ListGuides(ctx context.Context, filter ContentGuideFilt
 		fallback = s.defaultLocale
 	}
 
+	pageSize := filter.Pagination.PageSize
+	switch {
+	case pageSize <= 0:
+		pageSize = defaultGuidePageSize
+	case pageSize > maxGuidePageSize:
+		pageSize = maxGuidePageSize
+	}
+
 	repoFilter := repositories.ContentGuideFilter{
 		Category:       normalizeFilterPointer(filter.Category),
 		Slug:           normalizeFilterPointer(filter.Slug),
@@ -71,7 +83,7 @@ func (s *contentService) ListGuides(ctx context.Context, filter ContentGuideFilt
 		Status:         normalizeStatusSlice(filter.Status),
 		OnlyPublished:  filter.PublishedOnly,
 		Pagination: domain.Pagination{
-			PageSize:  filter.Pagination.PageSize,
+			PageSize:  pageSize,
 			PageToken: strings.TrimSpace(filter.Pagination.PageToken),
 		},
 	}
