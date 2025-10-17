@@ -185,7 +185,7 @@ func (s *catalogService) ListMaterials(ctx context.Context, filter MaterialFilte
 	return s.repo.ListMaterials(ctx, repoFilter)
 }
 
-func (s *catalogService) GetMaterial(ctx context.Context, materialID string, _ string) (Material, error) {
+func (s *catalogService) GetMaterial(ctx context.Context, materialID string) (Material, error) {
 	if s.repo == nil {
 		return Material{}, ErrCatalogRepositoryMissing
 	}

@@ -613,9 +613,6 @@ func TestPublicHandlers_GetMaterial(t *testing.T) {
 	if stubService.materialGetID != "mat_titanium" {
 		t.Fatalf("expected service to receive trimmed id mat_titanium got %s", stubService.materialGetID)
 	}
-	if stubService.materialGetLocale != "en" {
-		t.Fatalf("expected locale en got %s", stubService.materialGetLocale)
-	}
 }
 
 func TestPublicHandlers_GetMaterial_NotAvailable(t *testing.T) {
@@ -637,11 +634,22 @@ func TestPublicHandlers_GetMaterial_NotAvailable(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected status 404 got %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 got %d", rec.Code)
 	}
-	if cache := rec.Result().Header.Get("Cache-Control"); cache != "" {
-		t.Fatalf("expected no cache header on error got %q", cache)
+	if cache := rec.Result().Header.Get("Cache-Control"); cache != materialCacheControl {
+		t.Fatalf("expected cache header %q got %q", materialCacheControl, cache)
+	}
+
+	var payload materialDetailPayload
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.ID != "mat_hidden" {
+		t.Fatalf("expected material id mat_hidden got %s", payload.ID)
+	}
+	if payload.IsAvailable {
+		t.Fatalf("expected material to be unavailable")
 	}
 }
 
@@ -656,16 +664,15 @@ type stubCatalogService struct {
 	materialListResp   domain.CursorPage[services.MaterialSummary]
 	materialListErr    error
 
-	getID             string
-	getTemplate       domain.Template
-	getErr            error
-	fontGetID         string
-	fontGetFont       services.Font
-	fontGetErr        error
-	materialGetID     string
-	materialGetLocale string
-	materialGetMat    services.Material
-	materialGetErr    error
+	getID          string
+	getTemplate    domain.Template
+	getErr         error
+	fontGetID      string
+	fontGetFont    services.Font
+	fontGetErr     error
+	materialGetID  string
+	materialGetMat services.Material
+	materialGetErr error
 }
 
 func (s *stubCatalogService) ListTemplates(_ context.Context, filter services.TemplateFilter) (domain.CursorPage[domain.TemplateSummary], error) {
@@ -715,9 +722,8 @@ func (s *stubCatalogService) ListMaterials(_ context.Context, filter services.Ma
 	return s.materialListResp, s.materialListErr
 }
 
-func (s *stubCatalogService) GetMaterial(_ context.Context, materialID string, locale string) (services.Material, error) {
+func (s *stubCatalogService) GetMaterial(_ context.Context, materialID string) (services.Material, error) {
 	s.materialGetID = materialID
-	s.materialGetLocale = locale
 	if s.materialGetErr != nil {
 		return services.Material{}, s.materialGetErr
 	}

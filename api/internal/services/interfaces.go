@@ -211,7 +211,7 @@ type CatalogService interface {
 	UpsertFont(ctx context.Context, cmd UpsertFontCommand) (FontSummary, error)
 	DeleteFont(ctx context.Context, fontID string) error
 	ListMaterials(ctx context.Context, filter MaterialFilter) (domain.CursorPage[MaterialSummary], error)
-	GetMaterial(ctx context.Context, materialID string, locale string) (Material, error)
+	GetMaterial(ctx context.Context, materialID string) (Material, error)
 	UpsertMaterial(ctx context.Context, cmd UpsertMaterialCommand) (MaterialSummary, error)
 	DeleteMaterial(ctx context.Context, materialID string) error
 	ListProducts(ctx context.Context, filter ProductFilter) (domain.CursorPage[ProductSummary], error)

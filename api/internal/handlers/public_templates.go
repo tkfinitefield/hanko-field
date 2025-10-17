@@ -369,13 +369,9 @@ func (h *PublicHandlers) getMaterial(w http.ResponseWriter, r *http.Request) {
 		locale = defaultMaterialLocale
 	}
 
-	material, err := h.catalog.GetMaterial(r.Context(), materialID, locale)
+	material, err := h.catalog.GetMaterial(r.Context(), materialID)
 	if err != nil {
 		writeCatalogError(r.Context(), w, err, "material")
-		return
-	}
-	if !material.IsAvailable {
-		httpx.WriteError(r.Context(), w, httpx.NewError("material_not_found", "material not found", http.StatusNotFound))
 		return
 	}
 
@@ -676,8 +672,8 @@ func resolveMaterialLocalization(material services.MaterialSummary, requestedLoc
 		requested = defaultLocale
 	}
 
-	name := fallbackNonEmpty(baseName, material.Name)
-	description := fallbackNonEmpty(baseDescription, material.Description)
+	name := baseName
+	description := baseDescription
 	resolvedLocale := defaultLocale
 
 	if translation, ok := findMaterialTranslation(material, requested); ok {
