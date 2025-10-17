@@ -38,12 +38,17 @@ const (
 	defaultGuidePageSize      = 20
 	maxGuidePageSize          = 60
 	defaultGuideLocale        = "ja"
+	defaultPageLocale         = "ja"
 	guideCacheControl         = "public, max-age=900"
+	pageCacheControl          = "public, max-age=900"
 	priceDisplayModeInclusive = "tax_inclusive"
 	priceDisplayModeExclusive = "tax_exclusive"
 )
 
-var guideHTMLPolicy = newGuideHTMLPolicy()
+var (
+	guideHTMLPolicy = newGuideHTMLPolicy()
+	pageHTMLPolicy  = guideHTMLPolicy
+)
 
 // AssetURLResolver resolves storage paths to externally accessible URLs (e.g. CDN or signed links).
 type AssetURLResolver interface {
@@ -143,6 +148,7 @@ func (h *PublicHandlers) Routes(r chi.Router) {
 	r.Get("/materials/{materialID}", h.getMaterial)
 	r.Get("/products", h.listProducts)
 	r.Get("/products/{productID}", h.getProduct)
+	r.Get("/content/pages/{slug}", h.getPage)
 	r.Get("/content/guides", h.listGuides)
 	r.Get("/content/guides/{slug}", h.getGuide)
 }
@@ -533,6 +539,48 @@ func (h *PublicHandlers) getProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", productCacheControl)
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (h *PublicHandlers) getPage(w http.ResponseWriter, r *http.Request) {
+	if h.content == nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("content_unavailable", "content service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	slug := strings.TrimSpace(chi.URLParam(r, "slug"))
+	if slug == "" {
+		httpx.WriteError(r.Context(), w, httpx.NewError("invalid_slug", "page slug is required", http.StatusBadRequest))
+		return
+	}
+
+	locale := normalizeLocale(r.URL.Query().Get("lang"))
+	if locale == "" {
+		locale = defaultPageLocale
+	}
+
+	page, err := h.content.GetPage(r.Context(), slug, locale)
+	if err != nil {
+		writeContentError(r.Context(), w, err, "page")
+		return
+	}
+
+	if !page.IsPublished {
+		httpx.WriteError(r.Context(), w, httpx.NewError("page_not_found", "page not found", http.StatusNotFound))
+		return
+	}
+
+	payload := buildContentPagePayload(page)
+
+	w.Header().Set("Cache-Control", pageCacheControl)
+	if etag := computePageETag(page); etag != "" {
+		w.Header().Set("ETag", etag)
+		if matchesETag(r, etag) {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+
 	writeJSON(w, http.StatusOK, payload)
 }
 
@@ -1317,6 +1365,16 @@ type guideDetailPayload struct {
 	BodyHTML string `json:"body_html,omitempty"`
 }
 
+type contentPagePayload struct {
+	Slug        string            `json:"slug"`
+	Locale      string            `json:"locale"`
+	Title       string            `json:"title"`
+	BodyHTML    string            `json:"body_html,omitempty"`
+	SEO         map[string]string `json:"seo,omitempty"`
+	IsPublished bool              `json:"is_published"`
+	UpdatedAt   string            `json:"updated_at,omitempty"`
+}
+
 type productPriceTierPayload struct {
 	MinQuantity int    `json:"min_quantity"`
 	UnitPrice   int64  `json:"unit_price"`
@@ -1360,12 +1418,38 @@ func (h *PublicHandlers) buildGuideDetailPayload(ctx context.Context, guide serv
 	}, nil
 }
 
+func buildContentPagePayload(page services.ContentPage) contentPagePayload {
+	locale := normalizeLocale(page.Locale)
+	if locale == "" {
+		locale = defaultPageLocale
+	}
+
+	return contentPagePayload{
+		Slug:        strings.TrimSpace(page.Slug),
+		Locale:      locale,
+		Title:       strings.TrimSpace(page.Title),
+		BodyHTML:    sanitizePageHTML(page.BodyHTML),
+		SEO:         copyStringMap(page.SEO),
+		IsPublished: page.IsPublished,
+		UpdatedAt:   formatTimestamp(page.UpdatedAt),
+	}
+}
+
 func sanitizeGuideHTML(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return ""
 	}
 	sanitized := strings.TrimSpace(guideHTMLPolicy.Sanitize(trimmed))
+	return sanitized
+}
+
+func sanitizePageHTML(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	sanitized := strings.TrimSpace(pageHTMLPolicy.Sanitize(trimmed))
 	return sanitized
 }
 
@@ -1458,6 +1542,29 @@ func computeGuideETag(guide services.ContentGuide) string {
 	return fmt.Sprintf("W/\"%x\"", hash.Sum(nil))
 }
 
+func computePageETag(page services.ContentPage) string {
+	slug := strings.TrimSpace(page.Slug)
+	if slug == "" {
+		slug = page.ID
+	}
+	locale := normalizeLocale(page.Locale)
+	updated := formatTimestamp(page.UpdatedAt)
+	published := "0"
+	if page.IsPublished {
+		published = "1"
+	}
+
+	hash := sha256.New()
+	hash.Write([]byte(slug))
+	hash.Write([]byte("|"))
+	hash.Write([]byte(locale))
+	hash.Write([]byte("|"))
+	hash.Write([]byte(updated))
+	hash.Write([]byte("|"))
+	hash.Write([]byte(published))
+	return fmt.Sprintf("W/\"%x\"", hash.Sum(nil))
+}
+
 func guideOrderingFields(guide services.ContentGuide) (slug string, locale string, updated string, published string) {
 	slug = strings.TrimSpace(guide.Slug)
 	if slug == "" {
@@ -1515,6 +1622,24 @@ func formatTimestamp(ts time.Time) string {
 		return ""
 	}
 	return ts.UTC().Format(time.RFC3339)
+}
+
+func copyStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			continue
+		}
+		out[trimmedKey] = strings.TrimSpace(value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func copyStringSlice(in []string) []string {

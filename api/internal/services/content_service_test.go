@@ -198,6 +198,89 @@ func TestContentService_ListGuides_PageSizeValidation(t *testing.T) {
 	}
 }
 
+func TestContentService_GetPage_FallbackAndNormalization(t *testing.T) {
+	t.Helper()
+
+	updated := time.Date(2024, time.March, 1, 15, 30, 0, 0, time.FixedZone("JST", 9*3600))
+
+	defaultPage := domain.ContentPage{
+		ID:          "page_default",
+		Slug:        "about",
+		Locale:      "",
+		Title:       " About Us ",
+		BodyHTML:    " <p>Hello</p> ",
+		Status:      " Published ",
+		IsPublished: false,
+		UpdatedAt:   updated,
+		SEO: map[string]string{
+			"title":       " About ",
+			"description": " Learn ",
+			" ":           "ignored",
+		},
+	}
+
+	stubRepo := &stubContentRepository{
+		pages: map[string]domain.ContentPage{
+			"ja|about": defaultPage,
+		},
+		pageErr: stubRepoError{notFound: true},
+	}
+
+	service, err := NewContentService(ContentServiceDeps{
+		Repository:    stubRepo,
+		DefaultLocale: "ja",
+	})
+	if err != nil {
+		t.Fatalf("NewContentService: %v", err)
+	}
+
+	page, err := service.GetPage(context.Background(), " about ", "EN")
+	if err != nil {
+		t.Fatalf("GetPage: %v", err)
+	}
+
+	if len(stubRepo.getPageCalls) != 2 {
+		t.Fatalf("expected fallback call, got %d", len(stubRepo.getPageCalls))
+	}
+	if stubRepo.getPageCalls[0].locale != "en" {
+		t.Fatalf("expected first locale en, got %q", stubRepo.getPageCalls[0].locale)
+	}
+	if stubRepo.getPageCalls[1].locale != "ja" {
+		t.Fatalf("expected fallback locale ja, got %q", stubRepo.getPageCalls[1].locale)
+	}
+
+	if page.Locale != "ja" {
+		t.Fatalf("expected locale ja, got %q", page.Locale)
+	}
+	if page.Slug != "about" {
+		t.Fatalf("expected trimmed slug, got %q", page.Slug)
+	}
+	if page.Title != "About Us" {
+		t.Fatalf("expected trimmed title, got %q", page.Title)
+	}
+	if page.BodyHTML != "<p>Hello</p>" {
+		t.Fatalf("expected trimmed body html, got %q", page.BodyHTML)
+	}
+	if !page.IsPublished {
+		t.Fatalf("expected published page inferred from status")
+	}
+	if page.UpdatedAt.Location() != time.UTC {
+		t.Fatalf("expected updated at UTC, got %v", page.UpdatedAt.Location())
+	}
+	if got := page.UpdatedAt; !got.Equal(updated.UTC()) {
+		t.Fatalf("expected updated at %v got %v", updated.UTC(), got)
+	}
+	if len(page.SEO) != 2 {
+		t.Fatalf("expected seo entries trimmed, got %#v", page.SEO)
+	}
+	if page.SEO["title"] != "About" {
+		t.Fatalf("expected trimmed seo title, got %q", page.SEO["title"])
+	}
+	if page.SEO["description"] != "Learn" {
+		t.Fatalf("expected trimmed seo description, got %q", page.SEO["description"])
+	}
+}
+
 type stubContentRepository struct {
 	listFilters    []repositories.ContentGuideFilter
 	listResponse   domain.CursorPage[domain.ContentGuide]
@@ -205,6 +288,12 @@ type stubContentRepository struct {
 	guidesBySlug   map[string]domain.ContentGuide
 	getErr         error
 	getBySlugCalls []struct {
+		slug   string
+		locale string
+	}
+	pages        map[string]domain.ContentPage
+	pageErr      error
+	getPageCalls []struct {
 		slug   string
 		locale string
 	}
@@ -250,12 +339,35 @@ func (s *stubContentRepository) GetGuide(context.Context, string) (domain.Conten
 	return domain.ContentGuide{}, errors.New("not implemented")
 }
 
-func (s *stubContentRepository) GetPage(context.Context, string, string) (domain.ContentPage, error) {
-	return domain.ContentPage{}, errors.New("not implemented")
+func (s *stubContentRepository) GetPage(_ context.Context, slug string, locale string) (domain.ContentPage, error) {
+	if s.pages == nil {
+		s.pages = make(map[string]domain.ContentPage)
+	}
+	normalizedLocale := normalizeLocaleValue(locale)
+	trimmedSlug := strings.TrimSpace(slug)
+	s.getPageCalls = append(s.getPageCalls, struct {
+		slug   string
+		locale string
+	}{
+		slug:   trimmedSlug,
+		locale: normalizedLocale,
+	})
+	if page, ok := s.pages[normalizedLocale+"|"+trimmedSlug]; ok {
+		return page, nil
+	}
+	if s.pageErr != nil {
+		return domain.ContentPage{}, s.pageErr
+	}
+	return domain.ContentPage{}, stubRepoError{notFound: true}
 }
 
-func (s *stubContentRepository) UpsertPage(context.Context, domain.ContentPage) (domain.ContentPage, error) {
-	return domain.ContentPage{}, errors.New("not implemented")
+func (s *stubContentRepository) UpsertPage(_ context.Context, page domain.ContentPage) (domain.ContentPage, error) {
+	if s.pages == nil {
+		s.pages = make(map[string]domain.ContentPage)
+	}
+	key := normalizeLocaleValue(page.Locale) + "|" + strings.TrimSpace(page.Slug)
+	s.pages[key] = page
+	return page, nil
 }
 
 func (s *stubContentRepository) DeletePage(context.Context, string) error {

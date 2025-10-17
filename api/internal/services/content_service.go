@@ -208,13 +208,15 @@ func (s *contentService) GetPage(ctx context.Context, slug string, locale string
 		locale = s.defaultLocale
 	}
 	page, err := s.repo.GetPage(ctx, slug, locale)
+	resolvedLocale := locale
 	if err != nil && locale != s.defaultLocale && isRepositoryNotFound(err) {
 		page, err = s.repo.GetPage(ctx, slug, s.defaultLocale)
+		resolvedLocale = s.defaultLocale
 	}
 	if err != nil {
 		return ContentPage{}, err
 	}
-	return ContentPage(page), nil
+	return ContentPage(normalizeContentPage(page, resolvedLocale, s.defaultLocale)), nil
 }
 
 func (s *contentService) UpsertPage(ctx context.Context, cmd UpsertContentPageCommand) (ContentPage, error) {
@@ -230,14 +232,21 @@ func (s *contentService) UpsertPage(ctx context.Context, cmd UpsertContentPageCo
 	}
 	page.Title = strings.TrimSpace(page.Title)
 	page.Status = strings.TrimSpace(page.Status)
+	page.BodyHTML = strings.TrimSpace(page.BodyHTML)
+	page.SEO = normalizeStringMap(page.SEO)
+	if !page.IsPublished && page.Status != "" {
+		page.IsPublished = strings.EqualFold(page.Status, "published")
+	}
 	updated := s.clock().UTC()
 	page.UpdatedAt = updated
 
-	saved, err := s.repo.UpsertPage(ctx, domain.ContentPage(page))
+	domainPage := normalizeContentPage(domain.ContentPage(page), page.Locale, s.defaultLocale)
+
+	saved, err := s.repo.UpsertPage(ctx, domainPage)
 	if err != nil {
 		return ContentPage{}, err
 	}
-	return ContentPage(saved), nil
+	return ContentPage(normalizeContentPage(saved, page.Locale, s.defaultLocale)), nil
 }
 
 func normalizeContentGuide(guide domain.ContentGuide, requestedLocale, fallbackLocale, defaultLocale string) domain.ContentGuide {
@@ -279,6 +288,38 @@ func normalizeContentGuide(guide domain.ContentGuide, requestedLocale, fallbackL
 		guide.UpdatedAt = guide.UpdatedAt.UTC()
 	}
 	return guide
+}
+
+func normalizeContentPage(page domain.ContentPage, requestedLocale, defaultLocale string) domain.ContentPage {
+	page.Slug = strings.TrimSpace(page.Slug)
+
+	requestedLocale = normalizeLocaleValue(requestedLocale)
+	defaultLocale = normalizeLocaleValue(defaultLocale)
+	pageLocale := normalizeLocaleValue(page.Locale)
+
+	switch {
+	case pageLocale != "":
+		page.Locale = pageLocale
+	case requestedLocale != "":
+		page.Locale = requestedLocale
+	default:
+		page.Locale = defaultLocale
+	}
+
+	page.Title = strings.TrimSpace(page.Title)
+	page.BodyHTML = strings.TrimSpace(page.BodyHTML)
+	page.Status = strings.TrimSpace(page.Status)
+	page.SEO = normalizeStringMap(page.SEO)
+
+	if !page.IsPublished && page.Status != "" {
+		page.IsPublished = strings.EqualFold(page.Status, "published")
+	}
+
+	if !page.UpdatedAt.IsZero() {
+		page.UpdatedAt = page.UpdatedAt.UTC()
+	}
+
+	return page
 }
 
 func normalizeLocalePointer(value *string) string {
@@ -337,6 +378,24 @@ func normalizeStringSlice(values []string) []string {
 		}
 		seen[key] = struct{}{}
 		result = append(result, trimmed)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func normalizeStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(values))
+	for key, value := range values {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			continue
+		}
+		result[trimmedKey] = strings.TrimSpace(value)
 	}
 	if len(result) == 0 {
 		return nil

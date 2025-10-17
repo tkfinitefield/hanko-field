@@ -557,13 +557,15 @@ type InventoryStockEvent struct {
 
 // ContentPage describes CMS-managed content accessible via public endpoints.
 type ContentPage struct {
-	ID        string
-	Slug      string
-	Locale    string
-	Title     string
-	BodyRef   string
-	Status    string
-	UpdatedAt time.Time
+	ID          string
+	Slug        string
+	Locale      string
+	Title       string
+	BodyHTML    string
+	SEO         map[string]string
+	Status      string
+	IsPublished bool
+	UpdatedAt   time.Time
 }
 
 // ContentGuide captures localized guide metadata for CMS flows.

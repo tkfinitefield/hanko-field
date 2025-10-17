@@ -1086,6 +1086,159 @@ func TestPublicHandlers_GetGuide_NotModified(t *testing.T) {
 	}
 }
 
+func TestPublicHandlers_GetPage_SanitizesHTMLAndSetsHeaders(t *testing.T) {
+	t.Helper()
+
+	updated := time.Date(2024, time.March, 10, 9, 0, 0, 0, time.FixedZone("JST", 9*3600))
+	stub := &stubContentService{
+		pageDetail: services.ContentPage{
+			ID:       "page_1",
+			Slug:     "about",
+			Locale:   "",
+			Title:    " About ",
+			BodyHTML: " <p>Hello</p><script>alert('x')</script> ",
+			SEO: map[string]string{
+				"title":       " About ",
+				"description": " Learn ",
+				" ":           "ignored",
+			},
+			Status:      "published",
+			IsPublished: true,
+			UpdatedAt:   updated,
+		},
+	}
+
+	handler := NewPublicHandlers(WithPublicContentService(stub))
+
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/content/pages/about?lang=en", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", rec.Code)
+	}
+	if stub.pageSlug != "about" {
+		t.Fatalf("expected slug about got %q", stub.pageSlug)
+	}
+	if stub.pageLocale != "en" {
+		t.Fatalf("expected locale en got %q", stub.pageLocale)
+	}
+	if rec.Header().Get("Cache-Control") != pageCacheControl {
+		t.Fatalf("expected Cache-Control %s", pageCacheControl)
+	}
+	if rec.Header().Get("ETag") == "" {
+		t.Fatalf("expected ETag header")
+	}
+
+	var payload contentPagePayload
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Slug != "about" {
+		t.Fatalf("expected slug about got %q", payload.Slug)
+	}
+	if payload.Locale != defaultPageLocale {
+		t.Fatalf("expected locale %s got %q", defaultPageLocale, payload.Locale)
+	}
+	if payload.Title != "About" {
+		t.Fatalf("expected trimmed title got %q", payload.Title)
+	}
+	if payload.BodyHTML != "<p>Hello</p>" {
+		t.Fatalf("expected sanitized body got %q", payload.BodyHTML)
+	}
+	if strings.Contains(payload.BodyHTML, "script") {
+		t.Fatalf("expected no script tag got %q", payload.BodyHTML)
+	}
+	if !payload.IsPublished {
+		t.Fatalf("expected published flag true")
+	}
+	if payload.UpdatedAt != updated.UTC().Format(time.RFC3339) {
+		t.Fatalf("expected updated at %s got %s", updated.UTC().Format(time.RFC3339), payload.UpdatedAt)
+	}
+	if len(payload.SEO) != 2 {
+		t.Fatalf("expected trimmed seo map got %#v", payload.SEO)
+	}
+	if payload.SEO["title"] != "About" {
+		t.Fatalf("expected trimmed seo title got %q", payload.SEO["title"])
+	}
+	if payload.SEO["description"] != "Learn" {
+		t.Fatalf("expected trimmed seo description got %q", payload.SEO["description"])
+	}
+}
+
+func TestPublicHandlers_GetPage_ReturnsNotModifiedWhenETagMatches(t *testing.T) {
+	t.Helper()
+
+	page := services.ContentPage{
+		ID:          "page_1",
+		Slug:        "about",
+		Locale:      "ja",
+		Title:       "About",
+		BodyHTML:    "<p>Hello</p>",
+		Status:      "published",
+		IsPublished: true,
+		UpdatedAt:   time.Date(2024, time.March, 10, 0, 0, 0, 0, time.UTC),
+	}
+	stub := &stubContentService{pageDetail: page}
+
+	handler := NewPublicHandlers(WithPublicContentService(stub))
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	etag := computePageETag(page)
+
+	req := httptest.NewRequest(http.MethodGet, "/content/pages/about", nil)
+	req.Header.Set("If-None-Match", etag)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotModified {
+		t.Fatalf("expected 304 got %d", rec.Code)
+	}
+	if rec.Body.Len() != 0 {
+		t.Fatalf("expected empty body on 304")
+	}
+	if rec.Header().Get("ETag") != etag {
+		t.Fatalf("expected ETag to persist got %q", rec.Header().Get("ETag"))
+	}
+	if stub.pageSlug != "about" {
+		t.Fatalf("expected slug recorded got %q", stub.pageSlug)
+	}
+}
+
+func TestPublicHandlers_GetPage_ReturnsNotFoundForUnpublished(t *testing.T) {
+	t.Helper()
+
+	stub := &stubContentService{
+		pageDetail: services.ContentPage{
+			ID:          "page_1",
+			Slug:        "about",
+			Locale:      "ja",
+			Title:       "About",
+			Status:      "draft",
+			IsPublished: false,
+		},
+	}
+
+	handler := NewPublicHandlers(WithPublicContentService(stub))
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/content/pages/about", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 got %d", rec.Code)
+	}
+}
+
 type stubContentService struct {
 	listFilter   services.ContentGuideFilter
 	listResponse domain.CursorPage[services.ContentGuide]
@@ -1095,6 +1248,11 @@ type stubContentService struct {
 	detailErr   error
 	getSlug     string
 	getLocale   string
+
+	pageDetail services.ContentPage
+	pageErr    error
+	pageSlug   string
+	pageLocale string
 }
 
 func (s *stubContentService) ListGuides(_ context.Context, filter services.ContentGuideFilter) (domain.CursorPage[services.ContentGuide], error) {
@@ -1123,8 +1281,13 @@ func (s *stubContentService) DeleteGuide(context.Context, string) error {
 	return nil
 }
 
-func (s *stubContentService) GetPage(context.Context, string, string) (services.ContentPage, error) {
-	return services.ContentPage{}, errors.New("not implemented")
+func (s *stubContentService) GetPage(_ context.Context, slug string, locale string) (services.ContentPage, error) {
+	s.pageSlug = slug
+	s.pageLocale = locale
+	if s.pageErr != nil {
+		return services.ContentPage{}, s.pageErr
+	}
+	return s.pageDetail, nil
 }
 
 func (s *stubContentService) UpsertPage(context.Context, services.UpsertContentPageCommand) (services.ContentPage, error) {
