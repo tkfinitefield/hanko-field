@@ -568,15 +568,20 @@ type ContentPage struct {
 
 // ContentGuide captures localized guide metadata for CMS flows.
 type ContentGuide struct {
-	ID        string
-	Slug      string
-	Locale    string
-	Category  string
-	Title     string
-	Summary   string
-	BodyRef   string
-	Status    string
-	UpdatedAt time.Time
+	ID          string
+	Slug        string
+	Locale      string
+	Category    string
+	Title       string
+	Summary     string
+	BodyHTML    string
+	HeroImage   string
+	Tags        []string
+	Status      string
+	IsPublished bool
+	PublishedAt time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // TemplateSummary describes catalog templates for listing endpoints.

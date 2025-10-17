@@ -14,6 +14,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.0.5
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/googleapis/gax-go/v2 v2.14.1
+	github.com/microcosm-cc/bluemonday v1.0.26
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/stripe/stripe-go/v78 v78.12.0
 	go.opentelemetry.io/otel v1.38.0
@@ -38,6 +39,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.51.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.51.0 // indirect
 	github.com/MicahParks/keyfunc v1.9.0 // indirect
+	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
@@ -50,6 +52,7 @@ require (
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
+	github.com/gorilla/css v1.0.0 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
 	github.com/zeebo/errs v1.4.0 // indirect

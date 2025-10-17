@@ -195,6 +195,7 @@ type InventoryService interface {
 // ContentService provides read/write access to CMS content for public and admin usage.
 type ContentService interface {
 	ListGuides(ctx context.Context, filter ContentGuideFilter) (domain.CursorPage[ContentGuide], error)
+	GetGuideBySlug(ctx context.Context, slug string, locale string) (ContentGuide, error)
 	GetGuide(ctx context.Context, guideID string) (ContentGuide, error)
 	UpsertGuide(ctx context.Context, cmd UpsertContentGuideCommand) (ContentGuide, error)
 	DeleteGuide(ctx context.Context, guideID string) error
@@ -607,10 +608,13 @@ type InventoryLowStockFilter struct {
 }
 
 type ContentGuideFilter struct {
-	Category   *string
-	Locale     *string
-	Status     []string
-	Pagination Pagination
+	Category       *string
+	Slug           *string
+	Locale         *string
+	FallbackLocale string
+	Status         []string
+	PublishedOnly  bool
+	Pagination     Pagination
 }
 
 type UpsertContentGuideCommand struct {

@@ -128,6 +128,17 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 		svc.Catalog = catalogSvc
 	}
 
+	if contentRepo := reg.Content(); contentRepo != nil {
+		contentSvc, err := services.NewContentService(services.ContentServiceDeps{
+			Repository: contentRepo,
+			Clock:      time.Now,
+		})
+		if err != nil {
+			return Services{}, fmt.Errorf("build content service: %w", err)
+		}
+		svc.Content = contentSvc
+	}
+
 	counterRepo := reg.Counters()
 	if counterRepo != nil {
 		counterSvc, err := services.NewCounterService(services.CounterServiceDeps{

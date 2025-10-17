@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/microcosm-cc/bluemonday"
 
 	domain "github.com/hanko-field/api/internal/domain"
 	"github.com/hanko-field/api/internal/platform/httpx"
@@ -32,9 +34,15 @@ const (
 	materialCacheControl      = "public, max-age=900"
 	productCacheControl       = "public, max-age=300"
 	defaultMaterialLocale     = "ja"
+	defaultGuidePageSize      = 20
+	maxGuidePageSize          = 60
+	defaultGuideLocale        = "ja"
+	guideCacheControl         = "public, max-age=900"
 	priceDisplayModeInclusive = "tax_inclusive"
 	priceDisplayModeExclusive = "tax_exclusive"
 )
+
+var guideHTMLPolicy = newGuideHTMLPolicy()
 
 // AssetURLResolver resolves storage paths to externally accessible URLs (e.g. CDN or signed links).
 type AssetURLResolver interface {
@@ -55,6 +63,7 @@ func (fn AssetURLResolverFunc) ResolveURL(ctx context.Context, path string) (str
 // PublicHandlers exposes unauthenticated catalog endpoints.
 type PublicHandlers struct {
 	catalog          services.CatalogService
+	content          services.ContentService
 	previewResolver  AssetURLResolver
 	vectorResolver   AssetURLResolver
 	priceDisplayMode string
@@ -67,6 +76,13 @@ type PublicOption func(*PublicHandlers)
 func WithPublicCatalogService(svc services.CatalogService) PublicOption {
 	return func(h *PublicHandlers) {
 		h.catalog = svc
+	}
+}
+
+// WithPublicContentService injects the content service dependency.
+func WithPublicContentService(svc services.ContentService) PublicOption {
+	return func(h *PublicHandlers) {
+		h.content = svc
 	}
 }
 
@@ -126,6 +142,8 @@ func (h *PublicHandlers) Routes(r chi.Router) {
 	r.Get("/materials/{materialID}", h.getMaterial)
 	r.Get("/products", h.listProducts)
 	r.Get("/products/{productID}", h.getProduct)
+	r.Get("/content/guides", h.listGuides)
+	r.Get("/content/guides/{slug}", h.getGuide)
 }
 
 func (h *PublicHandlers) listTemplates(w http.ResponseWriter, r *http.Request) {
@@ -517,6 +535,92 @@ func (h *PublicHandlers) getProduct(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, payload)
 }
 
+func (h *PublicHandlers) listGuides(w http.ResponseWriter, r *http.Request) {
+	if h.content == nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("content_unavailable", "content service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	filter, locale, err := parseGuideListFilter(r)
+	if err != nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	page, err := h.content.ListGuides(r.Context(), filter)
+	if err != nil {
+		writeContentError(r.Context(), w, err, "guide")
+		return
+	}
+
+	summaries := make([]guideSummaryPayload, 0, len(page.Items))
+	for _, guide := range page.Items {
+		summary, err := h.buildGuideSummaryPayload(r.Context(), guide)
+		if err != nil {
+			httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
+			return
+		}
+		summaries = append(summaries, summary)
+	}
+
+	w.Header().Set("Cache-Control", guideCacheControl)
+	etag := computeGuideListETag(page.Items)
+	if etag != "" {
+		w.Header().Set("ETag", etag)
+		if matchesETag(r, etag) {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+	response := guideListResponse{
+		Guides:        summaries,
+		NextPageToken: page.NextPageToken,
+		Locale:        locale,
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *PublicHandlers) getGuide(w http.ResponseWriter, r *http.Request) {
+	if h.content == nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("content_unavailable", "content service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	slug := strings.TrimSpace(chi.URLParam(r, "slug"))
+	if slug == "" {
+		httpx.WriteError(r.Context(), w, httpx.NewError("invalid_slug", "guide slug is required", http.StatusBadRequest))
+		return
+	}
+
+	locale := normalizeLocale(r.URL.Query().Get("lang"))
+	if locale == "" {
+		locale = defaultGuideLocale
+	}
+
+	guide, err := h.content.GetGuideBySlug(r.Context(), slug, locale)
+	if err != nil {
+		writeContentError(r.Context(), w, err, "guide")
+		return
+	}
+
+	detail, err := h.buildGuideDetailPayload(r.Context(), guide)
+	if err != nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("asset_resolution_failed", err.Error(), http.StatusInternalServerError))
+		return
+	}
+
+	w.Header().Set("Cache-Control", guideCacheControl)
+	etag := computeGuideETag(guide)
+	if etag != "" {
+		w.Header().Set("ETag", etag)
+		if matchesETag(r, etag) {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, detail)
+}
+
 func (h *PublicHandlers) resolveAsset(ctx context.Context, resolver AssetURLResolver, path string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -673,6 +777,44 @@ func parseFontListFilter(r *http.Request) (services.FontFilter, error) {
 	return filter, nil
 }
 
+func parseGuideListFilter(r *http.Request) (services.ContentGuideFilter, string, error) {
+	if r == nil {
+		return services.ContentGuideFilter{}, "", errors.New("request cannot be nil")
+	}
+	values := r.URL.Query()
+
+	locale := normalizeLocale(values.Get("lang"))
+	if locale == "" {
+		locale = defaultGuideLocale
+	}
+
+	filter := services.ContentGuideFilter{
+		PublishedOnly:  true,
+		FallbackLocale: defaultGuideLocale,
+		Pagination: services.Pagination{
+			PageToken: strings.TrimSpace(values.Get("pageToken")),
+		},
+	}
+
+	if locale != "" {
+		localeCopy := locale
+		filter.Locale = &localeCopy
+	}
+
+	if category := strings.TrimSpace(values.Get("category")); category != "" {
+		normalized := strings.ToLower(category)
+		filter.Category = &normalized
+	}
+
+	pageSize, err := parseGuidePageSize(values.Get("pageSize"))
+	if err != nil {
+		return services.ContentGuideFilter{}, "", err
+	}
+	filter.Pagination.PageSize = pageSize
+
+	return filter, locale, nil
+}
+
 func parseMaterialListFilter(r *http.Request) (services.MaterialFilter, error) {
 	if r == nil {
 		return services.MaterialFilter{}, errors.New("request cannot be nil")
@@ -774,6 +916,10 @@ func parseMaterialPageSize(raw string) (int, error) {
 
 func parseProductPageSize(raw string) (int, error) {
 	return parseLimitedPageSize(raw, defaultProductPageSize, maxProductPageSize)
+}
+
+func parseGuidePageSize(raw string) (int, error) {
+	return parseLimitedPageSize(raw, defaultGuidePageSize, maxGuidePageSize)
 }
 
 func parseSort(raw string) (domain.TemplateSort, domain.SortOrder, error) {
@@ -989,6 +1135,39 @@ func writeCatalogError(ctx context.Context, w http.ResponseWriter, err error, re
 	httpx.WriteError(ctx, w, httpx.NewError("catalog_error", err.Error(), http.StatusInternalServerError))
 }
 
+func writeContentError(ctx context.Context, w http.ResponseWriter, err error, resource string) {
+	if err == nil {
+		return
+	}
+	resource = strings.TrimSpace(resource)
+	if resource == "" {
+		resource = "resource"
+	}
+
+	switch {
+	case errors.Is(err, services.ErrContentRepositoryMissing):
+		httpx.WriteError(ctx, w, httpx.NewError("content_unavailable", "content service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	var repoErr repositories.RepositoryError
+	if errors.As(err, &repoErr) {
+		switch {
+		case repoErr.IsNotFound():
+			httpx.WriteError(ctx, w, httpx.NewError(fmt.Sprintf("%s_not_found", resource), fmt.Sprintf("%s not found", resource), http.StatusNotFound))
+			return
+		case repoErr.IsUnavailable():
+			httpx.WriteError(ctx, w, httpx.NewError("content_unavailable", "content repository unavailable", http.StatusServiceUnavailable))
+			return
+		default:
+			httpx.WriteError(ctx, w, httpx.NewError("content_error", err.Error(), http.StatusInternalServerError))
+			return
+		}
+	}
+
+	httpx.WriteError(ctx, w, httpx.NewError("content_error", err.Error(), http.StatusInternalServerError))
+}
+
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -1106,10 +1285,169 @@ type productDetailPayload struct {
 	PriceTiers []productPriceTierPayload `json:"price_tiers,omitempty"`
 }
 
+type guideListResponse struct {
+	Guides        []guideSummaryPayload `json:"guides"`
+	NextPageToken string                `json:"next_page_token,omitempty"`
+	Locale        string                `json:"locale,omitempty"`
+}
+
+type guideSummaryPayload struct {
+	Slug         string   `json:"slug"`
+	Locale       string   `json:"locale"`
+	Category     string   `json:"category,omitempty"`
+	Title        string   `json:"title"`
+	Summary      string   `json:"summary,omitempty"`
+	HeroImageURL string   `json:"hero_image_url,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+	IsPublished  bool     `json:"is_published"`
+	PublishedAt  string   `json:"published_at,omitempty"`
+	UpdatedAt    string   `json:"updated_at,omitempty"`
+	CreatedAt    string   `json:"created_at,omitempty"`
+}
+
+type guideDetailPayload struct {
+	guideSummaryPayload
+	BodyHTML string `json:"body_html,omitempty"`
+}
+
 type productPriceTierPayload struct {
 	MinQuantity int    `json:"min_quantity"`
 	UnitPrice   int64  `json:"unit_price"`
 	Currency    string `json:"currency,omitempty"`
+}
+
+func (h *PublicHandlers) buildGuideSummaryPayload(ctx context.Context, guide services.ContentGuide) (guideSummaryPayload, error) {
+	heroURL, err := h.resolveAsset(ctx, h.previewResolver, guide.HeroImage)
+	if err != nil {
+		return guideSummaryPayload{}, err
+	}
+
+	locale := normalizeLocale(guide.Locale)
+	if locale == "" {
+		locale = defaultGuideLocale
+	}
+
+	isPublished := guide.IsPublished
+	if !isPublished && strings.TrimSpace(guide.Status) != "" {
+		isPublished = strings.EqualFold(strings.TrimSpace(guide.Status), "published")
+	}
+
+	return guideSummaryPayload{
+		Slug:         strings.TrimSpace(guide.Slug),
+		Locale:       locale,
+		Category:     strings.TrimSpace(guide.Category),
+		Title:        strings.TrimSpace(guide.Title),
+		Summary:      strings.TrimSpace(guide.Summary),
+		HeroImageURL: heroURL,
+		Tags:         normalizeGuideTags(guide.Tags),
+		IsPublished:  isPublished,
+		PublishedAt:  formatTimestamp(guide.PublishedAt),
+		UpdatedAt:    formatTimestamp(guide.UpdatedAt),
+		CreatedAt:    formatTimestamp(guide.CreatedAt),
+	}, nil
+}
+
+func (h *PublicHandlers) buildGuideDetailPayload(ctx context.Context, guide services.ContentGuide) (guideDetailPayload, error) {
+	summary, err := h.buildGuideSummaryPayload(ctx, guide)
+	if err != nil {
+		return guideDetailPayload{}, err
+	}
+	return guideDetailPayload{
+		guideSummaryPayload: summary,
+		BodyHTML:            sanitizeGuideHTML(guide.BodyHTML),
+	}, nil
+}
+
+func sanitizeGuideHTML(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	sanitized := strings.TrimSpace(guideHTMLPolicy.Sanitize(trimmed))
+	return sanitized
+}
+
+func normalizeGuideTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+	cleaned := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		trimmed := strings.TrimSpace(tag)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		cleaned = append(cleaned, trimmed)
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	return cleaned
+}
+
+func computeGuideListETag(guides []services.ContentGuide) string {
+	if len(guides) == 0 {
+		return ""
+	}
+	hash := sha256.New()
+	for _, guide := range guides {
+		slug := strings.TrimSpace(guide.Slug)
+		if slug == "" {
+			slug = guide.ID
+		}
+		hash.Write([]byte(slug))
+		hash.Write([]byte("|"))
+		hash.Write([]byte(formatTimestamp(guide.UpdatedAt)))
+		hash.Write([]byte("|"))
+		hash.Write([]byte(formatTimestamp(guide.PublishedAt)))
+	}
+	return fmt.Sprintf("W/\"%x\"", hash.Sum(nil))
+}
+
+func computeGuideETag(guide services.ContentGuide) string {
+	slug := strings.TrimSpace(guide.Slug)
+	if slug == "" {
+		slug = guide.ID
+	}
+	hash := sha256.New()
+	hash.Write([]byte(slug))
+	hash.Write([]byte("|"))
+	hash.Write([]byte(formatTimestamp(guide.UpdatedAt)))
+	hash.Write([]byte("|"))
+	hash.Write([]byte(formatTimestamp(guide.PublishedAt)))
+	return fmt.Sprintf("W/\"%x\"", hash.Sum(nil))
+}
+
+func matchesETag(r *http.Request, etag string) bool {
+	if etag == "" || r == nil {
+		return false
+	}
+	raw := r.Header.Get("If-None-Match")
+	if strings.TrimSpace(raw) == "" {
+		return false
+	}
+	for _, candidate := range strings.Split(raw, ",") {
+		trimmed := strings.TrimSpace(candidate)
+		if trimmed == "*" || trimmed == etag {
+			return true
+		}
+	}
+	return false
+}
+
+func newGuideHTMLPolicy() *bluemonday.Policy {
+	policy := bluemonday.UGCPolicy()
+	policy.AllowElements("figure", "figcaption")
+	policy.AllowAttrs("class").OnElements("figure", "figcaption", "p", "span")
+	policy.AllowAttrs("loading").OnElements("img")
+	policy.RequireNoFollowOnLinks(true)
+	return policy
 }
 
 func formatTimestamp(ts time.Time) string {

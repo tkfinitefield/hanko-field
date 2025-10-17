@@ -272,6 +272,7 @@ type ContentRepository interface {
 	ListGuides(ctx context.Context, filter ContentGuideFilter) (domain.CursorPage[domain.ContentGuide], error)
 	UpsertGuide(ctx context.Context, guide domain.ContentGuide) (domain.ContentGuide, error)
 	DeleteGuide(ctx context.Context, guideID string) error
+	GetGuideBySlug(ctx context.Context, slug string, locale string) (domain.ContentGuide, error)
 	GetGuide(ctx context.Context, guideID string) (domain.ContentGuide, error)
 
 	GetPage(ctx context.Context, slug string, locale string) (domain.ContentPage, error)
@@ -362,10 +363,13 @@ type ProductFilter struct {
 }
 
 type ContentGuideFilter struct {
-	Category   *string
-	Locale     *string
-	Status     []string
-	Pagination domain.Pagination
+	Category       *string
+	Slug           *string
+	Locale         *string
+	FallbackLocale string
+	Status         []string
+	OnlyPublished  bool
+	Pagination     domain.Pagination
 }
 
 type AuditLogFilter struct {

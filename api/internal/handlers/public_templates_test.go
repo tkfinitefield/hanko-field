@@ -904,6 +904,230 @@ func TestPublicHandlers_GetProduct_InvalidID(t *testing.T) {
 	}
 }
 
+func TestPublicHandlers_ListGuides(t *testing.T) {
+	stub := &stubContentService{
+		listResponse: domain.CursorPage[services.ContentGuide]{
+			Items: []services.ContentGuide{
+				{
+					ID:          "guide_1",
+					Slug:        "tea-ceremony",
+					Locale:      "en-US",
+					Category:    "Culture",
+					Title:       "Tea Ceremony",
+					Summary:     " Learn the basics ",
+					HeroImage:   "images/hero.jpg",
+					Tags:        []string{"Etiquette", " etiquette"},
+					Status:      "published",
+					PublishedAt: time.Date(2024, time.January, 2, 0, 0, 0, 0, time.UTC),
+					UpdatedAt:   time.Date(2024, time.January, 3, 0, 0, 0, 0, time.UTC),
+					CreatedAt:   time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC),
+				},
+			},
+			NextPageToken: "next",
+		},
+	}
+
+	handler := NewPublicHandlers(
+		WithPublicContentService(stub),
+		WithPublicPreviewResolver(AssetURLResolverFunc(func(_ context.Context, path string) (string, error) {
+			return "https://cdn.example.com/" + strings.TrimPrefix(path, "/"), nil
+		})),
+	)
+
+	values := url.Values{}
+	values.Set("lang", "EN_us")
+	values.Set("category", "CULTURE")
+	values.Set("pageSize", "10")
+	values.Set("pageToken", " token ")
+	req := httptest.NewRequest(http.MethodGet, "/content/guides?"+values.Encode(), nil)
+	resp := httptest.NewRecorder()
+
+	handler.listGuides(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", resp.Code)
+	}
+
+	if resp.Header().Get("Cache-Control") != guideCacheControl {
+		t.Fatalf("expected Cache-Control %s", guideCacheControl)
+	}
+	if resp.Header().Get("ETag") == "" {
+		t.Fatalf("expected ETag header")
+	}
+
+	var payload guideListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if payload.Locale != "en-us" {
+		t.Fatalf("expected locale en-us got %s", payload.Locale)
+	}
+	if payload.NextPageToken != "next" {
+		t.Fatalf("expected next token got %s", payload.NextPageToken)
+	}
+	if len(payload.Guides) != 1 {
+		t.Fatalf("expected 1 guide got %d", len(payload.Guides))
+	}
+	guide := payload.Guides[0]
+	if guide.HeroImageURL != "https://cdn.example.com/images/hero.jpg" {
+		t.Fatalf("expected resolved hero url got %s", guide.HeroImageURL)
+	}
+	if guide.Summary != "Learn the basics" {
+		t.Fatalf("expected trimmed summary got %q", guide.Summary)
+	}
+	if len(guide.Tags) != 1 || guide.Tags[0] != "Etiquette" {
+		t.Fatalf("expected deduped tags got %#v", guide.Tags)
+	}
+
+	if stub.listFilter.Locale == nil || *stub.listFilter.Locale != "en-us" {
+		t.Fatalf("expected locale filter en-us got %#v", stub.listFilter.Locale)
+	}
+	if stub.listFilter.Category == nil || *stub.listFilter.Category != "culture" {
+		t.Fatalf("expected normalized category got %#v", stub.listFilter.Category)
+	}
+	if stub.listFilter.FallbackLocale != defaultGuideLocale {
+		t.Fatalf("expected fallback locale %s got %q", defaultGuideLocale, stub.listFilter.FallbackLocale)
+	}
+	if stub.listFilter.Pagination.PageSize != 10 {
+		t.Fatalf("expected page size 10 got %d", stub.listFilter.Pagination.PageSize)
+	}
+	if stub.listFilter.Pagination.PageToken != "token" {
+		t.Fatalf("expected trimmed token got %q", stub.listFilter.Pagination.PageToken)
+	}
+}
+
+func TestPublicHandlers_GetGuide_SanitizesHTML(t *testing.T) {
+	guide := services.ContentGuide{
+		ID:          "guide_1",
+		Slug:        "tea-ceremony",
+		Locale:      "ja",
+		Title:       "Tea Ceremony",
+		BodyHTML:    "<p>Safe</p><script>alert('x')</script>",
+		HeroImage:   "images/hero.jpg",
+		Status:      "published",
+		UpdatedAt:   time.Date(2024, time.February, 10, 0, 0, 0, 0, time.UTC),
+		PublishedAt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
+	}
+	stub := &stubContentService{detailGuide: guide}
+
+	publicHandlers := NewPublicHandlers(
+		WithPublicContentService(stub),
+		WithPublicPreviewResolver(AssetURLResolverFunc(func(_ context.Context, path string) (string, error) {
+			return "https://cdn.example.com/" + path, nil
+		})),
+	)
+
+	router := chi.NewRouter()
+	router.Route("/", publicHandlers.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/content/guides/tea-ceremony?lang=en", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", rec.Code)
+	}
+
+	var payload guideDetailPayload
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if strings.Contains(payload.BodyHTML, "script") {
+		t.Fatalf("expected sanitized body, got %q", payload.BodyHTML)
+	}
+	if payload.BodyHTML != "<p>Safe</p>" {
+		t.Fatalf("expected preserved paragraph got %q", payload.BodyHTML)
+	}
+	if payload.HeroImageURL != "https://cdn.example.com/images/hero.jpg" {
+		t.Fatalf("expected resolved hero url got %s", payload.HeroImageURL)
+	}
+	if stub.getSlug != "tea-ceremony" || stub.getLocale != "en" {
+		t.Fatalf("expected service called with slug/locale got %s/%s", stub.getSlug, stub.getLocale)
+	}
+	if rec.Header().Get("ETag") == "" {
+		t.Fatalf("expected ETag header")
+	}
+}
+
+func TestPublicHandlers_GetGuide_NotModified(t *testing.T) {
+	guide := services.ContentGuide{
+		ID:        "guide_1",
+		Slug:      "tea-ceremony",
+		Locale:    "ja",
+		Status:    "published",
+		UpdatedAt: time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC),
+	}
+	stub := &stubContentService{detailGuide: guide}
+
+	handler := NewPublicHandlers(WithPublicContentService(stub))
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	etag := computeGuideETag(guide)
+	req := httptest.NewRequest(http.MethodGet, "/content/guides/tea-ceremony", nil)
+	req.Header.Set("If-None-Match", etag)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotModified {
+		t.Fatalf("expected 304 got %d", rec.Code)
+	}
+	if rec.Body.Len() != 0 {
+		t.Fatalf("expected empty body on 304")
+	}
+	if rec.Header().Get("ETag") != etag {
+		t.Fatalf("expected ETag to be preserved")
+	}
+}
+
+type stubContentService struct {
+	listFilter   services.ContentGuideFilter
+	listResponse domain.CursorPage[services.ContentGuide]
+	listErr      error
+
+	detailGuide services.ContentGuide
+	detailErr   error
+	getSlug     string
+	getLocale   string
+}
+
+func (s *stubContentService) ListGuides(_ context.Context, filter services.ContentGuideFilter) (domain.CursorPage[services.ContentGuide], error) {
+	s.listFilter = filter
+	return s.listResponse, s.listErr
+}
+
+func (s *stubContentService) GetGuideBySlug(_ context.Context, slug string, locale string) (services.ContentGuide, error) {
+	s.getSlug = slug
+	s.getLocale = locale
+	if s.detailErr != nil {
+		return services.ContentGuide{}, s.detailErr
+	}
+	return s.detailGuide, nil
+}
+
+func (s *stubContentService) GetGuide(context.Context, string) (services.ContentGuide, error) {
+	return services.ContentGuide{}, errors.New("not implemented")
+}
+
+func (s *stubContentService) UpsertGuide(context.Context, services.UpsertContentGuideCommand) (services.ContentGuide, error) {
+	return services.ContentGuide{}, errors.New("not implemented")
+}
+
+func (s *stubContentService) DeleteGuide(context.Context, string) error {
+	return nil
+}
+
+func (s *stubContentService) GetPage(context.Context, string, string) (services.ContentPage, error) {
+	return services.ContentPage{}, errors.New("not implemented")
+}
+
+func (s *stubContentService) UpsertPage(context.Context, services.UpsertContentPageCommand) (services.ContentPage, error) {
+	return services.ContentPage{}, errors.New("not implemented")
+}
+
 type stubCatalogService struct {
 	listFilter         services.TemplateFilter
 	listResponse       domain.CursorPage[domain.TemplateSummary]
