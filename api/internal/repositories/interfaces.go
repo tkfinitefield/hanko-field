@@ -357,6 +357,7 @@ type ProductFilter struct {
 	SizeMm         *int
 	MaterialID     *string
 	IsCustomizable *bool
+	OnlyPublished  bool
 	Pagination     domain.Pagination
 }
 

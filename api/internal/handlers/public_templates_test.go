@@ -697,7 +697,7 @@ func TestPublicHandlers_ListProducts(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/products", nil)
 	values := req.URL.Query()
 	values.Set("shape", "Round")
-	values.Set("size", "45mm")
+	values.Set("size", "45 mm")
 	values.Set("material", " mat_wood ")
 	values.Set("isCustomizable", "true")
 	values.Set("pageSize", "12")
@@ -762,6 +762,9 @@ func TestPublicHandlers_ListProducts(t *testing.T) {
 	}
 	if stubService.productListFilter.IsCustomizable == nil || !*stubService.productListFilter.IsCustomizable {
 		t.Fatalf("expected customizable filter true got %#v", stubService.productListFilter.IsCustomizable)
+	}
+	if !stubService.productListFilter.PublishedOnly {
+		t.Fatalf("expected published-only filter true got %v", stubService.productListFilter.PublishedOnly)
 	}
 	if stubService.productListFilter.Pagination.PageSize != 12 {
 		t.Fatalf("expected page size 12 got %d", stubService.productListFilter.Pagination.PageSize)

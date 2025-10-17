@@ -459,6 +459,7 @@ func (h *PublicHandlers) listProducts(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(r.Context(), w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
 		return
 	}
+	filter.PublishedOnly = true
 	if filter.Pagination.PageSize == 0 {
 		filter.Pagination.PageSize = defaultProductPageSize
 	}
@@ -723,8 +724,11 @@ func parseProductListFilter(r *http.Request) (services.ProductFilter, error) {
 
 	if size := strings.TrimSpace(values.Get("size")); size != "" {
 		normalized := strings.TrimSpace(size)
-		if len(normalized) > 2 && strings.EqualFold(normalized[len(normalized)-2:], "mm") {
-			normalized = strings.TrimSpace(normalized[:len(normalized)-2])
+		if len(normalized) >= 2 {
+			lower := strings.ToLower(normalized)
+			if strings.HasSuffix(lower, "mm") {
+				normalized = strings.TrimSpace(normalized[:len(normalized)-2])
+			}
 		}
 		value, err := strconv.Atoi(normalized)
 		if err != nil {
@@ -1116,18 +1120,12 @@ func formatTimestamp(ts time.Time) string {
 }
 
 func copyStringSlice(in []string) []string {
-	if len(in) == 0 {
-		return nil
-	}
 	out := make([]string, len(in))
 	copy(out, in)
 	return out
 }
 
 func copyIntSlice(in []int) []int {
-	if len(in) == 0 {
-		return nil
-	}
 	out := make([]int, len(in))
 	copy(out, in)
 	return out

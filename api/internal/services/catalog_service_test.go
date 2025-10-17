@@ -216,6 +216,7 @@ func TestCatalogServiceListProducts(t *testing.T) {
 		SizeMm:         &size,
 		MaterialID:     &material,
 		IsCustomizable: &customizable,
+		PublishedOnly:  true,
 		Pagination: Pagination{
 			PageSize:  50,
 			PageToken: " token ",
@@ -241,6 +242,9 @@ func TestCatalogServiceListProducts(t *testing.T) {
 	}
 	if stubRepo.productListFilter.IsCustomizable == nil || !*stubRepo.productListFilter.IsCustomizable {
 		t.Fatalf("expected customizable flag true got %#v", stubRepo.productListFilter.IsCustomizable)
+	}
+	if !stubRepo.productListFilter.OnlyPublished {
+		t.Fatalf("expected repository filter to request only published products")
 	}
 	if stubRepo.productListFilter.Pagination.PageSize != 50 {
 		t.Fatalf("expected page size 50 got %d", stubRepo.productListFilter.Pagination.PageSize)

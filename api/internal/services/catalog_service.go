@@ -227,6 +227,7 @@ func (s *catalogService) ListProducts(ctx context.Context, filter ProductFilter)
 		SizeMm:         filter.SizeMm,
 		MaterialID:     normalizeFilterPointer(filter.MaterialID),
 		IsCustomizable: normalizeBoolPointer(filter.IsCustomizable),
+		OnlyPublished:  filter.PublishedOnly,
 		Pagination:     domain.Pagination{PageSize: filter.Pagination.PageSize, PageToken: strings.TrimSpace(filter.Pagination.PageToken)},
 	}
 	return s.repo.ListProducts(ctx, repoFilter)
