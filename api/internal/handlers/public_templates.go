@@ -18,6 +18,7 @@ import (
 
 	domain "github.com/hanko-field/api/internal/domain"
 	"github.com/hanko-field/api/internal/platform/httpx"
+	"github.com/hanko-field/api/internal/platform/textutil"
 	"github.com/hanko-field/api/internal/repositories"
 	"github.com/hanko-field/api/internal/services"
 )
@@ -573,7 +574,7 @@ func (h *PublicHandlers) getPage(w http.ResponseWriter, r *http.Request) {
 	payload := buildContentPagePayload(page)
 
 	w.Header().Set("Cache-Control", pageCacheControl)
-	if etag := computePageETag(page); etag != "" {
+	if etag := computePageETag(page, slug); etag != "" {
 		w.Header().Set("ETag", etag)
 		if matchesETag(r, etag) {
 			w.WriteHeader(http.StatusNotModified)
@@ -1420,16 +1421,13 @@ func (h *PublicHandlers) buildGuideDetailPayload(ctx context.Context, guide serv
 
 func buildContentPagePayload(page services.ContentPage) contentPagePayload {
 	locale := normalizeLocale(page.Locale)
-	if locale == "" {
-		locale = defaultPageLocale
-	}
 
 	return contentPagePayload{
 		Slug:        strings.TrimSpace(page.Slug),
 		Locale:      locale,
 		Title:       strings.TrimSpace(page.Title),
 		BodyHTML:    sanitizePageHTML(page.BodyHTML),
-		SEO:         copyStringMap(page.SEO),
+		SEO:         textutil.NormalizeStringMap(page.SEO),
 		IsPublished: page.IsPublished,
 		UpdatedAt:   formatTimestamp(page.UpdatedAt),
 	}
@@ -1542,8 +1540,11 @@ func computeGuideETag(guide services.ContentGuide) string {
 	return fmt.Sprintf("W/\"%x\"", hash.Sum(nil))
 }
 
-func computePageETag(page services.ContentPage) string {
+func computePageETag(page services.ContentPage, requestedSlug string) string {
 	slug := strings.TrimSpace(page.Slug)
+	if slug == "" {
+		slug = strings.TrimSpace(requestedSlug)
+	}
 	if slug == "" {
 		slug = page.ID
 	}
@@ -1622,24 +1623,6 @@ func formatTimestamp(ts time.Time) string {
 		return ""
 	}
 	return ts.UTC().Format(time.RFC3339)
-}
-
-func copyStringMap(in map[string]string) map[string]string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for key, value := range in {
-		trimmedKey := strings.TrimSpace(key)
-		if trimmedKey == "" {
-			continue
-		}
-		out[trimmedKey] = strings.TrimSpace(value)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 func copyStringSlice(in []string) []string {

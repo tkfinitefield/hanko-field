@@ -1094,7 +1094,7 @@ func TestPublicHandlers_GetPage_SanitizesHTMLAndSetsHeaders(t *testing.T) {
 		pageDetail: services.ContentPage{
 			ID:       "page_1",
 			Slug:     "about",
-			Locale:   "",
+			Locale:   "JA",
 			Title:    " About ",
 			BodyHTML: " <p>Hello</p><script>alert('x')</script> ",
 			SEO: map[string]string{
@@ -1141,8 +1141,9 @@ func TestPublicHandlers_GetPage_SanitizesHTMLAndSetsHeaders(t *testing.T) {
 	if payload.Slug != "about" {
 		t.Fatalf("expected slug about got %q", payload.Slug)
 	}
-	if payload.Locale != defaultPageLocale {
-		t.Fatalf("expected locale %s got %q", defaultPageLocale, payload.Locale)
+	expectedLocale := normalizeLocale(stub.pageDetail.Locale)
+	if payload.Locale != expectedLocale {
+		t.Fatalf("expected locale %s got %q", expectedLocale, payload.Locale)
 	}
 	if payload.Title != "About" {
 		t.Fatalf("expected trimmed title got %q", payload.Title)
@@ -1189,7 +1190,7 @@ func TestPublicHandlers_GetPage_ReturnsNotModifiedWhenETagMatches(t *testing.T) 
 	router := chi.NewRouter()
 	router.Route("/", handler.Routes)
 
-	etag := computePageETag(page)
+	etag := computePageETag(page, "about")
 
 	req := httptest.NewRequest(http.MethodGet, "/content/pages/about", nil)
 	req.Header.Set("If-None-Match", etag)

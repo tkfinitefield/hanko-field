@@ -7,6 +7,7 @@ import (
 	"time"
 
 	domain "github.com/hanko-field/api/internal/domain"
+	"github.com/hanko-field/api/internal/platform/textutil"
 	"github.com/hanko-field/api/internal/repositories"
 )
 
@@ -233,10 +234,7 @@ func (s *contentService) UpsertPage(ctx context.Context, cmd UpsertContentPageCo
 	page.Title = strings.TrimSpace(page.Title)
 	page.Status = strings.TrimSpace(page.Status)
 	page.BodyHTML = strings.TrimSpace(page.BodyHTML)
-	page.SEO = normalizeStringMap(page.SEO)
-	if !page.IsPublished && page.Status != "" {
-		page.IsPublished = strings.EqualFold(page.Status, "published")
-	}
+	page.SEO = textutil.NormalizeStringMap(page.SEO)
 	updated := s.clock().UTC()
 	page.UpdatedAt = updated
 
@@ -309,7 +307,7 @@ func normalizeContentPage(page domain.ContentPage, requestedLocale, defaultLocal
 	page.Title = strings.TrimSpace(page.Title)
 	page.BodyHTML = strings.TrimSpace(page.BodyHTML)
 	page.Status = strings.TrimSpace(page.Status)
-	page.SEO = normalizeStringMap(page.SEO)
+	page.SEO = textutil.NormalizeStringMap(page.SEO)
 
 	if !page.IsPublished && page.Status != "" {
 		page.IsPublished = strings.EqualFold(page.Status, "published")
@@ -378,24 +376,6 @@ func normalizeStringSlice(values []string) []string {
 		}
 		seen[key] = struct{}{}
 		result = append(result, trimmed)
-	}
-	if len(result) == 0 {
-		return nil
-	}
-	return result
-}
-
-func normalizeStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	result := make(map[string]string, len(values))
-	for key, value := range values {
-		trimmedKey := strings.TrimSpace(key)
-		if trimmedKey == "" {
-			continue
-		}
-		result[trimmedKey] = strings.TrimSpace(value)
 	}
 	if len(result) == 0 {
 		return nil
