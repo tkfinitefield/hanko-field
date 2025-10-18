@@ -1,0 +1,369 @@
+---
+collections:
+  - name: users
+    path: /users/{uid}
+    schema: ./users.schema.yaml
+    description: "Authenticated users and staff accounts. Mirrors Firebase Auth custom claims."
+    id_format: Firebase UID
+    ttl: null
+    indexes:
+      - surface: admin
+        query: GET /users?query=...
+        composite:
+          - field: role
+            order: asc
+          - field: createdAt
+            order: desc
+      - surface: admin
+        query: filter inactive users
+        composite:
+          - field: isActive
+            order: asc
+          - field: updatedAt
+            order: desc
+    subcollections:
+      - name: addresses
+        path: /users/{uid}/addresses/{addressId}
+        schema: ./users.address.schema.yaml
+        ttl: null
+        indexes:
+          - surface: user
+            query: default shipping lookup
+            composite:
+              - field: isDefault
+                order: desc
+              - field: updatedAt
+                order: desc
+      - name: paymentMethods
+        path: /users/{uid}/paymentMethods/{pmId}
+        schema: ./users.paymentMethod.schema.yaml
+        ttl: null
+      - name: favorites
+        path: /users/{uid}/favorites/{designId}
+        schema: ./users.favorites.schema.yaml
+        ttl: null
+
+  - name: designs
+    path: /designs/{designId}
+    schema: ./designs.schema.yaml
+    description: "User-created seal designs including layout parameters and rendering status."
+    id_format: d_ ULID
+    ttl: null
+    indexes:
+      - surface: user
+        query: GET /designs?status=&orderBy=updatedAt desc
+        composite:
+          - field: ownerRef
+            order: asc
+          - field: status
+            order: asc
+          - field: updatedAt
+            order: desc
+      - surface: admin
+        query: moderation queue
+        composite:
+          - field: status
+            order: asc
+          - field: createdAt
+            order: desc
+    subcollections:
+      - name: versions
+        path: /designs/{designId}/versions/{versionId}
+        schema: ./designs.version.schema.yaml
+        ttl: null
+      - name: aiSuggestions
+        path: /designs/{designId}/aiSuggestions/{suggestionId}
+        schema: ./designs.aiSuggestion.schema.yaml
+        ttl:
+          field: expiresAt
+          policy: 30d after suggestion completion
+          notes: Auto-delete rejected suggestions after 30d to reduce storage.
+
+  - name: aiJobs
+    path: /aiJobs/{jobId}
+    schema: ./aiJobs.schema.yaml
+    description: "Asynchronous work queue for AI operations (suggestions, registrability checks)."
+    id_format: aj_ ULID
+    ttl:
+      field: expiresAt
+      policy: TTL index 7d post completion
+    indexes:
+      - surface: internal
+        query: dequeue next job
+        composite:
+          - field: status
+            order: asc
+          - field: priority
+            order: asc
+          - field: createdAt
+            order: asc
+
+  - name: nameMappings
+    path: /nameMappings/{mappingId}
+    schema: ./nameMappings.schema.yaml
+    description: "Name conversion sessions storing candidate kanji mappings."
+    id_format: nm_ ULID
+    ttl:
+      field: expiresAt
+      policy: TTL index 14d
+
+  - name: templates
+    path: /templates/{templateId}
+    schema: ./templates.schema.yaml
+    description: "Predefined layout templates accessible to public catalogue."
+    id_format: tpl_ base32
+    ttl: null
+    indexes:
+      - surface: public
+        query: GET /templates?orderBy=sort
+        composite:
+          - field: isPublic
+            order: desc
+          - field: sort
+            order: asc
+
+  - name: fonts
+    path: /fonts/{fontId}
+    schema: ./fonts.schema.yaml
+    description: "Font metadata used by rendering service."
+    id_format: font_ base32
+    ttl: null
+
+  - name: materials
+    path: /materials/{materialId}
+    schema: ./materials.schema.yaml
+    description: "Available stamp materials with availability flags."
+    id_format: mat_ base32
+    ttl: null
+
+  - name: products
+    path: /products/{productId}
+    schema: ./products.schema.yaml
+    description: "Sellable SKUs referencing templates, materials, and fonts."
+    id_format: prod_ base32
+    ttl: null
+    indexes:
+      - surface: public
+        query: GET /products?filter=shape,size,material
+        composite:
+          - field: shape
+            order: asc
+          - field: sizeMm
+            order: asc
+          - field: materialId
+            order: asc
+      - surface: public
+        query: sorting by popularity
+        composite:
+          - field: isPublic
+            order: desc
+          - field: sort
+            order: asc
+
+  - name: carts
+    path: /carts/{uid}
+    schema: ./carts.header.schema.yaml
+    description: "Per-user cart header with currency, promotion, and estimate information."
+    id_format: user UID
+    ttl: null
+    indexes:
+      - surface: internal
+        query: find carts needing cleanup
+        composite:
+          - field: updatedAt
+            order: asc
+          - field: status
+            order: asc
+    subcollections:
+      - name: items
+        path: /carts/{uid}/items/{itemId}
+        schema: ./carts.item.schema.yaml
+        ttl: null
+
+  - name: orders
+    path: /orders/{orderId}
+    schema: ./orders.schema.yaml
+    description: "Committed orders with totals, addresses, and production metadata."
+    id_format: o_ ULID
+    ttl: null
+    indexes:
+      - surface: user
+        query: GET /orders?orderBy=createdAt desc
+        composite:
+          - field: userRef
+            order: asc
+          - field: createdAt
+            order: desc
+      - surface: admin
+        query: filter by status + createdAt
+        composite:
+          - field: status
+            order: asc
+          - field: createdAt
+            order: desc
+      - surface: admin
+        query: production queue
+        composite:
+          - field: production.queueRef
+            order: asc
+          - field: status
+            order: asc
+          - field: updatedAt
+            order: desc
+    subcollections:
+      - name: payments
+        path: /orders/{orderId}/payments/{paymentId}
+        schema: ./orders.payment.schema.yaml
+        ttl: null
+      - name: shipments
+        path: /orders/{orderId}/shipments/{shipmentId}
+        schema: ./orders.shipment.schema.yaml
+        ttl: null
+      - name: productionEvents
+        path: /orders/{orderId}/productionEvents/{eventId}
+        schema: ./orders.productionEvent.schema.yaml
+        ttl: null
+
+  - name: invoices
+    path: /invoices/{invoiceId}
+    schema: ./invoices.schema.yaml
+    description: "Invoice issuance records tied to orders."
+    id_format: inv_ ULID
+    ttl: null
+    indexes:
+      - surface: admin
+        query: outstanding invoices
+        composite:
+          - field: status
+            order: asc
+          - field: dueDate
+            order: asc
+
+  - name: promotions
+    path: /promotions/{promoId}
+    schema: ./promotions.schema.yaml
+    description: "Promotion definitions and eligibility rules."
+    id_format: promo slug
+    ttl: null
+    subcollections:
+      - name: usages
+        path: /promotions/{promoId}/usages/{uid}
+        schema: ./promotions.usage.schema.yaml
+        ttl: null
+        indexes:
+          - surface: internal
+            query: enforce per-user limit
+            composite:
+              - field: uid
+                order: asc
+              - field: updatedAt
+                order: desc
+
+  - name: reviews
+    path: /reviews/{reviewId}
+    schema: ./reviews.schema.yaml
+    description: "User feedback on completed orders."
+    id_format: r_ ULID
+    ttl: null
+    indexes:
+      - surface: admin
+        query: moderation queue
+        composite:
+          - field: moderation.status
+            order: asc
+          - field: createdAt
+            order: desc
+      - surface: user
+        query: GET /reviews?orderId=...
+        composite:
+          - field: orderRef
+            order: asc
+          - field: createdAt
+            order: desc
+
+  - name: assets
+    path: /assets/{assetId}
+    schema: ./assets.schema.yaml
+    description: "References to GCS objects for uploads, previews, invoices, and other binary assets."
+    id_format: asset_ base32
+    ttl: null
+    indexes:
+      - surface: internal
+        query: GC expired temp assets
+        composite:
+          - field: kind
+            order: asc
+          - field: expiresAt
+            order: asc
+
+  - name: content_guides
+    path: /content/guides/{guideId}
+    schema: ./content.guides.schema.yaml
+    description: "Localized guide content for tutorials and reference."
+    id_format: guide slug
+    ttl: null
+    indexes:
+      - surface: public
+        query: filter by language/category
+        composite:
+          - field: isPublished
+            order: desc
+          - field: locale
+            order: asc
+          - field: category
+            order: asc
+
+  - name: content_pages
+    path: /content/pages/{pageId}
+    schema: ./content.pages.schema.yaml
+    description: "Static informational pages consumed by web/marketing surfaces."
+    id_format: page slug
+    ttl: null
+
+  - name: productionQueues
+    path: /productionQueues/{queueId}
+    schema: ./productionQueues.schema.yaml
+    description: "Manufacturing workflow queues and capacity controls."
+    id_format: pq_ base32
+    ttl: null
+
+  - name: auditLogs
+    path: /auditLogs/{logId}
+    schema: ./auditLogs.schema.yaml
+    description: "Immutable audit trail for admin/user mutations."
+    id_format: log_ ULID
+    ttl:
+      field: expiresAt
+      policy: 7y retention (no automatic delete)
+    indexes:
+      - surface: admin
+        query: GET /audit-logs?targetRef
+        composite:
+          - field: targetRef
+            order: asc
+          - field: createdAt
+            order: desc
+
+  - name: counters
+    path: /counters/{counterId}
+    schema: ./counters.schema.yaml
+    description: "Transaction-safe counters for order/invoice numbering and exports."
+    id_format: counter slug
+    ttl: null
+
+  - name: stockReservations
+    path: /stockReservations/{reservationId}
+    schema: ./stockReservations.schema.yaml
+    description: "Ephemeral records for hold-and-release operations during checkout."
+    id_format: sr_ ULID
+    ttl:
+      field: expiresAt
+      policy: TTL index 1h
+    indexes:
+      - surface: internal
+        query: cleanup expired reservations
+        composite:
+          - field: status
+            order: asc
+          - field: expiresAt
+            order: asc

@@ -21,3 +21,6 @@ Provide stock management abstractions for carts, orders, and admin operations, i
 3. Ensure concurrency via Firestore transactions to prevent overselling.
 4. Emit events for stock changes for audit/analytics.
 5. Tests using Firestore emulator simulating concurrent reservations and expiry handling.
+
+## Status
+- [x] 2025-05-06: Added Firestore-backed inventory repository with transactional reserve/commit/release flows, implemented inventory service with event emission and low-stock queries, and covered unit + integration scenarios (Go tests and emulator-backed suite).

@@ -20,3 +20,11 @@ Provide order detail with tabbed sections pulling relevant sub-resources.
 2. Each tab handler fetches necessary API data (e.g., `GET /orders/{id}/payments`).
 3. Provide consistent error handling: show toast and fallback message if API fails.
 4. Implement sticky header showing key actions (status change, refund, invoice) accessible from all tabs.
+
+## UI Components
+- **Page shell:** `AdminLayout` with breadcrumb `PageHeader` (order id, customer chip, status `Badge`).
+- **Summary band:** `SummaryCard` row for financial totals, SLA clocks, outstanding tasks.
+- **Primary tabs:** `UnderlineTabs` for Summary, Lines, Payments, Production, Shipments, Invoice, Audit.
+- **Content regions:** Each tab renders `DetailCard` grids with tables (`LineItemTable`, `TimelineList`) and action `ButtonGroup`.
+- **Context rail:** Right-side `InfoRail` containing customer profile snippet, notes accordion, and timeline feed.
+- **Action footer:** Sticky `ActionBar` for refund/status/modal triggers with `SnackbarHost` feedback.

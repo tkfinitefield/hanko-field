@@ -1,0 +1,26 @@
+run:
+  timeout: 3m
+  tests: true
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - gofumpt
+    - goimports
+    - revive
+    - gocyclo
+  disable:
+    - errcheck
+linters-settings:
+  gofumpt:
+    extra-rules: true
+  gocyclo:
+    min-complexity: 15
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    - linters:
+        - revive
+      text: "should have comment"

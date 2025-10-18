@@ -10,3 +10,11 @@ Create printable/digital work order view for production team.
 1. Show design assets, customer instructions, materials, due dates.
 2. Provide buttons to mark steps complete (calls production events endpoint).
 3. Optionally render PDF for printing.
+
+## UI Components
+- **Page shell:** `AdminLayout` breadcrumbs pointing back to queue and order detail.
+- **Header card:** `SummaryCard` with order id, due time, responsible team, and action `ButtonGroup`.
+- **Tabbed body:** `UnderlineTabs` for Overview, Assets, Instructions, Activity.
+- **Assets grid:** `MediaGrid` listing design files with preview thumbnails and download `IconButton`.
+- **Instruction panel:** `RichTextPanel` with step list, checkboxes, and safety callouts using `InlineAlert`.
+- **Activity timeline:** `TimelineList` capturing updates, QC outcomes, and attachments.

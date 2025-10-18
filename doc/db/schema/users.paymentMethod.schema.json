@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "users.paymentMethod.schema.json",
   "title": "User Payment Method",
-  "description": "外部PSP（例: Stripe/PayPal）にトークン化された支払手段の参照情報。カード番号等の機微情報は保持しません。",
+  "description": "外部PSP（例: Stripe）にトークン化された支払手段の参照情報。カード番号等の機微情報は保持しません。",
   "type": "object",
   "additionalProperties": false,
   "required": [

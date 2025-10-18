@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aiJobs.schema.json",
+  "title": "AI Job",
+  "description": "AI サービスへの非同期ジョブ（提案生成・評価など）をキュー管理する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status", "priority", "payload", "createdAt"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["design_suggestion", "registrability_check", "name_conversion"],
+      "description": "ジョブの種類。"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["queued", "in_progress", "succeeded", "failed", "canceled"],
+      "description": "現在のジョブ状態。"
+    },
+    "priority": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "優先度。数値が低いほど高優先。"
+    },
+    "payload": {
+      "type": "object",
+      "description": "AI ワーカーに渡す入力。",
+      "additionalProperties": true
+    },
+    "resultRef": {
+      "type": ["string", "null"],
+      "description": "生成結果の参照（例: /designs/{id}/aiSuggestions/{suggId}）。"
+    },
+    "error": {
+      "type": ["object", "null"],
+      "description": "失敗時の詳細。",
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "lastAttemptedAt": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "description": "リトライ情報。"
+    },
+    "scheduledAt": { "type": ["string", "null"], "format": "date-time" },
+    "lockedBy": { "type": ["string", "null"], "description": "実行ワーカーID。" },
+    "lockedAt": { "type": ["string", "null"], "format": "date-time" },
+    "completedAt": { "type": ["string", "null"], "format": "date-time" },
+    "expiresAt": { "type": ["string", "null"], "format": "date-time", "description": "ジョブ有効期限 (TTL)" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,6 +1,6 @@
 # ウェブ
 
-ウェブは Go + htmx で開発します。
+ウェブは Go + htmx + templ + chi + TailwindCSS で開発します。
 Cloud Run で実行します。
 
 ---
@@ -163,7 +163,7 @@ Cloud Run で実行します。
 
 ### `/checkout/payment`（FP）
 
-* PSP セッションボタン（Stripe/PayPal）→ `POST /checkout/session`
+* PSP セッションボタン（Stripe）→ `POST /checkout/session`
 * 完了後 `POST /checkout/confirm`（表示は `/checkout/complete` へ）
 
 ### `/checkout/review`（FP）
@@ -326,43 +326,3 @@ Cloud Run で実行します。
 | 注文詳細タブ                   | `GET /orders/{id}`, `GET /orders/{id}/payments   | shipments | production-events` |
 
 ---
-
-# 10. ディレクトリ（提案）
-
-```
-/web
-  /layouts/_base.html        # <head>, header, footer, #content
-  /layouts/_modal.html       # #modal, トースト
-  /partials/_table_empty.html
-  /partials/_pager.html
-  /frags
-    shop_table.html
-    product_gallery.html
-    design_form.html
-    design_preview.html
-    ai_table.html
-    cart_table.html
-    guides_table.html
-    orders_table.html
-  /pages
-    home.html
-    shop.html
-    product_show.html
-    design_editor.html
-    design_ai.html
-    design_preview.html
-    cart.html
-    checkout_address.html
-    checkout_shipping.html
-    checkout_payment.html
-    checkout_review.html
-    checkout_complete.html
-    account_index.html
-    account_orders.html
-    account_order_show.html
-    account_addresses.html
-    account_library.html
-    guide_index.html
-    guide_show.html
-    legal.html
-```

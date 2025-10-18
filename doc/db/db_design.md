@@ -44,6 +44,7 @@
 
 /counters/{counterId}           // 連番用（請求書番号など）
 /stockReservations/{orderId}    // 在庫引当の一時記録
+/invoices/{invoiceId}
 
 
 ---

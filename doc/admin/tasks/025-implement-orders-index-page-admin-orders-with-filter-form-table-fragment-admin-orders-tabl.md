@@ -18,3 +18,11 @@ Deliver orders list with filters, pagination, and bulk actions per design.
 3. Add forms for bulk actions using checkboxes; on submit call respective backend or open modal.
 4. Provide spinner indicator using `hx-indicator` and maintain query params via `hx-push-url`.
 5. Implement export action using async job (download link once ready).
+
+## UI Components
+- **Page shell:** `AdminLayout` containing `PageHeader` (orders total KPIs) and export `SplitButton`.
+- **Filter ribbon:** Sticky `FilterToolbar` with search `Input`, status `ChipGroup`, date `RangePicker`, org `Combobox`, and tag `MultiSelect`.
+- **Orders table:** Virtualised `DataTable` (row height md) with selection checkboxes, totals, SLA `Badge`, and inline `MenuButton` actions.
+- **Bulk action bar:** `BulkActionBar` for status change, label print, CSV export with progress `ProgressBar`.
+- **Saved views:** `SavedViewSwitcher` for quick recall of filter presets with pin `IconButton`.
+- **Empty/Errors:** `InlineAlert` for API issues and `IllustratedEmpty` when no results match filters.

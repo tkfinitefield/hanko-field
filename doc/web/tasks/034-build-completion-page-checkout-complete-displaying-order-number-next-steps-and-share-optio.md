@@ -10,3 +10,11 @@ Display order completion page.
 1. Show order number, summary, next actions (tracking, invoice).
 2. Provide share links and support contact info.
 3. Clear cart data in session.
+
+## UI Components
+- **Layout:** `CheckoutLayout` variant with celebratory `HeroCard`.
+- **Order confirmation:** `ConfirmationPanel` showing order number, status `Badge`, download receipt.
+- **Next steps:** `TaskList` cards for track shipment, download designs, refer friend.
+- **Share strip:** `SocialShareBar` with icons and referral copy.
+- **Recommendations:** `ProductRail` for accessories and `GuideCard` for onboarding docs.
+- **Support callout:** `SupportBanner` linking to help center.

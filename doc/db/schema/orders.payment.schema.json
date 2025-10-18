@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "orders.payment.schema.json",
   "title": "Order Payment",
-  "description": "注文に紐づく決済記録。PSP(例: Stripe/PayPal)のイベントを正規化して保持する。",
+  "description": "注文に紐づく決済記録。PSP(例: Stripe)のイベントを正規化して保持する。",
   "type": "object",
   "additionalProperties": false,
   "required": ["provider", "status", "amount", "currency", "createdAt"],

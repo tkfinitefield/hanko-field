@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nameMappings.schema.json",
+  "title": "Name Mapping",
+  "description": "外国人名の漢字変換候補と選択状態を保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["userRef", "latin", "locale", "status", "candidates", "createdAt", "updatedAt"],
+  "properties": {
+    "userRef": {
+      "type": "string",
+      "pattern": "^/users/[A-Za-z0-9_-]+$",
+      "description": "リクエストしたユーザーへの参照。"
+    },
+    "latin": {
+      "type": "string",
+      "description": "ローマ字等の元の名前。"
+    },
+    "locale": {
+      "type": "string",
+      "description": "言語・地域コード (例: en, fr)。"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "ready", "selected", "expired"],
+      "description": "現在の状態。"
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "display", "score"],
+        "properties": {
+          "id": { "type": "string" },
+          "display": { "type": "string" },
+          "readings": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "selectedCandidate": {
+      "type": ["object", "null"],
+      "description": "採用された候補。candidates の複製。",
+      "additionalProperties": true
+    },
+    "expiresAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "選択可能期限。"
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "createdBy": { "type": ["string", "null"] },
+        "updatedBy": { "type": ["string", "null"] }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}

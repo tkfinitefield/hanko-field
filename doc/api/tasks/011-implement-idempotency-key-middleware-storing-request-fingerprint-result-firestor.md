@@ -16,3 +16,9 @@ Ensure safe retries for mutating requests by deduplicating `Idempotency-Key` ope
 2. Wrap handlers in response recorder capturing status, headers, body.
 3. Enforce TTL config (e.g., 24h) and cleanup job for expired keys.
 4. Unit test duplicate request behaviour and missing header path.
+
+## Completion Notes
+- Implemented Firestore-backed idempotency store with scoped keys, TTL extension, and cleanup helpers.
+- Added HTTP middleware capturing responses, hashing request fingerprints, and replaying stored responses for duplicates.
+- Wired middleware and cleanup ticker into API server startup with configurable headers, TTL, and cleanup cadence.
+- Added configuration schema for idempotency settings and unit tests covering success, replay, conflict, and pending scenarios.

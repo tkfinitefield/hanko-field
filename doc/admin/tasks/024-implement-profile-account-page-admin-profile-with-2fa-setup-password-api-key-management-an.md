@@ -12,3 +12,11 @@ Provide admin profile page for personal settings.
 3. Show active sessions/devices with revoke button using htmx.
 4. Integrate with backend endpoints for each action and display success/failure toasts.
 5. Document security guidance on page.
+
+## UI Components
+- **Page shell:** `AdminLayout` with `PageHeader` (avatar + role `Badge`).
+- **Identity card:** `ProfileSummaryCard` displaying contact info, role chips, last login, edit `IconButton`.
+- **Tab navigation:** `UnderlineTabs` toggling Account, Security (MFA/API Keys), Sessions, Feature Flags.
+- **Form panels:** `FormCard` components with `Input`, `ComboBox`, `Toggle`, and `HelpText` per tab.
+- **Session history:** `DataTable` of active sessions with revoke `GhostButton`.
+- **Secondary rail:** Optional `SidePanel` for support links and audit trail.

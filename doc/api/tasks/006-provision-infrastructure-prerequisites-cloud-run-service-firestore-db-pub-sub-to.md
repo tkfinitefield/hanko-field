@@ -26,3 +26,25 @@ Provision all Google Cloud resources required by the API using repeatable Infras
 - Running IaC plan/apply from clean checkout provisions required resources.
 - Resource naming consistent with naming convention document.
 - Terraform state secured, version controlled modules reviewed, and CI integrates drift detection.
+
+---
+
+## Provisioning Summary (2025-04-01)
+
+### Deliverables
+- ✅ Scaffolded Terraform configuration in `infra/terraform/` with modules for service accounts, Cloud Run, Firestore, Pub/Sub, Storage, Cloud Scheduler, and Secret Manager.
+- ✅ Environment tfvars for `dev`, `stg`, and `prod` capturing project IDs, container images, scaling, and scheduler endpoints.
+- ✅ Root module outputs bucket names, service accounts, topic IDs, and Cloud Run URL for downstream configuration.
+- ✅ Infrastructure runbook added at `doc/api/infrastructure.md` covering backend setup, apply commands, and operational notes.
+- ✅ Updated `.gitignore` to exclude Terraform state artefacts.
+
+### Highlights
+- Naming convention derives from `hanko-field[-env]-resource` ensuring per-environment isolation while aligning with storage/secrets naming.
+- Firestore module enables TTL on `stockReservations` and adds core composite indexes required by order queries.
+- Cloud Scheduler jobs authenticate via OIDC using the dedicated scheduler service account provisioned in Terraform.
+- Secret Manager secrets are created but require manual version uploads after apply, keeping sensitive data out of git.
+
+### Next Actions
+- Configure remote state bucket and lock settings before the first apply.
+- Integrate Terraform plan in CI (nightly drift detection + merge validation).
+- Extend modules to include VPC connector provisioning and logging sinks as networking decisions finalize.

@@ -11,3 +11,9 @@ Render comprehensive order detail view.
 2. Present items, pricing breakdown, addresses, payment summary, design snapshots.
 3. Provide quick actions (contact support, reorder, download invoice).
 4. Handle loading/error states via `AsyncValue`.
+
+## Material Design 3 Components
+- **Top bar:** `Medium top app bar` with actions for reorder and share.
+- **Section tabs:** `Primary tabs` for Summary, Timeline, and Files.
+- **Content sections:** `Outlined cards` for addresses/payment and `Elevated cards` for design previews.
+- **Support banner:** `Banner` for escalation or delays, with `Assist chips` for quick actions.

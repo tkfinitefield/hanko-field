@@ -17,8 +17,13 @@ Calculate cart totals (subtotal, discounts, tax, shipping, total) using pluggabl
 - Support multi-currency with rounding rules and currency precision.
 
 ## Steps
-1. Define data structs `Cart`, `CartItem`, `PricingBreakdown` in shared package.
-2. Implement pipeline applying in order: base price → item-level discount → cart-level promotions → tax → shipping.
-3. Integrate with promotion service for discounts and inventory service for stock validation.
-4. Provide caching for shipping rates (per address, weight) to reduce API calls.
-5. Add regression tests comparing expected totals versus scenario fixtures.
+- [x] Define data structs `Cart`, `CartItem`, `PricingBreakdown` in shared package.
+- [x] Implement pipeline applying in order: base price → item-level discount → cart-level promotions → tax → shipping.
+- [x] Integrate with promotion service for discounts and inventory service for stock validation.
+- [x] Provide caching for shipping rates (per address, weight) to reduce API calls.
+- [x] Add regression tests comparing expected totals versus scenario fixtures.
+
+## Completion Notes
+- Added shared pricing models and enriched cart/item structs for weight, shipping, tax metadata (`api/internal/domain/pricing.go`, `api/internal/domain/types.go`).
+- Implemented `CartPricingEngine` with pluggable item discount rules, promotion validation, tax/shipping collaborators, and per-address shipping cache (`api/internal/services/pricing_engine.go`).
+- Covered core scenarios with unit tests, including caching behaviour and error paths (`api/internal/services/pricing_engine_test.go`), and verified via `go test ./...` from `api` module.

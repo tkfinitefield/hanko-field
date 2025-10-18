@@ -10,3 +10,11 @@ Render legal content pages with localization and version tracking.
 1. Fetch content (markdown/HTML) from CMS or static files; sanitize output.
 2. Display revision date and provide PDF download if required.
 3. Support locale toggles and canonical links.
+
+## UI Components
+- **Layout:** `StaticLayout` with legal `SectionHeader` and locale switch.
+- **Localization controls:** `LocaleSwitcher` toggling languages (htmx reload).
+- **Document body:** `MarkdownRenderer` with `Prose` styling, links, headings.
+- **Version table:** `VersionTable` listing history with download `LinkButton`.
+- **Feedback widget:** `WasHelpful` inline feedback form with `RadioGroup`.
+- **Footer:** `LegalFooter` referencing compliance contacts.

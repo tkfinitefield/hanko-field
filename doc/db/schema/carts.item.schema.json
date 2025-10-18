@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "carts.item.schema.json",
+  "title": "Cart Item",
+  "description": "カート内の個別アイテム。商品、デザイン、数量、金額見積のスナップショットを保持する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["productRef", "sku", "quantity", "unitPrice", "currency", "addedAt"],
+  "properties": {
+    "productRef": {
+      "type": "string",
+      "pattern": "^/products/[A-Za-z0-9_-]+$",
+      "description": "Firestore の product 参照。"
+    },
+    "designRef": {
+      "type": ["string", "null"],
+      "pattern": "^/designs/[A-Za-z0-9_-]+$",
+      "description": "デザイン参照。タイプが upload/logo の場合は null 可。"
+    },
+    "sku": {
+      "type": "string",
+      "description": "販売 SKU コード。"
+    },
+    "name": {
+      "type": "string",
+      "description": "商品名スナップショット。"
+    },
+    "options": {
+      "type": "object",
+      "description": "サイズ・素材などのオプション。",
+      "additionalProperties": true
+    },
+    "quantity": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "unitPrice": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "1個あたりの価格（最小通貨単位）。"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "estimates": {
+      "type": "object",
+      "description": "税・送料の見積キャッシュ。",
+      "additionalProperties": false,
+      "properties": {
+        "tax": { "type": "integer", "minimum": 0 },
+        "shipping": { "type": "integer", "minimum": 0 },
+        "discount": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "customization": {
+      "type": "object",
+      "description": "レイアウトや刻印設定。",
+      "additionalProperties": true
+    },
+    "assetRefs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^/assets/[A-Za-z0-9_-]+$"
+      },
+      "description": "関連アセット。"
+    },
+    "addedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "追加日時。"
+    },
+    "updatedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    }
+  }
+}

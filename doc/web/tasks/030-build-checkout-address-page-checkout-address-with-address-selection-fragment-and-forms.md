@@ -10,3 +10,11 @@ Build checkout address selection.
 1. Display saved addresses via fragment; allow selecting shipping/billing.
 2. Provide form for new address using modal; validate fields.
 3. Persist selection in session and route to shipping step.
+
+## UI Components
+- **Layout:** `CheckoutLayout` with breadcrumb progress indicator.
+- **Saved addresses:** `AddressList` fragment with radio selection and edit `LinkButton`.
+- **Address form:** `AddressForm` using `Input`, `Select`, `Textarea` with inline validation.
+- **Sidebar:** `SummarySidebar` showing order totals and shipping ETA.
+- **Action footer:** `ActionBar` with Continue `PrimaryButton` and Back `SecondaryButton`.
+- **Inline alerts:** `InlineAlert` for validation or geocoding errors.

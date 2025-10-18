@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Go build artifacts
+bin/
+*.exe
+*.test
+*.out
+
+# Go module caches
+api/.gocache/
+api/bin/
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+
+# Taskfile cache
+.task/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Coverage
+coverage*.txt
+coverage*.out

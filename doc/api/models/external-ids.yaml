@@ -1,0 +1,225 @@
+---
+id_spaces:
+  - entity: users
+    collection: /users/{uid}
+    prefix: none
+    pattern: Firebase Auth UID (`[A-Za-z0-9_-]{28}`)
+    generator: Firebase Authentication
+    exposure: external
+    notes: Primary key aligns with Authentication user ID. Never regenerate.
+
+  - entity: carts
+    collection: /carts/{uid}
+    prefix: c_
+    pattern: c_{uid}
+    generator: Deterministic (same as user UID)
+    exposure: internal
+    notes: Cart ID equals user UID to ensure one active cart per user.
+
+  - entity: cart_items
+    collection: /carts/{uid}/items/{itemId}
+    prefix: ci_
+    pattern: ci_{base36(8)}
+    generator: Firestore auto ID shortened to 8 chars
+    exposure: internal
+    notes: Stable across quantity updates; recreated on duplication.
+
+  - entity: designs
+    collection: /designs/{designId}
+    prefix: d_
+    pattern: d_{base32(10)}
+    generator: Server-side ULID (base32 Crockford)
+    exposure: external
+    notes: Exposed in APIs and URLs; lexicographically sortable by createdAt.
+
+  - entity: design_versions
+    collection: /designs/{designId}/versions/{versionId}
+    prefix: dv_
+    pattern: dv_{base32(10)}
+    generator: Derived ULID at version save
+    exposure: internal
+    notes: Not shown publicly; used for rollback/history.
+
+  - entity: ai_suggestions
+    collection: /designs/{designId}/aiSuggestions/{suggestionId}
+    prefix: s_
+    pattern: s_{base32(10)}
+    generator: AI job dispatcher
+    exposure: external
+    notes: Returned to client for polling and accept/reject flows.
+
+  - entity: ai_jobs
+    collection: /aiJobs/{jobId}
+    prefix: aj_
+    pattern: aj_{base32(12)}
+    generator: Internal job scheduler
+    exposure: internal
+    notes: Not exposed; referenced by internal worker logs.
+
+  - entity: name_mappings
+    collection: /nameMappings/{mappingId}
+    prefix: nm_
+    pattern: nm_{base32(10)}
+    generator: API when conversion requested
+    exposure: external
+    notes: Returned to clients for follow-up selection.
+
+  - entity: templates
+    collection: /templates/{templateId}
+    prefix: tpl_
+    pattern: tpl_{base32(8)}
+    generator: Admin console
+    exposure: external
+    notes: Shared across public catalogue and admin APIs.
+
+  - entity: fonts
+    collection: /fonts/{fontId}
+    prefix: font_
+    pattern: font_{base32(8)}
+    generator: Admin console
+    exposure: internal
+    notes: Not user-facing but referenced by templates/products.
+
+  - entity: materials
+    collection: /materials/{materialId}
+    prefix: mat_
+    pattern: mat_{base32(8)}
+    generator: Admin console
+    exposure: external
+    notes: Public endpoints expose material IDs for filtering.
+
+  - entity: products
+    collection: /products/{productId}
+    prefix: prod_
+    pattern: prod_{base32(8)}
+    generator: Admin console
+    exposure: external
+    notes: Used as foreign key in cart/order line items.
+
+  - entity: stock_reservations
+    collection: /stockReservations/{reservationId}
+    prefix: sr_
+    pattern: sr_{ulid}
+    generator: Checkout service
+    exposure: internal
+    notes: Shares ID with provisional order ID until commit.
+
+  - entity: orders
+    collection: /orders/{orderId}
+    prefix: o_
+    pattern: o_{ulid}
+    generator: Checkout commit service
+    exposure: external
+    notes: Returned to client; ULID ensures time-ordering.
+
+  - entity: order_number
+    collection: /orders/{orderId}
+    prefix: HF-
+    pattern: HF-{YYYY}-{6-digit sequential}
+    generator: counters/orders
+    exposure: external
+    notes: Human friendly; duplicates prevented through transaction using counters collection.
+
+  - entity: payments
+    collection: /orders/{orderId}/payments/{paymentId}
+    prefix: pay_
+    pattern: pay_{base32(10)}
+    generator: Webhook handler per PSP event
+    exposure: internal
+    notes: Mapped to PSP intents/charges.
+
+  - entity: shipments
+    collection: /orders/{orderId}/shipments/{shipmentId}
+    prefix: sh_
+    pattern: sh_{base32(10)}
+    generator: Fulfillment service
+    exposure: internal
+    notes: Carrier tracking numbers stored separately.
+
+  - entity: production_events
+    collection: /orders/{orderId}/productionEvents/{eventId}
+    prefix: pe_
+    pattern: pe_{timestamp}_{seq}
+    generator: Workshop console
+    exposure: internal
+    notes: Sorted by event timestamp for timeline rendering.
+
+  - entity: promotions
+    collection: /promotions/{promoId}
+    prefix: promo_
+    pattern: promo_{slug}
+    generator: Admin console
+    exposure: external
+    notes: Accepts meaningful slugs (uppercase alnum + dash) to align with marketing codes.
+
+  - entity: promotion_usage
+    collection: /promotions/{promoId}/usages/{uid}
+    prefix: none
+    pattern: {uid}
+    generator: Transactional increment handler
+    exposure: internal
+    notes: User UID used to simplify lookups and enforce limits.
+
+  - entity: reviews
+    collection: /reviews/{reviewId}
+    prefix: r_
+    pattern: r_{ulid}
+    generator: Reviews service
+    exposure: external
+    notes: ULID for chronological moderation queue ordering.
+
+  - entity: content_guides
+    collection: /content/guides/{guideId}
+    prefix: guide_
+    pattern: guide_{slug}
+    generator: CMS admin
+    exposure: external
+    notes: Slug is human readable; ensure uniqueness per locale.
+
+  - entity: content_pages
+    collection: /content/pages/{pageId}
+    prefix: page_
+    pattern: page_{slug}
+    generator: CMS admin
+    exposure: external
+    notes: Slug matches web route.
+
+  - entity: assets
+    collection: /assets/{assetId}
+    prefix: asset_
+    pattern: asset_{base32(12)}
+    generator: Asset service
+    exposure: internal
+    notes: Not directly exposed; signed URLs reference by ID.
+
+  - entity: production_queues
+    collection: /productionQueues/{queueId}
+    prefix: pq_
+    pattern: pq_{base32(8)}
+    generator: Operations tooling
+    exposure: internal
+    notes: Referenced by admin UI; not public.
+
+  - entity: audit_logs
+    collection: /auditLogs/{logId}
+    prefix: log_
+    pattern: log_{ulid}
+    generator: Shared audit writer
+    exposure: internal
+    notes: ULID ensures ordering per actor/target.
+
+  - entity: counters
+    collection: /counters/{counterId}
+    prefix: counter_
+    pattern: counter_{slug}
+    generator: DevOps provisioning
+    exposure: internal
+    notes: Counter IDs map to logical sequences (orders, invoices, exports).
+
+  - entity: invoices
+    collection: /invoices/{invoiceId}
+    prefix: inv_
+    pattern: inv_{ulid}
+    generator: Invoice service
+    exposure: internal
+    notes: Internal primary key; human number lives in `invoiceNumber`.

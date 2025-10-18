@@ -10,3 +10,9 @@ Build how-to/tutorial screen consolidating videos and step-by-step guides.
 1. Fetch content from CMS or static config; display cards grouped by topic.
 2. Embed video player with playback controls and captions.
 3. Track completion metrics for tutorials.
+
+## Material Design 3 Components
+- **App bar:** `Large top app bar` with category `Tabs` for video/article segmentation.
+- **Content cards:** `Elevated cards` combining thumbnail, duration chip, and summary.
+- **Featured banner:** Top `Outlined card` for spotlight tutorial.
+- **Navigation:** `Navigation bar` persistent for switching tabs.

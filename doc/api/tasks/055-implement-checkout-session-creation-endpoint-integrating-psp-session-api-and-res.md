@@ -4,7 +4,7 @@
 **Task ID:** 055
 
 ## Purpose
-Initiate PSP checkout session (Stripe/PayPal) and optionally reserve stock prior to redirecting customer.
+Initiate PSP checkout session (Stripe) and optionally reserve stock prior to redirecting customer.
 
 ## Endpoint
 - `POST /checkout/session`
