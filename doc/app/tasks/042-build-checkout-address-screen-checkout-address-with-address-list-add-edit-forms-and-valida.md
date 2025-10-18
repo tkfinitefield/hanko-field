@@ -10,3 +10,9 @@ Manage shipping address selection/creation.
 1. List saved addresses; highlight default and allow editing.
 2. Provide add form with validation, postal code lookup, persona-specific instructions.
 3. Persist selection to checkout state.
+
+## Material Design 3 Components
+- **App bar:** `Small top app bar` with add address `Icon button`.
+- **Saved addresses:** `List items` with leading location icon, trailing `Radio button`, and `Assist chips` for default/billing.
+- **Form modal:** `Full-screen dialog` containing `Outlined text fields` and `Segmented buttons` for domestic/international layouts.
+- **Footer:** Primary `Filled button` to confirm shipping address.

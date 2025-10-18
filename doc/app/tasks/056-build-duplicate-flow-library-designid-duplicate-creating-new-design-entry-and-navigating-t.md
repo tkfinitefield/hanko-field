@@ -10,3 +10,9 @@ Create duplicate design and navigate to editor.
 1. Call backend duplication endpoint; create new design entry.
 2. Navigate to `/design/editor` with new design ID, preloading assets.
 3. Notify user of success/failure.
+
+## Material Design 3 Components
+- **App bar:** `Center-aligned top app bar` describing source design.
+- **Form:** `Outlined text fields` for new name and tags, plus `Assist chips` for tag suggestions.
+- **Options:** `Switches` for copying history/assets within an `Elevated card`.
+- **Actions:** `Filled button` to duplicate and `Text button` to cancel.

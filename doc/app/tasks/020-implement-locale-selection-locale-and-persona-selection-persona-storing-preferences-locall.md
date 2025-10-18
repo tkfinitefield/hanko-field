@@ -11,3 +11,9 @@ Provide locale and region selection.
 2. Persist selection locally and propagate to app-wide locale provider.
 3. Sync with backend profile once authenticated.
 4. Handle fallback to device locale when user skips.
+
+## Material Design 3 Components
+- **App bar:** `Center-aligned top app bar` with up navigation and Save action.
+- **Locale grid:** `List items` with `Radio buttons` and supporting text for language/region metadata.
+- **Persona chips:** `Assist chips` grouped by persona archetype to toggle contextual defaults.
+- **Confirmation:** Footer `Filled button` to persist selections across providers.

@@ -11,3 +11,9 @@ Visualize production progress for an order.
 2. Display timeline with stage icons, timestamps, notes.
 3. Provide estimated completion and alerts for delays.
 4. Support real-time updates via polling or push notifications.
+
+## Material Design 3 Components
+- **App bar:** `Small top app bar` with refresh `Icon button`.
+- **Timeline:** Vertical `List` using `Step list items` separated by `Dividers` and decorated `Icons`.
+- **Status chips:** `Assist chips` representing stage SLA health (On track, Attention, Delayed).
+- **Context:** `Outlined card` summarizing order metadata at top.

@@ -11,3 +11,9 @@ Implement orders list with filters and infinite scroll.
 2. Provide filter chips for status and date range; integrate with provider state.
 3. Display cards containing snapshot, total, status timeline snippet.
 4. Implement pull-to-refresh and skeleton states.
+
+## Material Design 3 Components
+- **Top bar:** `Center-aligned top app bar` with search `Icon button`.
+- **Filter row:** `Filter chips` for status and time buckets.
+- **Order list:** `Two-line list items` within `Elevated card` groups for each day.
+- **Load more:** `Linear progress indicator` at list tail during pagination.

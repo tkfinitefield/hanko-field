@@ -10,3 +10,9 @@ Build shop landing page highlighting categories and promotions.
 1. Fetch categories, featured promotions, and trending materials.
 2. Display hero banner, category tiles, and quick links to guides.
 3. Provide analytics tracking for interactions.
+
+## Material Design 3 Components
+- **Top bar:** `Large top app bar` with promotional banner entry via `Assist chip`.
+- **Category grid:** `Filled cards` with imagery for each material category.
+- **Promotions carousel:** Horizontal row of `Elevated cards` for campaigns.
+- **Global nav:** Persistent `Navigation bar` for primary sections.

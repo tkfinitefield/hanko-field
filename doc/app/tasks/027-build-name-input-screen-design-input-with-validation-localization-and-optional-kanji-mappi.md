@@ -11,3 +11,9 @@ Capture name input with validation and preview.
 2. Show live preview using selected font style.
 3. Persist data to view model and proceed to style selection.
 4. Surface hints or auto-complete based on user profile.
+
+## Material Design 3 Components
+- **App bar:** `Small top app bar` with back navigation.
+- **Form:** Stacked `Outlined text fields` for kanji/kana plus `Supporting text` for validation hints.
+- **Helpers:** `Assist chips` for quick insert (e.g., surname templates).
+- **CTA:** Footer `Filled button` enabling progression when validation passes.
