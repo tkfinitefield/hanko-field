@@ -11,3 +11,11 @@ Implement guides list/detail with CMS integration.
 2. Render article detail with markdown/HTML sanitization, table of contents, related articles.
 3. Configure SEO metadata and structured data.
 4. Provide share buttons and localized alternatives.
+
+## UI Components
+- **Layout:** `SiteLayout` with `SectionHeader` including filters summary and subscribe CTA.
+- **Guide filters:** `FilterToolbar` with persona `ChipGroup`, topic `Select`, search `Input`.
+- **Guide list:** `GuideList` of `GuideCard` entries containing cover image, reading time, and tags.
+- **Detail view:** `GuideArticle` template using `Prose` typography styles for CMS HTML.
+- **Aside:** `StickySidebar` for table of contents, share `IconButtons`, and download PDF link.
+- **Recommendation band:** `RelatedGuidesRail` at article end.

@@ -12,3 +12,11 @@ Build global search spanning orders, users, reviews as described in design.
 3. Integrate with search API or call multiple endpoints; handle pagination (per type or aggregated).
 4. Add keyboard shortcuts (focus on `/` key) and highlight search terms.
 5. Provide empty-state and error messaging.
+
+## UI Components
+- **Page shell:** `AdminLayout` with breadcrumb `PageHeader` and search analytics `Badge`.
+- **Query bar:** Sticky `FilterToolbar` containing primary `SearchInput`, scope `SegmentedControl`, date `RangePicker`, and persona `Select`.
+- **Result list:** `DataTable` fragment (`/admin/search/table`) with relevance, entity icon, description, and action column.
+- **Side preview:** Expandable `DetailDrawer` showing entity summary, key fields, and quick actions via `ButtonGroup`.
+- **Pagination footer:** `TableFooter` with result count, cursor controls, and `DensityToggle`.
+- **Keyboard affordances:** Inline `ShortcutHint` row documenting `/`, `↑`, `↓`, `↵` behaviour.

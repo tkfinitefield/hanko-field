@@ -11,3 +11,11 @@ Implement customers list with search filters.
 2. Table columns: customer, total orders, lifetime value, last order, flags.
 3. Integrate with search API or `GET /users` admin endpoint.
 4. Provide row action to open detail.
+
+## UI Components
+- **Page shell:** `AdminLayout` with `PageHeader` showing total customers and segmentation chips.
+- **Filter + search:** `FilterToolbar` containing global search `Input`, status `ChipGroup`, persona `MultiSelect`, tag `Combobox`, spending `RangeSlider`.
+- **Customers table:** `DataTable` with avatar, name/email, lifetime value, last order date, risk `Badge`, actions menu.
+- **Bulk operations:** `BulkActionBar` for segment tagging, export, messaging triggers.
+- **Preview drawer:** `DetailDrawer` summarizing profile, notes, last interactions, quick links.
+- **Empty state:** `IllustratedEmpty` with CTA to import CSV.

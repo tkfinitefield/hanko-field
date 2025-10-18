@@ -52,3 +52,11 @@ Build status page showing system health.
 - **アクセシビリティ/フィードバック**
   - Semantics/Focus order/コントラスト比の遵守
   - Snackbar：通信失敗/成功時の非モーダル通知
+
+## UI Components
+- **Layout:** `StatusLayout` with `StatusHeader` showing overall indicator and last updated timestamp.
+- **Current status:** `StatusBanner` summarizing platform state with `StatusBadge` per service.
+- **Component grid:** `ComponentList` cards listing uptime, MTTR, incident count.
+- **Incident timeline:** `IncidentTimeline` accordion with collapsible incident entries.
+- **Subscription panel:** `SubscriptionCard` with email/webhook/RSS options.
+- **Support links:** `SupportFooter` referencing runbooks, contact info.

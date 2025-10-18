@@ -11,3 +11,11 @@ Manage shipment batch creation and label generation.
 2. Provide selection and action to call `POST /admin/orders/{id}/shipments` (per order or batch aggregated endpoint).
 3. Display label generation status and download links; allow retry on failure.
 4. Integrate with carrier options (service level, package details).
+
+## UI Components
+- **Page shell:** `AdminLayout` + `PageHeader` including outstanding batches KPI chips.
+- **Batch filters:** `FilterToolbar` (carrier `Select`, facility `Combobox`, status `ChipGroup`, date `RangePicker`).
+- **Batch table:** `DataTable` with expandable rows showing manifest counts, label status, and action `ButtonGroup`.
+- **Progress drawer:** `DetailDrawer` showing job timeline, assigned operator, print history.
+- **Toolbar actions:** Primary `FilledButton` for Create batch, secondary `GhostButton` for bulk label regenerate.
+- **Per-row metrics:** Inline `ProgressBar` and SLA `Badge` components in table cells.

@@ -10,3 +10,11 @@ Provide comprehensive customer profile view.
 1. Tabs for overview, orders, addresses, payment methods, notes.
 2. Display summary metrics and quick actions (send email, create order).
 3. Use htmx fragments for each tab to load data lazily.
+
+## UI Components
+- **Page shell:** `AdminLayout` + breadcrumbs (Customers > {Name}).
+- **Profile header:** `SummaryCard` with avatar, contact info, account status `Badge`, quick action `ButtonGroup`.
+- **Key metrics:** `KPIGrid` (orders, revenue, returns, support tickets).
+- **Tabs:** `UnderlineTabs` for Overview, Orders, Addresses, Payments, Notes, Activity.
+- **Detail sections:** `DetailCard` clusters containing `DataTable` for orders, `TimelineList` for interactions, `FormCard` for notes.
+- **Support drawer:** Right `InfoRail` showing escalations, fraud checks, identity docs.

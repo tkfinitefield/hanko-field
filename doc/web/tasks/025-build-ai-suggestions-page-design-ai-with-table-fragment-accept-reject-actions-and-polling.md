@@ -11,3 +11,11 @@ Implement AI suggestions gallery.
 2. Use fragment `/design/ai/table` to poll for new suggestions.
 3. Provide accept/reject buttons posting to API; refresh preview on accept.
 4. Handle error states and show queue status.
+
+## UI Components
+- **Layout:** `SiteLayout` with `SectionHeader` summarizing AI queue and poll toggle.
+- **Status filters:** `FilterToolbar` hosting status `SegmentedControl`, persona `Select`, sort `Dropdown`.
+- **Suggestion table:** `SuggestionTable` (htmx fragment) listing prompt summary, preview thumbnail, score, actions.
+- **Preview drawer:** `SuggestionPreview` sliding panel with diff view and accept/reject `ButtonGroup`.
+- **Polling indicator:** `InlineNotice` showing next refresh countdown.
+- **Analytics strip:** `StatsBar` summarizing adoption and success metrics.
