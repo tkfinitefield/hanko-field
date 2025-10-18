@@ -46,5 +46,10 @@
 - htmx
 - Tailwind CSS
 
+## アプリ(app)
+- Flutter
+- Riverpod 3.0
+- MVVM + feature-first architecture
+
 ## タスクについて
 - タスクが終了したらチェックを入れること。
