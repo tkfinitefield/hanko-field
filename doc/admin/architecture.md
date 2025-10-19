@@ -36,6 +36,7 @@ r.Route("/admin", func(r chi.Router) {
 })
 ```
 
+- Base path is configurable via the `ADMIN_BASE_PATH` environment variable (defaults to `/admin`).
 - **Full pages**: `GET /admin/...` returning complete HTML with `<html>` wrapper.
 - **Fragments**: `GET /admin/.../table`, `/modal/...`, `/fragment/...` returning partial HTML (no `<html>`). Handlers live alongside page handlers with `...Fragment` suffix.
 - **Mutations**: `POST/PUT/DELETE` endpoints return either JSON (for `hx-request` expecting JSON) or HTML partial on success when a UI region must update.

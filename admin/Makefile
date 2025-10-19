@@ -29,6 +29,7 @@ else
   $(error Unsupported architecture $(UNAME_M). Please install Tailwind manually.)
 endif
 
+TAILWIND_TARGET := $(BIN_DIR)/tailwindcss-v$(TAILWIND_VERSION)
 TAILWIND_BIN := $(BIN_DIR)/tailwindcss
 TAILWIND_URL := https://github.com/tailwindlabs/tailwindcss/releases/download/v$(TAILWIND_VERSION)/tailwindcss-$(TAILWIND_OS)-$(TAILWIND_ARCH)
 
@@ -67,13 +68,23 @@ lint: ## Run gofmt and go vet
 	@GOCACHE=$(GOCACHE) go vet ./...
 
 .PHONY: ensure-tailwind
-ensure-tailwind: ## Download Tailwind standalone binary if missing
+ensure-tailwind: ## Download Tailwind standalone binary if required version missing
 	@mkdir -p $(BIN_DIR)
-	@if [ ! -x $(TAILWIND_BIN) ]; then \
-		echo "Downloading tailwindcss $(TAILWIND_VERSION) ($(TAILWIND_OS)-$(TAILWIND_ARCH))..."; \
-		curl -sSL -o $(TAILWIND_BIN) $(TAILWIND_URL); \
-		chmod +x $(TAILWIND_BIN); \
-	fi
+	@REQUIRED="v$(TAILWIND_VERSION)"; \
+	CURRENT=""; \
+	if [ -x $(TAILWIND_BIN) ]; then \
+		CURRENT=$$($(TAILWIND_BIN) --version 2>/dev/null | awk '{print $$2}'); \
+	fi; \
+	if [ "$$CURRENT" != "$$REQUIRED" ]; then \
+		rm -f $(TAILWIND_BIN); \
+	fi; \
+	if [ ! -f $(TAILWIND_TARGET) ]; then \
+		echo "Downloading tailwindcss $$REQUIRED ($(TAILWIND_OS)-$(TAILWIND_ARCH))..."; \
+		curl -sSL -o $(TAILWIND_TARGET) $(TAILWIND_URL); \
+		chmod +x $(TAILWIND_TARGET); \
+	fi; \
+	ln -sf $$(basename $(TAILWIND_TARGET)) $(TAILWIND_BIN); \
+	$(TAILWIND_BIN) --version >/dev/null
 
 .PHONY: clean
 clean: ## Remove build artifacts

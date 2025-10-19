@@ -3,6 +3,7 @@ package httpserver
 import (
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -13,7 +14,8 @@ import (
 )
 
 type Config struct {
-	Address string
+	Address  string
+	BasePath string
 }
 
 func New(cfg Config) *http.Server {
@@ -30,7 +32,8 @@ func New(cfg Config) *http.Server {
 	}
 	router.Handle("/public/static/*", http.StripPrefix("/public/static/", http.FileServer(http.FS(staticContent))))
 
-	router.Get("/admin", ui.DashboardHandler)
+	basePath := normalizeBasePath(cfg.BasePath)
+	mountAdminRoutes(router, basePath)
 
 	return &http.Server{
 		Addr:         cfg.Address,
@@ -39,4 +42,35 @@ func New(cfg Config) *http.Server {
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
+}
+
+func normalizeBasePath(path string) string {
+	p := strings.TrimSpace(path)
+	if p == "" {
+		return "/admin"
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	if len(p) > 1 && strings.HasSuffix(p, "/") {
+		p = strings.TrimRight(p, "/")
+	}
+	if p == "" {
+		return "/"
+	}
+	return p
+}
+
+func mountAdminRoutes(router chi.Router, base string) {
+	if base == "/" {
+		router.Get("/", ui.DashboardHandler)
+		return
+	}
+
+	router.Get(base, ui.DashboardHandler)
+
+	router.Route(base, func(r chi.Router) {
+		r.Get("/", ui.DashboardHandler)
+		// Future admin routes will be registered here.
+	})
 }

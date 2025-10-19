@@ -14,7 +14,8 @@ import (
 
 func main() {
 	cfg := httpserver.Config{
-		Address: getEnv("ADMIN_HTTP_ADDR", ":8080"),
+		Address:  getEnv("ADMIN_HTTP_ADDR", ":8080"),
+		BasePath: getEnv("ADMIN_BASE_PATH", "/admin"),
 	}
 
 	srv := httpserver.New(cfg)
@@ -28,7 +29,7 @@ func main() {
 		}
 	}()
 
-	log.Printf("admin server listening on %s", cfg.Address)
+	log.Printf("admin server listening on %s (base path %s)", cfg.Address, cfg.BasePath)
 
 	<-ctx.Done()
 
@@ -37,6 +38,9 @@ func main() {
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("graceful shutdown failed: %v", err)
+		cancel()
+		stop()
+		os.Exit(1)
 	}
 }
 
@@ -46,4 +50,3 @@ func getEnv(key, fallback string) string {
 	}
 	return fallback
 }
-

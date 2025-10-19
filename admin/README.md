@@ -27,6 +27,15 @@ make ensure-tailwind   # downloads tailwindcss standalone binary
 
 `air` watches `*.go` and `*.templ` files (configured via `.air.toml`). Tailwind scans the paths listed in `tailwind.config.js`.
 
+## Configuration
+
+Environment variables:
+
+- `ADMIN_HTTP_ADDR` – bind address (default `:8080`)
+- `ADMIN_BASE_PATH` – mount point for the admin UI (default `/admin`)
+
+Run `make ensure-tailwind` after changing `TAILWIND_VERSION` in the `Makefile`; the rule verifies the installed binary matches the requested version and re-downloads if needed.
+
 ## Layout
 
 - `cmd/admin` – entrypoint.

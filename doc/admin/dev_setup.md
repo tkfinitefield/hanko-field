@@ -18,6 +18,8 @@ make ensure-tailwind
 
 This downloads the Tailwind standalone executable into `admin/bin/`.
 
+`make ensure-tailwind` is idempotent and re-downloads the binary when `TAILWIND_VERSION` changes.
+
 ## Common Tasks
 
 - `make dev` – runs `templ` generation, `go mod tidy`, starts Tailwind watcher, then launches `air`.
@@ -27,6 +29,11 @@ This downloads the Tailwind standalone executable into `admin/bin/`.
 - `make lint` – `gofmt` and `go vet`.
 
 Go build cache is redirected to `.gocache` to remain within the repo sandbox. Static assets are embedded from `public/static`.
+
+## Configuration
+
+- `ADMIN_HTTP_ADDR` (default `:8080`) controls the listen address.
+- `ADMIN_BASE_PATH` (default `/admin`) sets the mount point for all admin routes.
 
 ## Notes
 
