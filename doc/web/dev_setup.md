@@ -1,28 +1,17 @@
 # Web Dev Setup
 
-This guide sets up the Go web module with chi router, html/template rendering, TailwindCSS pipeline, and dev tooling.
+This guide sets up the Go web module with chi router, html/template rendering, Tailwind (CDN), and dev tooling.
 
 ## Prerequisites
 - Go 1.23+
-- Node.js 18+ and npm
 - Optional: Air for hot reload (`go install github.com/cosmtrek/air@latest`)
 
-## First-time setup
-```bash
-cd web
-npm install
-```
+No Node.js/npm is required. TailwindCSS and htmx are loaded via CDN.
 
 ## Running the dev server
 Two terminals recommended: one for CSS watch, one for the Go server.
 
-Terminal A (CSS + assets):
-```bash
-cd web
-npm run dev:css  # copies htmx and watches Tailwind
-```
-
-Terminal B (Go server):
+Terminal (Go server):
 ```bash
 cd web
 make dev        # uses air if available; else falls back to go run
@@ -39,8 +28,6 @@ Environment variables:
 ## Useful commands
 ```bash
 cd web
-make css        # one-shot Tailwind build to public/assets/app.css
-make css-watch  # watch mode (same as npm run dev:css)
 make build      # build Go binary to web/bin
 make test       # run Go tests
 make tidy       # go mod tidy
@@ -51,9 +38,8 @@ make tidy       # go mod tidy
 - `web/templates`: layouts, pages, partials for html/template
 - `web/public/assets`: output CSS/JS (served at `/assets/...`)
 - `web/assets/css/input.css`: Tailwind source
-- `web/tailwind.config.js`, `web/postcss.config.js`: pipeline configs
+- TailwindCSS is included via `<script src="https://cdn.tailwindcss.com"></script>` in the base layout.
 
 ## Notes
 - htmx is provided via npm (`htmx.org`) and copied to `public/assets/js/htmx.min.js` by `npm run assets:copy`.
 - This scaffold uses `html/template`. If/when migrating to `templ`, maintain the same directory structure and route organization.
-

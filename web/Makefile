@@ -3,7 +3,7 @@ BIN_DIR := $(CURDIR)/bin
 MAIN_PKG := ./cmd/web
 BINARY := $(BIN_DIR)/hanko-web
 
-.PHONY: run dev build fmt test tidy deps css css-watch assets
+.PHONY: run dev build fmt test tidy
 
 run:
 	DEV=1 $(GO) run $(MAIN_PKG)
@@ -24,18 +24,4 @@ test:
 tidy:
 	$(GO) mod tidy
 
-deps:
-	@echo "Install frontend deps (Node required): npm install"
-	@npm install
-
-css:
-	@npm run build
-
-css-watch:
-	@npm run dev:css
-
-assets:
-	@npm run assets:copy
-
 .DEFAULT_GOAL := build
-

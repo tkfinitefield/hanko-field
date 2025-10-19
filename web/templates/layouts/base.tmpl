@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ template "title" . }}</title>
     {{ template "head" . }}
-    <link rel="stylesheet" href="/assets/app.css">
+    <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="min-h-screen bg-gray-50 text-gray-900">
     <header class="border-b bg-white">
@@ -28,7 +28,7 @@
         © <span>{{ now.Format "2006" }}</span> Finite Field
       </div>
     </footer>
-    <script src="/assets/js/htmx.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.3/dist/htmx.min.js"></script>
   </body>
 </html>
 {{ end }}
