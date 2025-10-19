@@ -4,7 +4,7 @@
 - [x] [Confirm admin console scope, personas (ops, CS, marketing), and rollout priorities based on `doc/admin/admin_design.md`.](doc/admin/tasks/001-confirm-admin-console-scope-personas-ops-cs-marketing-and-rollout-priorities-based-on-doc-.md)
 - [x] [Define UI architecture (Go server-side rendering + htmx partials) and routing conventions for full pages vs fragment endpoints.](doc/admin/tasks/002-define-ui-architecture-go-server-side-rendering-htmx-partials-and-routing-conventions-for-.md)
 - [x] [Model navigation taxonomy and RBAC visibility rules; document mapping between sidebar groups and user roles.](doc/admin/tasks/003-model-navigation-taxonomy-and-rbac-visibility-rules-document-mapping-between-sidebar-group.md)
-- [ ] [Produce data contract checklist mapping every admin action to the corresponding API endpoint and required request/response fields.](doc/admin/tasks/004-produce-data-contract-checklist-mapping-every-admin-action-to-the-corresponding-api-endpoi.md)
+- [x] [Produce data contract checklist mapping every admin action to the corresponding API endpoint and required request/response fields.](doc/admin/tasks/004-produce-data-contract-checklist-mapping-every-admin-action-to-the-corresponding-api-endpoi.md)
 
 ## 1. Project & Infrastructure Setup
 - [ ] [Scaffold Go web module (`/admin` or `/web`) with templating pipeline, asset bundler (Tailwind), and dev tooling (hot reload, lint).](doc/admin/tasks/005-scaffold-go-web-module-admin-or-web-with-templating-pipeline-asset-bundler-tailwind-and-de.md)
