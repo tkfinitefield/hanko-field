@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -128,10 +129,12 @@ func (h *MeHandlers) updateProfile(w http.ResponseWriter, r *http.Request) {
 		cmd.Locale = updateReq.locale
 	}
 	if updateReq.hasNotificationPrefs {
+		cmd.NotificationPrefsSet = true
 		cmd.NotificationPrefs = cloneNotificationPrefs(updateReq.notificationPrefs)
 	}
 	if updateReq.hasAvatarAssetID {
-		cmd.AvatarAssetID = updateReq.avatarAssetID
+		cmd.AvatarAssetIDSet = true
+		cmd.AvatarAssetID = cloneStringPointer(updateReq.avatarAssetID)
 	}
 	if updateReq.expectedSync != nil {
 		cmd.ExpectedSyncTime = updateReq.expectedSync
@@ -277,7 +280,7 @@ func parseUpdateProfileRequest(data []byte) (updateProfileRequest, error) {
 			req.hasNotificationPrefs = true
 			updateFields++
 			if isJSONNull(value) {
-				req.notificationPrefs = map[string]bool{}
+				req.notificationPrefs = nil
 				continue
 			}
 			var prefs map[string]bool
@@ -292,8 +295,7 @@ func parseUpdateProfileRequest(data []byte) (updateProfileRequest, error) {
 			req.hasAvatarAssetID = true
 			updateFields++
 			if isJSONNull(value) {
-				empty := ""
-				req.avatarAssetID = &empty
+				req.avatarAssetID = nil
 				continue
 			}
 			var asset string
@@ -353,12 +355,18 @@ func buildProfilePayload(profile services.UserProfile, identity *auth.Identity, 
 
 	preferredLanguage := strings.TrimSpace(profile.PreferredLanguage)
 
-	roles := cloneStringSlice(profile.Roles)
+	roles := slices.Clone(profile.Roles)
 	if len(roles) == 0 && identity != nil {
-		roles = cloneStringSlice(identity.Roles)
+		roles = slices.Clone(identity.Roles)
+	}
+	if len(roles) == 0 {
+		roles = []string{}
 	}
 
 	notificationPrefs := cloneNotificationPrefs(profile.NotificationPrefs)
+	if notificationPrefs == nil {
+		notificationPrefs = map[string]bool{}
+	}
 	providers := providerPayloads(profile.ProviderData)
 	if len(providers) == 0 && record != nil {
 		providers = providerPayloads(providersFromRecord(record))
@@ -370,6 +378,11 @@ func buildProfilePayload(profile services.UserProfile, identity *auth.Identity, 
 	}
 
 	hasPassword := deriveHasPassword(profile.ProviderData, record)
+
+	onboardedAt := formatTime(profile.CreatedAt)
+	if meta := userCreationTime(record); !meta.IsZero() {
+		onboardedAt = formatTime(meta)
+	}
 
 	return meProfilePayload{
 		ID:                strings.TrimSpace(profile.ID),
@@ -388,7 +401,7 @@ func buildProfilePayload(profile services.UserProfile, identity *auth.Identity, 
 		ProviderData:      providers,
 		CreatedAt:         formatTime(profile.CreatedAt),
 		UpdatedAt:         formatTime(profile.UpdatedAt),
-		OnboardedAt:       formatTime(profile.CreatedAt),
+		OnboardedAt:       onboardedAt,
 		PiiMaskedAt:       formatTime(pointerTime(profile.PiiMaskedAt)),
 		LastSyncTime:      formatTime(profile.LastSyncTime),
 	}
@@ -412,6 +425,17 @@ func deriveHasPassword(providers []domain.AuthProvider, record *firebaseauth.Use
 		}
 	}
 	return false
+}
+
+func userCreationTime(record *firebaseauth.UserRecord) time.Time {
+	if record == nil || record.UserMetadata == nil {
+		return time.Time{}
+	}
+	timestamp := record.UserMetadata.CreationTimestamp
+	if timestamp <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(timestamp).UTC()
 }
 
 func providerPayloads(providers []domain.AuthProvider) []providerPayload {
@@ -472,6 +496,9 @@ func providersFromRecord(record *firebaseauth.UserRecord) []domain.AuthProvider 
 }
 
 func cloneNotificationPrefs(prefs map[string]bool) map[string]bool {
+	if prefs == nil {
+		return nil
+	}
 	if len(prefs) == 0 {
 		return map[string]bool{}
 	}
@@ -480,15 +507,6 @@ func cloneNotificationPrefs(prefs map[string]bool) map[string]bool {
 		cloned[key] = value
 	}
 	return cloned
-}
-
-func cloneStringSlice(values []string) []string {
-	if len(values) == 0 {
-		return []string{}
-	}
-	out := make([]string, len(values))
-	copy(out, values)
-	return out
 }
 
 func pointerTime(t *time.Time) time.Time {
@@ -509,6 +527,14 @@ func writeJSONResponse(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func cloneStringPointer(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }
 
 func writeUserProfileError(ctx context.Context, w http.ResponseWriter, err error) {

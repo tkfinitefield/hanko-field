@@ -349,7 +349,7 @@ func (s *userService) applyProfileUpdates(existing domain.UserProfile, cmd Updat
 		}
 	}
 
-	if cmd.NotificationPrefs != nil {
+	if cmd.NotificationPrefs != nil || cmd.NotificationPrefsSet {
 		prefs, err := normaliseNotificationPrefs(cmd.NotificationPrefs)
 		if err != nil {
 			return domain.UserProfile{}, nil, err
@@ -360,8 +360,11 @@ func (s *userService) applyProfileUpdates(existing domain.UserProfile, cmd Updat
 		}
 	}
 
-	if cmd.AvatarAssetID != nil {
-		trimmed := strings.TrimSpace(*cmd.AvatarAssetID)
+	if cmd.AvatarAssetID != nil || cmd.AvatarAssetIDSet {
+		trimmed := ""
+		if cmd.AvatarAssetID != nil {
+			trimmed = strings.TrimSpace(*cmd.AvatarAssetID)
+		}
 		var newValue *string
 		if trimmed != "" {
 			value := trimmed

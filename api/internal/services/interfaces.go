@@ -521,14 +521,16 @@ type PromotionUsageFilter struct {
 }
 
 type UpdateProfileCommand struct {
-	UserID            string
-	ActorID           string
-	DisplayName       *string
-	PreferredLanguage *string
-	Locale            *string
-	NotificationPrefs map[string]bool
-	AvatarAssetID     *string
-	ExpectedSyncTime  *time.Time
+	UserID               string
+	ActorID              string
+	DisplayName          *string
+	PreferredLanguage    *string
+	Locale               *string
+	NotificationPrefs    map[string]bool
+	NotificationPrefsSet bool
+	AvatarAssetID        *string
+	AvatarAssetIDSet     bool
+	ExpectedSyncTime     *time.Time
 }
 
 type MaskProfileCommand struct {

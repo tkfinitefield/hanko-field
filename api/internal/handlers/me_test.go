@@ -207,8 +207,14 @@ func TestMeHandlersUpdateProfile(t *testing.T) {
 	if captured.NotificationPrefs == nil || captured.NotificationPrefs["marketing.email"] != true {
 		t.Fatalf("expected notification prefs with marketing.email true, got %#v", captured.NotificationPrefs)
 	}
+	if !captured.NotificationPrefsSet {
+		t.Fatalf("expected notification prefs flag set")
+	}
 	if captured.AvatarAssetID == nil {
 		t.Fatalf("expected avatar asset id pointer")
+	}
+	if !captured.AvatarAssetIDSet {
+		t.Fatalf("expected avatar asset id flag set")
 	}
 	if captured.ExpectedSyncTime == nil || !captured.ExpectedSyncTime.Equal(lastSync) {
 		t.Fatalf("expected expected sync time %s, got %v", lastSync, captured.ExpectedSyncTime)
@@ -316,11 +322,17 @@ func TestMeHandlersUpdateProfileClearsAvatar(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rr.Code)
 	}
 
-	if captured.AvatarAssetID == nil || strings.TrimSpace(*captured.AvatarAssetID) != "" {
-		t.Fatalf("expected avatar asset id pointer with empty value, got %v", captured.AvatarAssetID)
+	if !captured.AvatarAssetIDSet {
+		t.Fatalf("expected avatar asset id flag set")
 	}
-	if captured.NotificationPrefs == nil || len(captured.NotificationPrefs) != 0 {
-		t.Fatalf("expected notification prefs empty map, got %#v", captured.NotificationPrefs)
+	if captured.AvatarAssetID != nil {
+		t.Fatalf("expected avatar asset id cleared, got %v", captured.AvatarAssetID)
+	}
+	if !captured.NotificationPrefsSet {
+		t.Fatalf("expected notification prefs flag set")
+	}
+	if captured.NotificationPrefs != nil {
+		t.Fatalf("expected notification prefs cleared, got %#v", captured.NotificationPrefs)
 	}
 
 	var resp meResponse
