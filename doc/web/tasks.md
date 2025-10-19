@@ -5,7 +5,7 @@
 - [x] [Define Go + htmx architecture (router layout, template structure, partials naming) and directory conventions.](doc/web/tasks/002-define-go-htmx-architecture-router-layout-template-structure-partials-naming-and-directory.md)
 - [x] [Establish shared components and Tailwind design tokens; document CSS/JS guidelines.](doc/web/tasks/003-establish-shared-components-and-tailwind-design-tokens-document-css-js-guidelines.md)
 - [x] [Map full site navigation (public, design creation, checkout, account) with routes, breadcrumbs, and SEO considerations.](doc/web/tasks/004-map-full-site-navigation-public-design-creation-checkout-account-with-routes-breadcrumbs-a.md)
-- [ ] [Produce integration checklist aligning web fragments with API endpoints and payload requirements.](doc/web/tasks/005-produce-integration-checklist-aligning-web-fragments-with-api-endpoints-and-payload-requir.md)
+- [x] [Produce integration checklist aligning web fragments with API endpoints and payload requirements.](doc/web/tasks/005-produce-integration-checklist-aligning-web-fragments-with-api-endpoints-and-payload-requir.md)
 
 ## 1. Project Setup & Tooling
 - [ ] [Scaffold Go web module with chi router, template engine, Tailwind asset pipeline, and dev tooling.](doc/web/tasks/006-scaffold-go-web-module-with-chi-echo-router-template-engine-asset-pipeline-tailwind-alpine.md)
