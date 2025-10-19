@@ -1,0 +1,5 @@
+.gocache/
+bin/
+tmp/
+public/static/app.*.css
+public/static/app.*.js

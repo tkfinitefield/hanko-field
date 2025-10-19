@@ -1,0 +1,16 @@
+# Config for air live reload
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/admin ./cmd/admin"
+bin = "./tmp/admin"
+exclude_dir = ["tmp", ".gocache", "node_modules", "public/static"]
+include_ext = ["go", "templ"]
+delay = 1000
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true

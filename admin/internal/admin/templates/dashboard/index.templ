@@ -1,0 +1,14 @@
+package dashboard
+
+import "finitefield.org/hanko-admin/internal/admin/templates/layouts"
+
+templ dashboardBody() {
+	<main class="mx-auto max-w-5xl px-6 py-8">
+		<h1 class="text-2xl font-semibold text-slate-900">Admin Dashboard</h1>
+		<p class="mt-2 text-slate-600">Scaffold is ready. Replace this view with real KPI fragments.</p>
+	</main>
+}
+
+templ Index() {
+	@layouts.Base("ダッシュボード", dashboardBody())
+}

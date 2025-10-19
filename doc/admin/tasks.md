@@ -7,7 +7,7 @@
 - [x] [Produce data contract checklist mapping every admin action to the corresponding API endpoint and required request/response fields.](doc/admin/tasks/004-produce-data-contract-checklist-mapping-every-admin-action-to-the-corresponding-api-endpoi.md)
 
 ## 1. Project & Infrastructure Setup
-- [ ] [Scaffold Go web module (`/admin` or `/web`) with templating pipeline, asset bundler (Tailwind), and dev tooling (hot reload, lint).](doc/admin/tasks/005-scaffold-go-web-module-admin-or-web-with-templating-pipeline-asset-bundler-tailwind-and-de.md)
+- [x] [Scaffold Go web module (`/admin` or `/web`) with templating pipeline, asset bundler (Tailwind), and dev tooling (hot reload, lint).](doc/admin/tasks/005-scaffold-go-web-module-admin-or-web-with-templating-pipeline-asset-bundler-tailwind-and-de.md)
 - [ ] [Configure chi/echo router with middleware for auth, CSRF, caching headers, and htmx request detection.](doc/admin/tasks/006-configure-chi-echo-router-with-middleware-for-auth-csrf-caching-headers-and-htmx-request-d.md)
 - [ ] [Establish HTML template structure (`layouts`, `partials`, `components`) and helper functions (i18n, currency, date formatting).](doc/admin/tasks/007-establish-html-template-structure-layouts-partials-components-and-helper-functions-i18n-cu.md)
 - [ ] [Implement Tailwind configuration, design tokens, and base components library (buttons, tables, forms, modals, toasts).](doc/admin/tasks/008-implement-tailwind-configuration-design-tokens-and-base-components-library-buttons-tables-.md)

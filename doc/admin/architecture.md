@@ -9,7 +9,7 @@ The admin console renders primarily on the server with Go + `templ` templates, u
 - **Router**: [`chi`](https://github.com/go-chi/chi) for lightweight middleware, context support, and nested routing that matches the admin IA.
 - **Templates**: [`templ`](https://templ.guide/) compiled templates grouped by feature area, with shared layouts and component partials.
 - **Partial Updates**: `htmx` drives incremental UX (filters, modals, D&D) without SPA overhead; handlers return HTML fragments matching the `hx-target`.
-- **Assets**: Tailwind built through a Node toolchain (`tailwindcss-cli` + PostCSS). Generated CSS is fingerprinted and served from `/public/static/`. Optional Alpine.js is bundled for micro-interactions when `htmx` alone is insufficient.
+- **Assets**: Tailwind compiled with the standalone Tailwind CLI (no Node runtime) invoked via Make targets. Generated CSS is served from `/public/static/`. Optional Alpine.js (or similar) can ship as additional static files.
 - **State**: Server remains source of truth; client-side state limited to transient UI (modal toggles, D&D). Persistent selections captured via form submission.
 
 ## Routing & Naming Conventions
@@ -101,11 +101,11 @@ func TableFragment(w http.ResponseWriter, r *http.Request) error {
 
 ## Asset Pipeline
 
-1. Tailwind source lives under `web/assets/tailwind.css`.
-2. `npm run tailwind:build` generates `public/static/app.<hash>.css`.
-3. Go embeds fingerprinted assets via `embed.FS` or serves from disk in dev.
-4. `templ` layout references the hashed asset through helper `assets.Stylesheet("app")`.
-5. JavaScript enhancements (Alpine.js) bundled similarly (`app.<hash>.js`).
+1. Tailwind source lives under `admin/web/styles/tailwind.css`.
+2. `make css` (or `make dev`) runs the standalone Tailwind binary to emit `public/static/app.css` (hashed filenames can be added later by the build).
+3. Go embeds generated assets via `embed.FS` or serves from disk in dev.
+4. Layout components link to `/public/static/app.css`; helper wrappers can evolve once fingerprinting is introduced.
+5. JavaScript enhancements (e.g., Alpine.js) can ship as additional files in `public/static` built via separate scripts.
 
 ## Request Flow
 
@@ -139,4 +139,3 @@ sequenceDiagram
 
 - Create scaffolding generators (`cmd/adminctl`) to bootstrap new feature modules with routes, handlers, templates, tests.
 - Establish lint CI to ensure fragment handlers avoid emitting `<html>` wrapper.
-
