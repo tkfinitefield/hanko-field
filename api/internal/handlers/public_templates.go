@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -35,6 +37,7 @@ const (
 	fontCacheControl          = "public, max-age=300"
 	materialCacheControl      = "public, max-age=900"
 	productCacheControl       = "public, max-age=300"
+	promotionCacheControl     = "public, max-age=120"
 	defaultMaterialLocale     = "ja"
 	defaultGuidePageSize      = 20
 	maxGuidePageSize          = 60
@@ -71,9 +74,11 @@ func (fn AssetURLResolverFunc) ResolveURL(ctx context.Context, path string) (str
 type PublicHandlers struct {
 	catalog          services.CatalogService
 	content          services.ContentService
+	promotions       services.PromotionService
 	previewResolver  AssetURLResolver
 	vectorResolver   AssetURLResolver
 	priceDisplayMode string
+	promotionLimiter rateLimiter
 }
 
 // PublicOption customises construction of PublicHandlers.
@@ -90,6 +95,13 @@ func WithPublicCatalogService(svc services.CatalogService) PublicOption {
 func WithPublicContentService(svc services.ContentService) PublicOption {
 	return func(h *PublicHandlers) {
 		h.content = svc
+	}
+}
+
+// WithPublicPromotionService injects the promotion service dependency.
+func WithPublicPromotionService(svc services.PromotionService) PublicOption {
+	return func(h *PublicHandlers) {
+		h.promotions = svc
 	}
 }
 
@@ -117,6 +129,20 @@ func WithPublicPriceDisplayMode(mode string) PublicOption {
 	}
 }
 
+// WithPublicPromotionRateLimit adjusts the rate limiter applied to public promotion lookups.
+func WithPublicPromotionRateLimit(limit int, window time.Duration) PublicOption {
+	return func(h *PublicHandlers) {
+		if h == nil {
+			return
+		}
+		if limit <= 0 || window <= 0 {
+			h.promotionLimiter = nil
+			return
+		}
+		h.promotionLimiter = newSimpleRateLimiter(limit, window, nil)
+	}
+}
+
 // NewPublicHandlers constructs handlers for public catalog endpoints.
 func NewPublicHandlers(opts ...PublicOption) *PublicHandlers {
 	handler := &PublicHandlers{
@@ -127,6 +153,7 @@ func NewPublicHandlers(opts ...PublicOption) *PublicHandlers {
 			return path, nil
 		}),
 		priceDisplayMode: priceDisplayModeInclusive,
+		promotionLimiter: newSimpleRateLimiter(30, time.Minute, nil),
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -149,6 +176,7 @@ func (h *PublicHandlers) Routes(r chi.Router) {
 	r.Get("/materials/{materialID}", h.getMaterial)
 	r.Get("/products", h.listProducts)
 	r.Get("/products/{productID}", h.getProduct)
+	r.Get("/promotions/{code}/public", h.getPublicPromotion)
 	r.Get("/content/pages/{slug}", h.getPage)
 	r.Get("/content/guides", h.listGuides)
 	r.Get("/content/guides/{slug}", h.getGuide)
@@ -541,6 +569,52 @@ func (h *PublicHandlers) getProduct(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cache-Control", productCacheControl)
 	writeJSON(w, http.StatusOK, payload)
+}
+
+func (h *PublicHandlers) getPublicPromotion(w http.ResponseWriter, r *http.Request) {
+	if h != nil && h.promotionLimiter != nil {
+		key := clientIP(r)
+		if key == "" {
+			key = "anonymous"
+		}
+		if !h.promotionLimiter.Allow(key) {
+			httpx.WriteError(r.Context(), w, httpx.NewError("rate_limited", "too many promotion lookups, slow down", http.StatusTooManyRequests))
+			return
+		}
+	}
+
+	if h == nil || h.promotions == nil {
+		httpx.WriteError(r.Context(), w, httpx.NewError("promotions_unavailable", "promotion service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	code := strings.ToUpper(strings.TrimSpace(chi.URLParam(r, "code")))
+	if code == "" {
+		httpx.WriteError(r.Context(), w, httpx.NewError("invalid_promotion_code", "promotion code is required", http.StatusBadRequest))
+		return
+	}
+
+	promo, err := h.promotions.GetPublicPromotion(r.Context(), code)
+	if err != nil {
+		writePromotionError(r.Context(), w, err)
+		return
+	}
+
+	response := promotionPublicResponse{
+		Code:              promo.Code,
+		IsAvailable:       promo.IsAvailable,
+		Description:       strings.TrimSpace(promo.DescriptionPublic),
+		EligibleAudiences: copyStringSlice(promo.EligibleAudiences),
+	}
+	if ts := formatTimestamp(promo.StartsAt); ts != "" {
+		response.StartsAt = ts
+	}
+	if ts := formatTimestamp(promo.EndsAt); ts != "" {
+		response.EndsAt = ts
+	}
+
+	w.Header().Set("Cache-Control", promotionCacheControl)
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (h *PublicHandlers) getPage(w http.ResponseWriter, r *http.Request) {
@@ -1224,6 +1298,41 @@ func writeContentError(ctx context.Context, w http.ResponseWriter, err error, re
 	httpx.WriteError(ctx, w, httpx.NewError("content_error", err.Error(), http.StatusInternalServerError))
 }
 
+func writePromotionError(ctx context.Context, w http.ResponseWriter, err error) {
+	if err == nil {
+		return
+	}
+
+	switch {
+	case errors.Is(err, services.ErrPromotionRepositoryMissing):
+		httpx.WriteError(ctx, w, httpx.NewError("promotions_unavailable", "promotion service is unavailable", http.StatusServiceUnavailable))
+		return
+	case errors.Is(err, services.ErrPromotionInvalidCode):
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_promotion_code", "promotion code is invalid", http.StatusBadRequest))
+		return
+	case errors.Is(err, services.ErrPromotionNotFound), errors.Is(err, services.ErrPromotionUnavailable):
+		httpx.WriteError(ctx, w, httpx.NewError("promotion_not_found", "promotion not found", http.StatusNotFound))
+		return
+	}
+
+	var repoErr repositories.RepositoryError
+	if errors.As(err, &repoErr) {
+		switch {
+		case repoErr.IsNotFound():
+			httpx.WriteError(ctx, w, httpx.NewError("promotion_not_found", "promotion not found", http.StatusNotFound))
+			return
+		case repoErr.IsUnavailable():
+			httpx.WriteError(ctx, w, httpx.NewError("promotions_unavailable", "promotion repository unavailable", http.StatusServiceUnavailable))
+			return
+		default:
+			httpx.WriteError(ctx, w, httpx.NewError("promotion_error", err.Error(), http.StatusInternalServerError))
+			return
+		}
+	}
+
+	httpx.WriteError(ctx, w, httpx.NewError("promotion_error", err.Error(), http.StatusInternalServerError))
+}
+
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -1339,6 +1448,15 @@ type productPayload struct {
 type productDetailPayload struct {
 	productPayload
 	PriceTiers []productPriceTierPayload `json:"price_tiers,omitempty"`
+}
+
+type promotionPublicResponse struct {
+	Code              string   `json:"code"`
+	IsAvailable       bool     `json:"isAvailable"`
+	StartsAt          string   `json:"startsAt,omitempty"`
+	EndsAt            string   `json:"endsAt,omitempty"`
+	Description       string   `json:"descriptionPublic,omitempty"`
+	EligibleAudiences []string `json:"eligibleAudiences,omitempty"`
 }
 
 type guideListResponse struct {
@@ -1566,6 +1684,29 @@ func computePageETag(page services.ContentPage, requestedSlug string) string {
 	return fmt.Sprintf("W/\"%x\"", hash.Sum(nil))
 }
 
+func clientIP(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if raw := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); raw != "" {
+		parts := strings.Split(raw, ",")
+		if len(parts) > 0 {
+			candidate := strings.TrimSpace(parts[0])
+			if candidate != "" {
+				return candidate
+			}
+		}
+	}
+	if raw := strings.TrimSpace(r.Header.Get("X-Real-IP")); raw != "" {
+		return raw
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil && host != "" {
+		return host
+	}
+	return strings.TrimSpace(r.RemoteAddr)
+}
+
 func guideOrderingFields(guide services.ContentGuide) (slug string, locale string, updated string, published string) {
 	slug = strings.TrimSpace(guide.Slug)
 	if slug == "" {
@@ -1635,6 +1776,76 @@ func copyIntSlice(in []int) []int {
 	out := make([]int, len(in))
 	copy(out, in)
 	return out
+}
+
+type rateLimiter interface {
+	Allow(key string) bool
+}
+
+type simpleRateLimiter struct {
+	limit  int
+	window time.Duration
+	clock  func() time.Time
+	mu     sync.Mutex
+	store  map[string]rateEntry
+}
+
+type rateEntry struct {
+	count int
+	reset time.Time
+}
+
+func newSimpleRateLimiter(limit int, window time.Duration, clock func() time.Time) rateLimiter {
+	if limit <= 0 || window <= 0 {
+		return nil
+	}
+	if clock == nil {
+		clock = time.Now
+	}
+	return &simpleRateLimiter{
+		limit:  limit,
+		window: window,
+		clock:  clock,
+		store:  make(map[string]rateEntry),
+	}
+}
+
+func (l *simpleRateLimiter) Allow(key string) bool {
+	if l == nil {
+		return true
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		key = "anonymous"
+	}
+	now := l.clock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	entry, ok := l.store[key]
+	if !ok || now.After(entry.reset) {
+		l.store[key] = rateEntry{count: 1, reset: now.Add(l.window)}
+		l.pruneExpiredLocked(now)
+		return true
+	}
+
+	if entry.count >= l.limit {
+		return false
+	}
+	entry.count++
+	l.store[key] = entry
+	return true
+}
+
+func (l *simpleRateLimiter) pruneExpiredLocked(now time.Time) {
+	if len(l.store) == 0 {
+		return
+	}
+	for key, entry := range l.store {
+		if now.After(entry.reset) {
+			delete(l.store, key)
+		}
+	}
 }
 
 func isAbsoluteURL(raw string) bool {

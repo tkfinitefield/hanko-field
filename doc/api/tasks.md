@@ -42,7 +42,7 @@
 - [x] [031 Implement products list/detail with filtering by shape/size/material and pagination.](./tasks/031-implement-products-list-detail-with-filtering-by-shape-size-material-and-paginat.md)
 - [x] [032 Implement localized guide content endpoints (`/content/guides`) with language/category query support.](./tasks/032-implement-localized-guide-content-endpoints-content-guides-with-language-categor.md)
 - [x] [033 Implement localized page content endpoint (`/content/pages/{slug}`) with language fallback.](./tasks/033-implement-localized-page-content-endpoint-content-pages-slug-with-language-fallb.md)
-- [ ] [034 Implement public promotion lookup endpoint returning exposure-safe fields only.](./tasks/034-implement-public-promotion-lookup-endpoint-returning-exposure-safe-fields-only.md)
+- [x] [034 Implement public promotion lookup endpoint returning exposure-safe fields only.](./tasks/034-implement-public-promotion-lookup-endpoint-returning-exposure-safe-fields-only.md)
 
 ## 5. Authenticated User Endpoints
 ### 5.1 Profile & Account

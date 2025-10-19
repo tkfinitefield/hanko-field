@@ -44,6 +44,7 @@ type (
 	ReviewStatus              = domain.ReviewStatus
 	Promotion                 = domain.Promotion
 	PromotionValidationResult = domain.PromotionValidationResult
+	PromotionPublic           = domain.PromotionPublic
 	RegistrabilityCheckResult = domain.RegistrabilityCheckResult
 	Address                   = domain.Address
 	UserProfile               = domain.UserProfile
@@ -153,7 +154,7 @@ type CounterService interface {
 
 // PromotionService exposes promotion lifecycle and validation operations.
 type PromotionService interface {
-	GetPublicPromotion(ctx context.Context, code string) (PromotionValidationResult, error)
+	GetPublicPromotion(ctx context.Context, code string) (PromotionPublic, error)
 	ValidatePromotion(ctx context.Context, cmd ValidatePromotionCommand) (PromotionValidationResult, error)
 	ListPromotions(ctx context.Context, filter PromotionListFilter) (domain.CursorPage[Promotion], error)
 	CreatePromotion(ctx context.Context, cmd UpsertPromotionCommand) (Promotion, error)

@@ -197,6 +197,126 @@ func TestPublicHandlers_GetTemplate_NotFound(t *testing.T) {
 	}
 }
 
+func TestPublicHandlers_GetPublicPromotion_Success(t *testing.T) {
+	starts := time.Date(2024, time.March, 10, 9, 0, 0, 0, time.UTC)
+	ends := starts.Add(24 * time.Hour)
+	stub := &stubPromotionService{result: services.PromotionPublic{
+		Code:              "SPRING10",
+		IsAvailable:       true,
+		StartsAt:          starts,
+		EndsAt:            ends,
+		DescriptionPublic: "Spring campaign",
+		EligibleAudiences: []string{"new_customers", "vip"},
+	}}
+	handler := NewPublicHandlers(
+		WithPublicPromotionService(stub),
+		WithPublicPromotionRateLimit(5, time.Minute),
+	)
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/promotions/SPRING10/public", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", resp.Code)
+	}
+
+	var payload promotionPublicResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Code != "SPRING10" {
+		t.Fatalf("expected code SPRING10 got %s", payload.Code)
+	}
+	if !payload.IsAvailable {
+		t.Fatalf("expected promotion to be available")
+	}
+	if payload.Description != "Spring campaign" {
+		t.Fatalf("unexpected description %q", payload.Description)
+	}
+	if len(payload.EligibleAudiences) != 2 {
+		t.Fatalf("expected eligible audiences, got %v", payload.EligibleAudiences)
+	}
+	if stub.code != "SPRING10" {
+		t.Fatalf("expected service to receive SPRING10 got %s", stub.code)
+	}
+}
+
+func TestPublicHandlers_GetPublicPromotion_ServiceUnavailable(t *testing.T) {
+	handler := NewPublicHandlers()
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/promotions/ANY/public", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 got %d", resp.Code)
+	}
+}
+
+func TestPublicHandlers_GetPublicPromotion_InvalidCode(t *testing.T) {
+	handler := NewPublicHandlers(
+		WithPublicPromotionService(&stubPromotionService{result: services.PromotionPublic{Code: "INVALID"}}),
+	)
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/promotions/%20/public", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 got %d", resp.Code)
+	}
+}
+
+func TestPublicHandlers_GetPublicPromotion_RateLimited(t *testing.T) {
+	stub := &stubPromotionService{result: services.PromotionPublic{Code: "LIMIT"}}
+	handler := NewPublicHandlers(
+		WithPublicPromotionService(stub),
+		WithPublicPromotionRateLimit(1, time.Hour),
+	)
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	req1 := httptest.NewRequest(http.MethodGet, "/promotions/LIMIT/public", nil)
+	resp1 := httptest.NewRecorder()
+	router.ServeHTTP(resp1, req1)
+
+	if resp1.Code != http.StatusOK {
+		t.Fatalf("expected first call 200 got %d", resp1.Code)
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/promotions/LIMIT/public", nil)
+	resp2 := httptest.NewRecorder()
+	router.ServeHTTP(resp2, req2)
+
+	if resp2.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 got %d", resp2.Code)
+	}
+}
+
+func TestPublicHandlers_GetPublicPromotion_NotFound(t *testing.T) {
+	stub := &stubPromotionService{err: services.ErrPromotionNotFound}
+	handler := NewPublicHandlers(
+		WithPublicPromotionService(stub),
+	)
+	router := chi.NewRouter()
+	router.Route("/", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/promotions/MISSING/public", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 got %d", resp.Code)
+	}
+}
+
 func TestPublicHandlers_ListFonts(t *testing.T) {
 	createdAt := time.Date(2024, time.March, 1, 0, 0, 0, 0, time.UTC)
 	updatedAt := time.Date(2024, time.March, 2, 0, 0, 0, 0, time.UTC)
@@ -1405,6 +1525,48 @@ func (s *stubCatalogService) UpsertProduct(context.Context, services.UpsertProdu
 
 func (s *stubCatalogService) DeleteProduct(context.Context, string) error {
 	return errors.New("not implemented")
+}
+
+type stubPromotionService struct {
+	result services.PromotionPublic
+	err    error
+	code   string
+}
+
+func (s *stubPromotionService) GetPublicPromotion(_ context.Context, code string) (services.PromotionPublic, error) {
+	s.code = code
+	if s.err != nil {
+		return services.PromotionPublic{}, s.err
+	}
+	res := s.result
+	if strings.TrimSpace(res.Code) == "" {
+		res.Code = code
+	}
+	return res, nil
+}
+
+func (s *stubPromotionService) ValidatePromotion(context.Context, services.ValidatePromotionCommand) (services.PromotionValidationResult, error) {
+	return services.PromotionValidationResult{}, errors.New("not implemented")
+}
+
+func (s *stubPromotionService) ListPromotions(context.Context, services.PromotionListFilter) (domain.CursorPage[services.Promotion], error) {
+	return domain.CursorPage[services.Promotion]{}, errors.New("not implemented")
+}
+
+func (s *stubPromotionService) CreatePromotion(context.Context, services.UpsertPromotionCommand) (services.Promotion, error) {
+	return services.Promotion{}, errors.New("not implemented")
+}
+
+func (s *stubPromotionService) UpdatePromotion(context.Context, services.UpsertPromotionCommand) (services.Promotion, error) {
+	return services.Promotion{}, errors.New("not implemented")
+}
+
+func (s *stubPromotionService) DeletePromotion(context.Context, string) error {
+	return errors.New("not implemented")
+}
+
+func (s *stubPromotionService) ListPromotionUsage(context.Context, services.PromotionUsageFilter) (domain.CursorPage[services.PromotionUsage], error) {
+	return domain.CursorPage[services.PromotionUsage]{}, errors.New("not implemented")
 }
 
 type stubRepoError struct {

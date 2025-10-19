@@ -394,15 +394,19 @@ type ReviewReply struct {
 
 // Promotion describes promotional rules persisted by admin services.
 type Promotion struct {
-	ID          string
-	Code        string
-	Name        string
-	Description string
-	Status      string
-	StartsAt    time.Time
-	EndsAt      time.Time
-	UsageLimit  *int
-	Metadata    map[string]any
+	ID                string
+	Code              string
+	Name              string
+	Description       string
+	DescriptionPublic string
+	Status            string
+	StartsAt          time.Time
+	EndsAt            time.Time
+	UsageLimit        *int
+	Metadata          map[string]any
+	EligibleAudiences []string
+	InternalOnly      bool
+	RequiresAuth      bool
 }
 
 // PromotionValidationResult is returned when a promotion is evaluated for a cart or order.
@@ -411,6 +415,16 @@ type PromotionValidationResult struct {
 	Eligible       bool
 	Reason         string
 	DiscountAmount int64
+}
+
+// PromotionPublic describes exposure-safe fields returned to unauthenticated clients.
+type PromotionPublic struct {
+	Code              string
+	IsAvailable       bool
+	StartsAt          time.Time
+	EndsAt            time.Time
+	DescriptionPublic string
+	EligibleAudiences []string
 }
 
 // RegistrabilityCheckResult stores outcomes from external name seal registrability checks.

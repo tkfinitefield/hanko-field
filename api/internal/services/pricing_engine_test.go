@@ -330,7 +330,7 @@ type fakePromotionService struct {
 	calls   int
 }
 
-func (f *fakePromotionService) GetPublicPromotion(context.Context, string) (PromotionValidationResult, error) {
+func (f *fakePromotionService) GetPublicPromotion(context.Context, string) (PromotionPublic, error) {
 	panic("unexpected call")
 }
 
