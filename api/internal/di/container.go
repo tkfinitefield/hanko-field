@@ -117,6 +117,17 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 		svc.Inventory = inventorySvc
 	}
 
+	if promotionsRepo := reg.Promotions(); promotionsRepo != nil {
+		promotionSvc, err := services.NewPromotionService(services.PromotionServiceDeps{
+			Promotions: promotionsRepo,
+			Clock:      time.Now,
+		})
+		if err != nil {
+			return Services{}, fmt.Errorf("build promotion service: %w", err)
+		}
+		svc.Promotions = promotionSvc
+	}
+
 	if catalogRepo := reg.Catalog(); catalogRepo != nil {
 		catalogSvc, err := services.NewCatalogService(services.CatalogServiceDeps{
 			Catalog: catalogRepo,

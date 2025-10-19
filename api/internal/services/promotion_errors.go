@@ -11,4 +11,6 @@ var (
 	ErrPromotionNotFound = errors.New("promotion service: promotion not found")
 	// ErrPromotionUnavailable indicates the promotion exists but is not exposed to the public channel.
 	ErrPromotionUnavailable = errors.New("promotion service: promotion unavailable")
+	// ErrPromotionOperationUnsupported marks operations that have not been implemented yet.
+	ErrPromotionOperationUnsupported = errors.New("promotion service: operation unsupported")
 )

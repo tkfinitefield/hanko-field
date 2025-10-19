@@ -23,10 +23,12 @@ import (
 	"github.com/hanko-field/api/internal/handlers"
 	"github.com/hanko-field/api/internal/platform/auth"
 	"github.com/hanko-field/api/internal/platform/config"
+	pfirestore "github.com/hanko-field/api/internal/platform/firestore"
 	"github.com/hanko-field/api/internal/platform/idempotency"
 	"github.com/hanko-field/api/internal/platform/observability"
 	"github.com/hanko-field/api/internal/platform/secrets"
 	"github.com/hanko-field/api/internal/repositories"
+	firestoreRepo "github.com/hanko-field/api/internal/repositories/firestore"
 	"github.com/hanko-field/api/internal/services"
 )
 
@@ -76,12 +78,15 @@ func main() {
 
 	buildInfo := buildInfoFromEnv(envValues, cfg, startedAt)
 
-	firestoreClient, err := newFirestoreClient(ctx, cfg)
+	firestoreProvider := pfirestore.NewProvider(cfg.Firestore)
+	firestoreClient, err := firestoreProvider.Client(ctx)
 	if err != nil {
 		logger.Fatal("failed to initialise firestore client", zap.Error(err))
 	}
 	defer func() {
-		if err := firestoreClient.Close(); err != nil {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := firestoreProvider.Close(closeCtx); err != nil {
 			logger.Warn("firestore close error", zap.Error(err))
 		}
 	}()
@@ -131,6 +136,27 @@ func main() {
 	oidcMiddleware := buildOIDCMiddleware(logger.Named("auth"), cfg)
 	hmacMiddleware := buildHMACMiddleware(logger.Named("auth"), cfg)
 
+	firebaseVerifier, err := auth.NewFirebaseVerifier(ctx, cfg.Firebase)
+	if err != nil {
+		logger.Fatal("failed to initialise firebase verifier", zap.Error(err))
+	}
+	authenticator := auth.NewAuthenticator(firebaseVerifier, auth.WithUserGetter(firebaseVerifier))
+
+	userRepo, err := firestoreRepo.NewUserRepository(firestoreProvider)
+	if err != nil {
+		logger.Fatal("failed to initialise user repository", zap.Error(err))
+	}
+	userService, err := services.NewUserService(services.UserServiceDeps{
+		Users:    userRepo,
+		Audit:    nil,
+		Firebase: firebaseVerifier,
+		Clock:    time.Now,
+	})
+	if err != nil {
+		logger.Fatal("failed to initialise user service", zap.Error(err))
+	}
+	meHandlers := handlers.NewMeHandlers(authenticator, userService)
+
 	projectID := traceProjectID(cfg)
 	middlewares := []func(http.Handler) http.Handler{
 		observability.InjectLoggerMiddleware(logger.Named("http")),
@@ -148,6 +174,7 @@ func main() {
 	var opts []handlers.Option
 	opts = append(opts, handlers.WithMiddlewares(middlewares...))
 	opts = append(opts, handlers.WithHealthHandlers(healthHandlers))
+	opts = append(opts, handlers.WithMeRoutes(meHandlers.Routes))
 	publicHandlers := handlers.NewPublicHandlers()
 	opts = append(opts, handlers.WithPublicRoutes(publicHandlers.Routes))
 	if oidcMiddleware != nil {
@@ -370,26 +397,6 @@ func webhookSecretResolver(secrets map[string]string) func(*http.Request) (strin
 		}
 		return "", false
 	}
-}
-
-func newFirestoreClient(ctx context.Context, cfg config.Config) (*firestore.Client, error) {
-	projectID := strings.TrimSpace(cfg.Firestore.ProjectID)
-	if projectID == "" {
-		return nil, fmt.Errorf("firestore project id not configured")
-	}
-
-	if host := strings.TrimSpace(cfg.Firestore.EmulatorHost); host != "" {
-		if err := os.Setenv("FIRESTORE_EMULATOR_HOST", host); err != nil {
-			return nil, fmt.Errorf("failed to set FIRESTORE_EMULATOR_HOST: %w", err)
-		}
-	}
-
-	var opts []option.ClientOption
-	if credentials := strings.TrimSpace(cfg.Firebase.CredentialsFile); credentials != "" {
-		opts = append(opts, option.WithCredentialsFile(credentials))
-	}
-
-	return firestore.NewClient(ctx, projectID, opts...)
 }
 
 func traceProjectID(cfg config.Config) string {

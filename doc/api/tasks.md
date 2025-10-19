@@ -46,7 +46,7 @@
 
 ## 5. Authenticated User Endpoints
 ### 5.1 Profile & Account
-- [ ] [035 Implement `/me` GET/PUT respecting editable fields and audit logging changes.](./tasks/035-implement-me-get-put-respecting-editable-fields-and-audit-logging-changes.md)
+- [x] [035 Implement `/me` GET/PUT respecting editable fields and audit logging changes.](./tasks/035-implement-me-get-put-respecting-editable-fields-and-audit-logging-changes.md)
 - [ ] [036 Implement addresses CRUD endpoints with validation, default management, and dedupe.](./tasks/036-implement-addresses-crud-endpoints-with-validation-default-management-and-dedupe.md)
 - [ ] [037 Integrate PSP token management for payment methods list/add/delete.](./tasks/037-integrate-psp-token-management-for-payment-methods-list-add-delete.md)
 - [ ] [038 Implement favorites list, add, and remove endpoints referencing designs.](./tasks/038-implement-favorites-list-add-and-remove-endpoints-referencing-designs.md)

@@ -23,6 +23,7 @@ var (
 	errActorIDRequired              = errors.New("user: actor id is required")
 	errInvalidDisplayName           = errors.New("user: invalid display name")
 	errInvalidLanguageTag           = errors.New("user: invalid language tag")
+	errInvalidNotificationKey       = errors.New("user: invalid notification key")
 	errProfileConflict              = errors.New("user: profile has been modified")
 	errAddressRepositoryUnavailable = errors.New("user: address repository not configured")
 	errPaymentMethodsNotImplemented = errors.New("user: payment method operations not yet implemented")
@@ -33,6 +34,17 @@ var (
 	auditActionProfileMask          = "user.profile.mask"
 	auditActionProfileActivate      = "user.profile.activate"
 	auditActionProfileDeactivate    = "user.profile.deactivate"
+)
+
+var (
+	// ErrUserProfileConflict indicates the profile has been modified by another concurrent actor.
+	ErrUserProfileConflict = errProfileConflict
+	// ErrUserInvalidDisplayName indicates the supplied display name failed validation.
+	ErrUserInvalidDisplayName = errInvalidDisplayName
+	// ErrUserInvalidLanguageTag indicates the supplied language or locale tag is invalid.
+	ErrUserInvalidLanguageTag = errInvalidLanguageTag
+	// ErrUserInvalidNotificationKey indicates a notification preference key did not meet validation rules.
+	ErrUserInvalidNotificationKey = errInvalidNotificationKey
 )
 
 // UserServiceDeps bundles the dependencies required to construct a user service instance.
@@ -429,7 +441,7 @@ func normaliseNotificationPrefs(prefs map[string]bool) (domain.NotificationPrefe
 			continue
 		}
 		if !notificationKeyPattern.MatchString(trimmed) {
-			return nil, fmt.Errorf("user: invalid notification key %q", key)
+			return nil, fmt.Errorf("%w %q", errInvalidNotificationKey, key)
 		}
 		normalised[trimmed] = value
 	}
