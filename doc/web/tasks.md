@@ -3,7 +3,7 @@
 ## 0. Planning & Architecture
 - [x] [Validate web scope, personas, and release milestones from `doc/web/web_design.md`.](doc/web/tasks/001-validate-web-scope-personas-and-release-milestones-from-doc-web-web-design-md.md)
 - [x] [Define Go + htmx architecture (router layout, template structure, partials naming) and directory conventions.](doc/web/tasks/002-define-go-htmx-architecture-router-layout-template-structure-partials-naming-and-directory.md)
-- [ ] [Establish shared components and Tailwind design tokens; document CSS/JS guidelines.](doc/web/tasks/003-establish-shared-components-and-tailwind-design-tokens-document-css-js-guidelines.md)
+- [x] [Establish shared components and Tailwind design tokens; document CSS/JS guidelines.](doc/web/tasks/003-establish-shared-components-and-tailwind-design-tokens-document-css-js-guidelines.md)
 - [ ] [Map full site navigation (public, design creation, checkout, account) with routes, breadcrumbs, and SEO considerations.](doc/web/tasks/004-map-full-site-navigation-public-design-creation-checkout-account-with-routes-breadcrumbs-a.md)
 - [ ] [Produce integration checklist aligning web fragments with API endpoints and payload requirements.](doc/web/tasks/005-produce-integration-checklist-aligning-web-fragments-with-api-endpoints-and-payload-requir.md)
 
