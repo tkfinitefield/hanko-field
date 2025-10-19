@@ -1,0 +1,15 @@
+{{ define "title" }}Hanko Field – Welcome{{ end }}
+
+{{ define "content" }}
+<section class="py-10">
+  <div class="mx-auto max-w-3xl text-center">
+    <h1 class="text-3xl md:text-4xl font-bold tracking-tight">{{ .Title }}</h1>
+    <p class="mt-4 text-gray-600">{{ .Message }}</p>
+    <div class="mt-8 flex items-center justify-center gap-4">
+      <a href="/design/new" class="px-5 py-3 rounded-md bg-indigo-600 text-white hover:bg-indigo-500">印影を作る</a>
+      <a href="/shop" class="px-5 py-3 rounded-md border border-gray-300 hover:bg-gray-100">素材から探す</a>
+    </div>
+  </div>
+</section>
+{{ end }}
+

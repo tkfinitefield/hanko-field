@@ -1,0 +1,23 @@
+# Air configuration for live-reloading during development
+root = "."
+tmp_dir = ".air"
+
+[build]
+  cmd = "go run ./cmd/web"
+  bin = ""
+  full_bin = ""
+  include_ext = ["go", "tmpl", "html", "css", "js"]
+  exclude_dir = [".git", "node_modules", "public", ".air"]
+  exclude_file = []
+  delay = 100
+  stop_on_error = true
+
+[log]
+  time = true
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
+
