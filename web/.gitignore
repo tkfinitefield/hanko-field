@@ -2,4 +2,5 @@
 bin/
 public/assets/app.css
 public/assets/app.css.map
+public/assets/js/
 tools/tailwindcss
