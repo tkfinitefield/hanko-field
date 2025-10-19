@@ -1,4 +1,4 @@
-# Confirm admin console scope, personas (ops, CS, marketing), and rollout priorities based on `doc/admin/admin_design.md`.
+# Confirm admin console scope, personas (ops, CS, marketing), and rollout priorities based on `doc/admin/admin_design.md`. ✅
 
 **Parent Section:** 0. Planning & Architecture
 **Task ID:** 001
