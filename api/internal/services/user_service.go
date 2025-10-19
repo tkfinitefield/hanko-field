@@ -293,28 +293,20 @@ func (s *userService) UpsertAddress(ctx context.Context, cmd UpsertAddressComman
 		return Address{}, errUserIDRequired
 	}
 
-	addresses, err := s.addresses.List(ctx, userID)
-	if err != nil {
-		return Address{}, err
-	}
-
 	targetID := ""
 	if cmd.AddressID != nil {
 		targetID = strings.TrimSpace(*cmd.AddressID)
 	}
 
 	var existing Address
+	var err error
 	if targetID != "" {
-		found := false
-		for _, addr := range addresses {
-			if strings.EqualFold(addr.ID, targetID) {
-				existing = addr
-				found = true
-				break
+		existing, err = s.addresses.Get(ctx, userID, targetID)
+		if err != nil {
+			if isNotFound(err) {
+				return Address{}, errAddressNotFound
 			}
-		}
-		if !found {
-			return Address{}, errAddressNotFound
+			return Address{}, err
 		}
 	}
 
@@ -325,42 +317,35 @@ func (s *userService) UpsertAddress(ctx context.Context, cmd UpsertAddressComman
 
 	fingerprint := addressFingerprint(addressInput)
 
-	var duplicate *Address
-	for _, addr := range addresses {
-		if targetID != "" && strings.EqualFold(addr.ID, targetID) {
-			continue
-		}
-		fp := addr.NormalizedHash
-		if fp == "" {
-			fp = addressFingerprint(addr)
-		}
-		if fp == fingerprint {
-			duplicate = &addr
-			break
+	if targetID == "" {
+		if duplicate, found, err := s.addresses.FindByHash(ctx, userID, fingerprint); err != nil {
+			return Address{}, err
+		} else if found {
+			targetID = duplicate.ID
+			existing = duplicate
 		}
 	}
 
-	if duplicate != nil {
-		// Merge into the duplicate record to avoid multiple identical entries.
-		targetID = duplicate.ID
-		existing = *duplicate
+	hasAny, err := s.addresses.HasAny(ctx, userID)
+	if err != nil {
+		return Address{}, err
 	}
 
 	finalAddress := mergeAddress(existing, addressInput)
-	finalAddress.NormalizedHash = fingerprint
 	finalAddress.ID = targetID
+	finalAddress.NormalizedHash = fingerprint
 
 	defaultShipping := existing.DefaultShipping
 	if cmd.DefaultShipping != nil {
 		defaultShipping = *cmd.DefaultShipping
-	} else if targetID == "" && len(addresses) == 0 {
+	} else if targetID == "" && !hasAny {
 		defaultShipping = true
 	}
 
 	defaultBilling := existing.DefaultBilling
 	if cmd.DefaultBilling != nil {
 		defaultBilling = *cmd.DefaultBilling
-	} else if targetID == "" && len(addresses) == 0 {
+	} else if targetID == "" && !hasAny {
 		defaultBilling = true
 	}
 
@@ -395,81 +380,69 @@ func (s *userService) DeleteAddress(ctx context.Context, cmd DeleteAddressComman
 		return errAddressIDRequired
 	}
 
-	addresses, err := s.addresses.List(ctx, userID)
+	target, err := s.addresses.Get(ctx, userID, addressID)
 	if err != nil {
-		return err
-	}
-
-	var target *Address
-	for i := range addresses {
-		if strings.EqualFold(addresses[i].ID, addressID) {
-			target = &addresses[i]
-			break
-		}
-	}
-	if target == nil {
-		return errAddressNotFound
-	}
-
-	var replacementID *string
-	if cmd.ReplacementID != nil {
-		id := strings.TrimSpace(*cmd.ReplacementID)
-		if id != "" && !strings.EqualFold(id, addressID) {
-			for _, addr := range addresses {
-				if strings.EqualFold(addr.ID, id) {
-					replacementID = &addr.ID
-					break
-				}
-			}
-		}
-		if replacementID == nil && id != "" {
+		if isNotFound(err) {
 			return errAddressNotFound
 		}
-	}
-
-	if replacementID == nil {
-		for _, addr := range addresses {
-			if strings.EqualFold(addr.ID, addressID) {
-				continue
-			}
-			replacementID = &addr.ID
-			break
-		}
+		return err
 	}
 
 	if err := s.addresses.Delete(ctx, userID, addressID); err != nil {
 		return err
 	}
 
-	// Promote replacement defaults when necessary.
-	if replacementID != nil && (target.DefaultShipping || target.DefaultBilling) {
-		var replacement Address
+	if !(target.DefaultShipping || target.DefaultBilling) {
+		return nil
+	}
+
+	addresses, err := s.addresses.List(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	var replacementID string
+	if cmd.ReplacementID != nil {
+		id := strings.TrimSpace(*cmd.ReplacementID)
+		if id != "" {
+			for _, addr := range addresses {
+				if strings.EqualFold(addr.ID, id) {
+					replacementID = addr.ID
+					break
+				}
+			}
+			if replacementID == "" {
+				return errAddressNotFound
+			}
+		}
+	}
+
+	if replacementID == "" {
 		for _, addr := range addresses {
-			if strings.EqualFold(addr.ID, *replacementID) {
-				replacement = addr
-				break
+			if strings.EqualFold(addr.ID, addressID) {
+				continue
 			}
+			replacementID = addr.ID
+			break
 		}
-		if replacement.ID != "" {
-			var dsPtr, dbPtr *bool
-			if target.DefaultShipping {
-				val := true
-				dsPtr = &val
-			}
-			if target.DefaultBilling {
-				val := true
-				dbPtr = &val
-			}
-			if _, err := s.UpsertAddress(ctx, UpsertAddressCommand{
-				UserID:          userID,
-				AddressID:       &replacement.ID,
-				Address:         replacement,
-				DefaultShipping: dsPtr,
-				DefaultBilling:  dbPtr,
-			}); err != nil {
-				return err
-			}
-		}
+	}
+
+	if replacementID == "" {
+		return nil
+	}
+
+	var shippingPtr, billingPtr *bool
+	if target.DefaultShipping {
+		val := true
+		shippingPtr = &val
+	}
+	if target.DefaultBilling {
+		val := true
+		billingPtr = &val
+	}
+
+	if _, err := s.addresses.SetDefaultFlags(ctx, userID, replacementID, shippingPtr, billingPtr); err != nil {
+		return err
 	}
 
 	return nil
@@ -829,7 +802,7 @@ func canonicalisePostalCode(country, postal string) (string, error) {
 		if !addressPostalPattern.MatchString(trimmed) {
 			return "", errInvalidAddressPostalCode
 		}
-		return strings.ToUpper(trimmed), nil
+		return trimmed, nil
 	}
 }
 
@@ -872,6 +845,9 @@ func mergeAddress(existing, input Address) Address {
 	if result.CreatedAt.IsZero() {
 		result.CreatedAt = input.CreatedAt
 	}
+	result.DefaultShipping = input.DefaultShipping
+	result.DefaultBilling = input.DefaultBilling
+	result.NormalizedHash = input.NormalizedHash
 	return result
 }
 

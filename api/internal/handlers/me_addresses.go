@@ -256,6 +256,12 @@ func (req addressRequest) toDomainAddress() services.Address {
 			addr.Phone = &trimmed
 		}
 	}
+	if req.DefaultShipping != nil {
+		addr.DefaultShipping = *req.DefaultShipping
+	}
+	if req.DefaultBilling != nil {
+		addr.DefaultBilling = *req.DefaultBilling
+	}
 	return addr
 }
 

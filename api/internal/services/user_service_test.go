@@ -170,6 +170,71 @@ func (m *memoryAddressRepo) Delete(_ context.Context, userID string, addressID s
 	return nil
 }
 
+func (m *memoryAddressRepo) Get(_ context.Context, userID string, addressID string) (domain.Address, error) {
+	if bucket := m.store[userID]; bucket != nil {
+		if addr, ok := bucket[addressID]; ok {
+			return addr, nil
+		}
+	}
+	return domain.Address{}, errors.New("not found")
+}
+
+func (m *memoryAddressRepo) FindByHash(_ context.Context, userID string, hash string) (domain.Address, bool, error) {
+	bucket := m.store[userID]
+	if bucket == nil {
+		return domain.Address{}, false, nil
+	}
+	for _, addr := range bucket {
+		if addr.NormalizedHash == hash {
+			return addr, true, nil
+		}
+	}
+	return domain.Address{}, false, nil
+}
+
+func (m *memoryAddressRepo) HasAny(_ context.Context, userID string) (bool, error) {
+	bucket := m.store[userID]
+	return bucket != nil && len(bucket) > 0, nil
+}
+
+func (m *memoryAddressRepo) SetDefaultFlags(_ context.Context, userID string, addressID string, shipping, billing *bool) (domain.Address, error) {
+	bucket := m.store[userID]
+	if bucket == nil {
+		return domain.Address{}, errors.New("not found")
+	}
+	addr, ok := bucket[addressID]
+	if !ok {
+		return domain.Address{}, errors.New("not found")
+	}
+	if shipping != nil && *shipping {
+		for key, other := range bucket {
+			if key == addressID {
+				continue
+			}
+			if other.DefaultShipping {
+				other.DefaultShipping = false
+				bucket[key] = other
+			}
+		}
+		addr.DefaultShipping = true
+	}
+	if billing != nil && *billing {
+		for key, other := range bucket {
+			if key == addressID {
+				continue
+			}
+			if other.DefaultBilling {
+				other.DefaultBilling = false
+				bucket[key] = other
+			}
+		}
+		addr.DefaultBilling = true
+	}
+	addr.UpdatedAt = m.clock().UTC()
+	bucket[addressID] = addr
+	return addr, nil
+}
+
 type captureAuditService struct {
 	records []AuditLogRecord
 }

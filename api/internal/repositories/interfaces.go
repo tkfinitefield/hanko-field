@@ -220,6 +220,10 @@ type AddressRepository interface {
 	List(ctx context.Context, userID string) ([]domain.Address, error)
 	Upsert(ctx context.Context, userID string, addressID *string, addr domain.Address) (domain.Address, error)
 	Delete(ctx context.Context, userID string, addressID string) error
+	Get(ctx context.Context, userID string, addressID string) (domain.Address, error)
+	FindByHash(ctx context.Context, userID string, hash string) (domain.Address, bool, error)
+	HasAny(ctx context.Context, userID string) (bool, error)
+	SetDefaultFlags(ctx context.Context, userID string, addressID string, shipping, billing *bool) (domain.Address, error)
 }
 
 // PaymentMethodRepository stores PSP reference tokens per user.

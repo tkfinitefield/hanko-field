@@ -191,6 +191,134 @@ func (r *AddressRepository) Delete(ctx context.Context, userID string, addressID
 	return nil
 }
 
+func (r *AddressRepository) Get(ctx context.Context, userID string, addressID string) (domain.Address, error) {
+	coll, err := r.collection(ctx, userID)
+	if err != nil {
+		return domain.Address{}, err
+	}
+	id := strings.TrimSpace(addressID)
+	if id == "" {
+		return domain.Address{}, errors.New("address repository: address id is required")
+	}
+	snap, err := coll.Doc(id).Get(ctx)
+	if err != nil {
+		return domain.Address{}, pfirestore.WrapError("addresses.get", err)
+	}
+	addr, err := decodeAddressDocument(snap)
+	if err != nil {
+		return domain.Address{}, err
+	}
+	return addr, nil
+}
+
+func (r *AddressRepository) FindByHash(ctx context.Context, userID string, hash string) (domain.Address, bool, error) {
+	coll, err := r.collection(ctx, userID)
+	if err != nil {
+		return domain.Address{}, false, err
+	}
+	trimmed := strings.TrimSpace(hash)
+	if trimmed == "" {
+		return domain.Address{}, false, nil
+	}
+	iter := coll.Where("hash", "==", trimmed).Limit(1).Documents(ctx)
+	defer iter.Stop()
+	snaps, err := iter.GetAll()
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return domain.Address{}, false, nil
+		}
+		return domain.Address{}, false, pfirestore.WrapError("addresses.findByHash", err)
+	}
+	if len(snaps) == 0 {
+		return domain.Address{}, false, nil
+	}
+	addr, err := decodeAddressDocument(snaps[0])
+	if err != nil {
+		return domain.Address{}, false, err
+	}
+	return addr, true, nil
+}
+
+func (r *AddressRepository) HasAny(ctx context.Context, userID string) (bool, error) {
+	coll, err := r.collection(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	iter := coll.Limit(1).Documents(ctx)
+	defer iter.Stop()
+	if _, err := iter.Next(); err != nil {
+		if errors.Is(err, iterator.Done) {
+			return false, nil
+		}
+		if status.Code(err) == codes.NotFound {
+			return false, nil
+		}
+		return false, pfirestore.WrapError("addresses.hasAny", err)
+	}
+	return true, nil
+}
+
+func (r *AddressRepository) SetDefaultFlags(ctx context.Context, userID string, addressID string, shipping, billing *bool) (domain.Address, error) {
+	coll, err := r.collection(ctx, userID)
+	if err != nil {
+		return domain.Address{}, err
+	}
+	id := strings.TrimSpace(addressID)
+	if id == "" {
+		return domain.Address{}, errors.New("address repository: address id is required")
+	}
+
+	var saved domain.Address
+	err = r.provider.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		docRef := coll.Doc(id)
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			return err
+		}
+		var doc addressDocument
+		if err := snap.DataTo(&doc); err != nil {
+			return fmt.Errorf("decode address %s: %w", snap.Ref.ID, err)
+		}
+
+		updates := make([]firestore.Update, 0, 3)
+		now := time.Now().UTC()
+		if shipping != nil {
+			doc.DefaultShipping = *shipping
+			updates = append(updates, firestore.Update{Path: "defaultShipping", Value: *shipping})
+		}
+		if billing != nil {
+			doc.DefaultBilling = *billing
+			updates = append(updates, firestore.Update{Path: "defaultBilling", Value: *billing})
+		}
+		if len(updates) > 0 {
+			updates = append(updates, firestore.Update{Path: "updatedAt", Value: now})
+			if err := tx.Update(docRef, updates); err != nil {
+				return err
+			}
+			doc.UpdatedAt = now
+		}
+
+		if shipping != nil && *shipping {
+			if err := r.clearDefault(ctx, tx, coll, docRef.ID, "defaultShipping"); err != nil {
+				return err
+			}
+		}
+		if billing != nil && *billing {
+			if err := r.clearDefault(ctx, tx, coll, docRef.ID, "defaultBilling"); err != nil {
+				return err
+			}
+		}
+
+		saved = doc.toDomain(docRef.ID)
+		saved.NormalizedHash = doc.Hash
+		return nil
+	})
+	if err != nil {
+		return domain.Address{}, pfirestore.WrapError("addresses.setDefaultFlags", err)
+	}
+	return saved, nil
+}
+
 func (r *AddressRepository) collection(ctx context.Context, userID string) (*firestore.CollectionRef, error) {
 	if r == nil || r.provider == nil {
 		return nil, errors.New("address repository not initialised")
@@ -208,7 +336,7 @@ func (r *AddressRepository) collection(ctx context.Context, userID string) (*fir
 }
 
 func (r *AddressRepository) clearDefault(ctx context.Context, tx *firestore.Transaction, coll *firestore.CollectionRef, currentID, field string) error {
-	query := coll.Where(field, "==", true)
+	query := coll.Where(field, "==", true).OrderBy("updatedAt", firestore.Desc).Limit(10)
 	iter := tx.Documents(query)
 	snaps, err := iter.GetAll()
 	if err != nil {
