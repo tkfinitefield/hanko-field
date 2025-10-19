@@ -146,11 +146,16 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to initialise user repository", zap.Error(err))
 	}
+	addressRepo, err := firestoreRepo.NewAddressRepository(firestoreProvider)
+	if err != nil {
+		logger.Fatal("failed to initialise address repository", zap.Error(err))
+	}
 	userService, err := services.NewUserService(services.UserServiceDeps{
-		Users:    userRepo,
-		Audit:    nil,
-		Firebase: firebaseVerifier,
-		Clock:    time.Now,
+		Users:     userRepo,
+		Addresses: addressRepo,
+		Audit:     nil,
+		Firebase:  firebaseVerifier,
+		Clock:     time.Now,
 	})
 	if err != nil {
 		logger.Fatal("failed to initialise user service", zap.Error(err))

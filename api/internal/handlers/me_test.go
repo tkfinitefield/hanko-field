@@ -385,6 +385,9 @@ func TestMeHandlersUpdateProfileConflict(t *testing.T) {
 type stubUserService struct {
 	getProfileFunc    func(ctx context.Context, userID string) (services.UserProfile, error)
 	updateProfileFunc func(ctx context.Context, cmd services.UpdateProfileCommand) (services.UserProfile, error)
+	listAddressesFunc func(ctx context.Context, userID string) ([]services.Address, error)
+	upsertAddressFunc func(ctx context.Context, cmd services.UpsertAddressCommand) (services.Address, error)
+	deleteAddressFunc func(ctx context.Context, cmd services.DeleteAddressCommand) error
 }
 
 func (s *stubUserService) GetProfile(ctx context.Context, userID string) (services.UserProfile, error) {
@@ -414,14 +417,23 @@ func (s *stubUserService) SetUserActive(ctx context.Context, cmd services.SetUse
 }
 
 func (s *stubUserService) ListAddresses(ctx context.Context, userID string) ([]services.Address, error) {
+	if s != nil && s.listAddressesFunc != nil {
+		return s.listAddressesFunc(ctx, userID)
+	}
 	return nil, errors.New("not implemented")
 }
 
 func (s *stubUserService) UpsertAddress(ctx context.Context, cmd services.UpsertAddressCommand) (services.Address, error) {
+	if s != nil && s.upsertAddressFunc != nil {
+		return s.upsertAddressFunc(ctx, cmd)
+	}
 	return services.Address{}, errors.New("not implemented")
 }
 
 func (s *stubUserService) DeleteAddress(ctx context.Context, cmd services.DeleteAddressCommand) error {
+	if s != nil && s.deleteAddressFunc != nil {
+		return s.deleteAddressFunc(ctx, cmd)
+	}
 	return errors.New("not implemented")
 }
 

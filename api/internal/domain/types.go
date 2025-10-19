@@ -437,14 +437,22 @@ type RegistrabilityCheckResult struct {
 
 // Address represents postal address structures shared by user and order layers.
 type Address struct {
-	Recipient  string
-	Line1      string
-	Line2      *string
-	City       string
-	State      *string
-	PostalCode string
-	Country    string
-	Phone      *string
+	ID              string
+	Label           string
+	Recipient       string
+	Company         string
+	Line1           string
+	Line2           *string
+	City            string
+	State           *string
+	PostalCode      string
+	Country         string
+	Phone           *string
+	DefaultShipping bool
+	DefaultBilling  bool
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	NormalizedHash  string
 }
 
 // NotificationPreferences stores per-channel notification opt-in flags.

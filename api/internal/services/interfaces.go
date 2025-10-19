@@ -549,15 +549,17 @@ type SetUserActiveCommand struct {
 }
 
 type UpsertAddressCommand struct {
-	UserID    string
-	AddressID *string
-	Address   Address
-	IsDefault bool
+	UserID          string
+	AddressID       *string
+	Address         Address
+	DefaultShipping *bool
+	DefaultBilling  *bool
 }
 
 type DeleteAddressCommand struct {
-	UserID    string
-	AddressID string
+	UserID        string
+	AddressID     string
+	ReplacementID *string
 }
 
 type AddPaymentMethodCommand struct {

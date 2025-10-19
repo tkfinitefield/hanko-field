@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -26,10 +28,21 @@ var (
 	errInvalidNotificationKey       = errors.New("user: invalid notification key")
 	errProfileConflict              = errors.New("user: profile has been modified")
 	errAddressRepositoryUnavailable = errors.New("user: address repository not configured")
+	errAddressIDRequired            = errors.New("user: address id is required")
+	errAddressNotFound              = errors.New("user: address not found")
+	errInvalidAddressRecipient      = errors.New("user: invalid address recipient")
+	errInvalidAddressLine1          = errors.New("user: invalid address line1")
+	errInvalidAddressCity           = errors.New("user: invalid address city")
+	errInvalidAddressCountry        = errors.New("user: invalid address country")
+	errInvalidAddressPostalCode     = errors.New("user: invalid address postal code")
+	errInvalidAddressPhone          = errors.New("user: invalid address phone")
 	errPaymentMethodsNotImplemented = errors.New("user: payment method operations not yet implemented")
 	errFavoritesNotImplemented      = errors.New("user: favorites operations not yet implemented")
 	emailMaskSuffix                 = "@hanko-field.invalid"
 	notificationKeyPattern          = regexp.MustCompile(`^[a-z0-9_.-]{1,40}$`)
+	addressPhonePattern             = regexp.MustCompile(`^[0-9+()\-\s]{6,20}$`)
+	addressCountryPattern           = regexp.MustCompile(`^[A-Za-z]{2}$`)
+	addressPostalPattern            = regexp.MustCompile(`^[0-9A-Za-z\-\s]{3,16}$`)
 	auditActionProfileUpdate        = "user.profile.update"
 	auditActionProfileMask          = "user.profile.mask"
 	auditActionProfileActivate      = "user.profile.activate"
@@ -45,6 +58,20 @@ var (
 	ErrUserInvalidLanguageTag = errInvalidLanguageTag
 	// ErrUserInvalidNotificationKey indicates a notification preference key did not meet validation rules.
 	ErrUserInvalidNotificationKey = errInvalidNotificationKey
+	// ErrUserAddressNotFound indicates the requested address does not exist.
+	ErrUserAddressNotFound = errAddressNotFound
+	// ErrUserInvalidAddressRecipient indicates the address recipient failed validation.
+	ErrUserInvalidAddressRecipient = errInvalidAddressRecipient
+	// ErrUserInvalidAddressLine1 indicates the primary address line failed validation.
+	ErrUserInvalidAddressLine1 = errInvalidAddressLine1
+	// ErrUserInvalidAddressCity indicates the city component failed validation.
+	ErrUserInvalidAddressCity = errInvalidAddressCity
+	// ErrUserInvalidAddressCountry indicates the country component failed validation.
+	ErrUserInvalidAddressCountry = errInvalidAddressCountry
+	// ErrUserInvalidAddressPostalCode indicates the postal code failed validation.
+	ErrUserInvalidAddressPostalCode = errInvalidAddressPostalCode
+	// ErrUserInvalidAddressPhone indicates the phone number failed validation.
+	ErrUserInvalidAddressPhone = errInvalidAddressPhone
 )
 
 // UserServiceDeps bundles the dependencies required to construct a user service instance.
@@ -241,22 +268,211 @@ func (s *userService) ListAddresses(ctx context.Context, userID string) ([]Addre
 	if s.addresses == nil {
 		return nil, errAddressRepositoryUnavailable
 	}
-	return s.addresses.List(ctx, userID)
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, errUserIDRequired
+	}
+	items, err := s.addresses.List(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		if items[i].NormalizedHash == "" {
+			items[i].NormalizedHash = addressFingerprint(items[i])
+		}
+	}
+	return items, nil
 }
 
 func (s *userService) UpsertAddress(ctx context.Context, cmd UpsertAddressCommand) (Address, error) {
 	if s.addresses == nil {
 		return Address{}, errAddressRepositoryUnavailable
 	}
-	address, err := s.addresses.Upsert(ctx, cmd.UserID, cmd.AddressID, cmd.Address, cmd.IsDefault)
-	return address, err
+	userID := strings.TrimSpace(cmd.UserID)
+	if userID == "" {
+		return Address{}, errUserIDRequired
+	}
+
+	addresses, err := s.addresses.List(ctx, userID)
+	if err != nil {
+		return Address{}, err
+	}
+
+	targetID := ""
+	if cmd.AddressID != nil {
+		targetID = strings.TrimSpace(*cmd.AddressID)
+	}
+
+	var existing Address
+	if targetID != "" {
+		found := false
+		for _, addr := range addresses {
+			if strings.EqualFold(addr.ID, targetID) {
+				existing = addr
+				found = true
+				break
+			}
+		}
+		if !found {
+			return Address{}, errAddressNotFound
+		}
+	}
+
+	addressInput, err := sanitizeAddress(cmd.Address)
+	if err != nil {
+		return Address{}, err
+	}
+
+	fingerprint := addressFingerprint(addressInput)
+
+	var duplicate *Address
+	for _, addr := range addresses {
+		if targetID != "" && strings.EqualFold(addr.ID, targetID) {
+			continue
+		}
+		fp := addr.NormalizedHash
+		if fp == "" {
+			fp = addressFingerprint(addr)
+		}
+		if fp == fingerprint {
+			duplicate = &addr
+			break
+		}
+	}
+
+	if duplicate != nil {
+		// Merge into the duplicate record to avoid multiple identical entries.
+		targetID = duplicate.ID
+		existing = *duplicate
+	}
+
+	finalAddress := mergeAddress(existing, addressInput)
+	finalAddress.NormalizedHash = fingerprint
+	finalAddress.ID = targetID
+
+	defaultShipping := existing.DefaultShipping
+	if cmd.DefaultShipping != nil {
+		defaultShipping = *cmd.DefaultShipping
+	} else if targetID == "" && len(addresses) == 0 {
+		defaultShipping = true
+	}
+
+	defaultBilling := existing.DefaultBilling
+	if cmd.DefaultBilling != nil {
+		defaultBilling = *cmd.DefaultBilling
+	} else if targetID == "" && len(addresses) == 0 {
+		defaultBilling = true
+	}
+
+	finalAddress.DefaultShipping = defaultShipping
+	finalAddress.DefaultBilling = defaultBilling
+
+	var addressIDPtr *string
+	if targetID != "" {
+		addressIDPtr = &targetID
+	}
+
+	saved, err := s.addresses.Upsert(ctx, userID, addressIDPtr, finalAddress)
+	if err != nil {
+		return Address{}, err
+	}
+	if saved.NormalizedHash == "" {
+		saved.NormalizedHash = addressFingerprint(saved)
+	}
+	return saved, nil
 }
 
 func (s *userService) DeleteAddress(ctx context.Context, cmd DeleteAddressCommand) error {
 	if s.addresses == nil {
 		return errAddressRepositoryUnavailable
 	}
-	return s.addresses.Delete(ctx, cmd.UserID, cmd.AddressID)
+	userID := strings.TrimSpace(cmd.UserID)
+	addressID := strings.TrimSpace(cmd.AddressID)
+	if userID == "" {
+		return errUserIDRequired
+	}
+	if addressID == "" {
+		return errAddressIDRequired
+	}
+
+	addresses, err := s.addresses.List(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	var target *Address
+	for i := range addresses {
+		if strings.EqualFold(addresses[i].ID, addressID) {
+			target = &addresses[i]
+			break
+		}
+	}
+	if target == nil {
+		return errAddressNotFound
+	}
+
+	var replacementID *string
+	if cmd.ReplacementID != nil {
+		id := strings.TrimSpace(*cmd.ReplacementID)
+		if id != "" && !strings.EqualFold(id, addressID) {
+			for _, addr := range addresses {
+				if strings.EqualFold(addr.ID, id) {
+					replacementID = &addr.ID
+					break
+				}
+			}
+		}
+		if replacementID == nil && id != "" {
+			return errAddressNotFound
+		}
+	}
+
+	if replacementID == nil {
+		for _, addr := range addresses {
+			if strings.EqualFold(addr.ID, addressID) {
+				continue
+			}
+			replacementID = &addr.ID
+			break
+		}
+	}
+
+	if err := s.addresses.Delete(ctx, userID, addressID); err != nil {
+		return err
+	}
+
+	// Promote replacement defaults when necessary.
+	if replacementID != nil && (target.DefaultShipping || target.DefaultBilling) {
+		var replacement Address
+		for _, addr := range addresses {
+			if strings.EqualFold(addr.ID, *replacementID) {
+				replacement = addr
+				break
+			}
+		}
+		if replacement.ID != "" {
+			var dsPtr, dbPtr *bool
+			if target.DefaultShipping {
+				val := true
+				dsPtr = &val
+			}
+			if target.DefaultBilling {
+				val := true
+				dbPtr = &val
+			}
+			if _, err := s.UpsertAddress(ctx, UpsertAddressCommand{
+				UserID:          userID,
+				AddressID:       &replacement.ID,
+				Address:         replacement,
+				DefaultShipping: dsPtr,
+				DefaultBilling:  dbPtr,
+			}); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *userService) ListPaymentMethods(ctx context.Context, userID string) ([]PaymentMethod, error) {
@@ -536,6 +752,150 @@ func isSensitiveAuditField(field string) bool {
 	default:
 		return false
 	}
+}
+
+func sanitizeAddress(addr Address) (Address, error) {
+	sanitized := Address{
+		ID:              strings.TrimSpace(addr.ID),
+		Label:           strings.TrimSpace(addr.Label),
+		Recipient:       strings.TrimSpace(addr.Recipient),
+		Company:         strings.TrimSpace(addr.Company),
+		Line1:           strings.TrimSpace(addr.Line1),
+		City:            strings.TrimSpace(addr.City),
+		PostalCode:      strings.TrimSpace(addr.PostalCode),
+		Country:         strings.ToUpper(strings.TrimSpace(addr.Country)),
+		DefaultShipping: addr.DefaultShipping,
+		DefaultBilling:  addr.DefaultBilling,
+	}
+	sanitized.Line2 = normalizeOptionalString(addr.Line2)
+	sanitized.State = normalizeOptionalString(addr.State)
+	sanitized.Phone = normalizeOptionalString(addr.Phone)
+	if !addr.CreatedAt.IsZero() {
+		sanitized.CreatedAt = addr.CreatedAt.UTC()
+	}
+	if !addr.UpdatedAt.IsZero() {
+		sanitized.UpdatedAt = addr.UpdatedAt.UTC()
+	}
+
+	if sanitized.Recipient == "" {
+		return Address{}, errInvalidAddressRecipient
+	}
+	if utf8.RuneCountInString(sanitized.Recipient) > 200 {
+		return Address{}, errInvalidAddressRecipient
+	}
+	if sanitized.Line1 == "" {
+		return Address{}, errInvalidAddressLine1
+	}
+	if sanitized.City == "" {
+		return Address{}, errInvalidAddressCity
+	}
+	if sanitized.Country == "" || !addressCountryPattern.MatchString(sanitized.Country) {
+		return Address{}, errInvalidAddressCountry
+	}
+	postal, err := canonicalisePostalCode(sanitized.Country, sanitized.PostalCode)
+	if err != nil {
+		return Address{}, err
+	}
+	sanitized.PostalCode = postal
+
+	if sanitized.Phone != nil {
+		phone := strings.TrimSpace(*sanitized.Phone)
+		if phone == "" {
+			sanitized.Phone = nil
+		} else {
+			if !addressPhonePattern.MatchString(phone) {
+				return Address{}, errInvalidAddressPhone
+			}
+			sanitized.Phone = &phone
+		}
+	}
+
+	return sanitized, nil
+}
+
+func canonicalisePostalCode(country, postal string) (string, error) {
+	trimmed := strings.TrimSpace(postal)
+	if trimmed == "" {
+		return "", errInvalidAddressPostalCode
+	}
+	switch strings.ToUpper(strings.TrimSpace(country)) {
+	case "JP":
+		digits := strings.ReplaceAll(strings.ReplaceAll(trimmed, "-", ""), " ", "")
+		if len(digits) != 7 || !allDigits(digits) {
+			return "", errInvalidAddressPostalCode
+		}
+		return digits[:3] + "-" + digits[3:], nil
+	default:
+		if !addressPostalPattern.MatchString(trimmed) {
+			return "", errInvalidAddressPostalCode
+		}
+		return strings.ToUpper(trimmed), nil
+	}
+}
+
+func allDigits(value string) bool {
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeOptionalString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func mergeAddress(existing, input Address) Address {
+	if existing.ID == "" {
+		existing.CreatedAt = input.CreatedAt
+	}
+	result := existing
+	result.Label = input.Label
+	result.Recipient = input.Recipient
+	result.Company = input.Company
+	result.Line1 = input.Line1
+	result.Line2 = input.Line2
+	result.City = input.City
+	result.State = input.State
+	result.PostalCode = input.PostalCode
+	result.Country = input.Country
+	result.Phone = input.Phone
+	result.UpdatedAt = input.UpdatedAt
+	if result.CreatedAt.IsZero() {
+		result.CreatedAt = input.CreatedAt
+	}
+	return result
+}
+
+func addressFingerprint(addr Address) string {
+	parts := []string{
+		strings.ToLower(strings.TrimSpace(addr.Recipient)),
+		strings.ToLower(strings.TrimSpace(addr.Company)),
+		strings.ToLower(strings.TrimSpace(addr.Line1)),
+		strings.ToLower(stringFromPointer(addr.Line2)),
+		strings.ToLower(strings.TrimSpace(addr.City)),
+		strings.ToLower(stringFromPointer(addr.State)),
+		strings.ToLower(strings.TrimSpace(addr.PostalCode)),
+		strings.ToLower(strings.TrimSpace(addr.Country)),
+	}
+	input := strings.Join(parts, "|")
+	sum := sha256.Sum256([]byte(input))
+	return hex.EncodeToString(sum[:])
+}
+
+func stringFromPointer(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
 }
 
 func profileFromFirebase(record *firebaseauth.UserRecord, now time.Time) domain.UserProfile {

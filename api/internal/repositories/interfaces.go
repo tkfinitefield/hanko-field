@@ -218,7 +218,7 @@ type UserRepository interface {
 // AddressRepository stores shipping addresses per user.
 type AddressRepository interface {
 	List(ctx context.Context, userID string) ([]domain.Address, error)
-	Upsert(ctx context.Context, userID string, addressID *string, addr domain.Address, isDefault bool) (domain.Address, error)
+	Upsert(ctx context.Context, userID string, addressID *string, addr domain.Address) (domain.Address, error)
 	Delete(ctx context.Context, userID string, addressID string) error
 }
 

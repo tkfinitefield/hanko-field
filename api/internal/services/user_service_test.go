@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +17,12 @@ import (
 type memoryUserRepo struct {
 	store map[string]domain.UserProfile
 	clock func() time.Time
+}
+
+type memoryAddressRepo struct {
+	store map[string]map[string]domain.Address
+	clock func() time.Time
+	seq   int
 }
 
 type repoErr struct {
@@ -32,6 +40,13 @@ func (e *repoErr) IsUnavailable() bool { return false }
 func newMemoryUserRepo(clock func() time.Time) *memoryUserRepo {
 	return &memoryUserRepo{
 		store: make(map[string]domain.UserProfile),
+		clock: clock,
+	}
+}
+
+func newMemoryAddressRepo(clock func() time.Time) *memoryAddressRepo {
+	return &memoryAddressRepo{
+		store: make(map[string]map[string]domain.Address),
 		clock: clock,
 	}
 }
@@ -59,6 +74,100 @@ func (m *memoryUserRepo) UpdateProfile(_ context.Context, profile domain.UserPro
 	profile.LastSyncTime = profile.UpdatedAt
 	m.store[profile.ID] = cloneProfile(profile)
 	return cloneProfile(profile), nil
+}
+
+func (m *memoryAddressRepo) List(_ context.Context, userID string) ([]domain.Address, error) {
+	if m.store == nil {
+		m.store = make(map[string]map[string]domain.Address)
+	}
+	entries := m.store[userID]
+	result := make([]domain.Address, 0, len(entries))
+	for _, addr := range entries {
+		result = append(result, addr)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].UpdatedAt.After(result[j].UpdatedAt)
+	})
+	return result, nil
+}
+
+func (m *memoryAddressRepo) Upsert(_ context.Context, userID string, addressID *string, addr domain.Address) (domain.Address, error) {
+	if m.store == nil {
+		m.store = make(map[string]map[string]domain.Address)
+	}
+	bucket := m.store[userID]
+	if bucket == nil {
+		bucket = make(map[string]domain.Address)
+		m.store[userID] = bucket
+	}
+
+	id := ""
+	if addressID != nil {
+		id = strings.TrimSpace(*addressID)
+	}
+	if id == "" {
+		if strings.TrimSpace(addr.ID) != "" {
+			id = strings.TrimSpace(addr.ID)
+		} else {
+			m.seq++
+			id = fmt.Sprintf("addr-%d", m.seq)
+		}
+	}
+
+	existing, found := bucket[id]
+	if !found {
+		if addr.CreatedAt.IsZero() {
+			addr.CreatedAt = m.clock().UTC()
+		} else {
+			addr.CreatedAt = addr.CreatedAt.UTC()
+		}
+	} else {
+		if addr.CreatedAt.IsZero() {
+			addr.CreatedAt = existing.CreatedAt
+		}
+	}
+	addr.ID = id
+	addr.UpdatedAt = m.clock().UTC()
+	if addr.NormalizedHash == "" {
+		addr.NormalizedHash = addressFingerprint(addr)
+	}
+
+	bucket[id] = addr
+
+	if addr.DefaultShipping {
+		for key, other := range bucket {
+			if key == id {
+				continue
+			}
+			if other.DefaultShipping {
+				other.DefaultShipping = false
+				bucket[key] = other
+			}
+		}
+	}
+	if addr.DefaultBilling {
+		for key, other := range bucket {
+			if key == id {
+				continue
+			}
+			if other.DefaultBilling {
+				other.DefaultBilling = false
+				bucket[key] = other
+			}
+		}
+	}
+
+	return addr, nil
+}
+
+func (m *memoryAddressRepo) Delete(_ context.Context, userID string, addressID string) error {
+	if m.store == nil {
+		return nil
+	}
+	if bucket := m.store[userID]; bucket != nil {
+		delete(bucket, addressID)
+	}
+	return nil
 }
 
 type captureAuditService struct {
@@ -146,6 +255,172 @@ func TestUserServiceGetProfileSeedsFromFirebase(t *testing.T) {
 	}
 	if len(profile.ProviderData) == 0 {
 		t.Fatalf("expected provider data to be captured")
+	}
+}
+
+func TestUserServiceUpsertAddressCreatesDefaults(t *testing.T) {
+	ctx := context.Background()
+	current := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time {
+		ts := current
+		current = current.Add(time.Second)
+		return ts
+	}
+
+	userRepo := newMemoryUserRepo(clock)
+	addressRepo := newMemoryAddressRepo(clock)
+	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
+
+	svc, err := NewUserService(UserServiceDeps{
+		Users:     userRepo,
+		Addresses: addressRepo,
+		Firebase:  firebase,
+		Clock:     clock,
+	})
+	if err != nil {
+		t.Fatalf("new user service: %v", err)
+	}
+
+	saved, err := svc.UpsertAddress(ctx, UpsertAddressCommand{
+		UserID: "user-a",
+		Address: Address{
+			Recipient:  "Hanako",
+			Line1:      "1-2-3",
+			City:       "Chiyoda",
+			PostalCode: "1000001",
+			Country:    "jp",
+		},
+	})
+	if err != nil {
+		t.Fatalf("upsert address: %v", err)
+	}
+	if !saved.DefaultShipping || !saved.DefaultBilling {
+		t.Fatalf("expected defaults set, got shipping=%v billing=%v", saved.DefaultShipping, saved.DefaultBilling)
+	}
+}
+
+func TestUserServiceUpsertAddressDeduplicates(t *testing.T) {
+	ctx := context.Background()
+	current := time.Date(2024, 6, 5, 9, 0, 0, 0, time.UTC)
+	clock := func() time.Time {
+		ts := current
+		current = current.Add(time.Second)
+		return ts
+	}
+
+	userRepo := newMemoryUserRepo(clock)
+	addressRepo := newMemoryAddressRepo(clock)
+	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
+
+	svc, err := NewUserService(UserServiceDeps{
+		Users:     userRepo,
+		Addresses: addressRepo,
+		Firebase:  firebase,
+		Clock:     clock,
+	})
+	if err != nil {
+		t.Fatalf("new user service: %v", err)
+	}
+
+	first, err := svc.UpsertAddress(ctx, UpsertAddressCommand{
+		UserID: "user-b",
+		Address: Address{
+			Recipient:  "Taro",
+			Line1:      "4-5-6",
+			City:       "Minato",
+			PostalCode: "1050001",
+			Country:    "JP",
+		},
+	})
+	if err != nil {
+		t.Fatalf("upsert initial: %v", err)
+	}
+
+	second, err := svc.UpsertAddress(ctx, UpsertAddressCommand{
+		UserID: "user-b",
+		Address: Address{
+			Recipient:  "taro",
+			Line1:      "4-5-6",
+			City:       "minato",
+			PostalCode: "105-0001",
+			Country:    "jp",
+		},
+	})
+	if err != nil {
+		t.Fatalf("upsert duplicate: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("expected duplicate to reuse id %s, got %s", first.ID, second.ID)
+	}
+}
+
+func TestUserServiceDeleteAddressPromotesDefault(t *testing.T) {
+	ctx := context.Background()
+	current := time.Date(2024, 7, 1, 8, 0, 0, 0, time.UTC)
+	clock := func() time.Time {
+		ts := current
+		current = current.Add(time.Second)
+		return ts
+	}
+
+	userRepo := newMemoryUserRepo(clock)
+	addressRepo := newMemoryAddressRepo(clock)
+	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
+
+	svc, err := NewUserService(UserServiceDeps{
+		Users:     userRepo,
+		Addresses: addressRepo,
+		Firebase:  firebase,
+		Clock:     clock,
+	})
+	if err != nil {
+		t.Fatalf("new user service: %v", err)
+	}
+
+	first, err := svc.UpsertAddress(ctx, UpsertAddressCommand{
+		UserID: "user-c",
+		Address: Address{
+			Recipient:  "Ichiro",
+			Line1:      "7-8-9",
+			City:       "Nagoya",
+			PostalCode: "4600001",
+			Country:    "JP",
+		},
+	})
+	if err != nil {
+		t.Fatalf("upsert first: %v", err)
+	}
+
+	second, err := svc.UpsertAddress(ctx, UpsertAddressCommand{
+		UserID: "user-c",
+		Address: Address{
+			Recipient:  "Jiro",
+			Line1:      "10-11-12",
+			City:       "Osaka",
+			PostalCode: "5300001",
+			Country:    "JP",
+		},
+	})
+	if err != nil {
+		t.Fatalf("upsert second: %v", err)
+	}
+
+	if err := svc.DeleteAddress(ctx, DeleteAddressCommand{UserID: "user-c", AddressID: first.ID}); err != nil {
+		t.Fatalf("delete address: %v", err)
+	}
+
+	addresses, err := svc.ListAddresses(ctx, "user-c")
+	if err != nil {
+		t.Fatalf("list addresses: %v", err)
+	}
+	if len(addresses) != 1 {
+		t.Fatalf("expected 1 address, got %d", len(addresses))
+	}
+	if !addresses[0].DefaultShipping || !addresses[0].DefaultBilling {
+		t.Fatalf("expected remaining address to be default, got shipping=%v billing=%v", addresses[0].DefaultShipping, addresses[0].DefaultBilling)
+	}
+	if addresses[0].ID != second.ID {
+		t.Fatalf("expected remaining address %s, got %s", second.ID, addresses[0].ID)
 	}
 }
 
