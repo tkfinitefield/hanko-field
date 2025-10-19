@@ -4,10 +4,12 @@ import (
     "flag"
     "fmt"
     "html/template"
+    "io/fs"
     "log"
     "net/http"
     "os"
     "path/filepath"
+    "strings"
     "time"
 
     "github.com/go-chi/chi/v5"
@@ -18,8 +20,9 @@ import (
 var (
     templatesDir = "templates"
     publicDir    = "public"
-    devMode      = os.Getenv("DEV") != ""
-    tmplCache    *template.Template
+    // devMode is set in main() based on env: HANKO_WEB_DEV (preferred) or DEV (fallback)
+    devMode   bool
+    tmplCache *template.Template
 )
 
 func main() {
@@ -29,7 +32,11 @@ func main() {
         tmplPath string
         pubPath  string
     )
-    port := os.Getenv("PORT")
+    // Port resolution: prefer HANKO_WEB_PORT, then Cloud Run's PORT, else 8080
+    port := os.Getenv("HANKO_WEB_PORT")
+    if port == "" {
+        port = os.Getenv("PORT")
+    }
     if port == "" {
         port = "8080"
     }
@@ -40,6 +47,9 @@ func main() {
 
     templatesDir = tmplPath
     publicDir = pubPath
+
+    // Dev mode: prefer HANKO_WEB_DEV, fallback to DEV
+    devMode = os.Getenv("HANKO_WEB_DEV") != "" || os.Getenv("DEV") != ""
 
     if !devMode {
         // Parse templates once in production
@@ -52,6 +62,9 @@ func main() {
 
     r := chi.NewRouter()
     r.Use(middleware.RequestID)
+    // If deployed behind a trusted reverse proxy/load balancer, RealIP will use
+    // X-Forwarded-For to determine the client IP. Ensure only trusted proxies
+    // can set these headers in production environments.
     r.Use(middleware.RealIP)
     r.Use(middleware.Logger)
     r.Use(middleware.Recoverer)
@@ -91,8 +104,26 @@ func parseTemplates() (*template.Template, error) {
     funcMap := template.FuncMap{
         "now": time.Now,
     }
-    // Parse all templates; rely on base layout with blocks
-    return template.New("_root").Funcs(funcMap).ParseGlob(filepath.Join(templatesDir, "**", "*.tmpl"))
+    // Recursively discover and parse all .tmpl files. Note: ParseGlob doesn't support **.
+    var files []string
+    if err := filepath.WalkDir(templatesDir, func(path string, d fs.DirEntry, err error) error {
+        if err != nil {
+            return err
+        }
+        if d.IsDir() {
+            return nil
+        }
+        if strings.HasSuffix(d.Name(), ".tmpl") {
+            files = append(files, path)
+        }
+        return nil
+    }); err != nil {
+        return nil, err
+    }
+    if len(files) == 0 {
+        return nil, fmt.Errorf("no templates found under %s", templatesDir)
+    }
+    return template.New("_root").Funcs(funcMap).ParseFiles(files...)
 }
 
 // render executes the base layout. In dev mode, templates are reparsed on each request.

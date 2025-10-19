@@ -34,8 +34,9 @@ make run
 Then open http://localhost:8080
 
 Environment variables:
-- `PORT`: listen port (default 8080)
-- `DEV=1`: enable template re-parse on each request
+- `HANKO_WEB_PORT`: listen port (fallback to Cloud Run `PORT`), default 8080
+- `HANKO_WEB_DEV=1`: enable template re-parse on each request
+- `HANKO_WEB_ENV`: environment name (e.g., `dev`, `staging`, `prod`)
 
 ## Useful commands
 ```bash
@@ -58,5 +59,4 @@ make tidy       # go mod tidy
 - Run `make htmx` once to fetch `public/assets/js/htmx.min.js` locally; the base layout references `/assets/js/htmx.min.js`.
 
 ## Notes
-- htmx is provided via npm (`htmx.org`) and copied to `public/assets/js/htmx.min.js` by `npm run assets:copy`.
 - This scaffold uses `html/template`. If/when migrating to `templ`, maintain the same directory structure and route organization.

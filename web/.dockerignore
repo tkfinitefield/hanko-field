@@ -1,0 +1,10 @@
+.git
+.gitignore
+.air
+bin
+tools
+public
+Dockerfile*
+cloudbuild.yaml
+**/*.swp
+**/*.DS_Store

@@ -1,0 +1,73 @@
+substitutions:
+  _REGION: asia-northeast1
+  _SERVICE: hanko-web
+  _REPOSITORY: web
+  _AR_HOST: asia-northeast1-docker.pkg.dev
+  _CPU: "1"
+  _MEMORY: 512Mi
+  _MIN_INSTANCES: "0"
+  _MAX_INSTANCES: "3"
+  _SECRET_API_BASE_URL: projects/$PROJECT_ID/secrets/web-API_BASE_URL:latest
+  _SECRET_FIREBASE_API_KEY: projects/$PROJECT_ID/secrets/web-FIREBASE_API_KEY:latest
+  _SECRET_FIREBASE_AUTH_DOMAIN: projects/$PROJECT_ID/secrets/web-FIREBASE_AUTH_DOMAIN:latest
+  _SECRET_FIREBASE_PROJECT_ID: projects/$PROJECT_ID/secrets/web-FIREBASE_PROJECT_ID:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - id: Build image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_AR_HOST}/${PROJECT_ID}/${_REPOSITORY}/web:${SHORT_SHA}
+      - .
+    dir: web
+
+  - id: Push image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_AR_HOST}/${PROJECT_ID}/${_REPOSITORY}/web:${SHORT_SHA}
+
+  - id: Deploy to Cloud Run
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image
+      - ${_AR_HOST}/${PROJECT_ID}/${_REPOSITORY}/web:${SHORT_SHA}
+      - --region
+      - ${_REGION}
+      - --platform
+      - managed
+      - --allow-unauthenticated
+      - --port
+      - "8080"
+      - --cpu
+      - ${_CPU}
+      - --memory
+      - ${_MEMORY}
+      - --min-instances
+      - ${_MIN_INSTANCES}
+      - --max-instances
+      - ${_MAX_INSTANCES}
+      - --set-env-vars
+      - HANKO_WEB_ENV=prod
+      - --set-secrets
+      - |
+        HANKO_WEB_API_BASE_URL=${_SECRET_API_BASE_URL},\
+        HANKO_WEB_FIREBASE_API_KEY=${_SECRET_FIREBASE_API_KEY},\
+        HANKO_WEB_FIREBASE_AUTH_DOMAIN=${_SECRET_FIREBASE_AUTH_DOMAIN},\
+        HANKO_WEB_FIREBASE_PROJECT_ID=${_SECRET_FIREBASE_PROJECT_ID}
+
+images:
+  - ${_AR_HOST}/${PROJECT_ID}/${_REPOSITORY}/web:${SHORT_SHA}
+
+tags:
+  - web
+  - cloud-run
+  - deploy
