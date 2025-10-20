@@ -7,6 +7,7 @@ type NavItem struct {
 	Href   string
 	Icon   string
 	Active bool
+	Capability string
 }
 
 templ Sidebar(items []NavItem) {
@@ -14,14 +15,16 @@ templ Sidebar(items []NavItem) {
 		<div class="px-4 py-6 text-lg font-semibold text-slate-900">Hanko Admin</div>
 		<ul class="space-y-1 px-2">
 			for _, item := range items {
-				<li>
-					<a href={ item.Href } class={ helpers.NavClass(item.Active) }>
-						if item.Icon != "" {
-							<span class="text-slate-400">{ item.Icon }</span>
-						}
-						<span>{ item.Label }</span>
-					</a>
-				</li>
+				if helpers.HasCapability(ctx, item.Capability) {
+					<li>
+						<a href={ item.Href } class={ helpers.NavClass(item.Active) }>
+							if item.Icon != "" {
+								<span class="text-slate-400">{ item.Icon }</span>
+							}
+							<span>{ item.Label }</span>
+						</a>
+					</li>
+				}
 			}
 		</ul>
 	</nav>

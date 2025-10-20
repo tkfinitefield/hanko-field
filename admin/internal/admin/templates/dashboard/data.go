@@ -5,6 +5,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"finitefield.org/hanko-admin/internal/admin/rbac"
 	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
 	"finitefield.org/hanko-admin/internal/admin/templates/partials"
 )
@@ -18,9 +19,22 @@ type orderRow struct {
 
 func navigationItems() []partials.NavItem {
 	return []partials.NavItem{
-		{Label: helpers.I18N("admin.nav.dashboard"), Href: "/admin", Active: true},
-		{Label: helpers.I18N("admin.nav.orders"), Href: "/admin/orders"},
-		{Label: helpers.I18N("admin.nav.catalog"), Href: "/admin/catalog"},
+		{
+			Label:      helpers.I18N("admin.nav.dashboard"),
+			Href:       "/admin",
+			Active:     true,
+			Capability: string(rbac.CapDashboardOverview),
+		},
+		{
+			Label:      helpers.I18N("admin.nav.orders"),
+			Href:       "/admin/orders",
+			Capability: string(rbac.CapOrdersList),
+		},
+		{
+			Label:      helpers.I18N("admin.nav.catalog"),
+			Href:       "/admin/catalog",
+			Capability: string(rbac.CapCatalogManage),
+		},
 	}
 }
 
