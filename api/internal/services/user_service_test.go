@@ -13,6 +13,8 @@ import (
 	firebaseauth "firebase.google.com/go/v4/auth"
 	domain "github.com/hanko-field/api/internal/domain"
 	"github.com/hanko-field/api/internal/repositories"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type memoryUserRepo struct {
@@ -403,37 +405,17 @@ func (m *memoryFavoriteRepo) List(_ context.Context, userID string, pager domain
 		}
 		return items[i].AddedAt.After(items[j].AddedAt)
 	})
-	start := 0
-	if token := strings.TrimSpace(pager.PageToken); token != "" {
-		for idx, fav := range items {
-			if fav.DesignID == token {
-				start = idx + 1
-				break
-			}
-		}
-	}
-	if start > len(items) {
-		start = len(items)
-	}
-	items = items[start:]
-	limit := pager.PageSize
-	if limit <= 0 || limit > len(items) {
-		limit = len(items)
-	}
-	nextToken := ""
-	if limit < len(items) {
-		nextToken = items[limit-1].DesignID
-		items = items[:limit]
+	if pager.PageSize > 0 && pager.PageSize < len(items) {
+		items = items[:pager.PageSize]
 	}
 	result := make([]domain.FavoriteDesign, len(items))
 	copy(result, items)
 	return domain.CursorPage[domain.FavoriteDesign]{
-		Items:         result,
-		NextPageToken: nextToken,
+		Items: result,
 	}, nil
 }
 
-func (m *memoryFavoriteRepo) Put(_ context.Context, userID string, designID string, addedAt time.Time) error {
+func (m *memoryFavoriteRepo) Put(_ context.Context, userID string, designID string, addedAt time.Time, limit int) (bool, error) {
 	if m.store == nil {
 		m.store = make(map[string]map[string]domain.FavoriteDesign)
 	}
@@ -442,13 +424,14 @@ func (m *memoryFavoriteRepo) Put(_ context.Context, userID string, designID stri
 		bucket = make(map[string]domain.FavoriteDesign)
 		m.store[userID] = bucket
 	}
-	if existing, ok := bucket[designID]; ok {
-		existing.DesignID = designID
-		bucket[designID] = existing
-		return nil
+	if _, ok := bucket[designID]; ok {
+		return false, nil
+	}
+	if limit > 0 && len(bucket) >= limit {
+		return false, status.Error(codes.FailedPrecondition, "favorite limit reached")
 	}
 	bucket[designID] = domain.FavoriteDesign{DesignID: designID, AddedAt: addedAt.UTC()}
-	return nil
+	return true, nil
 }
 
 func (m *memoryFavoriteRepo) Delete(_ context.Context, userID string, designID string) error {
@@ -1350,7 +1333,7 @@ func TestUserServiceToggleFavoriteLimit(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		designID := fmt.Sprintf("design-%03d", i)
 		designRepo.Insert(ctx, domain.Design{ID: designID, OwnerID: "user-limit", Status: "draft", UpdatedAt: clock()})
-		_ = favoriteRepo.Put(ctx, "user-limit", designID, clock())
+		_, _ = favoriteRepo.Put(ctx, "user-limit", designID, clock(), 200)
 	}
 
 	svc, err := NewUserService(UserServiceDeps{

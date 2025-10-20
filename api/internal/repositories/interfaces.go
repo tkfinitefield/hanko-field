@@ -238,7 +238,7 @@ type PaymentMethodRepository interface {
 // FavoriteRepository tracks favorite designs per user.
 type FavoriteRepository interface {
 	List(ctx context.Context, userID string, pager domain.Pagination) (domain.CursorPage[domain.FavoriteDesign], error)
-	Put(ctx context.Context, userID string, designID string, addedAt time.Time) error
+	Put(ctx context.Context, userID string, designID string, addedAt time.Time, limit int) (bool, error)
 	Delete(ctx context.Context, userID string, designID string) error
 }
 

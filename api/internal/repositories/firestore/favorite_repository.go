@@ -2,6 +2,7 @@ package firestore
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -52,21 +53,22 @@ func (r *FavoriteRepository) List(ctx context.Context, userID string, pager doma
 	}
 
 	if token := strings.TrimSpace(pager.PageToken); token != "" {
-		snap, err := coll.Doc(token).Get(ctx)
+		tokenTime, tokenID, err := decodeFavoriteToken(token)
 		if err != nil {
-			return domain.CursorPage[domain.FavoriteDesign]{}, pfirestore.WrapError("favorites.list.pageToken", err)
+			return domain.CursorPage[domain.FavoriteDesign]{}, fmt.Errorf("favorites.list: invalid page token: %w", err)
 		}
-		var doc favoriteDocument
-		if err := snap.DataTo(&doc); err != nil {
-			return domain.CursorPage[domain.FavoriteDesign]{}, fmt.Errorf("decode favorite %s: %w", snap.Ref.ID, err)
-		}
-		query = query.StartAfter(doc.AddedAt, snap.Ref.ID)
+		query = query.StartAfter(tokenTime, tokenID)
 	}
 
 	iter := query.Documents(ctx)
 	defer iter.Stop()
 
-	var items []domain.FavoriteDesign
+	type favoriteRow struct {
+		data  domain.FavoriteDesign
+		docID string
+	}
+
+	var rows []favoriteRow
 	for {
 		snap, err := iter.Next()
 		if errors.Is(err, iterator.Done) {
@@ -79,13 +81,19 @@ func (r *FavoriteRepository) List(ctx context.Context, userID string, pager doma
 		if err != nil {
 			return domain.CursorPage[domain.FavoriteDesign]{}, err
 		}
-		items = append(items, fav)
+		rows = append(rows, favoriteRow{data: fav, docID: snap.Ref.ID})
 	}
 
 	nextToken := ""
-	if limit > 0 && len(items) == fetchLimit {
-		nextToken = items[len(items)-1].DesignID
-		items = items[:len(items)-1]
+	if limit > 0 && len(rows) == fetchLimit {
+		last := rows[len(rows)-1]
+		nextToken = encodeFavoriteToken(last.data.AddedAt, last.docID)
+		rows = rows[:len(rows)-1]
+	}
+
+	items := make([]domain.FavoriteDesign, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, row.data)
 	}
 
 	return domain.CursorPage[domain.FavoriteDesign]{
@@ -95,33 +103,53 @@ func (r *FavoriteRepository) List(ctx context.Context, userID string, pager doma
 }
 
 // Put stores or preserves a favorite.
-func (r *FavoriteRepository) Put(ctx context.Context, userID string, designID string, addedAt time.Time) error {
+func (r *FavoriteRepository) Put(ctx context.Context, userID string, designID string, addedAt time.Time, limit int) (bool, error) {
 	coll, err := r.collection(ctx, userID)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	designID = strings.TrimSpace(designID)
 	if designID == "" {
-		return errors.New("favorite repository: design id is required")
+		return false, errors.New("favorite repository: design id is required")
 	}
 
-	return pfirestore.WrapError("favorites.put", r.provider.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+	created := false
+	err = r.provider.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		docRef := coll.Doc(designID)
-		if _, err := tx.Get(docRef); err != nil {
-			switch status.Code(err) {
-			case codes.NotFound:
-				doc := favoriteDocument{
-					DesignRef: designDocPath(designID),
-					AddedAt:   addedAt.UTC(),
-				}
-				return tx.Set(docRef, doc)
-			default:
+		if _, err := tx.Get(docRef); err == nil {
+			created = false
+			return nil
+		} else if status.Code(err) != codes.NotFound {
+			return err
+		}
+
+		if limit > 0 {
+			countQuery := coll.Select("addedAt").Limit(limit)
+			iter := tx.Documents(countQuery)
+			snaps, err := iter.GetAll()
+			if err != nil {
 				return err
 			}
+			if len(snaps) >= limit {
+				return status.Error(codes.FailedPrecondition, "favorite limit reached")
+			}
 		}
+
+		doc := favoriteDocument{
+			DesignRef: designDocPath(designID),
+			AddedAt:   addedAt.UTC(),
+		}
+		if err := tx.Set(docRef, doc); err != nil {
+			return err
+		}
+		created = true
 		return nil
-	}))
+	})
+	if err != nil {
+		return false, pfirestore.WrapError("favorites.put", err)
+	}
+	return created, nil
 }
 
 // Delete removes the favorite document.
@@ -201,6 +229,27 @@ func extractDesignID(ref string) string {
 		return trimmed[len(prefix):]
 	}
 	return trimmed
+}
+
+func encodeFavoriteToken(addedAt time.Time, docID string) string {
+	payload := fmt.Sprintf("%s|%s", addedAt.UTC().Format(time.RFC3339Nano), docID)
+	return base64.RawURLEncoding.EncodeToString([]byte(payload))
+}
+
+func decodeFavoriteToken(token string) (time.Time, string, error) {
+	data, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return time.Time{}, "", err
+	}
+	parts := strings.SplitN(string(data), "|", 2)
+	if len(parts) != 2 {
+		return time.Time{}, "", errors.New("invalid token format")
+	}
+	ts, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return time.Time{}, "", err
+	}
+	return ts, parts[1], nil
 }
 
 // Ensure interface compliance.

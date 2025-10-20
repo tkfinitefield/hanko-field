@@ -18,6 +18,8 @@ import (
 	"github.com/hanko-field/api/internal/platform/auth"
 	"github.com/hanko-field/api/internal/repositories"
 	"golang.org/x/text/language"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -678,37 +680,32 @@ func (s *userService) ListFavorites(ctx context.Context, userID string, pager Pa
 		return domain.CursorPage[FavoriteDesign]{}, err
 	}
 
-	lookup := map[string]*Design{}
-	if s.designs != nil {
-		for _, fav := range repoPage.Items {
-			designID := strings.TrimSpace(fav.DesignID)
-			if designID == "" {
-				continue
-			}
-			if _, exists := lookup[designID]; exists {
-				continue
-			}
-			design, err := s.designs.FindByID(ctx, designID)
-			if err != nil {
-				if isNotFound(err) {
-					_ = s.favorites.Delete(ctx, userID, designID)
-					continue
-				}
-				return domain.CursorPage[FavoriteDesign]{}, err
-			}
-			copy := design
-			lookup[designID] = &copy
-		}
-	}
-
 	items := make([]FavoriteDesign, 0, len(repoPage.Items))
+	lookup := map[string]*Design{}
+
 	for _, fav := range repoPage.Items {
 		fd := FavoriteDesign{
 			DesignID: fav.DesignID,
 			AddedAt:  fav.AddedAt,
 		}
-		if d, ok := lookup[fav.DesignID]; ok {
-			fd.Design = d
+		if s.designs != nil {
+			if cached, ok := lookup[fav.DesignID]; ok {
+				fd.Design = cached
+			} else {
+				design, err := s.designs.FindByID(ctx, fav.DesignID)
+				if err != nil {
+					if isNotFound(err) {
+						if delErr := s.favorites.Delete(ctx, userID, fav.DesignID); delErr != nil && !isNotFound(delErr) {
+							return domain.CursorPage[FavoriteDesign]{}, delErr
+						}
+						continue
+					}
+					return domain.CursorPage[FavoriteDesign]{}, err
+				}
+				copy := design
+				lookup[fav.DesignID] = &copy
+				fd.Design = &copy
+			}
 		}
 		items = append(items, fd)
 	}
@@ -734,26 +731,7 @@ func (s *userService) ToggleFavorite(ctx context.Context, cmd ToggleFavoriteComm
 		return errFavoriteDesignRequired
 	}
 
-	repoPage, err := s.favorites.List(ctx, userID, Pagination{PageSize: maxFavorites})
-	if err != nil {
-		return err
-	}
-
-	exists := false
-	for _, fav := range repoPage.Items {
-		if strings.EqualFold(fav.DesignID, designID) {
-			exists = true
-			break
-		}
-	}
-
 	if cmd.Mark {
-		if exists {
-			return nil
-		}
-		if len(repoPage.Items) >= maxFavorites {
-			return ErrUserFavoriteLimitExceeded
-		}
 		if s.designs == nil {
 			return errDesignRepositoryUnavailable
 		}
@@ -767,14 +745,13 @@ func (s *userService) ToggleFavorite(ctx context.Context, cmd ToggleFavoriteComm
 		if !s.canFavoriteDesign(userID, design) {
 			return ErrUserFavoriteDesignForbidden
 		}
-		now := s.clock()
-		if err := s.favorites.Put(ctx, userID, designID, now); err != nil {
+		_, err = s.favorites.Put(ctx, userID, designID, s.clock(), maxFavorites)
+		if err != nil {
+			if isFailedPrecondition(err) {
+				return ErrUserFavoriteLimitExceeded
+			}
 			return err
 		}
-		return nil
-	}
-
-	if !exists {
 		return nil
 	}
 
@@ -1379,6 +1356,16 @@ func isConflict(err error) bool {
 	var repoErr repositories.RepositoryError
 	if errors.As(err, &repoErr) {
 		return repoErr.IsConflict()
+	}
+	return false
+}
+
+func isFailedPrecondition(err error) bool {
+	if err == nil {
+		return false
+	}
+	if st, ok := status.FromError(err); ok {
+		return st.Code() == codes.FailedPrecondition
 	}
 	return false
 }
