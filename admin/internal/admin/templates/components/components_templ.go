@@ -1869,7 +1869,7 @@ func Toast(props ToastProps) templ.Component {
 
 func buttonType(value string) string {
 	if value == "" {
-		return "button"
+		return "submit"
 	}
 	return value
 }
