@@ -1,0 +1,44 @@
+{{ define "c_skeleton_text" }}
+{{ $lines := .Lines }}{{ if not $lines }}{{ $lines = 3 }}{{ end }}
+<div class="animate-pulse space-y-2">
+  {{ range $i, $_ := (seq $lines) }}
+    <div class="h-4 bg-gray-200 rounded"></div>
+  {{ end }}
+</div>
+{{ end }}
+
+{{ define "c_skeleton_card" }}
+<div class="rounded-lg border border-gray-100 bg-white p-4 animate-pulse">
+  <div class="h-40 w-full bg-gray-200 rounded"></div>
+  <div class="mt-4 space-y-2">
+    <div class="h-4 bg-gray-200 rounded w-3/4"></div>
+    <div class="h-4 bg-gray-200 rounded w-5/6"></div>
+  </div>
+</div>
+{{ end }}
+
+{{ define "c_skeleton_table" }}
+{{ $cols := .Cols }}{{ if not $cols }}{{ $cols = 4 }}{{ end }}
+{{ $rows := .Rows }}{{ if not $rows }}{{ $rows = 5 }}{{ end }}
+<div class="overflow-x-auto animate-pulse">
+  <table class="min-w-full divide-y divide-gray-200">
+    <thead class="bg-gray-50">
+      <tr>
+        {{ range $i, $_ := (seq $cols) }}
+          <th class="px-4 py-2"><div class="h-3 bg-gray-200 rounded w-16"></div></th>
+        {{ end }}
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100 bg-white">
+      {{ range $r, $_ := (seq $rows) }}
+        <tr>
+          {{ range $c, $_ := (seq $cols) }}
+            <td class="px-4 py-3"><div class="h-4 bg-gray-200 rounded w-24"></div></td>
+          {{ end }}
+        </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+{{ end }}
+

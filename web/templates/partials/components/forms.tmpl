@@ -1,0 +1,66 @@
+{{ define "c_input" }}
+{{ $id := .ID }}{{ if not $id }}{{ $id = .Name }}{{ end }}
+{{ $helpID := printf "%s_help" $id }}
+{{ $errID := printf "%s_error" $id }}
+<div class="w-full">
+  {{ if .Label }}<label for="{{ $id }}" class="block text-sm font-medium text-gray-700">{{ .Label }}</label>{{ end }}
+  <input
+    id="{{ $id }}"
+    name="{{ .Name }}"
+    type="{{ if .Type }}{{ .Type }}{{ else }}text{{ end }}"
+    value="{{ .Value }}"
+    placeholder="{{ .Placeholder }}"
+    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm {{ if .Invalid }}border-red-300 focus:border-red-500 focus:ring-red-500{{ end }}"
+    {{ with .Required }}{{ if . }}required aria-required="true"{{ end }}{{ end }}
+    {{ with .Help }}aria-describedby="{{ $helpID }}"{{ end }}
+    {{ with .Error }}aria-errormessage="{{ $errID }}" aria-invalid="true"{{ end }}
+  />
+  {{ with .Help }}<p id="{{ $helpID }}" class="mt-1 text-xs text-gray-500">{{ . }}</p>{{ end }}
+  {{ with .Error }}<p id="{{ $errID }}" class="mt-1 text-xs text-red-600">{{ . }}</p>{{ end }}
+</div>
+{{ end }}
+
+{{ define "c_textarea" }}
+{{ $id := .ID }}{{ if not $id }}{{ $id = .Name }}{{ end }}
+{{ $helpID := printf "%s_help" $id }}
+{{ $errID := printf "%s_error" $id }}
+<div class="w-full">
+  {{ if .Label }}<label for="{{ $id }}" class="block text-sm font-medium text-gray-700">{{ .Label }}</label>{{ end }}
+  <textarea
+    id="{{ $id }}"
+    name="{{ .Name }}"
+    rows="{{ if .Rows }}{{ .Rows }}{{ else }}4{{ end }}"
+    placeholder="{{ .Placeholder }}"
+    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm {{ if .Invalid }}border-red-300 focus:border-red-500 focus:ring-red-500{{ end }}"
+    {{ with .Required }}{{ if . }}required aria-required="true"{{ end }}{{ end }}
+    {{ with .Help }}aria-describedby="{{ $helpID }}"{{ end }}
+    {{ with .Error }}aria-errormessage="{{ $errID }}" aria-invalid="true"{{ end }}
+  >{{ .Value }}</textarea>
+  {{ with .Help }}<p id="{{ $helpID }}" class="mt-1 text-xs text-gray-500">{{ . }}</p>{{ end }}
+  {{ with .Error }}<p id="{{ $errID }}" class="mt-1 text-xs text-red-600">{{ . }}</p>{{ end }}
+</div>
+{{ end }}
+
+{{ define "c_select" }}
+{{ $id := .ID }}{{ if not $id }}{{ $id = .Name }}{{ end }}
+{{ $helpID := printf "%s_help" $id }}
+{{ $errID := printf "%s_error" $id }}
+<div class="w-full">
+  {{ if .Label }}<label for="{{ $id }}" class="block text-sm font-medium text-gray-700">{{ .Label }}</label>{{ end }}
+  <select
+    id="{{ $id }}"
+    name="{{ .Name }}"
+    class="mt-1 block w-full rounded-md border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm {{ if .Invalid }}border-red-300 focus:border-red-500 focus:ring-red-500{{ end }}"
+    {{ with .Required }}{{ if . }}required aria-required="true"{{ end }}{{ end }}
+    {{ with .Help }}aria-describedby="{{ $helpID }}"{{ end }}
+    {{ with .Error }}aria-errormessage="{{ $errID }}" aria-invalid="true"{{ end }}
+  >
+    {{ range .Options }}
+      <option value="{{ .Value }}" {{ if eq .Value $.Value }}selected{{ end }}>{{ .Label }}</option>
+    {{ end }}
+  </select>
+  {{ with .Help }}<p id="{{ $helpID }}" class="mt-1 text-xs text-gray-500">{{ . }}</p>{{ end }}
+  {{ with .Error }}<p id="{{ $errID }}" class="mt-1 text-xs text-red-600">{{ . }}</p>{{ end }}
+</div>
+{{ end }}
+

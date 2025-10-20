@@ -144,6 +144,13 @@ func tmplFuncMap() template.FuncMap {
         "tlang":    func(lang, key string) string { if i18nBundle == nil { return key }; return i18nBundle.T(lang, key) },
         "fmtDate":  func(ts time.Time, lang string) string { return format.FmtDate(ts, lang) },
         "fmtMoney": func(amount int64, currency, lang string) string { return format.FmtCurrency(amount, currency, lang) },
+        "seq":      func(n int) []int { if n < 0 { n = 0 }; s := make([]int, n); for i := range s { s[i] = i }; return s },
+        // dict builds a string-keyed map for component props
+        "dict":     func(v ...any) map[string]any { m := map[string]any{}; for i := 0; i+1 < len(v); i += 2 { k := fmt.Sprint(v[i]); m[k] = v[i+1] }; return m },
+        // list returns a slice of the arguments
+        "list":     func(v ...any) []any { return v },
+        // safe marks a string as trusted HTML. Use sparingly.
+        "safe":     func(s string) template.HTML { return template.HTML(s) },
     }
 }
 

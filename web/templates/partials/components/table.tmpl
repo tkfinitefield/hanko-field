@@ -1,0 +1,31 @@
+{{ define "c_table" }}
+<div class="overflow-x-auto">
+  <table class="min-w-full divide-y divide-gray-200">
+    <thead class="bg-gray-50">
+      <tr>
+        {{ range .Columns }}
+          {{ $align := .Align }}
+          <th scope="col" class="px-4 py-2 text-xs font-medium uppercase tracking-wide text-gray-500 {{ if eq $align "right" }}text-right{{ else if eq $align "center" }}text-center{{ else }}text-left{{ end }}">{{ .Label }}</th>
+        {{ end }}
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100 bg-white">
+      {{ if .Rows }}
+        {{ range $i, $row := .Rows }}
+          <tr class="hover:bg-gray-50">
+            {{ range $col := $.Columns }}
+              {{ $align := $col.Align }}
+              <td class="px-4 py-2 text-sm text-gray-900 {{ if eq $align "right" }}text-right{{ else if eq $align "center" }}text-center{{ else }}text-left{{ end }}">{{ index $row $col.Key }}</td>
+            {{ end }}
+          </tr>
+        {{ end }}
+      {{ else }}
+        <tr>
+          <td colspan="{{ len .Columns }}" class="px-4 py-6 text-center text-sm text-gray-500">{{ if .EmptyMessage }}{{ .EmptyMessage }}{{ else }}No data{{ end }}</td>
+        </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+{{ end }}
+

@@ -1,0 +1,48 @@
+{{ define "c_button" }}
+{{ $variant := .Variant }}
+{{ $size := .Size }}
+{{ $disabled := .Disabled }}
+{{ $base := "inline-flex items-center justify-center rounded-md font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition" }}
+{{ $cls := $base }}
+{{ if eq $size "sm" }}
+  {{ $cls = printf "%s %s" $cls "text-sm px-3 py-1.5" }}
+{{ else if eq $size "lg" }}
+  {{ $cls = printf "%s %s" $cls "text-base px-5 py-3" }}
+{{ else }}
+  {{ $cls = printf "%s %s" $cls "text-sm px-4 py-2" }}
+{{ end }}
+{{ if eq $variant "primary" }}
+  {{ $cls = printf "%s %s" $cls "bg-indigo-600 text-white hover:bg-indigo-500 focus:ring-indigo-600" }}
+{{ else if eq $variant "secondary" }}
+  {{ $cls = printf "%s %s" $cls "bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-300" }}
+{{ else if eq $variant "outline" }}
+  {{ $cls = printf "%s %s" $cls "border border-gray-300 text-gray-900 hover:bg-gray-50 focus:ring-gray-300" }}
+{{ else if eq $variant "ghost" }}
+  {{ $cls = printf "%s %s" $cls "text-gray-700 hover:bg-gray-100 focus:ring-gray-300" }}
+{{ else if eq $variant "danger" }}
+  {{ $cls = printf "%s %s" $cls "bg-red-600 text-white hover:bg-red-500 focus:ring-red-600" }}
+{{ else }}
+  {{ $cls = printf "%s %s" $cls "bg-gray-900 text-white hover:bg-gray-800 focus:ring-gray-900" }}
+{{ end }}
+{{ if .Href }}
+  <a href="{{ .Href }}" class="{{ $cls }}" {{ if $disabled }}aria-disabled="true" tabindex="-1"{{ end }}{{ with .AriaLabel }} aria-label="{{ . }}"{{ end }}{{ with .Attrs }} {{ range $k, $v := . }}{{$k}}="{{$v}}" {{ end }}{{ end }}>{{ .Label }}</a>
+{{ else }}
+  {{ $type := .Type }}{{ if not $type }}{{ $type = "button" }}{{ end }}
+  <button type="{{ $type }}" class="{{ $cls }}" {{ if $disabled }}disabled aria-disabled="true"{{ end }}{{ with .AriaLabel }} aria-label="{{ . }}"{{ end }}{{ with .Attrs }} {{ range $k, $v := . }}{{$k}}="{{$v}}" {{ end }}{{ end }}>{{ .Label }}</button>
+{{ end }}
+{{ end }}
+
+{{ define "c_button_set" }}
+{{ $align := .Align }}{{ if not $align }}{{ $align = "left" }}{{ end }}
+{{ $gap := .Gap }}{{ if not $gap }}{{ $gap = "gap-3" }}{{ end }}
+{{ if eq $align "center" }}
+  <div class="flex items-center justify-center {{ $gap }}">
+{{ else if eq $align "right" }}
+  <div class="flex items-center justify-end {{ $gap }}">
+{{ else }}
+  <div class="flex items-center {{ $gap }}">
+{{ end }}
+  {{ range .Buttons }}{{ template "c_button" . }}{{ end }}
+</div>
+{{ end }}
+
