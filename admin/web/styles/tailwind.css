@@ -2,6 +2,326 @@
 @tailwind components;
 @tailwind utilities;
 
-.app-shell {
-  @apply min-h-screen bg-slate-50;
+@layer base {
+  :root {
+    color-scheme: light;
+    --surface-default: theme("colors.surface.DEFAULT");
+    --surface-muted: theme("colors.surface.muted");
+    --surface-subtle: theme("colors.surface.subtle");
+    --surface-overlay: theme("colors.surface.overlay");
+    --border-subtle: theme("colors.border.subtle");
+    --border-bold: theme("colors.border.bold");
+    --text-default: theme("colors.slate.900");
+    --text-subtle: theme("colors.slate.600");
+  }
+
+  .dark {
+    color-scheme: dark;
+    --surface-default: theme("colors.slate.950");
+    --surface-muted: theme("colors.slate.900");
+    --surface-subtle: theme("colors.slate.800");
+    --surface-overlay: rgba(2, 6, 23, 0.65);
+    --border-subtle: theme("colors.slate.700");
+    --border-bold: theme("colors.slate.600");
+    --text-default: theme("colors.slate.100");
+    --text-subtle: theme("colors.slate.400");
+  }
+
+  body {
+    background-color: var(--surface-muted);
+    color: var(--text-default);
+    min-height: 100vh;
+    @apply font-sans antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--text-default);
+    @apply font-display tracking-tight;
+  }
+
+  h1 {
+    @apply text-3xl font-semibold;
+  }
+
+  h2 {
+    @apply text-2xl font-semibold;
+  }
+
+  h3 {
+    @apply text-xl font-semibold;
+  }
+
+  h4 {
+    @apply text-lg font-semibold;
+  }
+
+  a {
+    @apply text-brand-600 transition hover:text-brand-500;
+  }
+}
+
+@layer components {
+  .app-shell {
+    background-color: var(--surface-muted);
+    min-height: 100vh;
+  }
+
+  .card {
+    background-color: var(--surface-default);
+    border-color: var(--border-subtle);
+    @apply rounded-xl border p-6 shadow-surface transition hover:shadow-md;
+  }
+
+  .card-title {
+    color: var(--text-subtle);
+    @apply text-sm font-semibold uppercase tracking-wide;
+  }
+
+  .card-body {
+    color: var(--text-default);
+    @apply mt-3 text-sm;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-transparent px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  .btn-md {
+    @apply px-4 py-2 text-sm;
+  }
+
+  .btn-lg {
+    @apply px-5 py-3 text-base;
+  }
+
+  .btn-primary {
+    @apply bg-brand-600 text-white shadow focus-visible:ring-offset-2 hover:bg-brand-500;
+  }
+
+  .btn-secondary {
+    @apply bg-slate-100 text-slate-900 shadow-sm hover:bg-slate-200;
+  }
+
+  .btn-outline {
+    @apply border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900;
+  }
+
+  .btn-danger {
+    @apply bg-danger-600 text-white shadow-sm hover:bg-danger-500;
+  }
+
+  .btn-loading {
+    @apply relative text-transparent transition-none;
+  }
+
+  .btn-loading::after {
+    content: "";
+    background-image: radial-gradient(circle at center, theme("colors.white"), theme("colors.white") 40%, transparent 40%);
+    mask-image: radial-gradient(circle at center, transparent 45%, black 45%);
+    @apply absolute inset-0 flex items-center justify-center;
+    animation: spin 0.8s linear infinite;
+  }
+
+  .btn-label {
+    @apply inline-flex items-center;
+  }
+
+  .btn-icon-leading,
+  .btn-icon-trailing {
+    @apply flex items-center text-base;
+  }
+
+  .btn-icon-leading svg,
+  .btn-icon-trailing svg {
+    @apply h-4 w-4;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full border border-transparent bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600;
+  }
+
+  .badge-success {
+    @apply border-emerald-200 bg-emerald-50 text-emerald-700;
+  }
+
+  .badge-warning {
+    @apply border-amber-200 bg-amber-50 text-amber-700;
+  }
+
+  .badge-danger {
+    @apply border-rose-200 bg-rose-50 text-rose-700;
+  }
+
+  .badge-info {
+    @apply border-sky-200 bg-sky-50 text-sky-700;
+  }
+
+  .form-field {
+    @apply space-y-1;
+  }
+
+  .form-label {
+    color: var(--text-subtle);
+    @apply block text-sm font-medium;
+  }
+
+  .form-control {
+    background-color: var(--surface-default);
+    border-color: var(--border-subtle);
+    color: var(--text-default);
+    @apply w-full rounded-md border px-3 py-2 text-sm shadow-sm transition placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:bg-slate-100/70;
+  }
+
+  .form-control.is-error {
+    @apply border-danger-400 focus:border-danger-500 focus:ring-danger-400;
+  }
+
+  .form-help {
+    color: var(--text-subtle);
+    @apply text-xs;
+  }
+
+  .form-error {
+    @apply text-xs font-medium text-danger-600;
+  }
+
+  .table-wrapper {
+    background-color: var(--surface-default);
+    border-color: var(--border-subtle);
+    @apply overflow-hidden rounded-xl border shadow-surface;
+  }
+
+  .table {
+    @apply min-w-full border-collapse;
+  }
+
+  .table thead {
+    background-color: var(--surface-muted);
+    color: var(--text-subtle);
+    @apply text-left text-xs font-semibold uppercase tracking-wide;
+  }
+
+  .table th {
+    @apply px-4 py-3;
+  }
+
+  .table tbody {
+    color: var(--text-default);
+    @apply text-sm;
+  }
+
+  .table tbody tr + tr {
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .table tbody tr {
+    @apply transition hover:bg-slate-50;
+  }
+
+  .table td {
+    @apply px-4 py-3 align-middle;
+  }
+
+  .modal-overlay {
+    background-color: var(--surface-overlay);
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm;
+  }
+
+  .modal-panel {
+    background-color: var(--surface-default);
+    border-color: var(--border-subtle);
+    @apply w-full max-w-lg animate-dialog-in rounded-2xl border p-6 shadow-modal sm:max-w-xl;
+  }
+
+  .modal-panel.modal-lg {
+    @apply sm:max-w-3xl;
+  }
+
+  .modal-header {
+    @apply flex items-start justify-between gap-4;
+  }
+
+  .modal-title {
+    color: var(--text-default);
+    @apply text-lg font-semibold;
+  }
+
+  .modal-description {
+    color: var(--text-subtle);
+    @apply mt-1 text-sm;
+  }
+
+  .modal-body {
+    color: var(--text-default);
+    @apply mt-4 space-y-4 text-sm;
+  }
+
+  .modal-footer {
+    @apply mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end;
+  }
+
+  .toast-stack {
+    @apply pointer-events-none fixed inset-x-4 bottom-6 z-50 space-y-3 sm:left-auto sm:right-6;
+  }
+
+  .toast {
+    background-color: var(--surface-default);
+    border-color: var(--border-subtle);
+    @apply pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border p-4 text-sm shadow-toast transition;
+  }
+
+  .toast::before {
+    background-color: currentColor;
+    content: "";
+    @apply mt-0.5 inline-flex h-2 w-2 flex-none rounded-full;
+  }
+
+  .toast-title {
+    color: var(--text-default);
+    @apply text-sm font-semibold;
+  }
+
+  .toast-body {
+    color: var(--text-subtle);
+    @apply text-xs;
+  }
+
+  .toast-actions {
+    @apply mt-3 flex items-center gap-2;
+  }
+
+  .toast-success {
+    @apply border-emerald-200 bg-emerald-50 text-emerald-900;
+  }
+
+  .toast-danger {
+    @apply border-rose-200 bg-rose-50 text-rose-900;
+  }
+
+  .toast-info {
+    @apply border-sky-200 bg-sky-50 text-sky-900;
+  }
+
+  .toast-warning {
+    @apply border-amber-200 bg-amber-50 text-amber-900;
+  }
+}
+
+@layer utilities {
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 }

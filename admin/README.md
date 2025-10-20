@@ -47,5 +47,6 @@ The default authenticator accepts any non-empty bearer token for local developme
 - `internal/admin/templates` – templ components organised by feature.
 - `public/static` – compiled CSS/JS assets served by Go via `embed`.
 - `web/styles` – Tailwind source files.
+- Design tokens and component guidelines are catalogued in `doc/admin/design_tokens.md`.
 
 Generated `*_templ.go` files are committed to keep `go build ./...` working without extra steps. Regenerate after editing `.templ` files.

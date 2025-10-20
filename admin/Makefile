@@ -50,7 +50,7 @@ templ: ## Regenerate templ components
 
 .PHONY: css
 css: ensure-tailwind ## Build Tailwind assets
-	@$(TAILWIND_BIN) -i $(TAILWIND_INPUT) -o $(TAILWIND_OUTPUT) --minify
+	@NODE_ENV=production $(TAILWIND_BIN) -i $(TAILWIND_INPUT) -o $(TAILWIND_OUTPUT) --minify
 
 .PHONY: css-watch
 css-watch: ensure-tailwind ## Watch Tailwind assets
@@ -73,7 +73,7 @@ ensure-tailwind: ## Download Tailwind standalone binary if required version miss
 	@REQUIRED="v$(TAILWIND_VERSION)"; \
 	CURRENT=""; \
 	if [ -x $(TAILWIND_BIN) ]; then \
-		CURRENT=$$($(TAILWIND_BIN) --version 2>/dev/null | awk '{print $$2}'); \
+		CURRENT=$$($(TAILWIND_BIN) --help 2>/dev/null | awk 'NR==1{print $$2}'); \
 	fi; \
 	if [ "$$CURRENT" != "$$REQUIRED" ]; then \
 		rm -f $(TAILWIND_BIN); \
@@ -84,7 +84,7 @@ ensure-tailwind: ## Download Tailwind standalone binary if required version miss
 		chmod +x $(TAILWIND_TARGET); \
 	fi; \
 	ln -sf $$(basename $(TAILWIND_TARGET)) $(TAILWIND_BIN); \
-	$(TAILWIND_BIN) --version >/dev/null
+	$(TAILWIND_BIN) --help >/dev/null
 
 .PHONY: clean
 clean: ## Remove build artifacts

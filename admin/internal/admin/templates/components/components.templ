@@ -2,50 +2,469 @@ package components
 
 import "finitefield.org/hanko-admin/internal/admin/templates/helpers"
 
+type ButtonOptions struct {
+	Variant   string
+	Size      string
+	Type      string
+	Href      string
+	Leading   templ.Component
+	Trailing  templ.Component
+	FullWidth bool
+	Disabled  bool
+	Loading   bool
+	Attrs     templ.Attributes
+}
+
 templ Button(label string) {
- <button class="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2">
-  { label }
- </button>
+	@ButtonWith(label, ButtonOptions{})
+}
+
+templ ButtonSlot(content templ.Component, options ButtonOptions) {
+	@renderButton(safeComponent(content), options)
+}
+
+templ ButtonWith(label string, options ButtonOptions) {
+	@renderButton(helpers.TextComponent(label), options)
 }
 
 templ Text(value string) {
- { value }
+	{ value }
+}
+
+templ renderButton(content templ.Component, options ButtonOptions) {
+	if options.Href != "" {
+		<a
+			class={ helpers.ButtonClass(options.Variant, options.Size, options.FullWidth, options.Loading) }
+			href={ options.Href }
+			data-loading?={ options.Loading }
+			aria-disabled?={ options.Disabled || options.Loading }
+			if options.Attrs != nil {
+				{ options.Attrs... }
+			}
+		>
+			@renderButtonContent(safeComponent(content), options)
+		</a>
+	} else {
+		<button
+			type={ buttonType(options.Type) }
+			class={ helpers.ButtonClass(options.Variant, options.Size, options.FullWidth, options.Loading) }
+			data-loading?={ options.Loading }
+			disabled?={ options.Disabled || options.Loading }
+			if options.Attrs != nil {
+				{ options.Attrs... }
+			}
+		>
+			@renderButtonContent(safeComponent(content), options)
+		</button>
+	}
+}
+
+templ renderButtonContent(content templ.Component, options ButtonOptions) {
+	if options.Leading != nil {
+		<span class="btn-icon-leading">
+			@options.Leading
+		</span>
+	}
+	<span class="btn-label">
+		@safeComponent(content)
+	</span>
+	if options.Trailing != nil {
+		<span class="btn-icon-trailing">
+			@options.Trailing
+		</span>
+	}
 }
 
 templ Badge(label string, tone string) {
- <span class={ helpers.BadgeClass(tone) }>{ label }</span>
+	<span class={ helpers.BadgeClass(tone) }>{ label }</span>
 }
 
 templ Card(title string, body templ.Component) {
- <section class="rounded-lg bg-white p-4 shadow-sm">
-  <h2 class="text-sm font-medium text-slate-500">{ title }</h2>
-  <div class="mt-2 text-slate-900">
-   @body
-  </div>
- </section>
+	<section class="card">
+		if title != "" {
+			<h2 class="card-title">{ title }</h2>
+		}
+		if body != nil {
+			<div class="card-body">
+				@body
+			</div>
+		}
+	</section>
 }
 
 templ Table(headers []string, rows [][]templ.Component) {
- <div class="overflow-hidden rounded-lg border border-slate-200 shadow-sm">
-  <table class="min-w-full divide-y divide-slate-200">
-   <thead class="bg-slate-50">
-    <tr>
-     for _, h := range headers {
-      <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{ h }</th>
-     }
-    </tr>
-   </thead>
-   <tbody class="divide-y divide-slate-100 bg-white">
-    for _, row := range rows {
-     <tr class="hover:bg-slate-50">
-      for _, cell := range row {
-       <td class="px-4 py-3 text-sm text-slate-700">
-        @cell
-       </td>
-      }
-     </tr>
-    }
-   </tbody>
-  </table>
- </div>
+	<div class="table-wrapper">
+		<table class="table">
+			if len(headers) > 0 {
+				<thead>
+					<tr>
+						for _, h := range headers {
+							<th scope="col">{ h }</th>
+						}
+					</tr>
+				</thead>
+			}
+			<tbody>
+				if len(rows) == 0 {
+					<tr>
+						<td colspan={ maxInt(len(headers), 1) } class="px-4 py-6 text-center text-sm text-slate-500">No data available.</td>
+					</tr>
+				} else {
+					for _, row := range rows {
+						<tr>
+							for _, cell := range row {
+								<td>
+									@cell
+								</td>
+							}
+						</tr>
+					}
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+type TextInputProps struct {
+	ID          string
+	Name        string
+	Type        string
+	Value       string
+	Label       string
+	Placeholder string
+	Hint        string
+	Error       string
+	Required    bool
+	Disabled    bool
+	AutoFocus   bool
+	Attrs       templ.Attributes
+}
+
+templ TextInput(props TextInputProps) {
+	<div class="form-field">
+		if props.Label != "" {
+			<label for={ props.ID } class="form-label">
+				{ props.Label }
+				if props.Required {
+					<span class="ml-1 text-danger-500">*</span>
+				}
+			</label>
+		}
+		<input
+			if props.ID != "" {
+				id={ props.ID }
+			}
+			if props.Name != "" {
+				name={ props.Name }
+			}
+			type={ fieldType(props.Type) }
+			class={ inputClass(props.Error) }
+			value={ props.Value }
+			if props.Placeholder != "" {
+				placeholder={ props.Placeholder }
+			}
+			required?={ props.Required }
+			disabled?={ props.Disabled }
+			autofocus?={ props.AutoFocus }
+			if props.Attrs != nil {
+				{ props.Attrs... }
+			}
+		/>
+		@FieldMessages(props.Hint, props.Error)
+	</div>
+}
+
+type TextAreaProps struct {
+	ID          string
+	Name        string
+	Value       string
+	Label       string
+	Placeholder string
+	Hint        string
+	Error       string
+	Required    bool
+	Disabled    bool
+	Rows        int
+	Attrs       templ.Attributes
+}
+
+templ TextArea(props TextAreaProps) {
+	<div class="form-field">
+		if props.Label != "" {
+			<label for={ props.ID } class="form-label">
+				{ props.Label }
+				if props.Required {
+					<span class="ml-1 text-danger-500">*</span>
+				}
+			</label>
+		}
+		<textarea
+			if props.ID != "" {
+				id={ props.ID }
+			}
+			if props.Name != "" {
+				name={ props.Name }
+			}
+			class={ textareaClass(props.Error) }
+			if props.Placeholder != "" {
+				placeholder={ props.Placeholder }
+			}
+			required?={ props.Required }
+			disabled?={ props.Disabled }
+			rows={ textareaRows(props.Rows) }
+			if props.Attrs != nil {
+				{ props.Attrs... }
+			}
+		>{ props.Value }</textarea>
+		@FieldMessages(props.Hint, props.Error)
+	</div>
+}
+
+type SelectOption struct {
+	Value       string
+	Label       string
+	Description string
+	Selected    bool
+	Disabled    bool
+}
+
+type SelectProps struct {
+	ID       string
+	Name     string
+	Label    string
+	Hint     string
+	Error    string
+	Required bool
+	Disabled bool
+	Attrs    templ.Attributes
+	Options  []SelectOption
+}
+
+templ Select(props SelectProps) {
+	<div class="form-field">
+		if props.Label != "" {
+			<label for={ props.ID } class="form-label">
+				{ props.Label }
+				if props.Required {
+					<span class="ml-1 text-danger-500">*</span>
+				}
+			</label>
+		}
+		<select
+			if props.ID != "" {
+				id={ props.ID }
+			}
+			if props.Name != "" {
+				name={ props.Name }
+			}
+			class={ selectClass(props.Error) }
+			required?={ props.Required }
+			disabled?={ props.Disabled }
+			if props.Attrs != nil {
+				{ props.Attrs... }
+			}
+		>
+			for _, option := range props.Options {
+				<option value={ option.Value } selected?={ option.Selected } disabled?={ option.Disabled }>{ option.Label }</option>
+			}
+		</select>
+		@FieldMessages(props.Hint, props.Error)
+	</div>
+}
+
+templ FieldMessages(hint string, err string) {
+	if err != "" {
+		<p class="form-error">{ err }</p>
+	} else if hint != "" {
+		<p class="form-help">{ hint }</p>
+	}
+}
+
+func fieldType(value string) string {
+	if value == "" {
+		return "text"
+	}
+	return value
+}
+
+func textareaRows(rows int) int {
+	if rows <= 0 {
+		return 4
+	}
+	return rows
+}
+
+func inputClass(err string) string {
+	if err != "" {
+		return helpers.ClassList("form-control", "is-error")
+	}
+	return "form-control"
+}
+
+func textareaClass(err string) string {
+	return inputClass(err)
+}
+
+func selectClass(err string) string {
+	return inputClass(err)
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+type ModalProps struct {
+	ID            string
+	Title         string
+	Description   string
+	Size          string
+	Close         templ.Component
+	Body          templ.Component
+	Footer        templ.Component
+	OverlayAttrs  templ.Attributes
+	PanelAttrs    templ.Attributes
+	BodyAttrs     templ.Attributes
+	FooterAttrs   templ.Attributes
+	HeaderAttrs   templ.Attributes
+}
+
+templ Modal(props ModalProps) {
+	<div
+		class="modal-overlay"
+		if props.ID != "" {
+			id={ props.ID }
+		}
+		if props.OverlayAttrs != nil {
+			{ props.OverlayAttrs... }
+		}
+	>
+		<div
+			class={ helpers.ModalPanelClass(props.Size) }
+			role="dialog"
+			aria-modal="true"
+			if labelID := modalTitleID(props.ID, props.Title); labelID != "" {
+				aria-labelledby={ labelID }
+			}
+			if descID := modalDescriptionID(props.ID, props.Description); descID != "" {
+				aria-describedby={ descID }
+			}
+			if props.PanelAttrs != nil {
+				{ props.PanelAttrs... }
+			}
+		>
+			<div class="modal-header"
+				if props.HeaderAttrs != nil {
+					{ props.HeaderAttrs... }
+				}
+			>
+				<div class="flex-1">
+					if props.Title != "" {
+						<h2 id={ modalTitleID(props.ID, props.Title) } class="modal-title">{ props.Title }</h2>
+					}
+					if props.Description != "" {
+						<p id={ modalDescriptionID(props.ID, props.Description) } class="modal-description">{ props.Description }</p>
+					}
+				</div>
+				if props.Close != nil {
+					@props.Close
+				}
+			</div>
+			if props.Body != nil {
+				<div class="modal-body"
+					if props.BodyAttrs != nil {
+						{ props.BodyAttrs... }
+					}
+				>
+					@props.Body
+				</div>
+			}
+			if props.Footer != nil {
+				<div class="modal-footer"
+					if props.FooterAttrs != nil {
+						{ props.FooterAttrs... }
+					}
+				>
+					@props.Footer
+				</div>
+			}
+		</div>
+	</div>
+}
+
+func modalTitleID(id string, title string) string {
+	if id == "" || title == "" {
+		return ""
+	}
+	return id + "-title"
+}
+
+func modalDescriptionID(id string, description string) string {
+	if id == "" || description == "" {
+		return ""
+	}
+	return id + "-description"
+}
+
+type ToastProps struct {
+	ID       string
+	Tone     string
+	Title    string
+	Message  string
+	Icon     templ.Component
+	Actions  []templ.Component
+	Attrs    templ.Attributes
+	AutoHide bool
+}
+
+templ Toast(props ToastProps) {
+	<div
+		class={ helpers.ToastClass(props.Tone) }
+		if props.ID != "" {
+			id={ props.ID }
+		}
+		role="status"
+		aria-live="polite"
+		data-autohide?={ props.AutoHide }
+		if props.Attrs != nil {
+			{ props.Attrs... }
+		}
+	>
+		if props.Icon != nil {
+			<div class="mt-0.5 flex h-5 w-5 flex-none items-center justify-center text-lg">
+				@props.Icon
+			</div>
+		}
+		<div class="flex-1 space-y-1">
+			if props.Title != "" {
+				<p class="toast-title">{ props.Title }</p>
+			}
+			if props.Message != "" {
+				<p class="toast-body">{ props.Message }</p>
+			}
+			if len(props.Actions) > 0 {
+				<div class="toast-actions">
+					for _, action := range props.Actions {
+						@safeComponent(action)
+					}
+				</div>
+			}
+		</div>
+	</div>
+}
+
+func buttonType(value string) string {
+	if value == "" {
+		return "button"
+	}
+	return value
+}
+
+func safeComponent(c templ.Component) templ.Component {
+	if c == nil {
+		return templ.NopComponent
+	}
+	return c
 }

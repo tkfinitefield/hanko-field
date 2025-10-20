@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -80,16 +81,77 @@ func NavClass(active bool) string {
 
 // BadgeClass maps semantic tones to utility classes.
 func BadgeClass(tone string) string {
+	base := []string{"badge"}
 	switch tone {
 	case "success":
-		return "inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700"
+		base = append(base, "badge-success")
 	case "warning":
-		return "inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700"
+		base = append(base, "badge-warning")
 	case "danger":
-		return "inline-flex items-center rounded-full bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700"
+		base = append(base, "badge-danger")
+	case "info":
+		base = append(base, "badge-info")
 	default:
-		return "inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700"
+		// neutral badge uses base styling
 	}
+	return ClassList(base...)
+}
+
+// ButtonClass returns the composed class string for a button variant/size combination.
+func ButtonClass(variant, size string, fullWidth, loading bool) string {
+	if variant == "" {
+		variant = "primary"
+	}
+	if size == "" {
+		size = "md"
+	}
+	classes := []string{"btn", "btn-" + variant, "btn-" + size}
+	if fullWidth {
+		classes = append(classes, "w-full")
+	}
+	if loading {
+		classes = append(classes, "btn-loading")
+	}
+	return ClassList(classes...)
+}
+
+// ModalPanelClass returns the class string for the modal panel.
+func ModalPanelClass(size string) string {
+	classes := []string{"modal-panel"}
+	if size == "lg" || size == "large" {
+		classes = append(classes, "modal-lg")
+	}
+	return ClassList(classes...)
+}
+
+// ToastClass maps tones to toast UI classes.
+func ToastClass(tone string) string {
+	classes := []string{"toast"}
+	switch tone {
+	case "success":
+		classes = append(classes, "toast-success")
+	case "danger", "error":
+		classes = append(classes, "toast-danger")
+	case "warning":
+		classes = append(classes, "toast-warning")
+	case "info":
+		classes = append(classes, "toast-info")
+	default:
+		classes = append(classes, "toast-info")
+	}
+	return ClassList(classes...)
+}
+
+// ClassList joins non-empty class names safely.
+func ClassList(classes ...string) string {
+	result := make([]string, 0, len(classes))
+	for _, c := range classes {
+		if strings.TrimSpace(c) == "" {
+			continue
+		}
+		result = append(result, c)
+	}
+	return strings.Join(result, " ")
 }
 
 // TextComponent returns a templ component that renders plain text.
