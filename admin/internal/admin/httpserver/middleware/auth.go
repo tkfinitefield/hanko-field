@@ -119,9 +119,7 @@ func Auth(authenticator Authenticator, loginPath string) func(http.Handler) http
 					Email: user.Email,
 					Roles: append([]string(nil), user.Roles...),
 				})
-				if len(user.FeatureFlags) > 0 {
-					sess.SetFeatureFlags(user.FeatureFlags)
-				}
+				sess.SetFeatureFlags(user.FeatureFlags)
 			}
 
 			ctx := context.WithValue(r.Context(), userContextKey, user)
