@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'tokens.dart';
+import 'package:app/core/theme/tokens.dart';
 
 class AppTheme {
   static ThemeData light() {
@@ -45,4 +45,3 @@ class AppTheme {
     );
   }
 }
-
