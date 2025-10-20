@@ -9,7 +9,7 @@
 
 ## 1. Project Setup & Tooling
 - [x] [Scaffold Go web module with chi router, template engine, Tailwind asset pipeline, and dev tooling.](doc/web/tasks/006-scaffold-go-web-module-with-chi-echo-router-template-engine-asset-pipeline-tailwind-alpine.md)
-- [ ] [Configure build/release pipeline for Cloud Run deployment (Dockerfile, cloudbuild.yaml, env configs).](doc/web/tasks/007-configure-build-release-pipeline-for-cloud-run-deployment-dockerfile-cloudbuild-yaml-env-c.md)
+- [x] [Configure build/release pipeline for Cloud Run deployment (Dockerfile, cloudbuild.yaml, env configs).](doc/web/tasks/007-configure-build-release-pipeline-for-cloud-run-deployment-dockerfile-cloudbuild-yaml-env-c.md)
 - [ ] [Implement middleware stack (auth, CSRF, session, logging, caching) shared across SSR and htmx fragments.](doc/web/tasks/008-implement-middleware-stack-auth-csrf-session-logging-caching-shared-across-ssr-and-htmx-fr.md)
 - [ ] [Set up localization (i18n dictionaries), formatting helpers, and SEO metadata utilities.](doc/web/tasks/009-set-up-localization-i18n-dictionaries-formatting-helpers-and-seo-metadata-utilities.md)
 - [ ] [Establish integration/unit testing harness (httptest, HTML assertions, htmx interactions).](doc/web/tasks/010-establish-integration-unit-testing-harness-httptest-html-assertions-htmx-interactions.md)
