@@ -1,0 +1,79 @@
+package auth
+
+import (
+    "finitefield.org/hanko-admin/internal/admin/templates/components"
+    "finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
+
+templ loginBody(data LoginPageData) {
+    <section class="rounded-2xl bg-white p-8 shadow-xl ring-1 ring-slate-200">
+        <div class="mb-6 text-center">
+            <h1 class="text-2xl font-semibold text-slate-900">Hanko Admin</h1>
+            <p class="mt-2 text-sm text-slate-600">管理画面にログインしてください。</p>
+        </div>
+        if data.Message != "" {
+            <div class="mb-4 rounded-md border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-slate-800">
+                { data.Message }
+            </div>
+        }
+        if data.Error != "" {
+            <div class="mb-4 rounded-md border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                { data.Error }
+            </div>
+        }
+        <form method="post" action={ data.LoginPath } class="space-y-6">
+            <input type="hidden" name="csrf_token" value={ data.CSRFToken } />
+            if data.Next != "" {
+                <input type="hidden" name="next" value={ data.Next } />
+            }
+            @components.TextInput(components.TextInputProps{
+                ID:        "email",
+                Name:      "email",
+                Type:      "email",
+                Value:     data.Email,
+                Label:     "メールアドレス",
+                Required:  false,
+                AutoFocus: true,
+                Attrs:     templ.Attributes{"autocomplete": "email"},
+            })
+            @components.TextInput(components.TextInputProps{
+                ID:       "password",
+                Name:     "password",
+                Type:     "password",
+                Label:    "パスワード",
+                Required: false,
+                Attrs:    templ.Attributes{"autocomplete": "current-password"},
+            })
+            @components.TextArea(components.TextAreaProps{
+                ID:          "id_token",
+                Name:        "id_token",
+                Label:       "ID トークン (任意)",
+                Placeholder: "Firebase Auth などで取得した ID トークンを貼り付けてください。",
+                Hint:        "Google / Apple などのフェデレーションログインでは、発行された ID トークンを送信してください。開発環境では任意の値でログインできます。",
+                Attrs:       templ.Attributes{"autocomplete": "off"},
+            })
+            <div class="flex items-center justify-between text-sm">
+                <label class="flex items-center gap-2 text-slate-600">
+                    <input
+                        type="checkbox"
+                        name="remember"
+                        value="1"
+                        class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                        checked?={ data.Remember }
+                    />
+                    <span>ログイン状態を保持する</span>
+                </label>
+                <a href="https://firebase.google.com/docs/auth" class="text-indigo-600 hover:text-indigo-500" target="_blank" rel="noreferrer">フェデレーション設定ガイド</a>
+            </div>
+            <div class="space-y-3">
+                @components.ButtonWith("ログイン", components.ButtonOptions{Type: "submit", FullWidth: true})
+                <p class="text-center text-xs text-slate-500">エラーが続く場合はシステム管理者まで連絡してください。</p>
+            </div>
+        </form>
+    </section>
+    <p class="mt-6 text-center text-xs text-slate-500">© Hanko Field</p>
+}
+
+templ LoginPage(data LoginPageData) {
+    @layouts.Auth("管理画面ログイン", loginBody(data))
+}

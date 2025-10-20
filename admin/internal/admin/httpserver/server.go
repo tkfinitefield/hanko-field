@@ -104,17 +104,33 @@ type routeOptions struct {
 }
 
 func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
-	router.Route(base, func(r chi.Router) {
-		if opts.SessionStore != nil {
-			r.Use(custommw.Session(opts.SessionStore))
-		}
-		r.Use(custommw.HTMX())
-		r.Use(custommw.NoStore())
-		r.Use(custommw.Auth(opts.Authenticator, opts.LoginPath))
-		r.Use(custommw.CSRF(opts.CSRF))
+	authHandlers := newAuthHandlers(opts.Authenticator, base, opts.LoginPath)
 
-		r.Get("/", ui.DashboardHandler)
-		// Future admin routes will be registered here.
+	var shared []func(http.Handler) http.Handler
+	if opts.SessionStore != nil {
+		shared = append(shared, custommw.Session(opts.SessionStore))
+	}
+	shared = append(shared, custommw.HTMX(), custommw.NoStore())
+
+	loginChain := router.With(shared...)
+	loginChain = loginChain.With(custommw.CSRF(opts.CSRF))
+	loginChain.Get(authHandlers.loginPath, authHandlers.LoginForm)
+	loginChain.Post(authHandlers.loginPath, authHandlers.LoginSubmit)
+
+	router.Route(base, func(r chi.Router) {
+		for _, mw := range shared {
+			r.Use(mw)
+		}
+
+		r.Group(func(protected chi.Router) {
+			protected.Use(custommw.Auth(opts.Authenticator, opts.LoginPath))
+			protected.Use(custommw.CSRF(opts.CSRF))
+
+			protected.Get("/", ui.DashboardHandler)
+			protected.Get("/logout", authHandlers.Logout)
+			protected.Post("/logout", authHandlers.Logout)
+			// Future admin routes will be registered here.
+		})
 	})
 }
 

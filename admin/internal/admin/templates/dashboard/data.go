@@ -35,6 +35,10 @@ func navigationItems() []partials.NavItem {
 			Href:       "/admin/catalog",
 			Capability: string(rbac.CapCatalogManage),
 		},
+		{
+			Label: "ログアウト",
+			Href:  "logout",
+		},
 	}
 }
 

@@ -164,31 +164,113 @@ func cookieToken(r *http.Request) string {
 }
 
 func handleUnauthorized(w http.ResponseWriter, r *http.Request, loginPath, reason string) {
+	if strings.TrimSpace(loginPath) == "" {
+		loginPath = "/login"
+	}
 	if reason == "" {
 		reason = ReasonTokenInvalid
 	}
+
+	target := buildLoginRedirectURL(loginPath, reason, extractNextParam(r, loginPath))
 
 	if IsHTMXRequest(r.Context()) {
 		if reason == ReasonTokenExpired {
 			w.Header().Set("HX-Refresh", "true")
 		} else {
-			w.Header().Set("HX-Redirect", loginPath)
+			w.Header().Set("HX-Redirect", target)
 		}
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
-	redirectURL := loginPath
-	if reason == ReasonTokenExpired {
-		if u, err := url.Parse(loginPath); err == nil {
-			q := u.Query()
-			q.Set("reason", "expired")
-			u.RawQuery = q.Encode()
-			redirectURL = u.String()
-		}
+	http.Redirect(w, r, target, http.StatusFound)
+}
+
+func extractNextParam(r *http.Request, loginPath string) string {
+	if r == nil || r.URL == nil {
+		return ""
 	}
 
-	http.Redirect(w, r, redirectURL, http.StatusFound)
+	raw := r.URL.RequestURI()
+	if raw == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed == nil || parsed.IsAbs() {
+		return ""
+	}
+
+	path := parsed.Path
+	if path == "" {
+		return ""
+	}
+
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	if samePath(path, loginPath) {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(path)
+	if parsed.RawQuery != "" {
+		b.WriteString("?")
+		b.WriteString(parsed.RawQuery)
+	}
+	if parsed.Fragment != "" {
+		b.WriteString("#")
+		b.WriteString(parsed.Fragment)
+	}
+	return b.String()
+}
+
+func buildLoginRedirectURL(loginPath, reason, next string) string {
+	parsed, err := url.Parse(loginPath)
+	if err != nil {
+		if reason == "" && next == "" {
+			return loginPath
+		}
+		params := url.Values{}
+		if reason != "" {
+			params.Set("reason", reason)
+		}
+		if next != "" {
+			params.Set("next", next)
+		}
+		if strings.Contains(loginPath, "?") {
+			return loginPath + "&" + params.Encode()
+		}
+		return loginPath + "?" + params.Encode()
+	}
+
+	q := parsed.Query()
+	if reason != "" {
+		q.Set("reason", reason)
+	}
+	if next != "" {
+		q.Set("next", next)
+	}
+	parsed.RawQuery = q.Encode()
+	return parsed.String()
+}
+
+func samePath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	trim := func(p string) string {
+		if !strings.HasPrefix(p, "/") {
+			p = "/" + p
+		}
+		for len(p) > 1 && strings.HasSuffix(p, "/") {
+			p = strings.TrimSuffix(p, "/")
+		}
+		return p
+	}
+	return trim(a) == trim(b)
 }
 
 func destroySession(ctx context.Context) {

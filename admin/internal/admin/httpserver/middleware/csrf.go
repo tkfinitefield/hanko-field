@@ -59,6 +59,15 @@ func CSRF(cfg CSRFConfig) func(http.Handler) http.Handler {
 
 			if isUnsafeMethod(r.Method) {
 				submitted := r.Header.Get(headerName)
+				if submitted == "" {
+					if err := r.ParseForm(); err == nil {
+						submitted = firstNonEmpty(
+							r.PostFormValue("_csrf"),
+							r.PostFormValue("csrf_token"),
+							r.PostFormValue("csrf"),
+						)
+					}
+				}
 				if submitted == "" || submitted != token {
 					http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 					return
@@ -140,6 +149,15 @@ func generateToken(length int) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(bytes), nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func isUnsafeMethod(method string) bool {

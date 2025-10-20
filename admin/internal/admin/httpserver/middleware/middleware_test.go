@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -44,8 +45,23 @@ func TestAuthMiddleware(t *testing.T) {
 		if rr.Code != http.StatusFound {
 			t.Fatalf("expected 302, got %d", rr.Code)
 		}
-		if location := rr.Header().Get("Location"); location != "/login" {
-			t.Fatalf("expected redirect to /login, got %s", location)
+		location := rr.Header().Get("Location")
+		if location == "" {
+			t.Fatalf("expected redirect location header")
+		}
+		parsed, err := url.Parse(location)
+		if err != nil {
+			t.Fatalf("invalid redirect url: %v", err)
+		}
+		if parsed.Path != "/login" {
+			t.Fatalf("expected redirect to /login, got %s", parsed.Path)
+		}
+		q := parsed.Query()
+		if got := q.Get("reason"); got != ReasonMissingToken {
+			t.Fatalf("expected reason %s, got %s", ReasonMissingToken, got)
+		}
+		if got := q.Get("next"); got != "/admin" {
+			t.Fatalf("expected next=/admin, got %s", got)
 		}
 	})
 
@@ -57,8 +73,19 @@ func TestAuthMiddleware(t *testing.T) {
 		if rr.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401, got %d", rr.Code)
 		}
-		if rr.Header().Get("HX-Redirect") != "/login" {
-			t.Fatalf("expected HX-Redirect header to /login")
+		location := rr.Header().Get("HX-Redirect")
+		if location == "" {
+			t.Fatalf("expected HX-Redirect header")
+		}
+		parsed, err := url.Parse(location)
+		if err != nil {
+			t.Fatalf("invalid HX-Redirect url: %v", err)
+		}
+		if parsed.Path != "/login" {
+			t.Fatalf("expected HX-Redirect path /login, got %s", parsed.Path)
+		}
+		if parsed.Query().Get("next") != "/admin" {
+			t.Fatalf("expected HX-Redirect next=/admin")
 		}
 	})
 
