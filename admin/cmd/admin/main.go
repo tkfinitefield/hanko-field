@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -21,7 +23,19 @@ func main() {
 		Address:       getEnv("ADMIN_HTTP_ADDR", ":8080"),
 		BasePath:      getEnv("ADMIN_BASE_PATH", "/admin"),
 		Authenticator: buildAuthenticator(rootCtx),
+		Session: httpserver.SessionConfig{
+			CookieName:       getEnv("ADMIN_SESSION_COOKIE_NAME", ""),
+			CookieDomain:     os.Getenv("ADMIN_SESSION_COOKIE_DOMAIN"),
+			CookieSecure:     getEnvBool("ADMIN_SESSION_COOKIE_SECURE", false),
+			CookieHTTPOnly:   boolPtr(true),
+			IdleTimeout:      getEnvDuration("ADMIN_SESSION_IDLE_TIMEOUT", 0),
+			Lifetime:         getEnvDuration("ADMIN_SESSION_LIFETIME", 0),
+			RememberLifetime: getEnvDuration("ADMIN_SESSION_REMEMBER_LIFETIME", 0),
+			HashKey:          getEnvBytes("ADMIN_SESSION_HASH_KEY"),
+			BlockKey:         getEnvBytes("ADMIN_SESSION_BLOCK_KEY"),
+		},
 	}
+	cfg.Session.CookiePath = cfg.BasePath
 
 	srv := httpserver.New(cfg)
 
@@ -54,6 +68,55 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		val, err := strconv.ParseBool(v)
+		if err != nil {
+			log.Printf("invalid boolean for %s: %v", key, err)
+			return fallback
+		}
+		return val
+	}
+	return fallback
+}
+
+func getEnvDuration(key string, fallback time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			log.Printf("invalid duration for %s: %v", key, err)
+			return fallback
+		}
+		return d
+	}
+	return fallback
+}
+
+func getEnvBytes(key string) []byte {
+	val := os.Getenv(key)
+	if val == "" {
+		return nil
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(val); err == nil {
+		return decoded
+	}
+	if decoded, err := base64.RawStdEncoding.DecodeString(val); err == nil {
+		return decoded
+	}
+	if decoded, err := base64.URLEncoding.DecodeString(val); err == nil {
+		return decoded
+	}
+	if decoded, err := base64.RawURLEncoding.DecodeString(val); err == nil {
+		return decoded
+	}
+	log.Printf("using literal value for %s; base64 decode failed", key)
+	return []byte(val)
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 func buildAuthenticator(ctx context.Context) middleware.Authenticator {

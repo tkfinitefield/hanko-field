@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	appsession "finitefield.org/hanko-admin/internal/admin/session"
 )
 
 type csrfContextKey string
@@ -44,7 +46,12 @@ func CSRF(cfg CSRFConfig) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token, err := ensureCSRFToken(w, r, cookieName, cookiePath, maxAge, cfg.Secure)
+			var sess *appsession.Session
+			if s, ok := SessionFromContext(r.Context()); ok {
+				sess = s
+			}
+
+			token, err := ensureSessionCSRFToken(w, r, cookieName, cookiePath, maxAge, cfg.Secure, sess)
 			if err != nil {
 				http.Error(w, "csrf token error", http.StatusInternalServerError)
 				return
@@ -72,17 +79,43 @@ func CSRFTokenFromContext(ctx context.Context) string {
 	return ""
 }
 
-func ensureCSRFToken(w http.ResponseWriter, r *http.Request, cookieName, cookiePath string, maxAge time.Duration, secure bool) (string, error) {
-	if c, err := r.Cookie(cookieName); err == nil && c.Value != "" {
-		return c.Value, nil
+func ensureSessionCSRFToken(w http.ResponseWriter, r *http.Request, cookieName, cookiePath string, maxAge time.Duration, secure bool, sess *appsession.Session) (string, error) {
+	if sess == nil {
+		if ctxSess, ok := SessionFromContext(r.Context()); ok {
+			sess = ctxSess
+		}
 	}
 
-	token, err := generateToken(32)
-	if err != nil {
-		return "", err
+	var token string
+
+	if sess != nil {
+		token = sess.CSRFToken()
+	}
+	if token == "" {
+		if c, err := r.Cookie(cookieName); err == nil && c.Value != "" {
+			token = c.Value
+			if sess != nil {
+				sess.SetCSRFToken(token)
+			}
+		}
 	}
 
-	http.SetCookie(w, &http.Cookie{
+	if token == "" {
+		var err error
+		if sess != nil {
+			token, err = sess.EnsureCSRFToken()
+			if err != nil {
+				return "", err
+			}
+		} else {
+			token, err = generateToken(32)
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+
+	cookie := &http.Cookie{
 		Name:     cookieName,
 		Value:    token,
 		Path:     cookiePath,
@@ -90,7 +123,13 @@ func ensureCSRFToken(w http.ResponseWriter, r *http.Request, cookieName, cookieP
 		Secure:   secure || r.TLS != nil,
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   int(maxAge.Seconds()),
-	})
+	}
+
+	if maxAge > 0 {
+		cookie.Expires = time.Now().Add(maxAge)
+	}
+
+	http.SetCookie(w, cookie)
 
 	return token, nil
 }

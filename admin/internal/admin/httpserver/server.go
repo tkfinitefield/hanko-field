@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"crypto/rand"
 	"log"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	custommw "finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/ui"
+	appsession "finitefield.org/hanko-admin/internal/admin/session"
 	"finitefield.org/hanko-admin/public"
 )
 
@@ -20,10 +22,27 @@ type Config struct {
 	BasePath         string
 	LoginPath        string
 	Authenticator    custommw.Authenticator
+	Session          SessionConfig
+	SessionStore     custommw.SessionStore
 	CSRFCookieName   string
 	CSRFCookiePath   string
 	CSRFCookieSecure bool
 	CSRFHeaderName   string
+}
+
+// SessionConfig represents optional overrides for the admin session manager.
+type SessionConfig struct {
+	CookieName       string
+	CookiePath       string
+	CookieDomain     string
+	CookieSecure     bool
+	CookieHTTPOnly   *bool
+	CookieSameSite   http.SameSite
+	IdleTimeout      time.Duration
+	Lifetime         time.Duration
+	RememberLifetime time.Duration
+	HashKey          []byte
+	BlockKey         []byte
 }
 
 // New constructs the HTTP server with middleware stack and embedded assets.
@@ -49,6 +68,11 @@ func New(cfg Config) *http.Server {
 		authenticator = custommw.DefaultAuthenticator()
 	}
 
+	sessionStore := cfg.SessionStore
+	if sessionStore == nil {
+		sessionStore = mustBuildSessionStore(cfg.Session, basePath)
+	}
+
 	csrfCfg := custommw.CSRFConfig{
 		CookieName: cfg.CSRFCookieName,
 		CookiePath: firstNonEmpty(cfg.CSRFCookiePath, basePath),
@@ -57,6 +81,7 @@ func New(cfg Config) *http.Server {
 	}
 
 	mountAdminRoutes(router, basePath, routeOptions{
+		SessionStore:  sessionStore,
 		Authenticator: authenticator,
 		LoginPath:     loginPath,
 		CSRF:          csrfCfg,
@@ -72,6 +97,7 @@ func New(cfg Config) *http.Server {
 }
 
 type routeOptions struct {
+	SessionStore  custommw.SessionStore
 	Authenticator custommw.Authenticator
 	LoginPath     string
 	CSRF          custommw.CSRFConfig
@@ -79,6 +105,9 @@ type routeOptions struct {
 
 func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 	router.Route(base, func(r chi.Router) {
+		if opts.SessionStore != nil {
+			r.Use(custommw.Session(opts.SessionStore))
+		}
 		r.Use(custommw.HTMX())
 		r.Use(custommw.NoStore())
 		r.Use(custommw.Auth(opts.Authenticator, opts.LoginPath))
@@ -128,4 +157,49 @@ func firstNonEmpty(values ...string) string {
 // RegisterFragment registers a GET handler intended for htmx fragment rendering.
 func RegisterFragment(r chi.Router, pattern string, handler http.HandlerFunc) {
 	r.With(custommw.RequireHTMX()).Get(pattern, handler)
+}
+
+func mustBuildSessionStore(cfg SessionConfig, basePath string) custommw.SessionStore {
+	hashKey := cfg.HashKey
+	if len(hashKey) == 0 {
+		hashKey = randomBytes(32)
+		log.Printf("session: generated ephemeral hash key; set ADMIN_SESSION_HASH_KEY to persist sessions across restarts")
+	}
+
+	blockKey := cfg.BlockKey
+	if blockKey == nil || len(blockKey) == 0 {
+		blockKey = randomBytes(32)
+	}
+
+	path := firstNonEmpty(cfg.CookiePath, basePath, "/")
+	httpOnly := true
+	if cfg.CookieHTTPOnly != nil {
+		httpOnly = *cfg.CookieHTTPOnly
+	}
+
+	manager, err := appsession.NewManager(appsession.Config{
+		CookieName:       cfg.CookieName,
+		HashKey:          hashKey,
+		BlockKey:         blockKey,
+		CookiePath:       path,
+		CookieDomain:     cfg.CookieDomain,
+		CookieSecure:     cfg.CookieSecure,
+		CookieHTTPOnly:   &httpOnly,
+		CookieSameSite:   cfg.CookieSameSite,
+		IdleTimeout:      cfg.IdleTimeout,
+		Lifetime:         cfg.Lifetime,
+		RememberLifetime: cfg.RememberLifetime,
+	})
+	if err != nil {
+		log.Fatalf("session manager init failed: %v", err)
+	}
+	return manager
+}
+
+func randomBytes(length int) []byte {
+	buf := make([]byte, length)
+	if _, err := rand.Read(buf); err != nil {
+		log.Fatalf("generate random bytes: %v", err)
+	}
+	return buf
 }

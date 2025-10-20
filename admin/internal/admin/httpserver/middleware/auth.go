@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	appsession "finitefield.org/hanko-admin/internal/admin/session"
 )
 
 type authContextKey string
@@ -15,10 +17,11 @@ const userContextKey authContextKey = "auth.user"
 
 // User represents the authenticated staff member.
 type User struct {
-	UID   string
-	Email string
-	Roles []string
-	Token string
+	UID          string
+	Email        string
+	Roles        []string
+	Token        string
+	FeatureFlags map[string]bool
 }
 
 // Authenticator resolves an incoming Bearer token into a User.
@@ -86,6 +89,7 @@ func Auth(authenticator Authenticator, loginPath string) func(http.Handler) http
 			}
 			if strings.TrimSpace(token) == "" {
 				log.Printf("auth failure: reason=%s error=%v", ReasonMissingToken, ErrUnauthorized)
+				destroySession(r.Context())
 				handleUnauthorized(w, r, loginPath, ReasonMissingToken)
 				return
 			}
@@ -104,8 +108,20 @@ func Auth(authenticator Authenticator, loginPath string) func(http.Handler) http
 					err = ErrUnauthorized
 				}
 				log.Printf("auth failure: reason=%s error=%v", reason, err)
+				destroySession(r.Context())
 				handleUnauthorized(w, r, loginPath, reason)
 				return
+			}
+
+			if sess, ok := SessionFromContext(r.Context()); ok {
+				sess.SetUser(&appsession.User{
+					UID:   user.UID,
+					Email: user.Email,
+					Roles: append([]string(nil), user.Roles...),
+				})
+				if len(user.FeatureFlags) > 0 {
+					sess.SetFeatureFlags(user.FeatureFlags)
+				}
 			}
 
 			ctx := context.WithValue(r.Context(), userContextKey, user)
@@ -175,6 +191,12 @@ func handleUnauthorized(w http.ResponseWriter, r *http.Request, loginPath, reaso
 	}
 
 	http.Redirect(w, r, redirectURL, http.StatusFound)
+}
+
+func destroySession(ctx context.Context) {
+	if sess, ok := SessionFromContext(ctx); ok && sess != nil {
+		sess.Destroy()
+	}
 }
 
 type passthroughAuthenticator struct{}
