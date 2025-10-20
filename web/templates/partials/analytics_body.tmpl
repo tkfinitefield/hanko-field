@@ -1,0 +1,89 @@
+{{ define "analytics_body" }}
+{{ $gtm := .Analytics.GTMContainerID }}
+{{ $ga := .Analytics.GA4MeasurementID }}
+{{ $segment := .Analytics.SegmentWriteKey }}
+{{ $debug := .Analytics.Debug }}
+{{ if $gtm }}
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ $gtm }}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+{{ end }}
+<script>
+  // Minimal consent stub used by analytics wrappers
+  (function(){
+    var c = window.hankoConsent = window.hankoConsent || { analytics: true, marketing: false, functional: true };
+    c._listeners = c._listeners || [];
+    c.onChange = function(fn){ if (typeof fn === 'function') { c._listeners.push(fn); } };
+    c.set = function(k, v){ c[k] = !!v; (c._listeners||[]).forEach(function(fn){ try{ fn(k, c[k]); }catch(_){} }); };
+    c.allowed = function(k){ return c[k] !== false; };
+  })();
+
+  // Unified analytics helper supporting gtag and Segment
+  (function(){
+    var GA_ID = {{ if $ga }}'{{ $ga }}'{{ else }}''{{ end }};
+    var SEGMENT_KEY = {{ if $segment }}'{{ $segment }}'{{ else }}''{{ end }};
+    var DEBUG = {{ if $debug }}true{{ else }}false{{ end }};
+
+    function log(){ if (DEBUG && window.console) { try{ console.log.apply(console, arguments); }catch(_){} } }
+
+    // Segment loader
+    if (SEGMENT_KEY && !window.analytics) {
+      !function(){var analytics=window.analytics=window.analytics||[];if(!analytics.initialize)if(analytics.invoked)window.console&&console.error&&console.error("Segment snippet included twice.");else{analytics.invoked=!0;analytics.methods=["trackSubmit","trackClick","trackLink","trackForm","pageview","identify","reset","group","track","ready","alias","debug","page","once","off","on","addSourceMiddleware","addIntegrationMiddleware","setAnonymousId","addDestinationMiddleware"],analytics.factory=function(e){return function(){var t=Array.prototype.slice.call(arguments);t.unshift(e);analytics.push(t);return analytics}},analytics.methods.forEach(function(e){analytics[e]=analytics.factory(e)}),analytics.load=function(e){var t=document.createElement("script");t.type="text/javascript";t.async=!0;t.src="https://cdn.segment.com/analytics.js/v1/"+e+"/analytics.min.js";var n=document.getElementsByTagName("script")[0];n.parentNode.insertBefore(t,n)},analytics.SNIPPET_VERSION="4.15.3";analytics.load(SEGMENT_KEY)}}();
+    }
+
+    function allowed(){ return window.hankoConsent && window.hankoConsent.allowed('analytics'); }
+
+    function pageView(){
+      if (!allowed()) { log('[analytics] blocked by consent'); return; }
+      var path = location.pathname + location.search;
+      var title = document.title || '';
+      if (GA_ID && typeof window.gtag === 'function') {
+        window.gtag('event', 'page_view', { page_location: location.href, page_path: path, page_title: title });
+        log('[analytics] gtag page_view', path);
+      }
+      if (window.analytics && typeof window.analytics.page === 'function') {
+        window.analytics.page({ path: path, title: title, url: location.href });
+        log('[analytics] segment page', path);
+      }
+    }
+
+    function track(name, props){
+      if (!allowed()) { log('[analytics] blocked by consent'); return; }
+      props = props || {};
+      if (GA_ID && typeof window.gtag === 'function') {
+        window.gtag('event', name, props);
+        log('[analytics] gtag event', name, props);
+      }
+      if (window.analytics && typeof window.analytics.track === 'function') {
+        window.analytics.track(name, props);
+        log('[analytics] segment event', name, props);
+      }
+    }
+
+    // Expose global helpers
+    window.hankoAnalytics = { pageView: pageView, track: track };
+
+    // Initial load
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      setTimeout(pageView, 0);
+    } else {
+      document.addEventListener('DOMContentLoaded', pageView);
+    }
+
+    // htmx navigation hooks
+    document.body.addEventListener('htmx:afterSettle', function(){ pageView(); });
+
+    // Auto click tracking for elements annotated with data-analytics-click
+    document.addEventListener('click', function(e){
+      var t = e.target.closest('[data-analytics-click]');
+      if (!t) return;
+      var name = t.getAttribute('data-analytics-click') || 'click';
+      var props = {};
+      var ds = t.dataset || {};
+      Object.keys(ds).forEach(function(k){ if (k.indexOf('analyticsProp') === 0) { props[k.substring('analyticsProp'.length).toLowerCase()] = ds[k]; } });
+      track(name, props);
+    }, true);
+  })();
+</script>
+{{ end }}
+

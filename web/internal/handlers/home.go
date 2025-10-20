@@ -8,6 +8,7 @@ type HomeData struct {
     Message string
     Lang    string
     SEO     SEOData
+    Analytics Analytics
     // Common layout fields
     Path        string
     Nav         []nav.RenderedItem
@@ -32,15 +33,20 @@ type SEOData struct {
     Title       string
     Description string
     Canonical   string
+    Robots      string
     OG          struct{
         Title       string
         Description string
         Image       string
         Type        string
+        URL         string
+        SiteName    string
     }
     Twitter     struct{
         Card  string
         Site  string
         Image string
     }
+    Alternates []struct{ Href, Hreflang string }
+    JSONLD     []string
 }

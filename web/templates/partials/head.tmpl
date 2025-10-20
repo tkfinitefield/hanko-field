@@ -2,19 +2,27 @@
 {{ $desc := "Hanko Field - Custom stamps and seals" }}
 {{ with .SEO }}
   {{ if .Description }}{{ $desc = .Description }}{{ end }}
+  <meta name="description" content="{{ $desc }}">
+  {{ if .Robots }}<meta name="robots" content="{{ .Robots }}">{{ end }}
   {{ if .Canonical }}<link rel="canonical" href="{{ .Canonical }}">{{ end }}
+  {{ range .Alternates }}<link rel="alternate" hreflang="{{ .Hreflang }}" href="{{ .Href }}">{{ end }}
   {{ with .OG }}
     {{ if .Title }}<meta property="og:title" content="{{ .Title }}">{{ end }}
     {{ if .Description }}<meta property="og:description" content="{{ .Description }}">{{ end }}
     {{ if .Image }}<meta property="og:image" content="{{ .Image }}">{{ end }}
     {{ if .Type }}<meta property="og:type" content="{{ .Type }}">{{ end }}
+    {{ if .URL }}<meta property="og:url" content="{{ .URL }}">{{ end }}
+    {{ if .SiteName }}<meta property="og:site_name" content="{{ .SiteName }}">{{ end }}
   {{ end }}
   {{ with .Twitter }}
     {{ if .Card }}<meta name="twitter:card" content="{{ .Card }}">{{ end }}
     {{ if .Site }}<meta name="twitter:site" content="{{ .Site }}">{{ end }}
     {{ if .Image }}<meta name="twitter:image" content="{{ .Image }}">{{ end }}
   {{ end }}
+  {{ range .JSONLD }}
+    <script type="application/ld+json">{{ safe . }}</script>
+  {{ end }}
 {{ end }}
-<meta name="description" content="{{ $desc }}">
 <meta name="theme-color" content="#111827">
+{{ template "analytics_head" . }}
 {{ end }}

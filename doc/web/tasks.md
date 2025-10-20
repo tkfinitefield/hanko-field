@@ -19,7 +19,7 @@
 - [x] [Build navigation menu, breadcrumbs, and active state handling based on current route.](doc/web/tasks/012-build-navigation-menu-breadcrumbs-and-active-state-handling-based-on-current-route.md)
 - [x] [Create reusable components (hero, cards, tables, forms, button sets, skeleton loaders) with Tailwind variants.](doc/web/tasks/013-create-reusable-components-hero-cards-tables-forms-button-sets-skeleton-loaders-with-tailw.md)
 - [x] [Implement shared modals system with htmx targets and close triggers (ESC, overlay click).](doc/web/tasks/014-implement-shared-modals-system-with-htmx-targets-and-close-triggers-esc-overlay-click.md)
-- [ ] [Provide SEO/OGP tags, structured data helpers, and analytics instrumentation hooks.](doc/web/tasks/015-provide-seo-ogp-tags-structured-data-helpers-and-analytics-instrumentation-hooks.md)
+- [x] [Provide SEO/OGP tags, structured data helpers, and analytics instrumentation hooks.](doc/web/tasks/015-provide-seo-ogp-tags-structured-data-helpers-and-analytics-instrumentation-hooks.md)
 
 ## 3. Landing & Exploration
 - [ ] [Build landing page (`/`) with hero, comparison table fragment (`/frags/compare/sku-table`), and latest guides fragment.](doc/web/tasks/016-build-landing-page-with-hero-comparison-table-fragment-frags-compare-sku-table-and-latest-.md)

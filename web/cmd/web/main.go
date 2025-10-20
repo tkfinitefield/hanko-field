@@ -18,6 +18,7 @@ import (
     "finitefield.org/hanko-web/internal/format"
     "finitefield.org/hanko-web/internal/i18n"
     "finitefield.org/hanko-web/internal/nav"
+    "finitefield.org/hanko-web/internal/seo"
     mw "finitefield.org/hanko-web/internal/middleware"
     "github.com/go-chi/chi/v5"
     "github.com/go-chi/chi/v5/middleware"
@@ -315,10 +316,21 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
     vm.Path = r.URL.Path
     vm.Nav = nav.Build(vm.Path)
     vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+    vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
     if i18nBundle != nil {
         vm.SEO.Title = i18nBundle.T(lang, "home.seo.title")
         vm.SEO.Description = i18nBundle.T(lang, "home.seo.description")
     }
+    // Canonical + OG URL/Site
+    vm.SEO.Canonical = absoluteURL(r)
+    vm.SEO.OG.URL = vm.SEO.Canonical
+    vm.SEO.OG.SiteName = i18nOrDefault(lang, "brand.name", "Hanko Field")
+    vm.SEO.Alternates = buildAlternates(r)
+    // Default JSON-LD (Organization + WebSite)
+    siteURL := siteBaseURL(r)
+    org := seo.Organization(i18nOrDefault(lang, "brand.name", "Hanko Field"), siteURL, "")
+    ws := seo.WebSite(i18nOrDefault(lang, "brand.name", "Hanko Field"), siteURL, siteURL+"/search?q=")
+    vm.SEO.JSONLD = []string{seo.JSON(org), seo.JSON(ws)}
     renderPage(w, r, "home", vm)
 }
 
@@ -329,6 +341,11 @@ func ShopHandler(w http.ResponseWriter, r *http.Request) {
     vm.Path = r.URL.Path
     vm.Nav = nav.Build(vm.Path)
     vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+    vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+    vm.SEO.Canonical = absoluteURL(r)
+    vm.SEO.OG.URL = vm.SEO.Canonical
+    vm.SEO.OG.SiteName = i18nOrDefault(lang, "brand.name", "Hanko Field")
+    vm.SEO.Alternates = buildAlternates(r)
     renderPage(w, r, "shop", vm)
 }
 
@@ -338,6 +355,11 @@ func TemplatesHandler(w http.ResponseWriter, r *http.Request) {
     vm.Path = r.URL.Path
     vm.Nav = nav.Build(vm.Path)
     vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+    vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+    vm.SEO.Canonical = absoluteURL(r)
+    vm.SEO.OG.URL = vm.SEO.Canonical
+    vm.SEO.OG.SiteName = i18nOrDefault(lang, "brand.name", "Hanko Field")
+    vm.SEO.Alternates = buildAlternates(r)
     renderPage(w, r, "templates", vm)
 }
 
@@ -347,6 +369,11 @@ func GuidesHandler(w http.ResponseWriter, r *http.Request) {
     vm.Path = r.URL.Path
     vm.Nav = nav.Build(vm.Path)
     vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+    vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+    vm.SEO.Canonical = absoluteURL(r)
+    vm.SEO.OG.URL = vm.SEO.Canonical
+    vm.SEO.OG.SiteName = i18nOrDefault(lang, "brand.name", "Hanko Field")
+    vm.SEO.Alternates = buildAlternates(r)
     renderPage(w, r, "guides", vm)
 }
 
@@ -356,6 +383,11 @@ func AccountHandler(w http.ResponseWriter, r *http.Request) {
     vm.Path = r.URL.Path
     vm.Nav = nav.Build(vm.Path)
     vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+    vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+    vm.SEO.Canonical = absoluteURL(r)
+    vm.SEO.OG.URL = vm.SEO.Canonical
+    vm.SEO.OG.SiteName = i18nOrDefault(lang, "brand.name", "Hanko Field")
+    vm.SEO.Alternates = buildAlternates(r)
     renderPage(w, r, "account", vm)
 }
 
@@ -370,4 +402,47 @@ func DemoModalHandler(w http.ResponseWriter, r *http.Request) {
         // No FooterTmpl provided → default Close button with data-modal-close
     }
     renderTemplate(w, r, "c_modal", props)
+}
+
+// absoluteURL builds an absolute URL for the current request path, using X-Forwarded-Proto if present.
+func absoluteURL(r *http.Request) string {
+    scheme := r.Header.Get("X-Forwarded-Proto")
+    if scheme == "" {
+        if r.TLS != nil { scheme = "https" } else { scheme = "http" }
+    }
+    host := r.Host
+    if host == "" { host = "localhost" }
+    return scheme + "://" + host + r.URL.Path
+}
+
+// siteBaseURL returns the base site URL (scheme+host) inferred from the request.
+func siteBaseURL(r *http.Request) string {
+    scheme := r.Header.Get("X-Forwarded-Proto")
+    if scheme == "" { if r.TLS != nil { scheme = "https" } else { scheme = "http" } }
+    host := r.Host
+    if host == "" { host = "localhost" }
+    return scheme + "://" + host
+}
+
+// buildAlternates produces hreflang alternates for supported languages using the current path.
+func buildAlternates(r *http.Request) []struct{ Href, Hreflang string } {
+    var out []struct{ Href, Hreflang string }
+    if i18nBundle == nil { return out }
+    base := siteBaseURL(r)
+    path := r.URL.Path
+    supported := i18nBundle.Supported()
+    for _, l := range supported {
+        href := base + path + "?hl=" + l
+        out = append(out, struct{ Href, Hreflang string }{Href: href, Hreflang: l})
+    }
+    // x-default points to fallback
+    out = append(out, struct{ Href, Hreflang string }{Href: base + path, Hreflang: "x-default"})
+    return out
+}
+
+func i18nOrDefault(lang, key, def string) string {
+    if i18nBundle == nil { return def }
+    v := i18nBundle.T(lang, key)
+    if v == "" || v == key { return def }
+    return v
 }

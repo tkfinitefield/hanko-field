@@ -9,9 +9,9 @@ type PageData struct {
     Title string
     Lang  string
     SEO   SEOData
+    Analytics Analytics
 
     Path        string
     Nav         []nav.RenderedItem
     Breadcrumbs []nav.Crumb
 }
-
