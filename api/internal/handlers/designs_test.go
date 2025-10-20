@@ -303,10 +303,158 @@ func TestDesignHandlers_GetDesign_NotFoundForOtherUser(t *testing.T) {
 	}
 }
 
+func TestDesignHandlers_UpdateDesign_Success(t *testing.T) {
+	updatedAt := time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
+	var captured services.UpdateDesignCommand
+	stub := &stubDesignService{
+		getFn: func(context.Context, string, services.DesignReadOptions) (services.Design, error) {
+			return services.Design{
+				ID:        "dsg_1",
+				OwnerID:   "user-1",
+				UpdatedAt: updatedAt,
+			}, nil
+		},
+		updateFn: func(_ context.Context, cmd services.UpdateDesignCommand) (services.Design, error) {
+			captured = cmd
+			return services.Design{
+				ID:               "dsg_1",
+				OwnerID:          "user-1",
+				Label:            "Updated",
+				Status:           services.DesignStatusReady,
+				Version:          2,
+				CurrentVersionID: "ver_2",
+				UpdatedAt:        updatedAt.Add(time.Hour),
+			}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	body := `{"label":"Updated","status":"ready","snapshot":{"label":"Updated"}}`
+	req := httptest.NewRequest(http.MethodPut, "/designs/dsg_1", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("If-Unmodified-Since", updatedAt.Format(time.RFC3339))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	res := httptest.NewRecorder()
+	handler.updateDesign(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.Result().StatusCode)
+	}
+	if captured.DesignID != "dsg_1" || captured.Label == nil || *captured.Label != "Updated" {
+		t.Fatalf("captured command mismatch: %+v", captured)
+	}
+	if captured.Status == nil || *captured.Status != "ready" {
+		t.Fatalf("status not propagated: %+v", captured)
+	}
+	if captured.ExpectedUpdatedAt == nil || !captured.ExpectedUpdatedAt.Equal(updatedAt) {
+		t.Fatalf("expected updatedAt to propagate")
+	}
+	if captured.Snapshot == nil || captured.Snapshot["label"] != "Updated" {
+		t.Fatalf("snapshot not forwarded: %+v", captured.Snapshot)
+	}
+
+	var payload designPayload
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Label != "Updated" || payload.Status != string(services.DesignStatusReady) {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+}
+
+func TestDesignHandlers_UpdateDesign_Conflict(t *testing.T) {
+	stub := &stubDesignService{
+		getFn: func(context.Context, string, services.DesignReadOptions) (services.Design, error) {
+			return services.Design{ID: "dsg_1", OwnerID: "user-1", UpdatedAt: time.Unix(0, 0).UTC()}, nil
+		},
+		updateFn: func(context.Context, services.UpdateDesignCommand) (services.Design, error) {
+			return services.Design{}, services.ErrDesignConflict
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodPut, "/designs/dsg_1", strings.NewReader(`{"status":"ready"}`))
+	req.Header.Set("If-Unmodified-Since", time.Unix(0, 0).UTC().Format(time.RFC3339))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	res := httptest.NewRecorder()
+	handler.updateDesign(res, req)
+
+	if res.Result().StatusCode != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", res.Result().StatusCode)
+	}
+}
+
+func TestDesignHandlers_DeleteDesign_Success(t *testing.T) {
+	updatedAt := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	var captured services.DeleteDesignCommand
+	stub := &stubDesignService{
+		getFn: func(context.Context, string, services.DesignReadOptions) (services.Design, error) {
+			return services.Design{ID: "dsg_1", OwnerID: "user-1", UpdatedAt: updatedAt}, nil
+		},
+		deleteFn: func(_ context.Context, cmd services.DeleteDesignCommand) error {
+			captured = cmd
+			return nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodDelete, "/designs/dsg_1", nil)
+	req.Header.Set("If-Unmodified-Since", updatedAt.Format(time.RFC3339))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	res := httptest.NewRecorder()
+	handler.deleteDesign(res, req)
+
+	if res.Result().StatusCode != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d", res.Result().StatusCode)
+	}
+	if captured.DesignID != "dsg_1" || !captured.SoftDelete {
+		t.Fatalf("captured delete command incorrect: %+v", captured)
+	}
+	if captured.ExpectedUpdatedAt == nil || !captured.ExpectedUpdatedAt.Equal(updatedAt) {
+		t.Fatalf("expected updatedAt propagated")
+	}
+}
+
+func TestDesignHandlers_DeleteDesign_NotOwner(t *testing.T) {
+	stub := &stubDesignService{
+		getFn: func(context.Context, string, services.DesignReadOptions) (services.Design, error) {
+			return services.Design{ID: "dsg_1", OwnerID: "other", UpdatedAt: time.Now().UTC()}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodDelete, "/designs/dsg_1", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	res := httptest.NewRecorder()
+	handler.deleteDesign(res, req)
+
+	if res.Result().StatusCode != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", res.Result().StatusCode)
+	}
+}
+
 type stubDesignService struct {
 	createFn func(context.Context, services.CreateDesignCommand) (services.Design, error)
 	getFn    func(context.Context, string, services.DesignReadOptions) (services.Design, error)
 	listFn   func(context.Context, services.DesignListFilter) (domain.CursorPage[services.Design], error)
+	updateFn func(context.Context, services.UpdateDesignCommand) (services.Design, error)
+	deleteFn func(context.Context, services.DeleteDesignCommand) error
 }
 
 func (s *stubDesignService) CreateDesign(ctx context.Context, cmd services.CreateDesignCommand) (services.Design, error) {
@@ -330,11 +478,17 @@ func (s *stubDesignService) ListDesigns(ctx context.Context, filter services.Des
 	return domain.CursorPage[services.Design]{}, nil
 }
 
-func (s *stubDesignService) UpdateDesign(context.Context, services.UpdateDesignCommand) (services.Design, error) {
+func (s *stubDesignService) UpdateDesign(ctx context.Context, cmd services.UpdateDesignCommand) (services.Design, error) {
+	if s.updateFn != nil {
+		return s.updateFn(ctx, cmd)
+	}
 	return services.Design{}, nil
 }
 
-func (s *stubDesignService) DeleteDesign(context.Context, services.DeleteDesignCommand) error {
+func (s *stubDesignService) DeleteDesign(ctx context.Context, cmd services.DeleteDesignCommand) error {
+	if s.deleteFn != nil {
+		return s.deleteFn(ctx, cmd)
+	}
 	return nil
 }
 

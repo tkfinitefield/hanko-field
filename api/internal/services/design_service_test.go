@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,28 +13,67 @@ import (
 )
 
 type stubDesignRepository struct {
-	inserted []domain.Design
+	inserted    []domain.Design
+	updated     []domain.Design
+	softDeleted []string
+	store       map[string]domain.Design
 }
 
 func (s *stubDesignRepository) Insert(_ context.Context, design domain.Design) error {
+	if s.store == nil {
+		s.store = make(map[string]domain.Design)
+	}
 	s.inserted = append(s.inserted, design)
+	s.store[design.ID] = cloneTestDesign(design)
 	return nil
 }
 
-func (s *stubDesignRepository) Update(context.Context, domain.Design) error {
-	return errors.New("not implemented")
+func (s *stubDesignRepository) Update(_ context.Context, design domain.Design) error {
+	if s.store == nil {
+		return errors.New("not found")
+	}
+	if _, ok := s.store[design.ID]; !ok {
+		return errors.New("not found")
+	}
+	s.updated = append(s.updated, design)
+	s.store[design.ID] = cloneTestDesign(design)
+	return nil
 }
 
-func (s *stubDesignRepository) SoftDelete(context.Context, string, time.Time) error {
-	return errors.New("not implemented")
+func (s *stubDesignRepository) SoftDelete(_ context.Context, designID string, deletedAt time.Time) error {
+	if s.store == nil {
+		return errors.New("not found")
+	}
+	design, ok := s.store[designID]
+	if !ok {
+		return errors.New("not found")
+	}
+	design.Status = domain.DesignStatusDeleted
+	design.UpdatedAt = deletedAt.UTC()
+	s.store[designID] = design
+	s.softDeleted = append(s.softDeleted, designID)
+	return nil
 }
 
-func (s *stubDesignRepository) FindByID(context.Context, string) (domain.Design, error) {
-	return domain.Design{}, errors.New("not implemented")
+func (s *stubDesignRepository) FindByID(_ context.Context, designID string) (domain.Design, error) {
+	if s.store == nil {
+		return domain.Design{}, errors.New("not found")
+	}
+	design, ok := s.store[designID]
+	if !ok {
+		return domain.Design{}, errors.New("not found")
+	}
+	return cloneTestDesign(design), nil
 }
 
-func (s *stubDesignRepository) ListByOwner(context.Context, string, repositories.DesignListFilter) (domain.CursorPage[domain.Design], error) {
-	return domain.CursorPage[domain.Design]{}, errors.New("not implemented")
+func (s *stubDesignRepository) ListByOwner(_ context.Context, ownerID string, _ repositories.DesignListFilter) (domain.CursorPage[domain.Design], error) {
+	items := make([]domain.Design, 0)
+	for _, design := range s.store {
+		if design.OwnerID == ownerID {
+			items = append(items, cloneTestDesign(design))
+		}
+	}
+	return domain.CursorPage[domain.Design]{Items: items}, nil
 }
 
 type stubDesignVersionRepository struct {
@@ -265,4 +306,183 @@ func TestDesignService_CreateDesignInvalidInput(t *testing.T) {
 	if len(repo.inserted) != 0 {
 		t.Fatalf("expected no designs inserted on validation failure")
 	}
+}
+
+func TestDesignService_UpdateDesign_Success(t *testing.T) {
+	updatedAt := time.Date(2025, 3, 10, 12, 0, 0, 0, time.UTC)
+	repo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_001": {
+				ID:               "dsg_001",
+				OwnerID:          "user-1",
+				Label:            "Original",
+				Type:             domain.DesignTypeTyped,
+				Status:           domain.DesignStatusDraft,
+				Version:          1,
+				CurrentVersionID: "ver_old",
+				Snapshot:         map[string]any{"label": "Original"},
+				UpdatedAt:        updatedAt,
+			},
+		},
+	}
+	versions := &stubDesignVersionRepository{}
+	nextVersionID := "VERSION2"
+	now := time.Date(2025, 3, 11, 9, 30, 0, 0, time.UTC)
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      repo,
+		Versions:     versions,
+		AssetsBucket: "bucket",
+		Clock:        func() time.Time { return now },
+		IDGenerator: func() string {
+			id := nextVersionID
+			nextVersionID = "unused"
+			return id
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	label := "Updated"
+	status := "ready"
+	snapshot := map[string]any{"label": "Updated"}
+	expected := updatedAt
+
+	design, err := svc.UpdateDesign(context.Background(), UpdateDesignCommand{
+		DesignID:          "dsg_001",
+		UpdatedBy:         "user-1",
+		Label:             &label,
+		Status:            &status,
+		Snapshot:          snapshot,
+		ExpectedUpdatedAt: &expected,
+	})
+	if err != nil {
+		t.Fatalf("UpdateDesign error: %v", err)
+	}
+	if design.Label != "Updated" {
+		t.Fatalf("expected label Updated, got %s", design.Label)
+	}
+	if design.Status != DesignStatusReady {
+		t.Fatalf("expected status ready, got %s", design.Status)
+	}
+	if design.Version != 2 {
+		t.Fatalf("expected version 2, got %d", design.Version)
+	}
+	if design.CurrentVersionID != "ver_version2" {
+		t.Fatalf("unexpected current version id: %s", design.CurrentVersionID)
+	}
+	if !design.UpdatedAt.Equal(now) {
+		t.Fatalf("expected updatedAt %v, got %v", now, design.UpdatedAt)
+	}
+	if len(repo.updated) != 1 {
+		t.Fatalf("expected repository update captured")
+	}
+	if len(versions.appended) != 1 || versions.appended[0].DesignID != "dsg_001" {
+		t.Fatalf("expected version append recorded")
+	}
+	if versions.appended[0].Version != 2 {
+		t.Fatalf("expected appended version 2, got %d", versions.appended[0].Version)
+	}
+}
+
+func TestDesignService_UpdateDesign_Conflict(t *testing.T) {
+	repo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_001": {
+				ID:        "dsg_001",
+				OwnerID:   "user-1",
+				Label:     "Original",
+				Status:    domain.DesignStatusDraft,
+				Version:   1,
+				UpdatedAt: time.Date(2025, 3, 10, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	versions := &stubDesignVersionRepository{}
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      repo,
+		Versions:     versions,
+		AssetsBucket: "bucket",
+		Clock:        time.Now,
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	expected := time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)
+	status := "ready"
+
+	_, err = svc.UpdateDesign(context.Background(), UpdateDesignCommand{
+		DesignID:          "dsg_001",
+		UpdatedBy:         "user-1",
+		Status:            &status,
+		ExpectedUpdatedAt: &expected,
+	})
+	if !errors.Is(err, ErrDesignConflict) {
+		t.Fatalf("expected design conflict, got %v", err)
+	}
+}
+
+func TestDesignService_DeleteDesign_Soft(t *testing.T) {
+	updatedAt := time.Date(2025, 3, 10, 12, 0, 0, 0, time.UTC)
+	repo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_001": {
+				ID:        "dsg_001",
+				OwnerID:   "user-1",
+				Status:    domain.DesignStatusDraft,
+				UpdatedAt: updatedAt,
+			},
+		},
+	}
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      repo,
+		Versions:     &stubDesignVersionRepository{},
+		AssetsBucket: "bucket",
+		Clock: func() time.Time {
+			return time.Date(2025, 3, 11, 8, 0, 0, 0, time.UTC)
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	expected := updatedAt
+	err = svc.DeleteDesign(context.Background(), DeleteDesignCommand{
+		DesignID:          "dsg_001",
+		RequestedBy:       "user-1",
+		SoftDelete:        true,
+		ExpectedUpdatedAt: &expected,
+	})
+	if err != nil {
+		t.Fatalf("DeleteDesign error: %v", err)
+	}
+	if len(repo.softDeleted) != 1 || repo.softDeleted[0] != "dsg_001" {
+		t.Fatalf("expected soft delete recorded")
+	}
+	record, ok := repo.store["dsg_001"]
+	if !ok || record.Status != domain.DesignStatusDeleted {
+		t.Fatalf("expected design status deleted, got %v", record.Status)
+	}
+}
+
+func cloneTestDesign(design domain.Design) domain.Design {
+	copy := design
+	if design.Snapshot != nil {
+		copy.Snapshot = maps.Clone(design.Snapshot)
+	}
+	if len(design.TextLines) > 0 {
+		copy.TextLines = slices.Clone(design.TextLines)
+	}
+	if len(design.Versions) > 0 {
+		copy.Versions = make([]domain.DesignVersion, len(design.Versions))
+		for i, version := range design.Versions {
+			copy.Versions[i] = version
+			if version.Snapshot != nil {
+				copy.Versions[i].Snapshot = maps.Clone(version.Snapshot)
+			}
+		}
+	}
+	return copy
 }

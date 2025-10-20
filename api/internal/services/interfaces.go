@@ -337,16 +337,20 @@ type DesignListFilter struct {
 }
 
 type UpdateDesignCommand struct {
-	DesignID  string
-	Snapshot  map[string]any
-	Status    string
-	UpdatedBy string
+	DesignID          string
+	UpdatedBy         string
+	Label             *string
+	Status            *string
+	ThumbnailURL      *string
+	Snapshot          map[string]any
+	ExpectedUpdatedAt *time.Time
 }
 
 type DeleteDesignCommand struct {
-	DesignID    string
-	RequestedBy string
-	SoftDelete  bool
+	DesignID          string
+	RequestedBy       string
+	SoftDelete        bool
+	ExpectedUpdatedAt *time.Time
 }
 
 type DuplicateDesignCommand struct {

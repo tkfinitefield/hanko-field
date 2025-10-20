@@ -50,6 +50,8 @@ func (h *DesignHandlers) Routes(r chi.Router) {
 	r.Get("/", h.listDesigns)
 	r.Post("/", h.createDesign)
 	r.Get("/{designID}", h.getDesign)
+	r.Put("/{designID}", h.updateDesign)
+	r.Delete("/{designID}", h.deleteDesign)
 }
 
 func (h *DesignHandlers) listDesigns(w http.ResponseWriter, r *http.Request) {
@@ -199,6 +201,136 @@ func (h *DesignHandlers) getDesign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *DesignHandlers) updateDesign(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+
+	existing, err := h.designs.GetDesign(ctx, designID, services.DesignReadOptions{})
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+	if !strings.EqualFold(existing.OwnerID, identity.UID) && !identity.HasAnyRole(auth.RoleStaff, auth.RoleAdmin) {
+		httpx.WriteError(ctx, w, httpx.NewError("design_not_found", "design not found", http.StatusNotFound))
+		return
+	}
+
+	body, err := readLimitedBody(r, maxDesignRequestBody)
+	if err != nil {
+		status := http.StatusBadRequest
+		code := "invalid_request"
+		if errors.Is(err, errBodyTooLarge) {
+			status = http.StatusRequestEntityTooLarge
+			code = "payload_too_large"
+		}
+		httpx.WriteError(ctx, w, httpx.NewError(code, err.Error(), status))
+		return
+	}
+
+	req, err := decodeUpdateDesignRequest(body)
+	if err != nil {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	var expectedUpdatedAt *time.Time
+	if header := strings.TrimSpace(r.Header.Get("If-Unmodified-Since")); header != "" {
+		ts, err := parseTimeParam(header)
+		if err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "If-Unmodified-Since must be RFC3339 timestamp", http.StatusBadRequest))
+			return
+		}
+		expectedUpdatedAt = &ts
+	}
+
+	cmd := services.UpdateDesignCommand{
+		DesignID:          designID,
+		UpdatedBy:         identity.UID,
+		Label:             req.Label,
+		Status:            req.Status,
+		ThumbnailURL:      req.ThumbnailURL,
+		Snapshot:          cloneMap(req.Snapshot),
+		ExpectedUpdatedAt: expectedUpdatedAt,
+	}
+
+	updated, err := h.designs.UpdateDesign(ctx, cmd)
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	payload := buildDesignPayload(updated)
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *DesignHandlers) deleteDesign(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+
+	existing, err := h.designs.GetDesign(ctx, designID, services.DesignReadOptions{})
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+	if !strings.EqualFold(existing.OwnerID, identity.UID) && !identity.HasAnyRole(auth.RoleStaff, auth.RoleAdmin) {
+		httpx.WriteError(ctx, w, httpx.NewError("design_not_found", "design not found", http.StatusNotFound))
+		return
+	}
+
+	var expectedUpdatedAt *time.Time
+	if header := strings.TrimSpace(r.Header.Get("If-Unmodified-Since")); header != "" {
+		ts, err := parseTimeParam(header)
+		if err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "If-Unmodified-Since must be RFC3339 timestamp", http.StatusBadRequest))
+			return
+		}
+		expectedUpdatedAt = &ts
+	}
+
+	err = h.designs.DeleteDesign(ctx, services.DeleteDesignCommand{
+		DesignID:          designID,
+		RequestedBy:       identity.UID,
+		SoftDelete:        true,
+		ExpectedUpdatedAt: expectedUpdatedAt,
+	})
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *DesignHandlers) createDesign(w http.ResponseWriter, r *http.Request) {
@@ -545,4 +677,37 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+type updateDesignRequest struct {
+	Label        *string        `json:"label"`
+	Status       *string        `json:"status"`
+	ThumbnailURL *string        `json:"thumbnail_url"`
+	Snapshot     map[string]any `json:"snapshot"`
+}
+
+func decodeUpdateDesignRequest(body []byte) (updateDesignRequest, error) {
+	if len(body) == 0 {
+		return updateDesignRequest{}, errors.New("request body is required")
+	}
+	var req updateDesignRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		return updateDesignRequest{}, err
+	}
+	if req.Status != nil {
+		value := strings.TrimSpace(*req.Status)
+		req.Status = &value
+	}
+	if req.Label != nil {
+		value := strings.TrimSpace(*req.Label)
+		req.Label = &value
+	}
+	if req.ThumbnailURL != nil {
+		value := strings.TrimSpace(*req.ThumbnailURL)
+		req.ThumbnailURL = &value
+	}
+	if req.Snapshot != nil && len(req.Snapshot) == 0 {
+		req.Snapshot = nil
+	}
+	return req, nil
 }

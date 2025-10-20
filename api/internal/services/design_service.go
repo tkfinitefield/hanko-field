@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -310,12 +311,144 @@ func (s *designService) ListDesigns(ctx context.Context, filter DesignListFilter
 	return page, nil
 }
 
-func (s *designService) UpdateDesign(context.Context, UpdateDesignCommand) (Design, error) {
-	return Design{}, ErrDesignNotImplemented
+func (s *designService) UpdateDesign(ctx context.Context, cmd UpdateDesignCommand) (Design, error) {
+	if s.designs == nil || s.versions == nil {
+		return Design{}, ErrDesignRepositoryUnavailable
+	}
+
+	designID := strings.TrimSpace(cmd.DesignID)
+	if designID == "" {
+		return Design{}, fmt.Errorf("%w: design_id is required", ErrDesignInvalidInput)
+	}
+	actorID := strings.TrimSpace(cmd.UpdatedBy)
+	if actorID == "" {
+		return Design{}, fmt.Errorf("%w: updated_by is required", ErrDesignInvalidInput)
+	}
+
+	design, err := s.designs.FindByID(ctx, designID)
+	if err != nil {
+		return Design{}, s.mapRepositoryError(err)
+	}
+
+	if cmd.ExpectedUpdatedAt != nil {
+		expected := cmd.ExpectedUpdatedAt.UTC()
+		if design.UpdatedAt.IsZero() || !design.UpdatedAt.UTC().Equal(expected) {
+			return Design{}, ErrDesignConflict
+		}
+	}
+
+	if !designEditable(design.Status) {
+		return Design{}, fmt.Errorf("%w: design status %q does not allow updates", ErrDesignInvalidInput, design.Status)
+	}
+
+	updated := design
+
+	if cmd.Label != nil {
+		updated.Label = strings.TrimSpace(*cmd.Label)
+	}
+	if updated.Label == "" {
+		updated.Label = defaultDesignLabel(updated.ID, updated.Type, updated.TextLines)
+	}
+
+	if cmd.Status != nil {
+		nextStatus, err := normalizeDesignStatus(*cmd.Status)
+		if err != nil {
+			return Design{}, err
+		}
+		if !designStatusUserMutable(nextStatus) {
+			return Design{}, fmt.Errorf("%w: status %q is not allowed", ErrDesignInvalidInput, nextStatus)
+		}
+		updated.Status = nextStatus
+	}
+
+	if cmd.ThumbnailURL != nil {
+		updated.ThumbnailURL = strings.TrimSpace(*cmd.ThumbnailURL)
+	}
+
+	var snapshot map[string]any
+	if len(cmd.Snapshot) > 0 {
+		snapshot = cloneSnapshot(cmd.Snapshot)
+	} else {
+		snapshot = cloneSnapshot(design.Snapshot)
+	}
+	updated.Snapshot = snapshot
+
+	now := s.now()
+	newVersionID := s.nextVersionID()
+	updated.Version = design.Version + 1
+	updated.CurrentVersionID = newVersionID
+	updated.UpdatedAt = now
+
+	version := domain.DesignVersion{
+		ID:        newVersionID,
+		DesignID:  designID,
+		Version:   updated.Version,
+		Snapshot:  cloneSnapshot(snapshot),
+		CreatedAt: now,
+		CreatedBy: actorID,
+	}
+
+	if err := s.runInTx(ctx, func(txCtx context.Context) error {
+		if err := s.designs.Update(txCtx, updated); err != nil {
+			return s.mapRepositoryError(err)
+		}
+		if err := s.versions.Append(txCtx, version); err != nil {
+			return s.mapRepositoryError(err)
+		}
+		return nil
+	}); err != nil {
+		return Design{}, err
+	}
+
+	s.recordAuditUpdate(ctx, design, updated, actorID)
+
+	return updated, nil
 }
 
-func (s *designService) DeleteDesign(context.Context, DeleteDesignCommand) error {
-	return ErrDesignNotImplemented
+func (s *designService) DeleteDesign(ctx context.Context, cmd DeleteDesignCommand) error {
+	if s.designs == nil {
+		return ErrDesignRepositoryUnavailable
+	}
+
+	designID := strings.TrimSpace(cmd.DesignID)
+	if designID == "" {
+		return fmt.Errorf("%w: design_id is required", ErrDesignInvalidInput)
+	}
+	actorID := strings.TrimSpace(cmd.RequestedBy)
+	if actorID == "" {
+		return fmt.Errorf("%w: requested_by is required", ErrDesignInvalidInput)
+	}
+	if !cmd.SoftDelete {
+		return ErrDesignNotImplemented
+	}
+
+	design, err := s.designs.FindByID(ctx, designID)
+	if err != nil {
+		return s.mapRepositoryError(err)
+	}
+
+	if cmd.ExpectedUpdatedAt != nil {
+		expected := cmd.ExpectedUpdatedAt.UTC()
+		if design.UpdatedAt.IsZero() || !design.UpdatedAt.UTC().Equal(expected) {
+			return ErrDesignConflict
+		}
+	}
+
+	if !designDeletable(design.Status) {
+		return fmt.Errorf("%w: design status %q cannot be deleted", ErrDesignInvalidInput, design.Status)
+	}
+
+	if design.Status == DesignStatusDeleted {
+		return nil
+	}
+
+	now := s.now()
+	if err := s.designs.SoftDelete(ctx, designID, now); err != nil {
+		return s.mapRepositoryError(err)
+	}
+
+	s.recordAuditDelete(ctx, design, actorID, now)
+	return nil
 }
 
 func (s *designService) DuplicateDesign(context.Context, DuplicateDesignCommand) (Design, error) {
@@ -619,6 +752,112 @@ func (s *designService) mapRepositoryError(err error) error {
 		}
 	}
 	return err
+}
+
+func designEditable(status DesignStatus) bool {
+	switch status {
+	case DesignStatusDraft, DesignStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
+func designDeletable(status DesignStatus) bool {
+	switch status {
+	case DesignStatusDraft, DesignStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
+func designStatusUserMutable(status DesignStatus) bool {
+	switch status {
+	case DesignStatusDraft, DesignStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeDesignStatus(value string) (DesignStatus, error) {
+	status := DesignStatus(strings.ToLower(strings.TrimSpace(value)))
+	if status == "" {
+		return "", fmt.Errorf("%w: status is required", ErrDesignInvalidInput)
+	}
+	switch status {
+	case DesignStatusDraft, DesignStatusReady, DesignStatusOrdered, DesignStatusLocked, DesignStatusDeleted:
+		return status, nil
+	default:
+		return "", fmt.Errorf("%w: unsupported status %q", ErrDesignInvalidInput, status)
+	}
+}
+
+func mapsEqual(a, b map[string]any) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+func (s *designService) recordAuditUpdate(ctx context.Context, before, after Design, actorID string) {
+	if s.audit == nil {
+		return
+	}
+	diff := map[string]AuditLogDiff{}
+	if !strings.EqualFold(before.Label, after.Label) {
+		diff["label"] = AuditLogDiff{Before: before.Label, After: after.Label}
+	}
+	if before.Status != after.Status {
+		diff["status"] = AuditLogDiff{Before: string(before.Status), After: string(after.Status)}
+	}
+	if strings.TrimSpace(before.ThumbnailURL) != strings.TrimSpace(after.ThumbnailURL) {
+		diff["thumbnailUrl"] = AuditLogDiff{Before: before.ThumbnailURL, After: after.ThumbnailURL}
+	}
+	metadata := map[string]any{
+		"version":          after.Version,
+		"currentVersionId": after.CurrentVersionID,
+		"snapshotUpdated":  !mapsEqual(before.Snapshot, after.Snapshot),
+	}
+	record := AuditLogRecord{
+		Actor:      actorID,
+		ActorType:  "user",
+		Action:     "design.update",
+		TargetRef:  fmt.Sprintf("/designs/%s", after.ID),
+		Severity:   "info",
+		OccurredAt: after.UpdatedAt,
+		Metadata:   metadata,
+		Diff:       diff,
+	}
+	s.audit.Record(ctx, record)
+}
+
+func (s *designService) recordAuditDelete(ctx context.Context, design Design, actorID string, deletedAt time.Time) {
+	if s.audit == nil {
+		return
+	}
+	diff := map[string]AuditLogDiff{
+		"status": {
+			Before: string(design.Status),
+			After:  string(DesignStatusDeleted),
+		},
+	}
+	metadata := map[string]any{
+		"deletedAt": deletedAt,
+		"soft":      true,
+	}
+	record := AuditLogRecord{
+		Actor:      actorID,
+		ActorType:  "user",
+		Action:     "design.delete",
+		TargetRef:  fmt.Sprintf("/designs/%s", design.ID),
+		Severity:   "info",
+		OccurredAt: deletedAt,
+		Metadata:   metadata,
+		Diff:       diff,
+	}
+	s.audit.Record(ctx, record)
 }
 
 func (s *designService) recordAudit(ctx context.Context, design Design, params createDesignParams) {
