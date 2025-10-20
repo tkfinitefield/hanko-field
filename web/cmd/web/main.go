@@ -12,6 +12,7 @@ import (
     "strings"
     "time"
     "sync"
+    "bytes"
 
     handlersPkg "finitefield.org/hanko-web/internal/handlers"
     "finitefield.org/hanko-web/internal/format"
@@ -137,7 +138,7 @@ func main() {
 	}
 }
 
-func tmplFuncMap() template.FuncMap {
+func tmplFuncMapFor(getT func() *template.Template) template.FuncMap {
     return template.FuncMap{
         "now":      time.Now,
         "nowf":     func(layout string) string { return time.Now().Format(layout) },
@@ -151,11 +152,27 @@ func tmplFuncMap() template.FuncMap {
         "list":     func(v ...any) []any { return v },
         // safe marks a string as trusted HTML. Use sparingly.
         "safe":     func(s string) template.HTML { return template.HTML(s) },
+        // slot executes another template by name, passing data, and returns trusted HTML
+        "slot":     func(name string, data any) template.HTML {
+            t := getT()
+            if t == nil || name == "" {
+                return ""
+            }
+            var buf bytes.Buffer
+            if err := t.ExecuteTemplate(&buf, name, data); err != nil {
+                // render an HTML comment with the error to aid debugging without breaking page
+                return template.HTML("<!-- slot '" + template.HTMLEscapeString(name) + "' error: " + template.HTMLEscapeString(err.Error()) + " -->")
+            }
+            return template.HTML(buf.String())
+        },
     }
 }
 
 func parseTemplates() (*template.Template, error) {
-    funcMap := tmplFuncMap()
+    // create root template and bind funcMap that can access it
+    root := template.New("_root")
+    funcMap := tmplFuncMapFor(func() *template.Template { return root })
+    root = root.Funcs(funcMap)
 	// Recursively discover and parse all .tmpl files. Note: ParseGlob doesn't support **.
 	var files []string
 	if err := filepath.WalkDir(templatesDir, func(path string, d fs.DirEntry, err error) error {
@@ -172,15 +189,17 @@ func parseTemplates() (*template.Template, error) {
 	}); err != nil {
 		return nil, err
 	}
-	if len(files) == 0 {
-		return nil, fmt.Errorf("no templates found under %s", templatesDir)
-	}
-	return template.New("_root").Funcs(funcMap).ParseFiles(files...)
+    if len(files) == 0 {
+        return nil, fmt.Errorf("no templates found under %s", templatesDir)
+    }
+    return root.ParseFiles(files...)
 }
 
 // parsePageTemplates builds a template set with the shared layout/partials and one page.
 func parsePageTemplates(page string) (*template.Template, error) {
-    funcMap := tmplFuncMap()
+    root := template.New("_root")
+    funcMap := tmplFuncMapFor(func() *template.Template { return root })
+    root = root.Funcs(funcMap)
     var files []string
     // layouts
     _ = filepath.WalkDir(filepath.Join(templatesDir, "layouts"), func(path string, d fs.DirEntry, err error) error {
@@ -198,7 +217,7 @@ func parsePageTemplates(page string) (*template.Template, error) {
     })
     // page
     files = append(files, filepath.Join(templatesDir, "pages", page+".tmpl"))
-    return template.New("_root").Funcs(funcMap).ParseFiles(files...)
+    return root.ParseFiles(files...)
 }
 
 // render executes the base layout. In dev mode, templates are reparsed on each request.

@@ -1,3 +1,8 @@
+{{ define "demo_card_body" }}<p class="text-sm text-gray-600">{{ . }}</p>{{ end }}
+{{ define "demo_card_footer" }}
+  {{ template "c_button_set" (dict "Align" "left" "Buttons" (list (dict "Label" "View" "Href" "/shop" "Variant" "primary" "Size" "sm") (dict "Label" "Details" "Href" "/guides" "Variant" "outline" "Size" "sm"))) }}
+{{ end }}
+
 {{ define "content" }}
 <section class="py-6 space-y-10">
   <header>
@@ -31,8 +36,8 @@
   <div>
     <h2 class="text-lg font-semibold mb-3">Cards</h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {{ template "c_card" (dict "Variant" "outlined" "Title" "Template #1" "Description" "Outlined card" "Body" (safe "<p>Small, reusable composition.</p>")) }}
-      {{ template "c_card" (dict "Variant" "elevated" "Title" "Template #2" "Description" "Elevated card" "Body" (safe "<p>Includes custom body content.</p>") ) }}
+      {{ template "c_card" (dict "Variant" "outlined" "Title" "Template #1" "Description" "Outlined card" "ContentTmpl" "demo_card_body" "ContentData" "Small, reusable composition.") }}
+      {{ template "c_card" (dict "Variant" "elevated" "Title" "Template #2" "Description" "Elevated card" "ContentTmpl" "demo_card_body" "ContentData" "Includes body + footer." "FooterTmpl" "demo_card_footer" "FooterData" nil) }}
       {{ template "c_card" (dict "Variant" "plain" "Title" "Template #3" "Description" "Plain card" ) }}
     </div>
   </div>
