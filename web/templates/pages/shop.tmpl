@@ -1,10 +1,70 @@
 {{ define "content" }}
 <section class="py-6">
-  <h1 class="text-2xl font-bold">{{ tlang $.Lang "nav.shop" }}</h1>
-  <p class="mt-2 text-gray-600">Coming soon.</p>
-  <div class="mt-4 text-sm text-gray-500">Path: {{ $.Path }}</div>
-  {{/* Title for base fallback */}}
-  {{/* expose Title via data; base uses .Title */}}
+  <header class="mb-4">
+    <h1 class="text-2xl font-bold">{{ tlang $.Lang "nav.shop" }}</h1>
+    <p class="mt-2 text-gray-600">Browse products with filters. Results update via HTMX.</p>
+  </header>
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+    <!-- Filters -->
+    <aside class="md:col-span-1">
+      <form id="shop-filters"
+            class="space-y-4"
+            hx-get="/shop/table"
+            hx-target="#shop-results"
+            hx-push-url="true">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Material</label>
+          {{ template "c_select" (dict "Name" "material" "Options" (list (dict "Value" "" "Label" (tlang $.Lang "filter.all")) (dict "Value" "wood" "Label" "Wood") (dict "Value" "rubber" "Label" "Rubber") (dict "Value" "metal" "Label" "Metal"))) }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">{{ tlang $.Lang "home.compare.col.shape" }}</label>
+          {{ template "c_select" (dict "Name" "shape" "Options" (list (dict "Value" "" "Label" (tlang $.Lang "filter.all")) (dict "Value" "round" "Label" (tlang $.Lang "shape.round")) (dict "Value" "square" "Label" (tlang $.Lang "shape.square")) (dict "Value" "rect" "Label" (tlang $.Lang "shape.rect")))) }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">{{ tlang $.Lang "home.compare.col.size" }}</label>
+          {{ template "c_select" (dict "Name" "size" "Options" (list (dict "Value" "" "Label" (tlang $.Lang "filter.all")) (dict "Value" "small" "Label" (tlang $.Lang "size.small")) (dict "Value" "medium" "Label" (tlang $.Lang "size.medium")) (dict "Value" "large" "Label" (tlang $.Lang "size.large")))) }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Price (JPY)</label>
+          <div class="grid grid-cols-2 gap-2">
+            {{ template "c_input" (dict "Name" "price_min" "Type" "number" "Placeholder" "Min") }}
+            {{ template "c_input" (dict "Name" "price_max" "Type" "number" "Placeholder" "Max") }}
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <input id="sale" name="sale" type="checkbox" value="1" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
+          <label for="sale" class="text-sm text-gray-700">On sale</label>
+        </div>
+        <div>
+          {{ template "c_button" (dict "Label" (tlang $.Lang "filter.apply") "Variant" "primary" "Type" "submit") }}
+        </div>
+        <div class="text-xs text-gray-500">Tip: Change filters and results update without full page reload.</div>
+      </form>
+    </aside>
+
+    <!-- Results -->
+    <div class="md:col-span-3">
+      <div id="shop-results"
+           hx-get="/shop/table"
+           hx-trigger="load"
+           hx-swap="outerHTML">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {{ template "c_skeleton_card" . }}
+          {{ template "c_skeleton_card" . }}
+          {{ template "c_skeleton_card" . }}
+          {{ template "c_skeleton_card" . }}
+          {{ template "c_skeleton_card" . }}
+          {{ template "c_skeleton_card" . }}
+        </div>
+        <div class="mt-4 flex items-center justify-between">
+          <div class="h-6 w-24 bg-gray-200 rounded animate-pulse"></div>
+          <div class="h-6 w-20 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-6 text-sm text-gray-500">Path: {{ $.Path }}</div>
 </section>
 {{ end }}
-

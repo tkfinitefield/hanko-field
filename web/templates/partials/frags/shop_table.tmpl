@@ -1,0 +1,41 @@
+{{ define "frag_shop_table" }}
+<div id="shop-results">
+  <div class="flex items-center justify-between mb-3">
+    <div class="text-sm text-gray-600">{{ .Total }} results</div>
+    <div class="text-sm text-gray-500">Page {{ .Page }}</div>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {{ if .Products }}
+      {{ range .Products }}
+        {{ template "c_card" (dict 
+          "Variant" "outlined" 
+          "Title" .Name 
+          "Description" (printf "%s / %s – %s" .Material .Size (fmtMoney .PriceJPY "JPY" $.Lang))
+        ) }}
+      {{ end }}
+    {{ else }}
+      <div class="col-span-1 sm:col-span-2 lg:col-span-3">
+        <div class="rounded-md border border-gray-200 bg-white p-6 text-center text-sm text-gray-600">No matching products</div>
+      </div>
+    {{ end }}
+  </div>
+  <div class="mt-4 flex items-center justify-between">
+    <nav class="flex items-center gap-2" aria-label="Pagination">
+      <a href="/shop/table?{{ .BaseQS }}&page={{ .Prev }}"
+         class="px-3 py-1.5 rounded border text-sm {{ if not .HasPrev }}pointer-events-none opacity-40{{ else }}hover:bg-gray-50{{ end }}"
+         hx-get="/shop/table?{{ .BaseQS }}&page={{ .Prev }}"
+         hx-target="#shop-results"
+         hx-push-url="true"
+      >Prev</a>
+      <a href="/shop/table?{{ .BaseQS }}&page={{ .Next }}"
+         class="px-3 py-1.5 rounded border text-sm {{ if not .HasNext }}pointer-events-none opacity-40{{ else }}hover:bg-gray-50{{ end }}"
+         hx-get="/shop/table?{{ .BaseQS }}&page={{ .Next }}"
+         hx-target="#shop-results"
+         hx-push-url="true"
+      >Next</a>
+    </nav>
+    <div class="text-xs text-gray-500">{{ .Total }} items • {{ .Per }} per page</div>
+  </div>
+</div>
+{{ end }}
+

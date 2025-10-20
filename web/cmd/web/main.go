@@ -13,6 +13,7 @@ import (
     "time"
     "sync"
     "bytes"
+    "net/url"
 
     handlersPkg "finitefield.org/hanko-web/internal/handlers"
     "finitefield.org/hanko-web/internal/format"
@@ -120,6 +121,8 @@ func main() {
     r.Get("/", HomeHandler)
     // Top-level pages
     r.Get("/shop", ShopHandler)
+    // Shop results fragment (htmx)
+    r.Get("/shop/table", ShopTableFrag)
     r.Get("/templates", TemplatesHandler)
     r.Get("/guides", GuidesHandler)
     r.Get("/account", AccountHandler)
@@ -358,6 +361,136 @@ func ShopHandler(w http.ResponseWriter, r *http.Request) {
     vm.SEO.OG.SiteName = i18nOrDefault(lang, "brand.name", "Hanko Field")
     vm.SEO.Alternates = buildAlternates(r)
     renderPage(w, r, "shop", vm)
+}
+
+// --- Shop listing (fragment) ---
+
+// Product represents a shop list item.
+type Product struct {
+    ID       string
+    Name     string
+    Material string // wood, rubber, metal
+    Shape    string // round, square, rect
+    Size     string // small, medium, large
+    PriceJPY int64  // price in JPY (for fmtMoney)
+    Sale     bool
+    InStock  bool
+}
+
+// productData returns a seed catalog suitable for demo listing and filtering.
+func productData(lang string) []Product {
+    // name fragments localized
+    shapes := map[string]map[string]string{
+        "round":  {"en": "Round", "ja": "丸型"},
+        "square": {"en": "Square", "ja": "角型"},
+        "rect":   {"en": "Rect", "ja": "長方形"},
+    }
+    sizes := map[string]map[string]string{
+        "small":  {"en": "Small", "ja": "小"},
+        "medium": {"en": "Medium", "ja": "中"},
+        "large":  {"en": "Large", "ja": "大"},
+    }
+    mats := []string{"wood", "rubber", "metal"}
+    shapesKeys := []string{"round", "square", "rect"}
+    sizesKeys := []string{"small", "medium", "large"}
+    var out []Product
+    id := 1000
+    base := map[string]int64{"wood": 1800, "rubber": 1200, "metal": 2400} // in JPY
+    for _, m := range mats {
+        for _, sh := range shapesKeys {
+            for i, sz := range sizesKeys {
+                price := base[m] + int64(i*300)
+                sale := (m == "metal" && sh == "rect") || (m == "rubber" && sz == "small")
+                name := ""
+                if lang == "ja" {
+                    name = fmt.Sprintf("%s %s", shapes[sh]["ja"], sizes[sz]["ja"])
+                } else {
+                    name = fmt.Sprintf("%s %s", shapes[sh]["en"], sizes[sz]["en"])
+                }
+                out = append(out, Product{
+                    ID:       fmt.Sprintf("P-%d", id),
+                    Name:     name,
+                    Material: m,
+                    Shape:    sh,
+                    Size:     sz,
+                    PriceJPY: price,
+                    Sale:     sale,
+                    InStock:  true,
+                })
+                id++
+            }
+        }
+    }
+    return out
+}
+
+// ShopTableFrag renders the product grid with applied filters and pagination.
+func ShopTableFrag(w http.ResponseWriter, r *http.Request) {
+    lang := mw.Lang(r)
+    q := r.URL.Query()
+    material := strings.TrimSpace(strings.ToLower(q.Get("material")))
+    shape := strings.TrimSpace(strings.ToLower(q.Get("shape")))
+    size := strings.TrimSpace(strings.ToLower(q.Get("size")))
+    saleOnly := strings.TrimSpace(strings.ToLower(q.Get("sale")))
+    priceMinStr := strings.TrimSpace(q.Get("price_min"))
+    priceMaxStr := strings.TrimSpace(q.Get("price_max"))
+    pageStr := strings.TrimSpace(q.Get("page"))
+    perStr := strings.TrimSpace(q.Get("per"))
+
+    // Parse numeric params
+    // Use simple Atoi for integers
+    atoi := func(s string) (int, bool) { if s == "" { return 0, false }; n := 0; for i := 0; i < len(s); i++ { if s[i] < '0' || s[i] > '9' { return 0, false } ; n = n*10 + int(s[i]-'0') }; return n, true }
+    priceMin, _ := atoi(priceMinStr)
+    priceMax, _ := atoi(priceMaxStr)
+    page, ok := atoi(pageStr); if !ok || page < 1 { page = 1 }
+    per, ok := atoi(perStr); if !ok || per < 1 { per = 9 }; if per > 48 { per = 48 }
+
+    // Filter
+    var filtered []Product
+    for _, p := range productData(lang) {
+        if material != "" && material != "all" && p.Material != material { continue }
+        if shape != "" && shape != "all" && p.Shape != shape { continue }
+        if size != "" && size != "all" && p.Size != size { continue }
+        if (saleOnly == "1" || saleOnly == "true") && !p.Sale { continue }
+        if priceMin > 0 && p.PriceJPY < int64(priceMin) { continue }
+        if priceMax > 0 && p.PriceJPY > int64(priceMax) { continue }
+        filtered = append(filtered, p)
+    }
+
+    total := len(filtered)
+    // Pagination window
+    start := (page - 1) * per
+    if start > total { start = total }
+    end := start + per
+    if end > total { end = total }
+    window := filtered[start:end]
+
+    // Build base query string excluding page for pager links
+    base := make(url.Values)
+    if material != "" { base.Set("material", material) }
+    if shape != "" { base.Set("shape", shape) }
+    if size != "" { base.Set("size", size) }
+    if saleOnly != "" { base.Set("sale", saleOnly) }
+    if priceMinStr != "" { base.Set("price_min", priceMinStr) }
+    if priceMaxStr != "" { base.Set("price_max", priceMaxStr) }
+    base.Set("per", fmt.Sprintf("%d", per))
+
+    hasPrev := page > 1
+    hasNext := end < total
+
+    props := map[string]any{
+        "Products": window,
+        "Lang":     lang,
+        "Total":    total,
+        "Page":     page,
+        "Per":      per,
+        "HasPrev":  hasPrev,
+        "HasNext":  hasNext,
+        "Prev":     page - 1,
+        "Next":     page + 1,
+        "BaseQS":   base.Encode(),
+    }
+    renderTemplate(w, r, "frag_shop_table", props)
 }
 
 func TemplatesHandler(w http.ResponseWriter, r *http.Request) {
