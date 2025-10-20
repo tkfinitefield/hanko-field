@@ -1223,8 +1223,8 @@ func TestDesignService_RequestAISuggestion_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RequestAISuggestion error: %v", err)
 	}
-	if result.ID != "as_001" {
-		t.Fatalf("expected suggestion id as_001, got %s", result.ID)
+	if result.ID != "as_7368dd0c7cc6fff7" {
+		t.Fatalf("expected suggestion id as_7368dd0c7cc6fff7, got %s", result.ID)
 	}
 	if result.Status != string(domain.AIJobStatusQueued) {
 		t.Fatalf("expected status queued, got %s", result.Status)
@@ -1251,19 +1251,19 @@ func TestDesignService_RequestAISuggestion_Success(t *testing.T) {
 	if captured.Priority != 25 {
 		t.Fatalf("expected priority propagated, got %d", captured.Priority)
 	}
+	if captured.SuggestionID != result.ID {
+		t.Fatalf("expected suggestion id propagated, got %s", captured.SuggestionID)
+	}
 	if captured.Snapshot == nil || captured.Snapshot["designId"] != "dsg_123" {
 		t.Fatalf("expected snapshot to include designId, got %+v", captured.Snapshot)
 	}
 
-	if len(suggestionRepo.inserted) != 1 {
-		t.Fatalf("expected 1 inserted suggestion, got %d", len(suggestionRepo.inserted))
+	record, err := suggestionRepo.FindByID(context.Background(), "dsg_123", result.ID)
+	if err != nil {
+		t.Fatalf("FindByID error: %v", err)
 	}
-	inserted := suggestionRepo.inserted[0]
-	if inserted.Status != string(domain.AIJobStatusQueued) {
-		t.Fatalf("expected inserted status queued, got %s", inserted.Status)
-	}
-	if inserted.Payload == nil || inserted.Payload["jobId"] != "aj_001" {
-		t.Fatalf("expected inserted payload to include jobId, got %+v", inserted.Payload)
+	if record.Payload == nil || record.Payload["jobId"] != "aj_001" {
+		t.Fatalf("expected stored payload to include jobId, got %+v", record.Payload)
 	}
 }
 
@@ -1281,7 +1281,7 @@ func TestDesignService_RequestAISuggestion_Idempotent(t *testing.T) {
 	}
 
 	existing := domain.AISuggestion{
-		ID:        "as_existing",
+		ID:        "as_cf12644d69a7c5ba",
 		DesignID:  "dsg_999",
 		Method:    "balance",
 		Status:    string(domain.AIJobStatusQueued),
@@ -1291,6 +1291,11 @@ func TestDesignService_RequestAISuggestion_Idempotent(t *testing.T) {
 	}
 
 	suggestionRepo := &stubSuggestionRepository{
+		store: map[string]map[string]domain.AISuggestion{
+			"dsg_999": {
+				existing.ID: cloneSuggestionRecord(existing),
+			},
+		},
 		insertFn: func(context.Context, domain.AISuggestion) error {
 			return suggestionRepoErr{err: errors.New("conflict"), conflict: true}
 		},
@@ -1303,7 +1308,7 @@ func TestDesignService_RequestAISuggestion_Idempotent(t *testing.T) {
 		queueFn: func(ctx context.Context, cmd QueueAISuggestionCommand) (QueueAISuggestionResult, error) {
 			return QueueAISuggestionResult{
 				JobID:        "aj_existing",
-				SuggestionID: "as_existing",
+				SuggestionID: existing.ID,
 				Status:       domain.AIJobStatusQueued,
 				QueuedAt:     now,
 			}, nil

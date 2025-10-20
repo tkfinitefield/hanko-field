@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -1061,27 +1063,21 @@ func (s *designService) RequestAISuggestion(ctx context.Context, cmd AISuggestio
 
 	parameters := cloneMetadata(cmd.Parameters)
 	metadata := cloneMetadata(cmd.Metadata)
+	idempotencyKey := strings.TrimSpace(cmd.IdempotencyKey)
 
-	queueResult, err := s.jobs.QueueAISuggestion(ctx, QueueAISuggestionCommand{
-		DesignID:       design.ID,
-		Method:         method,
-		Model:          model,
-		Prompt:         strings.TrimSpace(cmd.Prompt),
-		Snapshot:       snapshot,
-		Parameters:     parameters,
-		Metadata:       metadata,
-		IdempotencyKey: strings.TrimSpace(cmd.IdempotencyKey),
-		Priority:       cmd.Priority,
-		RequestedBy:    actorID,
-	})
-	if err != nil {
-		return AISuggestion{}, s.mapAIError(err)
+	suggestionID := ensureSuggestionID(s.newID())
+	if idempotencyKey != "" {
+		suggestionID = ensureSuggestionID(suggestionIDFromKey(idempotencyKey))
 	}
 
 	now := s.now()
 	payload := map[string]any{
-		"jobId": queueResult.JobID,
-		"model": model,
+		"model":       model,
+		"requestedBy": actorID,
+		"queuedAt":    now.Format(time.RFC3339Nano),
+	}
+	if idempotencyKey != "" {
+		payload["idempotencyKey"] = idempotencyKey
 	}
 	if prompt := strings.TrimSpace(cmd.Prompt); prompt != "" {
 		payload["prompt"] = prompt
@@ -1092,28 +1088,100 @@ func (s *designService) RequestAISuggestion(ctx context.Context, cmd AISuggestio
 	if len(metadata) > 0 {
 		payload["metadata"] = cloneMetadata(metadata)
 	}
-	payload["requestedBy"] = actorID
 
 	suggestion := AISuggestion{
-		ID:        queueResult.SuggestionID,
+		ID:        suggestionID,
 		DesignID:  design.ID,
 		Method:    method,
-		Status:    string(queueResult.Status),
+		Status:    string(domain.AIJobStatusQueued),
 		Payload:   payload,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
 
+	insertedNew := true
 	if err := s.suggestions.Insert(ctx, suggestion); err != nil {
 		var repoErr repositories.RepositoryError
 		if errors.As(err, &repoErr) && repoErr.IsConflict() {
-			existing, findErr := s.suggestions.FindByID(ctx, design.ID, suggestion.ID)
+			insertedNew = false
+			existing, findErr := s.suggestions.FindByID(ctx, design.ID, suggestionID)
 			if findErr != nil {
 				return AISuggestion{}, s.mapRepositoryError(findErr)
 			}
-			return existing, nil
+			suggestion = existing
+		} else {
+			return AISuggestion{}, s.mapRepositoryError(err)
 		}
+	}
+
+	queueResult, err := s.jobs.QueueAISuggestion(ctx, QueueAISuggestionCommand{
+		SuggestionID:   suggestionID,
+		DesignID:       design.ID,
+		Method:         method,
+		Model:          model,
+		Prompt:         strings.TrimSpace(cmd.Prompt),
+		Snapshot:       snapshot,
+		Parameters:     parameters,
+		Metadata:       metadata,
+		IdempotencyKey: idempotencyKey,
+		Priority:       cmd.Priority,
+		RequestedBy:    actorID,
+	})
+	if err != nil {
+		if insertedNew {
+			failPayload := cloneMetadata(suggestion.Payload)
+			if failPayload == nil {
+				failPayload = make(map[string]any)
+			}
+			failPayload["jobDispatchError"] = err.Error()
+			failPayload["jobDispatchFailedAt"] = now.Format(time.RFC3339Nano)
+			if _, updateErr := s.suggestions.UpdateStatus(ctx, design.ID, suggestionID, string(domain.AIJobStatusFailed), failPayload); updateErr != nil && s.logger != nil {
+				s.logger(ctx, "design.ai_suggestion_dispatch_fail_update", map[string]any{
+					"designId":     design.ID,
+					"suggestionId": suggestionID,
+					"error":        updateErr.Error(),
+				})
+			}
+		}
+		return AISuggestion{}, s.mapAIError(err)
+	}
+
+	current, err := s.suggestions.FindByID(ctx, design.ID, suggestionID)
+	if err != nil {
 		return AISuggestion{}, s.mapRepositoryError(err)
+	}
+	payloadUpdate := cloneMetadata(current.Payload)
+	if payloadUpdate == nil {
+		payloadUpdate = make(map[string]any)
+	}
+	payloadUpdate["jobId"] = queueResult.JobID
+	if len(parameters) > 0 {
+		if _, exists := payloadUpdate["parameters"]; !exists {
+			payloadUpdate["parameters"] = cloneMetadata(parameters)
+		}
+	}
+	if len(metadata) > 0 {
+		if _, exists := payloadUpdate["metadata"]; !exists {
+			payloadUpdate["metadata"] = cloneMetadata(metadata)
+		}
+	}
+	statusForUpdate := current.Status
+	if strings.TrimSpace(statusForUpdate) == "" {
+		statusForUpdate = string(queueResult.Status)
+	}
+	updatedSuggestion, updateErr := s.suggestions.UpdateStatus(ctx, design.ID, suggestionID, statusForUpdate, payloadUpdate)
+	if updateErr != nil {
+		var repoErr repositories.RepositoryError
+		if errors.As(updateErr, &repoErr) && repoErr.IsConflict() {
+			updatedSuggestion, err = s.suggestions.FindByID(ctx, design.ID, suggestionID)
+			if err != nil {
+				return AISuggestion{}, s.mapRepositoryError(err)
+			}
+		} else {
+			return AISuggestion{}, s.mapRepositoryError(updateErr)
+		}
+	} else {
+		suggestion = updatedSuggestion
 	}
 
 	return suggestion, nil
@@ -1748,6 +1816,11 @@ func cloneMetadata(src map[string]any) map[string]any {
 		return nil
 	}
 	return maps.Clone(src)
+}
+
+func suggestionIDFromKey(key string) string {
+	sum := sha1.Sum([]byte(strings.ToLower(strings.TrimSpace(key))))
+	return hex.EncodeToString(sum[:8])
 }
 
 func cloneAssetReference(ref *DesignAssetReference) *DesignAssetReference {

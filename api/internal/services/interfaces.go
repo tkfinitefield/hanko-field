@@ -858,6 +858,7 @@ type QueueAISuggestionCommand struct {
 	Method         string
 	Model          string
 	Prompt         string
+	SuggestionID   string
 	Snapshot       map[string]any
 	Parameters     map[string]any
 	Metadata       map[string]any
