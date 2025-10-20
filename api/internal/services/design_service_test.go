@@ -467,6 +467,38 @@ func TestDesignService_DeleteDesign_Soft(t *testing.T) {
 	}
 }
 
+func TestDesignService_DeleteDesign_Idempotent(t *testing.T) {
+	now := time.Date(2025, 3, 12, 9, 0, 0, 0, time.UTC)
+	repo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_001": {
+				ID:        "dsg_001",
+				OwnerID:   "user-1",
+				Status:    domain.DesignStatusDeleted,
+				UpdatedAt: now,
+			},
+		},
+	}
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      repo,
+		Versions:     &stubDesignVersionRepository{},
+		AssetsBucket: "bucket",
+		Clock:        func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	err = svc.DeleteDesign(context.Background(), DeleteDesignCommand{
+		DesignID:    "dsg_001",
+		RequestedBy: "user-1",
+		SoftDelete:  true,
+	})
+	if err != nil {
+		t.Fatalf("DeleteDesign should be idempotent, got error: %v", err)
+	}
+}
+
 func cloneTestDesign(design domain.Design) domain.Design {
 	copy := design
 	if design.Snapshot != nil {

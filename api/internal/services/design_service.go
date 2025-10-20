@@ -434,6 +434,10 @@ func (s *designService) DeleteDesign(ctx context.Context, cmd DeleteDesignComman
 		}
 	}
 
+	if design.Status == DesignStatusDeleted {
+		return nil
+	}
+
 	if !designDeletable(design.Status) {
 		return fmt.Errorf("%w: design status %q cannot be deleted", ErrDesignInvalidInput, design.Status)
 	}
