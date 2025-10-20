@@ -66,7 +66,7 @@ func main() {
     var err error
     i18nBundle, err = i18n.Load(localesDir, "ja", sup)
     if err != nil {
-        log.Printf("i18n load failed: %v", err)
+        log.Fatalf("i18n load failed: %v", err)
     }
 
 	if !devMode {
@@ -184,5 +184,9 @@ func render(w http.ResponseWriter, r *http.Request, data any) {
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
     lang := mw.Lang(r)
     vm := handlersPkg.BuildHomeData(lang)
+    if i18nBundle != nil {
+        vm.SEO.Title = i18nBundle.T(lang, "home.seo.title")
+        vm.SEO.Description = i18nBundle.T(lang, "home.seo.description")
+    }
     render(w, r, vm)
 }

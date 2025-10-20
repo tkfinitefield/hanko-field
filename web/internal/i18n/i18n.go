@@ -6,6 +6,7 @@ import (
     "os"
     "path/filepath"
     "sort"
+    "strconv"
     "strings"
 )
 
@@ -56,6 +57,9 @@ func (b *Bundle) Supported() []string {
     return out
 }
 
+// Fallback returns the configured fallback language.
+func (b *Bundle) Fallback() string { return b.fallback }
+
 func (b *Bundle) isSupported(lang string) bool {
     _, ok := b.supported[lang]
     return ok
@@ -80,27 +84,72 @@ func (b *Bundle) T(lang, key string) string {
 
 // Resolve chooses best language from Accept-Language header.
 func (b *Bundle) Resolve(acceptLang string) string {
-    // Very small parser: split by comma, take primary tag, match supported.
+    type langPref struct {
+        base string
+        q    float64
+        pos  int
+    }
+    prefs := make([]langPref, 0, 8)
     parts := strings.Split(acceptLang, ",")
-    for _, p := range parts {
-        p = strings.TrimSpace(p)
+    for i, raw := range parts {
+        p := strings.TrimSpace(raw)
         if p == "" {
             continue
         }
-        // strip ;q=...
-        if i := strings.IndexByte(p, ';'); i != -1 {
-            p = p[:i]
+        q := 1.0
+        if sc := strings.IndexByte(p, ';'); sc != -1 {
+            // parse ;q=...
+            params := strings.TrimSpace(p[sc+1:])
+            p = strings.TrimSpace(p[:sc])
+            if strings.HasPrefix(params, "q=") {
+                if v, err := parseQValue(strings.TrimPrefix(params, "q=")); err == nil {
+                    q = v
+                }
+            }
         }
-        // primary subtag only (e.g., ja-JP -> ja)
         base := p
-        if i := strings.IndexByte(p, '-'); i != -1 {
-            base = p[:i]
+        if dash := strings.IndexByte(p, '-'); dash != -1 {
+            base = p[:dash]
         }
         base = strings.ToLower(base)
-        if b.isSupported(base) {
-            return base
+        prefs = append(prefs, langPref{base: base, q: q, pos: i})
+    }
+    // sort by q desc then by original order
+    sort.SliceStable(prefs, func(i, j int) bool {
+        if prefs[i].q == prefs[j].q {
+            return prefs[i].pos < prefs[j].pos
+        }
+        return prefs[i].q > prefs[j].q
+    })
+    for _, lp := range prefs {
+        if b.isSupported(lp.base) {
+            return lp.base
         }
     }
     return b.fallback
 }
 
+// parseQValue parses a qvalue per RFC 7231 (0.0 to 1.0).
+func parseQValue(s string) (float64, error) {
+    s = strings.TrimSpace(s)
+    // Only simple parser needed: 1, 1.0, 0.8, etc.
+    var v float64
+    var err error
+    // fast path for common values
+    switch s {
+    case "1", "1.0", "1.00":
+        return 1.0, nil
+    case "0", "0.0", "0.00":
+        return 0.0, nil
+    }
+    v, err = strconv.ParseFloat(s, 64)
+    if err != nil {
+        return 0, err
+    }
+    if v < 0 {
+        v = 0
+    } else if v > 1 {
+        v = 1
+    }
+    return v, nil
+}

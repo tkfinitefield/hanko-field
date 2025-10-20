@@ -1,6 +1,7 @@
 package middleware
 
 import (
+    "context"
     "net/http"
     "strings"
 
@@ -11,6 +12,9 @@ import (
 func Locale(bundle *i18n.Bundle) func(http.Handler) http.Handler {
     return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            // make fallback available to request context for helpers
+            ctx := context.WithValue(r.Context(), ctxKeyLocaleFB, bundle.Fallback())
+            r = r.WithContext(ctx)
             s := GetSession(r)
             // query override
             if q := r.URL.Query().Get("hl"); q != "" {
@@ -42,6 +46,10 @@ func Lang(r *http.Request) string {
     if s := GetSession(r); s != nil && s.Locale != "" {
         return s.Locale
     }
+    if v := r.Context().Value(ctxKeyLocaleFB); v != nil {
+        if fb, ok := v.(string); ok && fb != "" {
+            return fb
+        }
+    }
     return "ja"
 }
-

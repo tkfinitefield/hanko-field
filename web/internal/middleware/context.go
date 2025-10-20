@@ -8,10 +8,11 @@ import (
 type ctxKey string
 
 const (
-	ctxKeyRequestID ctxKey = "req_id"
-	ctxKeyIsHTMX    ctxKey = "is_htmx"
-	ctxKeySession   ctxKey = "session"
-	ctxKeyUser      ctxKey = "user"
+    ctxKeyRequestID ctxKey = "req_id"
+    ctxKeyIsHTMX    ctxKey = "is_htmx"
+    ctxKeySession   ctxKey = "session"
+    ctxKeyUser      ctxKey = "user"
+    ctxKeyLocaleFB  ctxKey = "locale_fallback"
 )
 
 // WithRequestID stores request id in context
