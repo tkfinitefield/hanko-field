@@ -127,6 +127,8 @@ type DesignServiceDeps struct {
 	Audit        AuditLogService
 	Renderer     DesignRenderer
 	AssetCopier  AssetCopier
+	Suggestions  repositories.AISuggestionRepository
+	Jobs         BackgroundJobDispatcher
 	UnitOfWork   repositories.UnitOfWork
 	Clock        func() time.Time
 	IDGenerator  func() string
@@ -140,6 +142,8 @@ type designService struct {
 	audit        AuditLogService
 	renderer     DesignRenderer
 	assetCopier  AssetCopier
+	suggestions  repositories.AISuggestionRepository
+	jobs         BackgroundJobDispatcher
 	unitOfWork   repositories.UnitOfWork
 	clock        func() time.Time
 	newID        func() string
@@ -181,6 +185,8 @@ func NewDesignService(deps DesignServiceDeps) (DesignService, error) {
 		audit:        deps.Audit,
 		renderer:     deps.Renderer,
 		assetCopier:  deps.AssetCopier,
+		suggestions:  deps.Suggestions,
+		jobs:         deps.Jobs,
 		unitOfWork:   deps.UnitOfWork,
 		clock:        func() time.Time { return clock().UTC() },
 		newID:        idGen,
@@ -987,8 +993,130 @@ func assetContentType(ref *DesignAssetReference) string {
 	return ref.ContentType
 }
 
-func (s *designService) RequestAISuggestion(context.Context, AISuggestionRequest) (AISuggestion, error) {
-	return AISuggestion{}, ErrDesignNotImplemented
+func (s *designService) RequestAISuggestion(ctx context.Context, cmd AISuggestionRequest) (AISuggestion, error) {
+	if s.designs == nil {
+		return AISuggestion{}, ErrDesignRepositoryUnavailable
+	}
+	if s.jobs == nil || s.suggestions == nil {
+		return AISuggestion{}, ErrDesignNotImplemented
+	}
+
+	designID := strings.TrimSpace(cmd.DesignID)
+	if designID == "" {
+		return AISuggestion{}, fmt.Errorf("%w: design_id is required", ErrDesignInvalidInput)
+	}
+	method := strings.TrimSpace(cmd.Method)
+	if method == "" {
+		return AISuggestion{}, fmt.Errorf("%w: method is required", ErrDesignInvalidInput)
+	}
+	model := strings.TrimSpace(cmd.Model)
+	if model == "" {
+		return AISuggestion{}, fmt.Errorf("%w: model is required", ErrDesignInvalidInput)
+	}
+	actorID := strings.TrimSpace(cmd.ActorID)
+	if actorID == "" {
+		return AISuggestion{}, fmt.Errorf("%w: actor_id is required", ErrDesignInvalidInput)
+	}
+
+	design, err := s.designs.FindByID(ctx, designID)
+	if err != nil {
+		return AISuggestion{}, s.mapRepositoryError(err)
+	}
+
+	ownerID := strings.TrimSpace(design.OwnerID)
+	if ownerID == "" {
+		return AISuggestion{}, fmt.Errorf("%w: design owner missing", ErrDesignInvalidInput)
+	}
+	if !strings.EqualFold(ownerID, actorID) {
+		return AISuggestion{}, ErrDesignNotFound
+	}
+	if design.Status == DesignStatusDeleted {
+		return AISuggestion{}, fmt.Errorf("%w: design status %q cannot request ai suggestions", ErrDesignInvalidInput, design.Status)
+	}
+
+	snapshot := stripSnapshotAssets(design.Snapshot)
+	if snapshot == nil {
+		snapshot = make(map[string]any)
+	}
+	if len(snapshot) == 0 {
+		if label := strings.TrimSpace(design.Label); label != "" {
+			snapshot["label"] = label
+		}
+		if len(design.TextLines) > 0 {
+			snapshot["textLines"] = cloneStrings(design.TextLines)
+		}
+		if design.Type != "" {
+			snapshot["type"] = string(design.Type)
+		}
+		if design.Version > 0 {
+			snapshot["version"] = design.Version
+		}
+		if design.Status != "" {
+			snapshot["status"] = string(design.Status)
+		}
+	}
+	if _, ok := snapshot["designId"]; !ok {
+		snapshot["designId"] = design.ID
+	}
+
+	parameters := cloneMetadata(cmd.Parameters)
+	metadata := cloneMetadata(cmd.Metadata)
+
+	queueResult, err := s.jobs.QueueAISuggestion(ctx, QueueAISuggestionCommand{
+		DesignID:       design.ID,
+		Method:         method,
+		Model:          model,
+		Prompt:         strings.TrimSpace(cmd.Prompt),
+		Snapshot:       snapshot,
+		Parameters:     parameters,
+		Metadata:       metadata,
+		IdempotencyKey: strings.TrimSpace(cmd.IdempotencyKey),
+		Priority:       cmd.Priority,
+		RequestedBy:    actorID,
+	})
+	if err != nil {
+		return AISuggestion{}, s.mapAIError(err)
+	}
+
+	now := s.now()
+	payload := map[string]any{
+		"jobId": queueResult.JobID,
+		"model": model,
+	}
+	if prompt := strings.TrimSpace(cmd.Prompt); prompt != "" {
+		payload["prompt"] = prompt
+	}
+	if len(parameters) > 0 {
+		payload["parameters"] = cloneMetadata(parameters)
+	}
+	if len(metadata) > 0 {
+		payload["metadata"] = cloneMetadata(metadata)
+	}
+	payload["requestedBy"] = actorID
+
+	suggestion := AISuggestion{
+		ID:        queueResult.SuggestionID,
+		DesignID:  design.ID,
+		Method:    method,
+		Status:    string(queueResult.Status),
+		Payload:   payload,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	if err := s.suggestions.Insert(ctx, suggestion); err != nil {
+		var repoErr repositories.RepositoryError
+		if errors.As(err, &repoErr) && repoErr.IsConflict() {
+			existing, findErr := s.suggestions.FindByID(ctx, design.ID, suggestion.ID)
+			if findErr != nil {
+				return AISuggestion{}, s.mapRepositoryError(findErr)
+			}
+			return existing, nil
+		}
+		return AISuggestion{}, s.mapRepositoryError(err)
+	}
+
+	return suggestion, nil
 }
 
 func (s *designService) ListAISuggestions(context.Context, string, AISuggestionFilter) (domain.CursorPage[AISuggestion], error) {
@@ -1281,6 +1409,30 @@ func (s *designService) mapRepositoryError(err error) error {
 			return fmt.Errorf("%w: %v", ErrDesignConflict, err)
 		case repoErr.IsUnavailable():
 			return fmt.Errorf("%w: %v", ErrDesignRepositoryUnavailable, err)
+		}
+	}
+	return err
+}
+
+func (s *designService) mapAIError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, ErrAIInvalidInput):
+		return fmt.Errorf("%w: %v", ErrDesignInvalidInput, err)
+	case errors.Is(err, ErrAIJobNotFound), errors.Is(err, ErrAISuggestionNotFound):
+		return fmt.Errorf("%w: %v", ErrDesignNotFound, err)
+	}
+	var repoErr repositories.RepositoryError
+	if errors.As(err, &repoErr) {
+		switch {
+		case repoErr.IsConflict():
+			return fmt.Errorf("%w: %v", ErrDesignConflict, err)
+		case repoErr.IsUnavailable():
+			return fmt.Errorf("%w: %v", ErrDesignRepositoryUnavailable, err)
+		case repoErr.IsNotFound():
+			return fmt.Errorf("%w: %v", ErrDesignNotFound, err)
 		}
 	}
 	return err

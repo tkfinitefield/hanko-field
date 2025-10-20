@@ -247,6 +247,129 @@ func TestDesignHandlers_DuplicateDesign_NotFound(t *testing.T) {
 	}
 }
 
+func TestDesignHandlers_RequestAISuggestion_Success(t *testing.T) {
+	var captured services.AISuggestionRequest
+	stub := &stubDesignService{
+		aiRequestFn: func(_ context.Context, req services.AISuggestionRequest) (services.AISuggestion, error) {
+			captured = req
+			return services.AISuggestion{
+				ID:     "as_123",
+				Status: "queued",
+			}, nil
+		},
+	}
+	handler := NewDesignHandlers(nil, stub)
+
+	reqBody := `{
+		"method": " balance ",
+		"model": " glyph@2025 ",
+		"prompt": " refine ",
+		"idempotency_key": " idem-123 ",
+		"priority": 10,
+		"parameters": {"strength": 0.7},
+		"metadata": {"channel":"app"}
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_src/ai-suggestions", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_src")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.requestAISuggestion(rec, req)
+
+	res := rec.Result()
+	if res.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d", res.StatusCode)
+	}
+	location := res.Header.Get("Location")
+	if location != "/designs/dsg_src/ai-suggestions/as_123" {
+		t.Fatalf("unexpected Location header: %s", location)
+	}
+
+	var payload aiSuggestionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if payload.SuggestionID != "as_123" {
+		t.Fatalf("expected suggestion id as_123, got %s", payload.SuggestionID)
+	}
+	if payload.Status != "queued" {
+		t.Fatalf("expected status queued, got %s", payload.Status)
+	}
+	if payload.PollingURL != location {
+		t.Fatalf("expected polling url to match location, got %s", payload.PollingURL)
+	}
+
+	if captured.DesignID != "dsg_src" {
+		t.Fatalf("expected design id dsg_src, got %s", captured.DesignID)
+	}
+	if captured.Method != "balance" {
+		t.Fatalf("expected method trimmed to balance, got %s", captured.Method)
+	}
+	if captured.Model != "glyph@2025" {
+		t.Fatalf("expected model trimmed, got %s", captured.Model)
+	}
+	if captured.Prompt != "refine" {
+		t.Fatalf("expected prompt trimmed, got %s", captured.Prompt)
+	}
+	if captured.IdempotencyKey != "idem-123" {
+		t.Fatalf("expected idempotency key trimmed, got %s", captured.IdempotencyKey)
+	}
+	if captured.Priority != 10 {
+		t.Fatalf("expected priority 10, got %d", captured.Priority)
+	}
+	if captured.ActorID != "user-1" {
+		t.Fatalf("expected actor id user-1, got %s", captured.ActorID)
+	}
+	if captured.Parameters == nil || captured.Parameters["strength"] != 0.7 {
+		t.Fatalf("expected parameters propagated, got %+v", captured.Parameters)
+	}
+	if captured.Metadata == nil || captured.Metadata["channel"] != "app" {
+		t.Fatalf("expected metadata propagated, got %+v", captured.Metadata)
+	}
+}
+
+func TestDesignHandlers_RequestAISuggestion_InvalidJSON(t *testing.T) {
+	handler := NewDesignHandlers(nil, &stubDesignService{})
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_src/ai-suggestions", strings.NewReader("{"))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_src")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.requestAISuggestion(rec, req)
+
+	if rec.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestDesignHandlers_RequestAISuggestion_ServiceError(t *testing.T) {
+	stub := &stubDesignService{
+		aiRequestFn: func(context.Context, services.AISuggestionRequest) (services.AISuggestion, error) {
+			return services.AISuggestion{}, services.ErrDesignInvalidInput
+		},
+	}
+	handler := NewDesignHandlers(nil, stub)
+	reqBody := `{"method":"balance","model":"glyph"}`
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_src/ai-suggestions", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_src")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.requestAISuggestion(rec, req)
+	if rec.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
+	}
+}
+
 func TestDesignHandlers_ListDesigns_Success(t *testing.T) {
 	var captured services.DesignListFilter
 	now := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
@@ -795,6 +918,7 @@ type stubDesignService struct {
 	updateFn       func(context.Context, services.UpdateDesignCommand) (services.Design, error)
 	deleteFn       func(context.Context, services.DeleteDesignCommand) error
 	duplicateFn    func(context.Context, services.DuplicateDesignCommand) (services.Design, error)
+	aiRequestFn    func(context.Context, services.AISuggestionRequest) (services.AISuggestion, error)
 }
 
 func (s *stubDesignService) CreateDesign(ctx context.Context, cmd services.CreateDesignCommand) (services.Design, error) {
@@ -853,7 +977,10 @@ func (s *stubDesignService) DuplicateDesign(ctx context.Context, cmd services.Du
 	return services.Design{}, nil
 }
 
-func (s *stubDesignService) RequestAISuggestion(context.Context, services.AISuggestionRequest) (services.AISuggestion, error) {
+func (s *stubDesignService) RequestAISuggestion(ctx context.Context, req services.AISuggestionRequest) (services.AISuggestion, error) {
+	if s.aiRequestFn != nil {
+		return s.aiRequestFn(ctx, req)
+	}
 	return services.AISuggestion{}, nil
 }
 

@@ -256,8 +256,17 @@ func (d *backgroundJobDispatcher) CompleteAISuggestion(ctx context.Context, cmd 
 	suggestion.Payload = mergePayload(suggestion.Payload, cmd.Outputs, cmd.Metadata)
 	suggestion.Status = ensureSuggestionStatus(suggestion.Status)
 
-	if err := d.suggestions.Insert(ctx, suggestion); err != nil {
-		return CompleteAISuggestionResult{}, err
+	stored, err := d.suggestions.UpdateStatus(ctx, suggestion.DesignID, suggestion.ID, suggestion.Status, copyMap(suggestion.Payload))
+	if err != nil {
+		if isRepoNotFound(err) {
+			if err := d.suggestions.Insert(ctx, suggestion); err != nil {
+				return CompleteAISuggestionResult{}, err
+			}
+		} else {
+			return CompleteAISuggestionResult{}, err
+		}
+	} else {
+		suggestion = stored
 	}
 
 	resultRef := fmt.Sprintf("/designs/%s/aiSuggestions/%s", suggestion.DesignID, suggestion.ID)

@@ -103,6 +103,153 @@ func (s *stubDesignVersionRepository) FindByID(ctx context.Context, designID, ve
 	return domain.DesignVersion{}, errors.New("not implemented")
 }
 
+type stubSuggestionRepository struct {
+	mu             sync.Mutex
+	store          map[string]map[string]domain.AISuggestion
+	inserted       []domain.AISuggestion
+	insertFn       func(context.Context, domain.AISuggestion) error
+	findFn         func(context.Context, string, string) (domain.AISuggestion, error)
+	updateStatusFn func(context.Context, string, string, string, map[string]any) (domain.AISuggestion, error)
+}
+
+func (s *stubSuggestionRepository) Insert(ctx context.Context, suggestion domain.AISuggestion) error {
+	if s.insertFn != nil {
+		return s.insertFn(ctx, suggestion)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.store == nil {
+		s.store = make(map[string]map[string]domain.AISuggestion)
+	}
+	byDesign, ok := s.store[suggestion.DesignID]
+	if !ok {
+		byDesign = make(map[string]domain.AISuggestion)
+		s.store[suggestion.DesignID] = byDesign
+	}
+	if _, exists := byDesign[suggestion.ID]; exists {
+		return suggestionRepoErr{err: errors.New("conflict"), conflict: true}
+	}
+	clone := cloneSuggestionRecord(suggestion)
+	byDesign[suggestion.ID] = clone
+	s.inserted = append(s.inserted, cloneSuggestionRecord(suggestion))
+	return nil
+}
+
+func (s *stubSuggestionRepository) FindByID(ctx context.Context, designID string, suggestionID string) (domain.AISuggestion, error) {
+	if s.findFn != nil {
+		return s.findFn(ctx, designID, suggestionID)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.store == nil {
+		return domain.AISuggestion{}, suggestionRepoErr{err: errors.New("not found"), notFound: true}
+	}
+	designSuggestions, ok := s.store[designID]
+	if !ok {
+		return domain.AISuggestion{}, suggestionRepoErr{err: errors.New("not found"), notFound: true}
+	}
+	suggestion, ok := designSuggestions[suggestionID]
+	if !ok {
+		return domain.AISuggestion{}, suggestionRepoErr{err: errors.New("not found"), notFound: true}
+	}
+	return cloneSuggestionRecord(suggestion), nil
+}
+
+func (s *stubSuggestionRepository) UpdateStatus(ctx context.Context, designID string, suggestionID string, status string, metadata map[string]any) (domain.AISuggestion, error) {
+	if s.updateStatusFn != nil {
+		return s.updateStatusFn(ctx, designID, suggestionID, status, metadata)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.store == nil {
+		return domain.AISuggestion{}, suggestionRepoErr{err: errors.New("not found"), notFound: true}
+	}
+	designSuggestions, ok := s.store[designID]
+	if !ok {
+		return domain.AISuggestion{}, suggestionRepoErr{err: errors.New("not found"), notFound: true}
+	}
+	record, ok := designSuggestions[suggestionID]
+	if !ok {
+		return domain.AISuggestion{}, suggestionRepoErr{err: errors.New("not found"), notFound: true}
+	}
+	record.Status = status
+	if len(metadata) > 0 {
+		if record.Payload == nil {
+			record.Payload = make(map[string]any)
+		}
+		for k, v := range metadata {
+			record.Payload[k] = v
+		}
+	}
+	record.UpdatedAt = time.Now().UTC()
+	designSuggestions[suggestionID] = cloneSuggestionRecord(record)
+	return cloneSuggestionRecord(record), nil
+}
+
+func (s *stubSuggestionRepository) ListByDesign(ctx context.Context, designID string, pager domain.Pagination) (domain.CursorPage[domain.AISuggestion], error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	page := domain.CursorPage[domain.AISuggestion]{}
+	if s.store == nil {
+		return page, nil
+	}
+	if suggestions, ok := s.store[designID]; ok {
+		for _, suggestion := range suggestions {
+			page.Items = append(page.Items, cloneSuggestionRecord(suggestion))
+		}
+	}
+	return page, nil
+}
+
+type suggestionRepoErr struct {
+	err         error
+	notFound    bool
+	conflict    bool
+	unavailable bool
+}
+
+func (e suggestionRepoErr) Error() string {
+	if e.err != nil {
+		return e.err.Error()
+	}
+	return "suggestion repository error"
+}
+
+func (e suggestionRepoErr) IsNotFound() bool    { return e.notFound }
+func (e suggestionRepoErr) IsConflict() bool    { return e.conflict }
+func (e suggestionRepoErr) IsUnavailable() bool { return e.unavailable }
+
+type stubJobDispatcher struct {
+	queueFn func(context.Context, QueueAISuggestionCommand) (QueueAISuggestionResult, error)
+}
+
+func (s *stubJobDispatcher) QueueAISuggestion(ctx context.Context, cmd QueueAISuggestionCommand) (QueueAISuggestionResult, error) {
+	if s.queueFn != nil {
+		return s.queueFn(ctx, cmd)
+	}
+	return QueueAISuggestionResult{}, nil
+}
+
+func (s *stubJobDispatcher) GetAIJob(context.Context, string) (domain.AIJob, error) {
+	return domain.AIJob{}, errors.New("not implemented")
+}
+
+func (s *stubJobDispatcher) CompleteAISuggestion(context.Context, CompleteAISuggestionCommand) (CompleteAISuggestionResult, error) {
+	return CompleteAISuggestionResult{}, errors.New("not implemented")
+}
+
+func (s *stubJobDispatcher) GetSuggestion(context.Context, string, string) (AISuggestion, error) {
+	return AISuggestion{}, errors.New("not implemented")
+}
+
+func (s *stubJobDispatcher) EnqueueRegistrabilityCheck(context.Context, RegistrabilityJobPayload) (string, error) {
+	return "", errors.New("not implemented")
+}
+
+func (s *stubJobDispatcher) EnqueueStockCleanup(context.Context, StockCleanupPayload) error {
+	return errors.New("not implemented")
+}
+
 type assetCopyCall struct {
 	SourceBucket string
 	SourceObject string
@@ -1013,6 +1160,208 @@ func TestDesignService_DeleteDesign_Idempotent(t *testing.T) {
 	}
 }
 
+func TestDesignService_RequestAISuggestion_Success(t *testing.T) {
+	now := time.Date(2025, 6, 1, 9, 0, 0, 0, time.UTC)
+	designRepo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_123": {
+				ID:        "dsg_123",
+				OwnerID:   "user-1",
+				Label:     "My Design",
+				Type:      domain.DesignTypeTyped,
+				Status:    domain.DesignStatusReady,
+				TextLines: []string{"Line1", "Line2"},
+				Version:   3,
+				Snapshot: map[string]any{
+					"label":  "My Design",
+					"type":   "typed",
+					"assets": map[string]any{"previewPath": "path/to/preview"},
+				},
+			},
+		},
+	}
+	suggestionRepo := &stubSuggestionRepository{}
+
+	var captured QueueAISuggestionCommand
+	dispatcher := &stubJobDispatcher{
+		queueFn: func(ctx context.Context, cmd QueueAISuggestionCommand) (QueueAISuggestionResult, error) {
+			captured = cmd
+			return QueueAISuggestionResult{
+				JobID:        "aj_001",
+				SuggestionID: "as_001",
+				Status:       domain.AIJobStatusQueued,
+				QueuedAt:     now,
+			}, nil
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      designRepo,
+		Versions:     &stubDesignVersionRepository{},
+		Suggestions:  suggestionRepo,
+		Jobs:         dispatcher,
+		AssetsBucket: "bucket",
+		Clock:        func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	req := AISuggestionRequest{
+		DesignID:       "dsg_123",
+		Method:         " balance ",
+		Model:          " glyph-balancer@2025-05 ",
+		Prompt:         "Balance glyphs",
+		Parameters:     map[string]any{"strength": 0.8},
+		Metadata:       map[string]any{"channel": "app"},
+		IdempotencyKey: "idem-001",
+		Priority:       25,
+		ActorID:        "user-1",
+	}
+
+	result, err := svc.RequestAISuggestion(context.Background(), req)
+	if err != nil {
+		t.Fatalf("RequestAISuggestion error: %v", err)
+	}
+	if result.ID != "as_001" {
+		t.Fatalf("expected suggestion id as_001, got %s", result.ID)
+	}
+	if result.Status != string(domain.AIJobStatusQueued) {
+		t.Fatalf("expected status queued, got %s", result.Status)
+	}
+	if result.Method != "balance" {
+		t.Fatalf("expected method trimmed to balance, got %s", result.Method)
+	}
+	if result.Payload == nil || result.Payload["jobId"] != "aj_001" {
+		t.Fatalf("expected payload to include jobId, got %+v", result.Payload)
+	}
+
+	if captured.DesignID != "dsg_123" {
+		t.Fatalf("expected queue design id dsg_123, got %s", captured.DesignID)
+	}
+	if captured.Method != "balance" {
+		t.Fatalf("expected queue method balance, got %s", captured.Method)
+	}
+	if captured.Model != "glyph-balancer@2025-05" {
+		t.Fatalf("expected queue model trimmed, got %s", captured.Model)
+	}
+	if captured.IdempotencyKey != "idem-001" {
+		t.Fatalf("expected idempotency key propagated, got %s", captured.IdempotencyKey)
+	}
+	if captured.Priority != 25 {
+		t.Fatalf("expected priority propagated, got %d", captured.Priority)
+	}
+	if captured.Snapshot == nil || captured.Snapshot["designId"] != "dsg_123" {
+		t.Fatalf("expected snapshot to include designId, got %+v", captured.Snapshot)
+	}
+
+	if len(suggestionRepo.inserted) != 1 {
+		t.Fatalf("expected 1 inserted suggestion, got %d", len(suggestionRepo.inserted))
+	}
+	inserted := suggestionRepo.inserted[0]
+	if inserted.Status != string(domain.AIJobStatusQueued) {
+		t.Fatalf("expected inserted status queued, got %s", inserted.Status)
+	}
+	if inserted.Payload == nil || inserted.Payload["jobId"] != "aj_001" {
+		t.Fatalf("expected inserted payload to include jobId, got %+v", inserted.Payload)
+	}
+}
+
+func TestDesignService_RequestAISuggestion_Idempotent(t *testing.T) {
+	now := time.Date(2025, 6, 2, 11, 0, 0, 0, time.UTC)
+	designRepo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_999": {
+				ID:      "dsg_999",
+				OwnerID: "user-9",
+				Status:  domain.DesignStatusDraft,
+				Label:   "Draft",
+			},
+		},
+	}
+
+	existing := domain.AISuggestion{
+		ID:        "as_existing",
+		DesignID:  "dsg_999",
+		Method:    "balance",
+		Status:    string(domain.AIJobStatusQueued),
+		Payload:   map[string]any{"jobId": "aj_existing"},
+		CreatedAt: now.Add(-time.Minute),
+		UpdatedAt: now.Add(-time.Minute),
+	}
+
+	suggestionRepo := &stubSuggestionRepository{
+		insertFn: func(context.Context, domain.AISuggestion) error {
+			return suggestionRepoErr{err: errors.New("conflict"), conflict: true}
+		},
+		findFn: func(context.Context, string, string) (domain.AISuggestion, error) {
+			return cloneSuggestionRecord(existing), nil
+		},
+	}
+
+	dispatcher := &stubJobDispatcher{
+		queueFn: func(ctx context.Context, cmd QueueAISuggestionCommand) (QueueAISuggestionResult, error) {
+			return QueueAISuggestionResult{
+				JobID:        "aj_existing",
+				SuggestionID: "as_existing",
+				Status:       domain.AIJobStatusQueued,
+				QueuedAt:     now,
+			}, nil
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      designRepo,
+		Versions:     &stubDesignVersionRepository{},
+		Suggestions:  suggestionRepo,
+		Jobs:         dispatcher,
+		AssetsBucket: "bucket",
+		Clock:        func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	result, err := svc.RequestAISuggestion(context.Background(), AISuggestionRequest{
+		DesignID:       "dsg_999",
+		Method:         "balance",
+		Model:          "glyph-balancer@2025-05",
+		ActorID:        "user-9",
+		IdempotencyKey: "idem-existing",
+	})
+	if err != nil {
+		t.Fatalf("RequestAISuggestion error: %v", err)
+	}
+	if result.ID != existing.ID {
+		t.Fatalf("expected existing suggestion returned, got %s", result.ID)
+	}
+	if result.Payload["jobId"] != "aj_existing" {
+		t.Fatalf("expected existing payload preserved, got %+v", result.Payload)
+	}
+}
+
+func TestDesignService_RequestAISuggestion_InvalidInput(t *testing.T) {
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      &stubDesignRepository{},
+		Versions:     &stubDesignVersionRepository{},
+		Suggestions:  &stubSuggestionRepository{},
+		Jobs:         &stubJobDispatcher{},
+		AssetsBucket: "bucket",
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+	_, err = svc.RequestAISuggestion(context.Background(), AISuggestionRequest{
+		DesignID: "",
+		Method:   "balance",
+		Model:    "glyph",
+		ActorID:  "user",
+	})
+	if !errors.Is(err, ErrDesignInvalidInput) {
+		t.Fatalf("expected invalid input error, got %v", err)
+	}
+}
+
 func cloneTestDesign(design domain.Design) domain.Design {
 	copy := design
 	if design.Snapshot != nil {
@@ -1029,6 +1378,18 @@ func cloneTestDesign(design domain.Design) domain.Design {
 				copy.Versions[i].Snapshot = maps.Clone(version.Snapshot)
 			}
 		}
+	}
+	return copy
+}
+
+func cloneSuggestionRecord(s domain.AISuggestion) domain.AISuggestion {
+	copy := s
+	if s.Payload != nil {
+		copy.Payload = maps.Clone(s.Payload)
+	}
+	if s.ExpiresAt != nil {
+		expires := *s.ExpiresAt
+		copy.ExpiresAt = &expires
 	}
 	return copy
 }

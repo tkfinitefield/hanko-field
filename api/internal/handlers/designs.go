@@ -52,6 +52,7 @@ func (h *DesignHandlers) Routes(r chi.Router) {
 	r.Get("/", h.listDesigns)
 	r.Post("/", h.createDesign)
 	r.Post("/{designID}/duplicate", h.duplicateDesign)
+	r.Post("/{designID}/ai-suggestions", h.requestAISuggestion)
 	r.Get("/{designID}/versions", h.listDesignVersions)
 	r.Get("/{designID}/versions/{versionID}", h.getDesignVersion)
 	r.Get("/{designID}", h.getDesign)
@@ -562,6 +563,80 @@ func (h *DesignHandlers) duplicateDesign(w http.ResponseWriter, r *http.Request)
 	writeJSONResponse(w, http.StatusCreated, response)
 }
 
+func (h *DesignHandlers) requestAISuggestion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	requester := strings.TrimSpace(identity.UID)
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+
+	body, err := readLimitedBody(r, maxDesignRequestBody)
+	if err != nil {
+		switch {
+		case errors.Is(err, errEmptyBody):
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "request body is required", http.StatusBadRequest))
+		case errors.Is(err, errBodyTooLarge):
+			httpx.WriteError(ctx, w, httpx.NewError("payload_too_large", "request body too large", http.StatusRequestEntityTooLarge))
+		default:
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		}
+		return
+	}
+
+	var payload aiSuggestionRequest
+	if err := json.Unmarshal(body, &payload); err != nil {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "invalid JSON payload", http.StatusBadRequest))
+		return
+	}
+
+	cmd := services.AISuggestionRequest{
+		DesignID:   designID,
+		Method:     strings.TrimSpace(payload.Method),
+		Model:      strings.TrimSpace(payload.Model),
+		ActorID:    requester,
+		Parameters: cloneMap(payload.Parameters),
+		Metadata:   cloneMap(payload.Metadata),
+	}
+	if payload.Prompt != nil {
+		cmd.Prompt = strings.TrimSpace(*payload.Prompt)
+	}
+	if payload.IdempotencyKey != nil {
+		cmd.IdempotencyKey = strings.TrimSpace(*payload.IdempotencyKey)
+	}
+	if payload.Priority != nil {
+		cmd.Priority = *payload.Priority
+	}
+
+	result, err := h.designs.RequestAISuggestion(ctx, cmd)
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	location := fmt.Sprintf("%s/%s", strings.TrimSuffix(r.URL.Path, "/"), result.ID)
+	w.Header().Set("Location", location)
+
+	response := aiSuggestionResponse{
+		SuggestionID: result.ID,
+		Status:       strings.TrimSpace(result.Status),
+		PollingURL:   location,
+	}
+	writeJSONResponse(w, http.StatusAccepted, response)
+}
+
 func (h *DesignHandlers) createDesign(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.designs == nil {
@@ -617,11 +692,29 @@ func (h *DesignHandlers) writeDesignError(ctx context.Context, w http.ResponseWr
 		httpx.WriteError(ctx, w, httpx.NewError("design_conflict", "design conflict", http.StatusConflict))
 	case errors.Is(err, services.ErrDesignNotFound):
 		httpx.WriteError(ctx, w, httpx.NewError("design_not_found", "design not found", http.StatusNotFound))
+	case errors.Is(err, services.ErrDesignNotImplemented):
+		httpx.WriteError(ctx, w, httpx.NewError("not_implemented", "feature not enabled", http.StatusNotImplemented))
 	case errors.Is(err, services.ErrDesignRepositoryUnavailable), errors.Is(err, services.ErrDesignRendererUnavailable):
 		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
 	default:
 		httpx.WriteError(ctx, w, httpx.NewError("internal_error", "internal server error", http.StatusInternalServerError))
 	}
+}
+
+type aiSuggestionRequest struct {
+	Method         string         `json:"method"`
+	Model          string         `json:"model"`
+	Prompt         *string        `json:"prompt"`
+	Parameters     map[string]any `json:"parameters"`
+	Metadata       map[string]any `json:"metadata"`
+	IdempotencyKey *string        `json:"idempotency_key"`
+	Priority       *int           `json:"priority"`
+}
+
+type aiSuggestionResponse struct {
+	SuggestionID string `json:"suggestionId"`
+	Status       string `json:"status"`
+	PollingURL   string `json:"pollingUrl"`
 }
 
 type duplicateDesignRequest struct {

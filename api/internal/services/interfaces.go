@@ -376,10 +376,15 @@ type DuplicateDesignCommand struct {
 }
 
 type AISuggestionRequest struct {
-	DesignID string
-	Method   string
-	Model    string
-	Metadata map[string]any
+	DesignID       string
+	Method         string
+	Model          string
+	Prompt         string
+	Parameters     map[string]any
+	Metadata       map[string]any
+	IdempotencyKey string
+	Priority       int
+	ActorID        string
 }
 
 type AISuggestionFilter struct {
