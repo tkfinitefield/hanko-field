@@ -140,13 +140,13 @@ func HasCapability(userRoles []string, capability Capability) bool {
 	if capability == "" {
 		return true
 	}
-	roles := NormaliseRoles(userRoles)
-	if roles.Has(RoleAdmin) {
-		return true
-	}
 	allowed := RolesForCapability(capability)
 	if len(allowed) == 0 {
 		return false
+	}
+	roles := NormaliseRoles(userRoles)
+	if roles.Has(RoleAdmin) {
+		return true
 	}
 	return allowed.Intersects(roles)
 }

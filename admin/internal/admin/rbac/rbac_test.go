@@ -12,10 +12,16 @@ func TestHasCapabilityMatrix(t *testing.T) {
 		want       bool
 	}{
 		{
-			name:       "admin has every capability",
+			name:       "admin has defined capability",
+			roles:      []string{"admin"},
+			capability: CapDashboardOverview,
+			want:       true,
+		},
+		{
+			name:       "admin denied for undefined capability",
 			roles:      []string{"admin"},
 			capability: Capability("made.up"),
-			want:       true,
+			want:       false,
 		},
 		{
 			name:       "ops can list orders",
