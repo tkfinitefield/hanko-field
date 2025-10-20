@@ -15,6 +15,14 @@
   "home.hero.message": "Hanko Field（Web）へようこそ",
   "home.seo.title": "Hanko Field – ようこそ",
   "home.seo.description": "Hanko Field - オーダーメイドの印鑑・はんこ",
+  "home.compare.title": "比較表",
+  "home.compare.subtitle": "形状とサイズで絞り込んで比較できます。",
+  "home.compare.col.name": "名称",
+  "home.compare.col.shape": "形状",
+  "home.compare.col.size": "サイズ",
+  "home.compare.col.price": "価格",
+  "home.guides.title": "最新ガイド",
+  "home.guides.subtitle": "はじめての方に役立つ記事",
   "cta.create": "印影を作る",
   "cta.explore": "素材から探す"
 }

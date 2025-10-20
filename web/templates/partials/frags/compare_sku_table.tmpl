@@ -1,0 +1,18 @@
+{{ define "frag_compare_sku_table" }}
+<div id="compare-frag" class="rounded-lg border border-gray-100 bg-white p-4">
+  <form class="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3"
+        hx-get="/frags/compare/sku-table"
+        hx-target="#compare-frag"
+        hx-swap="outerHTML">
+    {{ template "c_select" (dict "Name" "shape" "Label" "Shape" "Options" (list (dict "Value" "" "Label" "All") (dict "Value" "round" "Label" "Round") (dict "Value" "square" "Label" "Square") (dict "Value" "rect" "Label" "Rect") ) "Value" .Shape) }}
+    {{ template "c_select" (dict "Name" "size" "Label" "Size" "Options" (list (dict "Value" "" "Label" "All") (dict "Value" "small" "Label" "Small") (dict "Value" "medium" "Label" "Medium") (dict "Value" "large" "Label" "Large") ) "Value" .Size) }}
+    <div class="flex items-end">
+      {{ template "c_button" (dict "Label" "Filter" "Variant" "secondary" "Type" "submit") }}
+    </div>
+  </form>
+  <div>
+    {{ template "c_table" (dict "Columns" .Columns "Rows" .Rows "EmptyMessage" "No matching SKUs") }}
+  </div>
+</div>
+{{ end }}
+

@@ -11,4 +11,40 @@
     </div>
   </div>
 </section>
+
+<section class="py-10 border-t bg-white">
+  <div class="mx-auto max-w-5xl px-4">
+    <header class="mb-4">
+      <h2 class="text-xl font-semibold">{{ tlang $.Lang "home.compare.title" }}</h2>
+      <p class="text-gray-600 text-sm">{{ tlang $.Lang "home.compare.subtitle" }}</p>
+    </header>
+    <!-- Comparison fragment mount -->
+    <div id="compare-frag"
+         hx-get="/frags/compare/sku-table"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+      {{ template "c_skeleton_table" (dict "Cols" 4 "Rows" 5) }}
+    </div>
+  </div>
+</section>
+
+<section class="py-10 border-t bg-gray-50">
+  <div class="mx-auto max-w-5xl px-4">
+    <header class="mb-4">
+      <h2 class="text-xl font-semibold">{{ tlang $.Lang "home.guides.title" }}</h2>
+      <p class="text-gray-600 text-sm">{{ tlang $.Lang "home.guides.subtitle" }}</p>
+    </header>
+    <!-- Latest guides fragment mount -->
+    <div id="guides-latest-frag"
+         hx-get="/frags/guides/latest"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {{ template "c_skeleton_card" . }}
+        {{ template "c_skeleton_card" . }}
+        {{ template "c_skeleton_card" . }}
+      </div>
+    </div>
+  </div>
+</section>
 {{ end }}

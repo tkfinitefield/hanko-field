@@ -15,6 +15,14 @@
   "home.hero.message": "Welcome to Hanko Field (Web)",
   "home.seo.title": "Hanko Field – Welcome",
   "home.seo.description": "Hanko Field - Custom stamps and seals",
+  "home.compare.title": "Compare Options",
+  "home.compare.subtitle": "Filter by shape and size to compare SKUs.",
+  "home.compare.col.name": "Name",
+  "home.compare.col.shape": "Shape",
+  "home.compare.col.size": "Size",
+  "home.compare.col.price": "Price",
+  "home.guides.title": "Latest Guides",
+  "home.guides.subtitle": "Helpful articles to get started.",
   "cta.create": "Create a Seal",
   "cta.explore": "Explore Materials"
 }

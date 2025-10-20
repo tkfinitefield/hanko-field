@@ -22,7 +22,7 @@
 - [x] [Provide SEO/OGP tags, structured data helpers, and analytics instrumentation hooks.](doc/web/tasks/015-provide-seo-ogp-tags-structured-data-helpers-and-analytics-instrumentation-hooks.md)
 
 ## 3. Landing & Exploration
-- [ ] [Build landing page (`/`) with hero, comparison table fragment (`/frags/compare/sku-table`), and latest guides fragment.](doc/web/tasks/016-build-landing-page-with-hero-comparison-table-fragment-frags-compare-sku-table-and-latest-.md)
+- [x] [Build landing page (`/`) with hero, comparison table fragment (`/frags/compare/sku-table`), and latest guides fragment.](doc/web/tasks/016-build-landing-page-with-hero-comparison-table-fragment-frags-compare-sku-table-and-latest-.md)
 - [ ] [Implement shop listing (`/shop`) with filters form, results fragment (`/shop/table`), and pagination.](doc/web/tasks/017-implement-shop-listing-shop-with-filters-form-results-fragment-shop-table-and-pagination.md)
 - [ ] [Build product detail (`/products/{productId}`) with gallery fragment, review snippets, and add-to-cart form.](doc/web/tasks/018-build-product-detail-products-productid-with-gallery-fragment-review-snippets-and-add-to-c.md)
 - [ ] [Implement templates listing/detail (`/templates`, `/templates/{templateId}`) with filter fragment and preview.](doc/web/tasks/019-implement-templates-listing-detail-templates-templates-templateid-with-filter-fragment-and.md)

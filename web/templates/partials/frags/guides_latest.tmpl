@@ -1,0 +1,12 @@
+{{ define "frag_guides_latest" }}
+<div id="guides-latest-frag">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    {{ range .Guides }}
+      <a href="{{ .URL }}" class="block">
+        {{ template "c_card" (dict "Variant" "outlined" "Title" .Title "Description" .Excerpt) }}
+      </a>
+    {{ end }}
+  </div>
+</div>
+{{ end }}
+

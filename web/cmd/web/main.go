@@ -123,6 +123,9 @@ func main() {
     r.Get("/templates", TemplatesHandler)
     r.Get("/guides", GuidesHandler)
     r.Get("/account", AccountHandler)
+    // Fragment endpoints (htmx)
+    r.Get("/frags/compare/sku-table", CompareSKUTableFrag)
+    r.Get("/frags/guides/latest", LatestGuidesFrag)
     // Modal demo fragment (htmx)
     r.Get("/modals/demo", DemoModalHandler)
 
@@ -331,6 +334,14 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
     org := seo.Organization(i18nOrDefault(lang, "brand.name", "Hanko Field"), siteURL, "")
     ws := seo.WebSite(i18nOrDefault(lang, "brand.name", "Hanko Field"), siteURL, siteURL+"/search?q=")
     vm.SEO.JSONLD = []string{seo.JSON(org), seo.JSON(ws)}
+    // Add representative Product + Articles JSON-LD
+    // Product
+    prod := seo.Product(i18nOrDefault(lang, "home.compare.col.name", "Name")+": Classic Round", i18nOrDefault(lang, "home.seo.description", "Custom stamps and seals"), siteURL+"/shop", "", "T-100")
+    vm.SEO.JSONLD = append(vm.SEO.JSONLD, seo.JSON(prod))
+    // Articles (latest guides)
+    art1 := seo.Article(i18nOrDefault(lang, "home.guides.title", "Latest Guides")+": Materials", siteURL+"/guides/materials", "", "Hanko Field", "2025-01-10")
+    art2 := seo.Article(i18nOrDefault(lang, "home.guides.title", "Latest Guides")+": Design Basics", siteURL+"/guides/design-basics", "", "Hanko Field", "2025-01-05")
+    vm.SEO.JSONLD = append(vm.SEO.JSONLD, seo.JSON(art1), seo.JSON(art2))
     renderPage(w, r, "home", vm)
 }
 
@@ -445,4 +456,118 @@ func i18nOrDefault(lang, key, def string) string {
     v := i18nBundle.T(lang, key)
     if v == "" || v == key { return def }
     return v
+}
+
+// --- Fragments and supporting types ---
+
+// SKU represents a simple product option for comparison.
+type SKU struct {
+    ID    string
+    Name  string
+    Shape string
+    Size  string
+    Price string // display price (e.g., "$12")
+}
+
+// skuData returns the canonical list of SKUs for comparison.
+func skuData(lang string) []SKU {
+    // Static seed data; in the future fetch from API/DB.
+    // Translate names lightly depending on lang.
+    round := map[string]string{"en": "Classic Round", "ja": "丸型クラシック"}
+    square := map[string]string{"en": "Square Logo", "ja": "角形ロゴ"}
+    rect := map[string]string{"en": "Business Seal", "ja": "ビジネス印"}
+    tl := func(m map[string]string, l string) string { if v, ok := m[l]; ok { return v }; return m["en"] }
+    return []SKU{
+        {ID: "T-100", Name: tl(round, lang),  Shape: "round",  Size: "small",  Price: "$12"},
+        {ID: "T-105", Name: tl(round, lang),  Shape: "round",  Size: "medium", Price: "$14"},
+        {ID: "T-110", Name: tl(round, lang),  Shape: "round",  Size: "large",  Price: "$18"},
+        {ID: "T-220", Name: tl(square, lang), Shape: "square", Size: "small",  Price: "$16"},
+        {ID: "T-225", Name: tl(square, lang), Shape: "square", Size: "medium", Price: "$18"},
+        {ID: "T-310", Name: tl(rect, lang),   Shape: "rect",   Size: "large",  Price: "$24"},
+    }
+}
+
+// CompareSKUTableFrag renders the SKU comparison table with optional filters.
+func CompareSKUTableFrag(w http.ResponseWriter, r *http.Request) {
+    lang := mw.Lang(r)
+    shape := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("shape")))
+    size := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("size")))
+
+    // Build rows with filters applied
+    cols := []map[string]any{
+        {"Key": "id", "Label": "ID", "Align": "left"},
+        {"Key": "name", "Label": i18nOrDefault(lang, "home.compare.col.name", "Name"), "Align": "left"},
+        {"Key": "shape", "Label": i18nOrDefault(lang, "home.compare.col.shape", "Shape"), "Align": "left"},
+        {"Key": "size", "Label": i18nOrDefault(lang, "home.compare.col.size", "Size"), "Align": "left"},
+        {"Key": "price", "Label": i18nOrDefault(lang, "home.compare.col.price", "Price"), "Align": "right"},
+    }
+    var rows []map[string]string
+    for _, s := range skuData(lang) {
+        if shape != "" && s.Shape != shape { continue }
+        if size != "" && s.Size != size { continue }
+        rows = append(rows, map[string]string{"id": s.ID, "name": s.Name, "shape": s.Shape, "size": s.Size, "price": s.Price})
+    }
+
+    // ETag simple hash of inputs
+    etag := etagFor("sku:", lang, shape, size)
+    if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
+        w.WriteHeader(http.StatusNotModified)
+        return
+    }
+    w.Header().Set("Cache-Control", "public, max-age=60")
+    w.Header().Set("ETag", etag)
+
+    props := map[string]any{
+        "Columns": cols,
+        "Rows":    rows,
+        "Shape":   shape,
+        "Size":    size,
+    }
+    renderTemplate(w, r, "frag_compare_sku_table", props)
+}
+
+// LatestGuidesFrag renders a small set of localized guide cards.
+func LatestGuidesFrag(w http.ResponseWriter, r *http.Request) {
+    lang := mw.Lang(r)
+    type Guide struct { Title, URL, Excerpt, Date string }
+    // Seed localized guide list
+    var guides []Guide
+    if lang == "ja" {
+        guides = []Guide{
+            {Title: "はんこ素材の選び方", URL: "/guides/materials", Excerpt: "用途別に最適な素材を解説します。", Date: "2025-01-10"},
+            {Title: "印影デザインの基本", URL: "/guides/design-basics", Excerpt: "読みやすさと個性のバランスを学びます。", Date: "2025-01-05"},
+            {Title: "サイズ比較ガイド", URL: "/guides/size-guide", Excerpt: "丸・角・楕円のサイズ感を比較。", Date: "2024-12-20"},
+        }
+    } else {
+        guides = []Guide{
+            {Title: "How to Choose Materials", URL: "/guides/materials", Excerpt: "Pick the right material for your use.", Date: "2025-01-10"},
+            {Title: "Seal Design Basics", URL: "/guides/design-basics", Excerpt: "Balance legibility with personality.", Date: "2025-01-05"},
+            {Title: "Size Comparison Guide", URL: "/guides/size-guide", Excerpt: "Compare round, square, and rectangular.", Date: "2024-12-20"},
+        }
+    }
+
+    // Simple 2-minute cache
+    etag := etagFor("guides:", lang)
+    if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
+        w.WriteHeader(http.StatusNotModified)
+        return
+    }
+    w.Header().Set("Cache-Control", "public, max-age=120")
+    w.Header().Set("ETag", etag)
+
+    props := map[string]any{"Guides": guides}
+    renderTemplate(w, r, "frag_guides_latest", props)
+}
+
+// etagFor builds a weak pseudo-ETag from inputs.
+func etagFor(prefix string, parts ...string) string {
+    // very small non-crypto hash
+    h := 1469598103934665603 ^ uint64(len(prefix))
+    for _, s := range parts {
+        for i := 0; i < len(s); i++ {
+            h ^= uint64(s[i])
+            h *= 1099511628211
+        }
+    }
+    return fmt.Sprintf("W/\"%s%x\"", prefix, h)
 }
