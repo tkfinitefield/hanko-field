@@ -4,7 +4,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ template "title" . }}</title>
+    <title>{{ if .SEO.Title }}{{ .SEO.Title }}{{ else if .Title }}{{ .Title }}{{ else }}{{ tlang $.Lang "brand.name" }}{{ end }}</title>
     {{ template "head" . }}
     <link rel="stylesheet" href="/assets/app.css">
   </head>
@@ -21,11 +21,10 @@
           </button>
           <a href="/" class="font-semibold text-xl">{{ tlang $.Lang "brand.name" }}</a>
         </div>
-        <nav class="hidden md:flex items-center gap-6 text-sm">
-          <a href="/shop" class="hover:underline">{{ tlang $.Lang "nav.shop" }}</a>
-          <a href="/templates" class="hover:underline">{{ tlang $.Lang "nav.templates" }}</a>
-          <a href="/guides" class="hover:underline">{{ tlang $.Lang "nav.guides" }}</a>
-          <a href="/account" class="hover:underline">{{ tlang $.Lang "nav.account" }}</a>
+        <nav class="hidden md:flex items-center gap-6 text-sm" aria-label="Primary">
+          {{ range .Nav }}
+          <a href="{{ .Href }}" class="hover:underline {{ if .Active }}text-indigo-600 font-medium underline{{ end }}">{{ tlang $.Lang .LabelKey }}</a>
+          {{ end }}
         </nav>
         <div class="flex items-center gap-3">
           <a href="/notifications" class="hidden md:inline-flex items-center justify-center rounded-full p-2 text-gray-600 hover:bg-gray-100" aria-label="{{ tlang $.Lang "nav.notifications" }}">
@@ -49,12 +48,11 @@
         </div>
       </div>
       <!-- Mobile menu -->
-      <div id="mobile-menu" class="md:hidden hidden border-t bg-white">
+      <div id="mobile-menu" class="md:hidden hidden border-t bg-white" tabindex="-1" aria-hidden="true">
         <div class="mx-auto max-w-5xl px-4 py-3 space-y-2">
-          <a href="/shop" class="block py-2 text-sm hover:underline">{{ tlang $.Lang "nav.shop" }}</a>
-          <a href="/templates" class="block py-2 text-sm hover:underline">{{ tlang $.Lang "nav.templates" }}</a>
-          <a href="/guides" class="block py-2 text-sm hover:underline">{{ tlang $.Lang "nav.guides" }}</a>
-          <a href="/account" class="block py-2 text-sm hover:underline">{{ tlang $.Lang "nav.account" }}</a>
+          {{ range .Nav }}
+          <a href="{{ .Href }}" class="block py-2 text-sm hover:underline {{ if .Active }}text-indigo-600 font-medium underline{{ end }}">{{ tlang $.Lang .LabelKey }}</a>
+          {{ end }}
           <div class="pt-2 flex items-center gap-3">
             <a href="/notifications" class="inline-flex items-center gap-2 rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-100" aria-label="{{ tlang $.Lang "nav.notifications" }}">
               <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -81,6 +79,22 @@
       </div>
     </header>
     <main id="main" class="mx-auto max-w-5xl px-4 py-10">
+      {{ if gt (len .Breadcrumbs) 1 }}
+      <nav aria-label="Breadcrumb" class="mb-6 text-sm">
+        <ol class="flex items-center gap-2 text-gray-600">
+          {{ range .Breadcrumbs }}
+            <li class="flex items-center gap-2">
+              {{ if .Active }}
+                <span class="text-gray-900 font-medium">{{ if .LabelKey }}{{ tlang $.Lang .LabelKey }}{{ else }}{{ .Label }}{{ end }}</span>
+              {{ else }}
+                <a href="{{ .Href }}" class="hover:underline">{{ if .LabelKey }}{{ tlang $.Lang .LabelKey }}{{ else }}{{ .Label }}{{ end }}</a>
+                <span class="text-gray-300">/</span>
+              {{ end }}
+            </li>
+          {{ end }}
+        </ol>
+      </nav>
+      {{ end }}
       {{ block "content" . }}{{ end }}
     </main>
     <footer class="mt-16 border-t bg-white">
@@ -112,12 +126,43 @@
         // Mobile menu toggle
         var btn = document.getElementById('menu-toggle');
         var menu = document.getElementById('mobile-menu');
+        var lastFocus = null;
+        function getFocusable(container){
+          return container.querySelectorAll('a, button, [tabindex]:not([tabindex="-1"])');
+        }
+        function openMenu(){
+          if (!menu) return;
+          menu.classList.remove('hidden');
+          menu.setAttribute('aria-hidden','false');
+          lastFocus = document.activeElement;
+          var f = getFocusable(menu);
+          if (f.length) { f[0].focus(); }
+          document.addEventListener('keydown', trap, true);
+        }
+        function closeMenu(){
+          if (!menu) return;
+          menu.classList.add('hidden');
+          menu.setAttribute('aria-hidden','true');
+          document.removeEventListener('keydown', trap, true);
+          if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
+        }
+        function trap(e){
+          if (e.key === 'Escape'){ e.preventDefault(); closeMenu(); btn.setAttribute('aria-expanded','false'); return; }
+          if (e.key !== 'Tab') return;
+          var focusables = Array.prototype.slice.call(getFocusable(menu));
+          if (!focusables.length) return;
+          var idx = focusables.indexOf(document.activeElement);
+          if (e.shiftKey) {
+            if (idx <= 0) { focusables[focusables.length - 1].focus(); e.preventDefault(); }
+          } else {
+            if (idx === focusables.length - 1) { focusables[0].focus(); e.preventDefault(); }
+          }
+        }
         if (btn && menu) {
           btn.addEventListener('click', function(){
             var expanded = btn.getAttribute('aria-expanded') === 'true';
             btn.setAttribute('aria-expanded', (!expanded).toString());
-            if (menu.classList.contains('hidden')) { menu.classList.remove('hidden'); }
-            else { menu.classList.add('hidden'); }
+            if (expanded) { closeMenu(); } else { openMenu(); }
           });
         }
       })();

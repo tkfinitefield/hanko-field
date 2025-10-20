@@ -15,6 +15,7 @@ import (
     handlersPkg "finitefield.org/hanko-web/internal/handlers"
     "finitefield.org/hanko-web/internal/format"
     "finitefield.org/hanko-web/internal/i18n"
+    "finitefield.org/hanko-web/internal/nav"
     mw "finitefield.org/hanko-web/internal/middleware"
     "github.com/go-chi/chi/v5"
     "github.com/go-chi/chi/v5/middleware"
@@ -109,8 +110,13 @@ func main() {
 	assets := http.StripPrefix("/assets", mw.AssetsWithCache(assetsRoot))
 	r.Handle("/assets/*", assets)
 
-	// Home page
-	r.Get("/", HomeHandler)
+    // Home page
+    r.Get("/", HomeHandler)
+    // Top-level pages
+    r.Get("/shop", ShopHandler)
+    r.Get("/templates", TemplatesHandler)
+    r.Get("/guides", GuidesHandler)
+    r.Get("/account", AccountHandler)
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -185,9 +191,50 @@ func render(w http.ResponseWriter, r *http.Request, data any) {
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
     lang := mw.Lang(r)
     vm := handlersPkg.BuildHomeData(lang)
+    // augment common layout data
+    vm.Path = r.URL.Path
+    vm.Nav = nav.Build(vm.Path)
+    vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
     if i18nBundle != nil {
         vm.SEO.Title = i18nBundle.T(lang, "home.seo.title")
         vm.SEO.Description = i18nBundle.T(lang, "home.seo.description")
     }
+    render(w, r, vm)
+}
+
+// Generic page handlers
+func ShopHandler(w http.ResponseWriter, r *http.Request) {
+    lang := mw.Lang(r)
+    vm := handlersPkg.PageData{Title: "Shop", Lang: lang}
+    vm.Path = r.URL.Path
+    vm.Nav = nav.Build(vm.Path)
+    vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+    render(w, r, vm)
+}
+
+func TemplatesHandler(w http.ResponseWriter, r *http.Request) {
+    lang := mw.Lang(r)
+    vm := handlersPkg.PageData{Title: "Templates", Lang: lang}
+    vm.Path = r.URL.Path
+    vm.Nav = nav.Build(vm.Path)
+    vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+    render(w, r, vm)
+}
+
+func GuidesHandler(w http.ResponseWriter, r *http.Request) {
+    lang := mw.Lang(r)
+    vm := handlersPkg.PageData{Title: "Guides", Lang: lang}
+    vm.Path = r.URL.Path
+    vm.Nav = nav.Build(vm.Path)
+    vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+    render(w, r, vm)
+}
+
+func AccountHandler(w http.ResponseWriter, r *http.Request) {
+    lang := mw.Lang(r)
+    vm := handlersPkg.PageData{Title: "Account", Lang: lang}
+    vm.Path = r.URL.Path
+    vm.Nav = nav.Build(vm.Path)
+    vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
     render(w, r, vm)
 }

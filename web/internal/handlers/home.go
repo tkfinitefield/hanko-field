@@ -1,11 +1,17 @@
 package handlers
 
+import "finitefield.org/hanko-web/internal/nav"
+
 // HomeData is the view model for the home page.
 type HomeData struct {
     Title   string
     Message string
     Lang    string
     SEO     SEOData
+    // Common layout fields
+    Path        string
+    Nav         []nav.RenderedItem
+    Breadcrumbs []nav.Crumb
 }
 
 // BuildHomeData constructs the default view model for the landing page.
