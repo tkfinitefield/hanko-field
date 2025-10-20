@@ -49,21 +49,17 @@ r.Route("/admin", func(r chi.Router) {
 internal/admin/templates/
   layouts/
     base.templ        # wraps `<html>`, navigation, flash area
-    modal.templ       # minimal chrome for modals
+    modal.templ       # modal shell
   components/
-    table.templ       # shared table scaffolding
-    breadcrumbs.templ
-    alerts.templ
+    components.templ  # atomic UI elements (button, card, table, text)
+  partials/
+    nav.templ         # sidebar
+    breadcrumbs.templ # page breadcrumbs
+  helpers/
+    format.go         # currency/date/i18n helpers + component helpers
   dashboard/
     index.templ
-    kpi_fragment.templ
-  orders/
-    index.templ
-    table.templ
-    detail.templ
-    tabs/
-      summary.templ
-      payments.templ
+    data.go           # view-specific helper functions
 ```
 
 - Layouts render once per full page. Fragments render only the inner markup to be swapped.

@@ -1,24 +1,27 @@
 package layouts
 
-templ Base(title string, body templ.Component) {
-	<!DOCTYPE html>
-	<html lang="ja" class="h-full bg-slate-100">
-		<head>
-			<meta charset="utf-8" />
-			<meta name="viewport" content="width=device-width, initial-scale=1" />
-			<title>{ title } | Hanko Admin</title>
-			<link rel="stylesheet" href="/public/static/app.css" />
-		</head>
-		<body class="min-h-full">
-			<div class="flex min-h-screen">
-				<nav class="w-64 bg-white border-r border-slate-200">
-					<div class="px-4 py-6 text-lg font-semibold text-slate-900">Hanko Admin</div>
-				</nav>
-				<section class="flex-1 bg-slate-50">
-					@body
-				</section>
-			</div>
-			<script src="/public/static/app.js" defer></script>
-		</body>
-	</html>
+import "finitefield.org/hanko-admin/internal/admin/templates/partials"
+
+templ Base(title string, navItems []partials.NavItem, crumbs []partials.Breadcrumb, body templ.Component) {
+    <!DOCTYPE html>
+    <html lang="ja" class="h-full bg-slate-100">
+        <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>{ title } | Hanko Admin</title>
+            <link rel="stylesheet" href="/public/static/app.css" />
+        </head>
+        <body class="min-h-full">
+            <div class="flex min-h-screen">
+                @partials.Sidebar(navItems)
+                <section class="flex-1 bg-slate-50">
+                    <div class="mx-auto max-w-6xl px-8 py-6">
+                        @partials.Breadcrumbs(crumbs)
+                        @body
+                    </div>
+                </section>
+            </div>
+            <script src="/public/static/app.js" defer></script>
+        </body>
+    </html>
 }

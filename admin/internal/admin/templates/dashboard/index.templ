@@ -1,14 +1,32 @@
 package dashboard
 
-import "finitefield.org/hanko-admin/internal/admin/templates/layouts"
+import (
+    "finitefield.org/hanko-admin/internal/admin/templates/components"
+    "finitefield.org/hanko-admin/internal/admin/templates/helpers"
+    "finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
 
 templ dashboardBody() {
-	<main class="mx-auto max-w-5xl px-6 py-8">
-		<h1 class="text-2xl font-semibold text-slate-900">Admin Dashboard</h1>
-		<p class="mt-2 text-slate-600">Scaffold is ready. Replace this view with real KPI fragments.</p>
-	</main>
+    <main class="space-y-6">
+        <header>
+            <h1 class="text-2xl font-semibold text-slate-900">{ helpers.I18N("admin.dashboard.title") }</h1>
+            <p class="mt-2 text-slate-600">{ helpers.I18N("admin.dashboard.subtitle") }</p>
+        </header>
+        <section class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            @components.Card(helpers.I18N("admin.dashboard.metric.revenue"), components.Text(helpers.Currency(3420000, "JPY")))
+            @components.Card(helpers.I18N("admin.dashboard.metric.orders"), components.Text("128"))
+            @components.Card(helpers.I18N("admin.dashboard.metric.csat"), components.Text("4.8 / 5"))
+        </section>
+        <section class="space-y-3">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-slate-900">{ helpers.I18N("admin.dashboard.recent_orders") }</h2>
+                @components.Button(helpers.I18N("admin.dashboard.view_orders"))
+            </div>
+            @components.Table(orderHeaders(), orderRowsComponents(sampleOrders()))
+        </section>
+    </main>
 }
 
 templ Index() {
-	@layouts.Base("ダッシュボード", dashboardBody())
+    @layouts.Base("ダッシュボード", navigationItems(), breadcrumbItems(), dashboardBody())
 }

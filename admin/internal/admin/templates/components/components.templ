@@ -1,0 +1,51 @@
+package components
+
+import "finitefield.org/hanko-admin/internal/admin/templates/helpers"
+
+templ Button(label string) {
+ <button class="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2">
+  { label }
+ </button>
+}
+
+templ Text(value string) {
+ { value }
+}
+
+templ Badge(label string, tone string) {
+ <span class={ helpers.BadgeClass(tone) }>{ label }</span>
+}
+
+templ Card(title string, body templ.Component) {
+ <section class="rounded-lg bg-white p-4 shadow-sm">
+  <h2 class="text-sm font-medium text-slate-500">{ title }</h2>
+  <div class="mt-2 text-slate-900">
+   @body
+  </div>
+ </section>
+}
+
+templ Table(headers []string, rows [][]templ.Component) {
+ <div class="overflow-hidden rounded-lg border border-slate-200 shadow-sm">
+  <table class="min-w-full divide-y divide-slate-200">
+   <thead class="bg-slate-50">
+    <tr>
+     for _, h := range headers {
+      <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{ h }</th>
+     }
+    </tr>
+   </thead>
+   <tbody class="divide-y divide-slate-100 bg-white">
+    for _, row := range rows {
+     <tr class="hover:bg-slate-50">
+      for _, cell := range row {
+       <td class="px-4 py-3 text-sm text-slate-700">
+        @cell
+       </td>
+      }
+     </tr>
+    }
+   </tbody>
+  </table>
+ </div>
+}
