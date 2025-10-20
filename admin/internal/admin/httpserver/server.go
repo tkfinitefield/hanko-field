@@ -78,10 +78,6 @@ type routeOptions struct {
 }
 
 func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
-	if base != "/" {
-		router.Get(base, ui.DashboardHandler)
-	}
-
 	router.Route(base, func(r chi.Router) {
 		r.Use(custommw.HTMX())
 		r.Use(custommw.NoStore())
