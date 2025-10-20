@@ -14,8 +14,8 @@
             hx-target="#shop-results"
             hx-push-url="true">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Material</label>
-          {{ template "c_select" (dict "Name" "material" "Options" (list (dict "Value" "" "Label" (tlang $.Lang "filter.all")) (dict "Value" "wood" "Label" "Wood") (dict "Value" "rubber" "Label" "Rubber") (dict "Value" "metal" "Label" "Metal"))) }}
+          <label class="block text-sm font-medium text-gray-700 mb-1">{{ tlang $.Lang "filter.material" }}</label>
+          {{ template "c_select" (dict "Name" "material" "Options" (list (dict "Value" "" "Label" (tlang $.Lang "filter.all")) (dict "Value" "wood" "Label" (tlang $.Lang "material.wood")) (dict "Value" "rubber" "Label" (tlang $.Lang "material.rubber")) (dict "Value" "metal" "Label" (tlang $.Lang "material.metal")))) }}
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">{{ tlang $.Lang "home.compare.col.shape" }}</label>
@@ -34,7 +34,7 @@
         </div>
         <div class="flex items-center gap-2">
           <input id="sale" name="sale" type="checkbox" value="1" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
-          <label for="sale" class="text-sm text-gray-700">On sale</label>
+          <label for="sale" class="text-sm text-gray-700">{{ tlang $.Lang "filter.sale" }}</label>
         </div>
         <div>
           {{ template "c_button" (dict "Label" (tlang $.Lang "filter.apply") "Variant" "primary" "Type" "submit") }}
@@ -45,23 +45,7 @@
 
     <!-- Results -->
     <div class="md:col-span-3">
-      <div id="shop-results"
-           hx-get="/shop/table"
-           hx-trigger="load"
-           hx-swap="outerHTML">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {{ template "c_skeleton_card" . }}
-          {{ template "c_skeleton_card" . }}
-          {{ template "c_skeleton_card" . }}
-          {{ template "c_skeleton_card" . }}
-          {{ template "c_skeleton_card" . }}
-          {{ template "c_skeleton_card" . }}
-        </div>
-        <div class="mt-4 flex items-center justify-between">
-          <div class="h-6 w-24 bg-gray-200 rounded animate-pulse"></div>
-          <div class="h-6 w-20 bg-gray-200 rounded animate-pulse"></div>
-        </div>
-      </div>
+      {{ slot "frag_shop_table" $.Shop }}
     </div>
   </div>
 

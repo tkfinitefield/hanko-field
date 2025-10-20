@@ -7,13 +7,14 @@ import (
     "io/fs"
     "log"
     "net/http"
+    "net/url"
     "os"
     "path/filepath"
+    "strconv"
     "strings"
     "time"
     "sync"
     "bytes"
-    "net/url"
 
     handlersPkg "finitefield.org/hanko-web/internal/handlers"
     "finitefield.org/hanko-web/internal/format"
@@ -360,6 +361,8 @@ func ShopHandler(w http.ResponseWriter, r *http.Request) {
     vm.SEO.OG.URL = vm.SEO.Canonical
     vm.SEO.OG.SiteName = i18nOrDefault(lang, "brand.name", "Hanko Field")
     vm.SEO.Alternates = buildAlternates(r)
+    // Build initial results server-side to avoid extra HTMX request on first load
+    vm.Shop = buildShopProps(lang, r.URL.Query())
     renderPage(w, r, "shop", vm)
 }
 
@@ -424,10 +427,8 @@ func productData(lang string) []Product {
     return out
 }
 
-// ShopTableFrag renders the product grid with applied filters and pagination.
-func ShopTableFrag(w http.ResponseWriter, r *http.Request) {
-    lang := mw.Lang(r)
-    q := r.URL.Query()
+// buildShopProps constructs view props for shop results from query params.
+func buildShopProps(lang string, q url.Values) map[string]any {
     material := strings.TrimSpace(strings.ToLower(q.Get("material")))
     shape := strings.TrimSpace(strings.ToLower(q.Get("shape")))
     size := strings.TrimSpace(strings.ToLower(q.Get("size")))
@@ -437,28 +438,49 @@ func ShopTableFrag(w http.ResponseWriter, r *http.Request) {
     pageStr := strings.TrimSpace(q.Get("page"))
     perStr := strings.TrimSpace(q.Get("per"))
 
-    // Parse numeric params
-    // Use simple Atoi for integers
-    atoi := func(s string) (int, bool) { if s == "" { return 0, false }; n := 0; for i := 0; i < len(s); i++ { if s[i] < '0' || s[i] > '9' { return 0, false } ; n = n*10 + int(s[i]-'0') }; return n, true }
-    priceMin, _ := atoi(priceMinStr)
-    priceMax, _ := atoi(priceMaxStr)
-    page, ok := atoi(pageStr); if !ok || page < 1 { page = 1 }
-    per, ok := atoi(perStr); if !ok || per < 1 { per = 9 }; if per > 48 { per = 48 }
+    // Parse numeric params (ignore invalid values rather than converting to 0)
+    priceMin, priceMinOK := 0, false
+    if priceMinStr != "" {
+        if v, err := strconv.Atoi(priceMinStr); err == nil && v >= 0 {
+            priceMin = v
+            priceMinOK = true
+        }
+    }
+    priceMax, priceMaxOK := 0, false
+    if priceMaxStr != "" {
+        if v, err := strconv.Atoi(priceMaxStr); err == nil && v >= 0 {
+            priceMax = v
+            priceMaxOK = true
+        }
+    }
+    page := 1
+    if pageStr != "" {
+        if v, err := strconv.Atoi(pageStr); err == nil && v > 0 {
+            page = v
+        }
+    }
+    per := 9
+    if perStr != "" {
+        if v, err := strconv.Atoi(perStr); err == nil {
+            if v < 1 { v = 9 }
+            if v > 48 { v = 48 }
+            per = v
+        }
+    }
 
-    // Filter
+    // Filter products
     var filtered []Product
     for _, p := range productData(lang) {
         if material != "" && material != "all" && p.Material != material { continue }
         if shape != "" && shape != "all" && p.Shape != shape { continue }
         if size != "" && size != "all" && p.Size != size { continue }
         if (saleOnly == "1" || saleOnly == "true") && !p.Sale { continue }
-        if priceMin > 0 && p.PriceJPY < int64(priceMin) { continue }
-        if priceMax > 0 && p.PriceJPY > int64(priceMax) { continue }
+        if priceMinOK && p.PriceJPY < int64(priceMin) { continue }
+        if priceMaxOK && p.PriceJPY > int64(priceMax) { continue }
         filtered = append(filtered, p)
     }
 
     total := len(filtered)
-    // Pagination window
     start := (page - 1) * per
     if start > total { start = total }
     end := start + per
@@ -471,9 +493,9 @@ func ShopTableFrag(w http.ResponseWriter, r *http.Request) {
     if shape != "" { base.Set("shape", shape) }
     if size != "" { base.Set("size", size) }
     if saleOnly != "" { base.Set("sale", saleOnly) }
-    if priceMinStr != "" { base.Set("price_min", priceMinStr) }
-    if priceMaxStr != "" { base.Set("price_max", priceMaxStr) }
-    base.Set("per", fmt.Sprintf("%d", per))
+    if priceMinOK { base.Set("price_min", strconv.Itoa(priceMin)) }
+    if priceMaxOK { base.Set("price_max", strconv.Itoa(priceMax)) }
+    base.Set("per", strconv.Itoa(per))
 
     hasPrev := page > 1
     hasNext := end < total
@@ -489,6 +511,20 @@ func ShopTableFrag(w http.ResponseWriter, r *http.Request) {
         "Prev":     page - 1,
         "Next":     page + 1,
         "BaseQS":   base.Encode(),
+    }
+    return props
+}
+
+// ShopTableFrag renders the product grid with applied filters and pagination.
+func ShopTableFrag(w http.ResponseWriter, r *http.Request) {
+    lang := mw.Lang(r)
+    props := buildShopProps(lang, r.URL.Query())
+    // Push URL to the full page (/shop?...) to avoid landing on the fragment URL when reloading or sharing
+    if baseQS, ok := props["BaseQS"].(string); ok {
+        if page, ok2 := props["Page"].(int); ok2 {
+            push := "/shop?" + baseQS + "&page=" + strconv.Itoa(page)
+            w.Header().Set("HX-Push-Url", push)
+        }
     }
     renderTemplate(w, r, "frag_shop_table", props)
 }

@@ -14,4 +14,7 @@ type PageData struct {
     Path        string
     Nav         []nav.RenderedItem
     Breadcrumbs []nav.Crumb
+
+    // Optional per-page view model payloads
+    Shop any
 }

@@ -7,12 +7,14 @@ import (
 )
 
 // Currency formats amount in minor units for basic currencies.
-// Example: FmtCurrency(12345, "JPY", "ja") => "¥12,345"
+// Example: FmtCurrency(12345, "JPY", "ja") => "¥12345" (no thousands separator for JPY)
 func FmtCurrency(minor int64, currency, lang string) string {
     currency = strings.ToUpper(currency)
     switch currency {
     case "JPY":
-        return fmt.Sprintf("¥%s", thousandSep(minor))
+        // Japanese Yen is commonly displayed without a thousands separator in Japan.
+        // We intentionally avoid thousand separators here to match local expectations.
+        return fmt.Sprintf("¥%d", minor)
     case "USD":
         // assume cents; format with 2 decimals
         neg := minor < 0

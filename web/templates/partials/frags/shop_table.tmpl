@@ -21,13 +21,13 @@
   </div>
   <div class="mt-4 flex items-center justify-between">
     <nav class="flex items-center gap-2" aria-label="Pagination">
-      <a href="/shop/table?{{ .BaseQS }}&page={{ .Prev }}"
+      <a href="/shop?{{ .BaseQS }}&page={{ .Prev }}"
          class="px-3 py-1.5 rounded border text-sm {{ if not .HasPrev }}pointer-events-none opacity-40{{ else }}hover:bg-gray-50{{ end }}"
          hx-get="/shop/table?{{ .BaseQS }}&page={{ .Prev }}"
          hx-target="#shop-results"
          hx-push-url="true"
       >Prev</a>
-      <a href="/shop/table?{{ .BaseQS }}&page={{ .Next }}"
+      <a href="/shop?{{ .BaseQS }}&page={{ .Next }}"
          class="px-3 py-1.5 rounded border text-sm {{ if not .HasNext }}pointer-events-none opacity-40{{ else }}hover:bg-gray-50{{ end }}"
          hx-get="/shop/table?{{ .BaseQS }}&page={{ .Next }}"
          hx-target="#shop-results"
@@ -38,4 +38,3 @@
   </div>
 </div>
 {{ end }}
-
