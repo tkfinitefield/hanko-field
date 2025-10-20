@@ -15,7 +15,7 @@
 - [x] [Establish integration/unit testing harness (httptest, HTML assertions, htmx interactions).](doc/web/tasks/010-establish-integration-unit-testing-harness-httptest-html-assertions-htmx-interactions.md)
 
 ## 2. Shared Layout & Components
-- [ ] [Implement base layout (`/layouts/_base.html`) with header, footer, responsive nav, and modal container.](doc/web/tasks/011-implement-base-layout-layouts-base-html-with-header-footer-responsive-nav-and-modal-contai.md)
+- [x] [Implement base layout (`/layouts/_base.html`) with header, footer, responsive nav, and modal container.](doc/web/tasks/011-implement-base-layout-layouts-base-html-with-header-footer-responsive-nav-and-modal-contai.md)
 - [ ] [Build navigation menu, breadcrumbs, and active state handling based on current route.](doc/web/tasks/012-build-navigation-menu-breadcrumbs-and-active-state-handling-based-on-current-route.md)
 - [ ] [Create reusable components (hero, cards, tables, forms, button sets, skeleton loaders) with Tailwind variants.](doc/web/tasks/013-create-reusable-components-hero-cards-tables-forms-button-sets-skeleton-loaders-with-tailw.md)
 - [ ] [Implement shared modals system with htmx targets and close triggers (ESC, overlay click).](doc/web/tasks/014-implement-shared-modals-system-with-htmx-targets-and-close-triggers-esc-overlay-click.md)
