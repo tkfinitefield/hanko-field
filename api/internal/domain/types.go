@@ -36,22 +36,92 @@ const (
 	TemplateSortCreatedAt TemplateSort = "createdAt"
 )
 
+// DesignType enumerates the supported design creation variants.
+type DesignType string
+
+const (
+	// DesignTypeTyped represents designs created from typed text input.
+	DesignTypeTyped DesignType = "typed"
+	// DesignTypeUploaded represents designs created from user-uploaded artwork.
+	DesignTypeUploaded DesignType = "uploaded"
+	// DesignTypeLogo represents designs created from user-provided logos or library selections.
+	DesignTypeLogo DesignType = "logo"
+)
+
+// DesignStatus indicates the current lifecycle state of a design.
+type DesignStatus string
+
+const (
+	// DesignStatusDraft indicates the design is still being edited.
+	DesignStatusDraft DesignStatus = "draft"
+	// DesignStatusReady indicates the design is ready for ordering or export.
+	DesignStatusReady DesignStatus = "ready"
+	// DesignStatusOrdered indicates the design has been used in an order.
+	DesignStatusOrdered DesignStatus = "ordered"
+	// DesignStatusLocked indicates the design can no longer be modified.
+	DesignStatusLocked DesignStatus = "locked"
+	// DesignStatusDeleted indicates the design has been soft deleted.
+	DesignStatusDeleted DesignStatus = "deleted"
+)
+
+// DesignSource captures the variant-specific input that produced the design.
+type DesignSource struct {
+	Type        DesignType
+	RawName     string
+	TextLines   []string
+	UploadAsset *DesignAssetReference
+	LogoAsset   *DesignAssetReference
+}
+
+// DesignAssetReference stores metadata describing a file tracked alongside the design.
+type DesignAssetReference struct {
+	AssetID     string
+	Bucket      string
+	ObjectPath  string
+	ContentType string
+	SizeBytes   int64
+	FileName    string
+	Checksum    string
+}
+
+// DesignAssets tracks generated preview/vector resources in storage.
+type DesignAssets struct {
+	SourcePath  string
+	VectorPath  string
+	PreviewPath string
+	PreviewURL  string
+}
+
 // Design encapsulates user-created seal design metadata shared across layers.
 type Design struct {
-	ID        string
-	OwnerID   string
-	Status    string
-	Template  string
-	Locale    string
-	Snapshot  map[string]any
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID               string
+	OwnerID          string
+	Label            string
+	Type             DesignType
+	TextLines        []string
+	FontID           string
+	MaterialID       string
+	Template         string
+	Locale           string
+	Shape            string
+	SizeMM           float64
+	Source           DesignSource
+	Assets           DesignAssets
+	Status           DesignStatus
+	ThumbnailURL     string
+	Version          int
+	CurrentVersionID string
+	Snapshot         map[string]any
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	LastOrderedAt    *time.Time
 }
 
 // DesignVersion stores historical snapshots for audits and reverts.
 type DesignVersion struct {
 	ID        string
 	DesignID  string
+	Version   int
 	Snapshot  map[string]any
 	CreatedAt time.Time
 	CreatedBy string

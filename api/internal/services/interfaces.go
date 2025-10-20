@@ -13,6 +13,11 @@ type (
 	Pagination                = domain.Pagination
 	SortOrder                 = domain.SortOrder
 	Design                    = domain.Design
+	DesignType                = domain.DesignType
+	DesignStatus              = domain.DesignStatus
+	DesignSource              = domain.DesignSource
+	DesignAssets              = domain.DesignAssets
+	DesignAssetReference      = domain.DesignAssetReference
 	DesignVersion             = domain.DesignVersion
 	AISuggestion              = domain.AISuggestion
 	Cart                      = domain.Cart
@@ -73,6 +78,18 @@ type (
 	SignedAssetResponse       = domain.SignedAssetResponse
 	PromotionUsage            = domain.PromotionUsage
 	PaymentMethod             = domain.PaymentMethod
+)
+
+const (
+	DesignTypeTyped    = domain.DesignTypeTyped
+	DesignTypeUploaded = domain.DesignTypeUploaded
+	DesignTypeLogo     = domain.DesignTypeLogo
+
+	DesignStatusDraft   = domain.DesignStatusDraft
+	DesignStatusReady   = domain.DesignStatusReady
+	DesignStatusOrdered = domain.DesignStatusOrdered
+	DesignStatusLocked  = domain.DesignStatusLocked
+	DesignStatusDeleted = domain.DesignStatusDeleted
 )
 
 // DesignService orchestrates design lifecycle operations, coordinating repositories,
@@ -274,10 +291,36 @@ type DomainError interface {
 // Command and DTO definitions ------------------------------------------------
 
 type CreateDesignCommand struct {
-	OwnerID  string
-	Template string
-	Locale   string
-	Snapshot map[string]any
+	OwnerID         string
+	ActorID         string
+	Label           string
+	Type            DesignType
+	TextLines       []string
+	FontID          string
+	MaterialID      string
+	TemplateID      string
+	Locale          string
+	Shape           string
+	SizeMM          float64
+	RawName         string
+	KanjiValue      *string
+	KanjiMappingRef *string
+	Upload          *DesignAssetInput
+	Logo            *DesignAssetInput
+	Snapshot        map[string]any
+	Metadata        map[string]any
+	IdempotencyKey  string
+}
+
+// DesignAssetInput captures metadata for a user-provided asset referenced during design creation.
+type DesignAssetInput struct {
+	AssetID     string
+	Bucket      string
+	ObjectPath  string
+	FileName    string
+	ContentType string
+	SizeBytes   int64
+	Checksum    string
 }
 
 type DesignReadOptions struct {

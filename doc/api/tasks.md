@@ -52,7 +52,7 @@
 - [x] [038 Implement favorites list, add, and remove endpoints referencing designs.](./tasks/038-implement-favorites-list-add-and-remove-endpoints-referencing-designs.md)
 
 ### 5.2 Designs & AI Workflow
-- [ ] [039 Implement `POST /designs` supporting typed/upload/logo variants, including asset storage and validation.](./tasks/039-implement-post-designs-supporting-typed-upload-logo-variants-including-asset-sto.md)
+- [x] [039 Implement `POST /designs` supporting typed/upload/logo variants, including asset storage and validation.](./tasks/039-implement-post-designs-supporting-typed-upload-logo-variants-including-asset-sto.md)
 - [ ] [040 Implement designs listing/detail and filtering by status/user.](./tasks/040-implement-designs-listing-detail-and-filtering-by-status-user.md)
 - [ ] [041 Implement design update/delete with permission checks and soft delete handling.](./tasks/041-implement-design-update-delete-with-permission-checks-and-soft-delete-handling.md)
 - [ ] [042 Implement design version listing/detail endpoints maintaining history snapshots.](./tasks/042-implement-design-version-listing-detail-endpoints-maintaining-history-snapshots.md)

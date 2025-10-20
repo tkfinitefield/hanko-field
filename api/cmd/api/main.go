@@ -155,6 +155,14 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to initialise favorite repository", zap.Error(err))
 	}
+	designRepo, err := firestoreRepo.NewDesignRepository(firestoreProvider)
+	if err != nil {
+		logger.Fatal("failed to initialise design repository", zap.Error(err))
+	}
+	designVersionRepo, err := firestoreRepo.NewDesignVersionRepository(firestoreProvider)
+	if err != nil {
+		logger.Fatal("failed to initialise design version repository", zap.Error(err))
+	}
 	designFinder := newFirestoreDesignFinder(firestoreProvider)
 	paymentRepo, err := firestoreRepo.NewPaymentMethodRepository(firestoreProvider)
 	if err != nil {
@@ -188,6 +196,17 @@ func main() {
 	}
 	meHandlers := handlers.NewMeHandlers(authenticator, userService)
 
+	designService, err := services.NewDesignService(services.DesignServiceDeps{
+		Designs:      designRepo,
+		Versions:     designVersionRepo,
+		AssetsBucket: cfg.Storage.AssetsBucket,
+		Clock:        time.Now,
+	})
+	if err != nil {
+		logger.Fatal("failed to initialise design service", zap.Error(err))
+	}
+	designHandlers := handlers.NewDesignHandlers(authenticator, designService)
+
 	projectID := traceProjectID(cfg)
 	middlewares := []func(http.Handler) http.Handler{
 		observability.InjectLoggerMiddleware(logger.Named("http")),
@@ -206,6 +225,7 @@ func main() {
 	opts = append(opts, handlers.WithMiddlewares(middlewares...))
 	opts = append(opts, handlers.WithHealthHandlers(healthHandlers))
 	opts = append(opts, handlers.WithMeRoutes(meHandlers.Routes))
+	opts = append(opts, handlers.WithDesignRoutes(designHandlers.Routes))
 	publicHandlers := handlers.NewPublicHandlers()
 	opts = append(opts, handlers.WithPublicRoutes(publicHandlers.Routes))
 	if oidcMiddleware != nil {
@@ -717,7 +737,7 @@ func (f *firestoreDesignFinder) FindByID(ctx context.Context, designID string) (
 	design := services.Design{
 		ID:        trimmed,
 		OwnerID:   extractOwnerID(ownerRef),
-		Status:    statusValue,
+		Status:    services.DesignStatus(strings.TrimSpace(statusValue)),
 		Template:  template,
 		Locale:    locale,
 		Snapshot:  snapshot,

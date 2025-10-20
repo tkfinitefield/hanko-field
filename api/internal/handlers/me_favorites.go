@@ -145,7 +145,7 @@ func buildFavoritePayload(fav services.FavoriteDesign) favoritePayload {
 		payload.Design = &favoriteDesignMetadata{
 			ID:        design.ID,
 			OwnerID:   design.OwnerID,
-			Status:    design.Status,
+			Status:    string(design.Status),
 			Template:  design.Template,
 			Locale:    design.Locale,
 			UpdatedAt: formatTime(design.UpdatedAt),

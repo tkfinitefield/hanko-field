@@ -1200,7 +1200,7 @@ func (s *userService) canFavoriteDesign(userID string, design Design) bool {
 	if strings.EqualFold(strings.TrimSpace(design.OwnerID), strings.TrimSpace(userID)) {
 		return true
 	}
-	status := strings.ToLower(strings.TrimSpace(design.Status))
+	status := strings.ToLower(strings.TrimSpace(string(design.Status)))
 	_, ok := shareableDesignStatuses[status]
 	return ok
 }
