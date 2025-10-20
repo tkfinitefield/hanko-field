@@ -223,7 +223,7 @@ func (r *PaymentMethodRepository) collection(ctx context.Context, userID string)
 }
 
 func (r *PaymentMethodRepository) clearDefault(ctx context.Context, tx *firestore.Transaction, coll *firestore.CollectionRef, currentID string, now time.Time) error {
-	query := coll.Where("isDefault", "==", true).Limit(20)
+	query := coll.Where("isDefault", "==", true)
 	iter := tx.Documents(query)
 	snaps, err := iter.GetAll()
 	if err != nil {
