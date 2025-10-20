@@ -42,12 +42,12 @@ func (rw *ResponseRecorder) WriteHeader(statusCode int) {
 
 func (rw *ResponseRecorder) Write(p []byte) (int, error) {
     rw.mu.Lock()
+    defer rw.mu.Unlock()
     if !rw.wrote {
         rw.onWrite()
         rw.status = http.StatusOK
         rw.wrote = true
     }
-    rw.mu.Unlock()
     return rw.ResponseWriter.Write(p)
 }
 
