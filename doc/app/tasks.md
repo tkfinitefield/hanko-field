@@ -9,7 +9,7 @@
 
 ## 1. Project Setup & Tooling
 - [x] [Initialize Flutter project with flavors (dev/stg/prod), app icons, splash screens, and build configurations.](doc/app/tasks/006-initialize-flutter-project-with-flavors-dev-stg-prod-app-icons-splash-screens-and-build-co.md)
-- [ ] [Configure linting/formatting (analysis_options), CI pipeline (flutter analyze/test), and code coverage thresholds.](doc/app/tasks/007-configure-linting-formatting-analysis-options-ci-pipeline-flutter-analyze-test-and-code-co.md)
+- [x] [Configure linting/formatting (analysis_options), CI pipeline (flutter analyze/test), and code coverage thresholds.](doc/app/tasks/007-configure-linting-formatting-analysis-options-ci-pipeline-flutter-analyze-test-and-code-co.md)
 - [ ] [Set up localization tooling (ARB files), theming, typography, and design tokens shared across screens.](doc/app/tasks/008-set-up-localization-tooling-arb-files-theming-typography-and-design-tokens-shared-across-s.md)
 - [ ] [Integrate Firebase services (Auth, Messaging, Remote Config) and configure environment-specific options.](doc/app/tasks/009-integrate-firebase-services-auth-messaging-remote-config-and-configure-environment-specifi.md)
 - [ ] [Implement secure storage, crash reporting (Sentry/Firebase Crashlytics), and analytics instrumentation.](doc/app/tasks/010-implement-secure-storage-crash-reporting-sentry-firebase-crashlytics-and-analytics-instrum.md)

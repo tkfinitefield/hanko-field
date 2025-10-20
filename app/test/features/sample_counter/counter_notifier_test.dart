@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:app/features/sample_counter/application/providers.dart';
-import 'package:app/features/sample_counter/application/counter_notifier.dart';
 import 'package:app/features/sample_counter/domain/counter_repository.dart';
 
 class _FakeRepo implements CounterRepository {
@@ -29,4 +28,3 @@ void main() {
     expect(container.read(counterProvider).value, 2);
   });
 }
-

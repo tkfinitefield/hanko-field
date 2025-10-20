@@ -34,11 +34,9 @@ final appConfigProvider = Provider<AppConfig>((ref) {
         displayName: 'Hanko Field Staging',
       );
     case AppFlavor.dev:
-    default:
       return AppConfig(
         baseUrl: 'http://10.0.2.2:8080/api/v1',
         displayName: 'Hanko Field Dev',
       );
   }
 });
-

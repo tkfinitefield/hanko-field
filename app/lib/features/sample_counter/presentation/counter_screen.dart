@@ -27,10 +27,8 @@ class CounterScreen extends ConsumerWidget {
             ),
           AsyncLoading() => const CircularProgressIndicator(),
           AsyncError(:final error) => Text('Error: $error'),
-          _ => const SizedBox.shrink(),
         },
       ),
     );
   }
 }
-
