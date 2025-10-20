@@ -1,11 +1,11 @@
 # Mobile App Implementation Task List
 
 ## 0. Planning & Architecture
-- [ ] [Validate Flutter app scope, personas, supported platforms (iOS/Android), and release milestones from `doc/app/app_design.md`.](doc/app/tasks/001-validate-flutter-app-scope-personas-supported-platforms-ios-android-and-release-milestones.md)
-- [ ] [Define MVVM architecture conventions (view/widget, view-model, repository layers) and directory structure.](doc/app/tasks/002-define-mvvm-architecture-conventions-view-widget-view-model-repository-layers-and-director.md)
-- [ ] [Establish Riverpod usage guidelines (Notifier/AsyncNotifier, providers scoping) and dependency injection strategy without code generation.](doc/app/tasks/003-establish-riverpod-usage-guidelines-notifier-asyncnotifier-providers-scoping-and-dependenc.md)
-- [ ] [Document navigation map (routes, tabs, nested flows) and deep link handling for app sections.](doc/app/tasks/004-document-navigation-map-routes-tabs-nested-flows-and-deep-link-handling-for-app-sections.md)
-- [ ] [Create API contract checklist aligning mobile payloads with backend endpoints for all flows.](doc/app/tasks/005-create-api-contract-checklist-aligning-mobile-payloads-with-backend-endpoints-for-all-flow.md)
+- [x] [Validate Flutter app scope, personas, supported platforms (iOS/Android), and release milestones from `doc/app/app_design.md`.](doc/app/tasks/001-validate-flutter-app-scope-personas-supported-platforms-ios-android-and-release-milestones.md)
+- [x] [Define MVVM architecture conventions (view/widget, view-model, repository layers) and directory structure.](doc/app/tasks/002-define-mvvm-architecture-conventions-view-widget-view-model-repository-layers-and-director.md)
+- [x] [Establish Riverpod usage guidelines (Notifier/AsyncNotifier, providers scoping) and dependency injection strategy without code generation.](doc/app/tasks/003-establish-riverpod-usage-guidelines-notifier-asyncnotifier-providers-scoping-and-dependenc.md)
+- [x] [Document navigation map (routes, tabs, nested flows) and deep link handling for app sections.](doc/app/tasks/004-document-navigation-map-routes-tabs-nested-flows-and-deep-link-handling-for-app-sections.md)
+- [x] [Create API contract checklist aligning mobile payloads with backend endpoints for all flows.](doc/app/tasks/005-create-api-contract-checklist-aligning-mobile-payloads-with-backend-endpoints-for-all-flow.md)
 
 ## 1. Project Setup & Tooling
 - [ ] [Initialize Flutter project with flavors (dev/stg/prod), app icons, splash screens, and build configurations.](doc/app/tasks/006-initialize-flutter-project-with-flavors-dev-stg-prod-app-icons-splash-screens-and-build-co.md)
