@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	cloudstorage "cloud.google.com/go/storage"
 	"go.uber.org/zap"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -28,6 +29,7 @@ import (
 	"github.com/hanko-field/api/internal/platform/idempotency"
 	"github.com/hanko-field/api/internal/platform/observability"
 	"github.com/hanko-field/api/internal/platform/secrets"
+	platformstorage "github.com/hanko-field/api/internal/platform/storage"
 	"github.com/hanko-field/api/internal/repositories"
 	firestoreRepo "github.com/hanko-field/api/internal/repositories/firestore"
 	"github.com/hanko-field/api/internal/services"
@@ -91,6 +93,21 @@ func main() {
 			logger.Warn("firestore close error", zap.Error(err))
 		}
 	}()
+
+	storageClient, err := cloudstorage.NewClient(ctx)
+	if err != nil {
+		logger.Fatal("failed to initialise storage client", zap.Error(err))
+	}
+	defer func() {
+		if err := storageClient.Close(); err != nil {
+			logger.Warn("storage close error", zap.Error(err))
+		}
+	}()
+
+	assetCopier, err := platformstorage.NewCopier(storageClient)
+	if err != nil {
+		logger.Fatal("failed to initialise storage copier", zap.Error(err))
+	}
 
 	systemService, err := newSystemService(ctx, firestoreClient, fetcher, buildInfo)
 	if err != nil {
@@ -199,6 +216,7 @@ func main() {
 	designService, err := services.NewDesignService(services.DesignServiceDeps{
 		Designs:      designRepo,
 		Versions:     designVersionRepo,
+		AssetCopier:  assetCopier,
 		AssetsBucket: cfg.Storage.AssetsBucket,
 		Clock:        time.Now,
 	})

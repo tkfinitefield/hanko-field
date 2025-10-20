@@ -5,6 +5,8 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -99,6 +101,86 @@ func (s *stubDesignVersionRepository) FindByID(ctx context.Context, designID, ve
 		return s.findFn(ctx, designID, versionID)
 	}
 	return domain.DesignVersion{}, errors.New("not implemented")
+}
+
+type assetCopyCall struct {
+	SourceBucket string
+	SourceObject string
+	DestBucket   string
+	DestObject   string
+}
+
+type stubAssetCopier struct {
+	mu    sync.Mutex
+	calls []assetCopyCall
+	ch    chan assetCopyCall
+}
+
+func newStubAssetCopier(buffer int) *stubAssetCopier {
+	if buffer <= 0 {
+		buffer = 4
+	}
+	return &stubAssetCopier{
+		ch: make(chan assetCopyCall, buffer),
+	}
+}
+
+func (s *stubAssetCopier) CopyObject(ctx context.Context, sourceBucket, sourceObject, destBucket, destObject string) error {
+	call := assetCopyCall{
+		SourceBucket: strings.TrimSpace(sourceBucket),
+		SourceObject: strings.TrimSpace(sourceObject),
+		DestBucket:   strings.TrimSpace(destBucket),
+		DestObject:   strings.TrimSpace(destObject),
+	}
+	s.mu.Lock()
+	s.calls = append(s.calls, call)
+	s.mu.Unlock()
+	s.ch <- call
+	return nil
+}
+
+func (s *stubAssetCopier) waitForCalls(t *testing.T, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		select {
+		case <-s.ch:
+		case <-time.After(200 * time.Millisecond):
+			t.Fatalf("timed out waiting for asset copier calls; expected %d, observed %d", n, len(s.Calls()))
+		}
+	}
+	// Give goroutines a moment to finish appending to the calls slice.
+	time.Sleep(10 * time.Millisecond)
+}
+
+func (s *stubAssetCopier) Calls() []assetCopyCall {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]assetCopyCall, len(s.calls))
+	copy(out, s.calls)
+	return out
+}
+
+type capturingAuditService struct {
+	mu      sync.Mutex
+	records []AuditLogRecord
+}
+
+func (s *capturingAuditService) Record(_ context.Context, record AuditLogRecord) {
+	s.mu.Lock()
+	s.records = append(s.records, record)
+	s.mu.Unlock()
+}
+
+func (s *capturingAuditService) List(context.Context, AuditLogFilter) (domain.CursorPage[domain.AuditLogEntry], error) {
+	return domain.CursorPage[domain.AuditLogEntry]{}, errors.New("not implemented")
+}
+
+func (s *capturingAuditService) Records() []AuditLogRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]AuditLogRecord, len(s.records))
+	copy(out, s.records)
+	return out
 }
 
 func TestDesignService_CreateDesignTyped(t *testing.T) {
@@ -551,6 +633,308 @@ func TestDesignService_UpdateDesign_Conflict(t *testing.T) {
 	})
 	if !errors.Is(err, ErrDesignConflict) {
 		t.Fatalf("expected design conflict, got %v", err)
+	}
+}
+
+func TestDesignService_DuplicateDesign_Success(t *testing.T) {
+	fixed := time.Date(2025, 4, 10, 15, 30, 0, 0, time.UTC)
+	previewPath := "assets/designs/dsg_src/previews/ver_src/preview.png"
+	vectorPath := "assets/designs/dsg_src/sources/render-ver_src/design.svg"
+
+	source := domain.Design{
+		ID:         "dsg_src",
+		OwnerID:    "user-1",
+		Label:      "Original",
+		Type:       domain.DesignTypeTyped,
+		TextLines:  []string{"Original"},
+		FontID:     "font-1",
+		MaterialID: "material-1",
+		Template:   "tmpl-1",
+		Locale:     "ja-JP",
+		Shape:      "round",
+		SizeMM:     15,
+		Source: domain.DesignSource{
+			Type:      domain.DesignTypeTyped,
+			RawName:   "Original",
+			TextLines: []string{"Original"},
+			UploadAsset: &domain.DesignAssetReference{
+				AssetID:     "render-ver_src",
+				Bucket:      "bucket",
+				ObjectPath:  vectorPath,
+				FileName:    "design.svg",
+				ContentType: "image/svg+xml",
+				SizeBytes:   2048,
+				Checksum:    "checksum-src",
+			},
+		},
+		Assets: domain.DesignAssets{
+			SourcePath:  vectorPath,
+			VectorPath:  vectorPath,
+			PreviewPath: previewPath,
+			PreviewURL:  "https://storage.googleapis.com/bucket/" + previewPath,
+		},
+		Status:           domain.DesignStatusReady,
+		ThumbnailURL:     "https://storage.googleapis.com/bucket/" + previewPath,
+		Version:          3,
+		CurrentVersionID: "ver_src",
+		Snapshot: map[string]any{
+			"label":  "Original",
+			"status": "ready",
+			"assets": map[string]any{
+				"previewPath": previewPath,
+				"previewUrl":  "https://storage.googleapis.com/bucket/" + previewPath,
+				"sourcePath":  vectorPath,
+				"vectorPath":  vectorPath,
+			},
+			"source": map[string]any{
+				"type":      string(domain.DesignTypeTyped),
+				"rawName":   "Original",
+				"textLines": []string{"Original"},
+				"uploadAsset": map[string]any{
+					"assetId":     "render-ver_src",
+					"bucket":      "bucket",
+					"objectPath":  vectorPath,
+					"fileName":    "design.svg",
+					"contentType": "image/svg+xml",
+					"sizeBytes":   int64(2048),
+					"checksum":    "checksum-src",
+				},
+			},
+		},
+		CreatedAt: fixed.Add(-24 * time.Hour),
+		UpdatedAt: fixed,
+	}
+
+	repo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			source.ID: cloneTestDesign(source),
+		},
+	}
+	versions := &stubDesignVersionRepository{}
+	idSeq := []string{"ID100", "ID101", "ID102"}
+
+	copier := newStubAssetCopier(6)
+	audit := &capturingAuditService{}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      repo,
+		Versions:     versions,
+		AssetsBucket: "bucket",
+		AssetCopier:  copier,
+		Audit:        audit,
+		Clock:        func() time.Time { return fixed },
+		IDGenerator: func() string {
+			if len(idSeq) == 0 {
+				return "id"
+			}
+			id := idSeq[0]
+			idSeq = idSeq[1:]
+			return id
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	override := " My Copy "
+	duplicate, err := svc.DuplicateDesign(context.Background(), DuplicateDesignCommand{
+		SourceDesignID: source.ID,
+		RequestedBy:    "user-1",
+		OverrideName:   &override,
+	})
+	if err != nil {
+		t.Fatalf("DuplicateDesign error: %v", err)
+	}
+
+	copier.waitForCalls(t, 2)
+	calls := copier.Calls()
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 asset copies, got %d", len(calls))
+	}
+	expectedDestinations := map[string]struct{}{
+		"assets/designs/dsg_id100/previews/ver_id101/preview.png":      {},
+		"assets/designs/dsg_id100/sources/render-ver_id101/design.svg": {},
+	}
+	for _, call := range calls {
+		if call.DestBucket != "bucket" {
+			t.Fatalf("unexpected destination bucket: %s", call.DestBucket)
+		}
+		if _, ok := expectedDestinations[call.DestObject]; !ok {
+			t.Fatalf("unexpected destination object: %s", call.DestObject)
+		}
+	}
+
+	if duplicate.ID != "dsg_id100" {
+		t.Fatalf("unexpected duplicate id: %s", duplicate.ID)
+	}
+	if duplicate.Label != "My Copy" {
+		t.Fatalf("expected label override to be applied, got %s", duplicate.Label)
+	}
+	if duplicate.Status != DesignStatusDraft {
+		t.Fatalf("expected draft status, got %s", duplicate.Status)
+	}
+	if duplicate.Version != 1 {
+		t.Fatalf("expected version 1, got %d", duplicate.Version)
+	}
+	if duplicate.CurrentVersionID != "ver_id101" {
+		t.Fatalf("unexpected current version id: %s", duplicate.CurrentVersionID)
+	}
+	expectedPreviewPath := "assets/designs/dsg_id100/previews/ver_id101/preview.png"
+	if duplicate.Assets.PreviewPath != expectedPreviewPath {
+		t.Fatalf("unexpected preview path: %s", duplicate.Assets.PreviewPath)
+	}
+	expectedVectorPath := "assets/designs/dsg_id100/sources/render-ver_id101/design.svg"
+	if duplicate.Assets.SourcePath != expectedVectorPath {
+		t.Fatalf("unexpected source path: %s", duplicate.Assets.SourcePath)
+	}
+	if duplicate.Assets.VectorPath != expectedVectorPath {
+		t.Fatalf("unexpected vector path: %s", duplicate.Assets.VectorPath)
+	}
+	expectedPreviewURL := "https://storage.googleapis.com/bucket/" + expectedPreviewPath
+	if duplicate.Assets.PreviewURL != expectedPreviewURL {
+		t.Fatalf("unexpected preview url: %s", duplicate.Assets.PreviewURL)
+	}
+	if duplicate.ThumbnailURL != expectedPreviewURL {
+		t.Fatalf("unexpected thumbnail url: %s", duplicate.ThumbnailURL)
+	}
+	if duplicate.Source.UploadAsset == nil {
+		t.Fatalf("expected upload asset to be present")
+	} else {
+		if duplicate.Source.UploadAsset.AssetID != "render-ver_id101" {
+			t.Fatalf("unexpected upload asset id: %s", duplicate.Source.UploadAsset.AssetID)
+		}
+		if duplicate.Source.UploadAsset.ObjectPath != expectedVectorPath {
+			t.Fatalf("unexpected upload object path: %s", duplicate.Source.UploadAsset.ObjectPath)
+		}
+	}
+	if duplicate.Source.RawName != "My Copy" {
+		t.Fatalf("expected raw name to use override, got %s", duplicate.Source.RawName)
+	}
+
+	assetsSnapshot, ok := duplicate.Snapshot["assets"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected assets snapshot map, got %T", duplicate.Snapshot["assets"])
+	}
+	if assetsSnapshot["previewPath"] != expectedPreviewPath {
+		t.Fatalf("snapshot preview path mismatch: %v", assetsSnapshot["previewPath"])
+	}
+	sourceSnapshot, ok := duplicate.Snapshot["source"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected source snapshot map, got %T", duplicate.Snapshot["source"])
+	}
+	if uploadSnapshot, ok := sourceSnapshot["uploadAsset"].(map[string]any); !ok {
+		t.Fatalf("expected upload asset snapshot, got %T", sourceSnapshot["uploadAsset"])
+	} else if uploadSnapshot["objectPath"] != expectedVectorPath {
+		t.Fatalf("snapshot upload path mismatch: %v", uploadSnapshot["objectPath"])
+	}
+
+	if len(repo.inserted) != 1 {
+		t.Fatalf("expected 1 inserted design, got %d", len(repo.inserted))
+	}
+	if repo.inserted[0].ID != duplicate.ID {
+		t.Fatalf("repository stored wrong id: %s", repo.inserted[0].ID)
+	}
+
+	if len(versions.appended) != 1 {
+		t.Fatalf("expected 1 appended version, got %d", len(versions.appended))
+	}
+	if versions.appended[0].ID != "ver_id101" {
+		t.Fatalf("unexpected version id: %s", versions.appended[0].ID)
+	}
+	if versions.appended[0].Snapshot["label"] != "My Copy" {
+		t.Fatalf("version snapshot label mismatch: %v", versions.appended[0].Snapshot["label"])
+	}
+	if versions.appended[0].CreatedBy != "user-1" {
+		t.Fatalf("expected version created_by to be user-1, got %s", versions.appended[0].CreatedBy)
+	}
+
+	records := audit.Records()
+	if len(records) != 1 {
+		t.Fatalf("expected 1 audit record, got %d", len(records))
+	}
+	record := records[0]
+	if record.Action != "design.duplicate" {
+		t.Fatalf("unexpected audit action: %s", record.Action)
+	}
+	if record.TargetRef != "/designs/dsg_id100" {
+		t.Fatalf("unexpected audit target: %s", record.TargetRef)
+	}
+	if sourceID, ok := record.Metadata["sourceDesignId"]; !ok || sourceID != "dsg_src" {
+		t.Fatalf("audit metadata missing source design id: %v", record.Metadata)
+	}
+}
+
+func TestDesignService_DuplicateDesign_NotOwner(t *testing.T) {
+	repo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_src": {
+				ID:      "dsg_src",
+				OwnerID: "user-1",
+				Status:  domain.DesignStatusReady,
+			},
+		},
+	}
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      repo,
+		Versions:     &stubDesignVersionRepository{},
+		AssetsBucket: "bucket",
+		IDGenerator:  func() string { return "id" },
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	_, err = svc.DuplicateDesign(context.Background(), DuplicateDesignCommand{
+		SourceDesignID: "dsg_src",
+		RequestedBy:    "user-2",
+	})
+	if !errors.Is(err, ErrDesignNotFound) {
+		t.Fatalf("expected ErrDesignNotFound, got %v", err)
+	}
+}
+
+func TestDesignService_DuplicateDesign_DeletedSource(t *testing.T) {
+	repo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_src": {
+				ID:      "dsg_src",
+				OwnerID: "user-1",
+				Status:  domain.DesignStatusDeleted,
+			},
+		},
+	}
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      repo,
+		Versions:     &stubDesignVersionRepository{},
+		AssetsBucket: "bucket",
+		IDGenerator:  func() string { return "id" },
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	_, err = svc.DuplicateDesign(context.Background(), DuplicateDesignCommand{
+		SourceDesignID: "dsg_src",
+		RequestedBy:    "user-1",
+	})
+	if !errors.Is(err, ErrDesignInvalidInput) {
+		t.Fatalf("expected ErrDesignInvalidInput, got %v", err)
+	}
+}
+
+func TestDesignService_DuplicateDesign_InvalidInput(t *testing.T) {
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      &stubDesignRepository{},
+		Versions:     &stubDesignVersionRepository{},
+		AssetsBucket: "bucket",
+		IDGenerator:  func() string { return "id" },
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+	_, err = svc.DuplicateDesign(context.Background(), DuplicateDesignCommand{})
+	if !errors.Is(err, ErrDesignInvalidInput) {
+		t.Fatalf("expected invalid input error, got %v", err)
 	}
 }
 

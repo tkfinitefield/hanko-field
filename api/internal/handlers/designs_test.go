@@ -125,6 +125,128 @@ func TestDesignHandlers_CreateDesign_Invalid(t *testing.T) {
 	}
 }
 
+func TestDesignHandlers_DuplicateDesign_Success(t *testing.T) {
+	var captured services.DuplicateDesignCommand
+	stub := &stubDesignService{
+		duplicateFn: func(_ context.Context, cmd services.DuplicateDesignCommand) (services.Design, error) {
+			captured = cmd
+			return services.Design{
+				ID:               "dsg_copy",
+				OwnerID:          "user-1",
+				Label:            "Copy Label",
+				Type:             services.DesignTypeTyped,
+				Status:           services.DesignStatusDraft,
+				Version:          1,
+				CurrentVersionID: "ver_copy",
+				Assets: services.DesignAssets{
+					PreviewPath: "assets/designs/dsg_copy/previews/ver_copy/preview.png",
+					PreviewURL:  "https://example.com/preview.png",
+				},
+				Snapshot:  map[string]any{"label": "Copy Label"},
+				CreatedAt: time.Now().UTC(),
+				UpdatedAt: time.Now().UTC(),
+			}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	reqBody := `{"label":"  Copy Label  "}`
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_src/duplicate", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_src")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.duplicateDesign(rec, req)
+
+	if rec.Result().StatusCode != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rec.Result().StatusCode)
+	}
+	if captured.SourceDesignID != "dsg_src" {
+		t.Fatalf("expected source design id dsg_src, got %s", captured.SourceDesignID)
+	}
+	if captured.RequestedBy != "user-1" {
+		t.Fatalf("expected requested_by user-1, got %s", captured.RequestedBy)
+	}
+	if captured.OverrideName == nil || *captured.OverrideName != "Copy Label" {
+		t.Fatalf("expected override Copy Label, got %#v", captured.OverrideName)
+	}
+
+	var payload createDesignResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if payload.Design.ID != "dsg_copy" {
+		t.Fatalf("unexpected design id %s", payload.Design.ID)
+	}
+}
+
+func TestDesignHandlers_DuplicateDesign_NoOverride(t *testing.T) {
+	var captured services.DuplicateDesignCommand
+	stub := &stubDesignService{
+		duplicateFn: func(_ context.Context, cmd services.DuplicateDesignCommand) (services.Design, error) {
+			captured = cmd
+			return services.Design{ID: "dsg_copy"}, nil
+		},
+	}
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_src/duplicate", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_src")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.duplicateDesign(rec, req)
+
+	if rec.Result().StatusCode != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rec.Result().StatusCode)
+	}
+	if captured.OverrideName != nil {
+		t.Fatalf("expected no override name, got %#v", captured.OverrideName)
+	}
+}
+
+func TestDesignHandlers_DuplicateDesign_InvalidJSON(t *testing.T) {
+	handler := NewDesignHandlers(nil, &stubDesignService{})
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_src/duplicate", strings.NewReader("{"))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_src")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.duplicateDesign(rec, req)
+
+	if rec.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestDesignHandlers_DuplicateDesign_NotFound(t *testing.T) {
+	stub := &stubDesignService{
+		duplicateFn: func(context.Context, services.DuplicateDesignCommand) (services.Design, error) {
+			return services.Design{}, services.ErrDesignNotFound
+		},
+	}
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_missing/duplicate", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_missing")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.duplicateDesign(rec, req)
+
+	if rec.Result().StatusCode != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rec.Result().StatusCode)
+	}
+}
+
 func TestDesignHandlers_ListDesigns_Success(t *testing.T) {
 	var captured services.DesignListFilter
 	now := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
@@ -672,6 +794,7 @@ type stubDesignService struct {
 	getVersionFn   func(context.Context, string, string, services.DesignVersionReadOptions) (services.DesignVersion, error)
 	updateFn       func(context.Context, services.UpdateDesignCommand) (services.Design, error)
 	deleteFn       func(context.Context, services.DeleteDesignCommand) error
+	duplicateFn    func(context.Context, services.DuplicateDesignCommand) (services.Design, error)
 }
 
 func (s *stubDesignService) CreateDesign(ctx context.Context, cmd services.CreateDesignCommand) (services.Design, error) {
@@ -723,7 +846,10 @@ func (s *stubDesignService) DeleteDesign(ctx context.Context, cmd services.Delet
 	return nil
 }
 
-func (s *stubDesignService) DuplicateDesign(context.Context, services.DuplicateDesignCommand) (services.Design, error) {
+func (s *stubDesignService) DuplicateDesign(ctx context.Context, cmd services.DuplicateDesignCommand) (services.Design, error) {
+	if s.duplicateFn != nil {
+		return s.duplicateFn(ctx, cmd)
+	}
 	return services.Design{}, nil
 }
 

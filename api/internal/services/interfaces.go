@@ -268,6 +268,11 @@ type AuditLogService interface {
 	List(ctx context.Context, filter AuditLogFilter) (domain.CursorPage[AuditLogEntry], error)
 }
 
+// AssetCopier copies storage objects between buckets or paths.
+type AssetCopier interface {
+	CopyObject(ctx context.Context, sourceBucket, sourceObject, destBucket, destObject string) error
+}
+
 // BackgroundJobDispatcher schedules asynchronous processing such as AI jobs, cleanup tasks, and notifications.
 type BackgroundJobDispatcher interface {
 	QueueAISuggestion(ctx context.Context, cmd QueueAISuggestionCommand) (QueueAISuggestionResult, error)

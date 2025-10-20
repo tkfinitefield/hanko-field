@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path"
 	"reflect"
 	"slices"
 	"strings"
@@ -125,6 +126,7 @@ type DesignServiceDeps struct {
 	Versions     repositories.DesignVersionRepository
 	Audit        AuditLogService
 	Renderer     DesignRenderer
+	AssetCopier  AssetCopier
 	UnitOfWork   repositories.UnitOfWork
 	Clock        func() time.Time
 	IDGenerator  func() string
@@ -137,6 +139,7 @@ type designService struct {
 	versions     repositories.DesignVersionRepository
 	audit        AuditLogService
 	renderer     DesignRenderer
+	assetCopier  AssetCopier
 	unitOfWork   repositories.UnitOfWork
 	clock        func() time.Time
 	newID        func() string
@@ -177,6 +180,7 @@ func NewDesignService(deps DesignServiceDeps) (DesignService, error) {
 		versions:     deps.Versions,
 		audit:        deps.Audit,
 		renderer:     deps.Renderer,
+		assetCopier:  deps.AssetCopier,
 		unitOfWork:   deps.UnitOfWork,
 		clock:        func() time.Time { return clock().UTC() },
 		newID:        idGen,
@@ -503,8 +507,484 @@ func (s *designService) DeleteDesign(ctx context.Context, cmd DeleteDesignComman
 	return nil
 }
 
-func (s *designService) DuplicateDesign(context.Context, DuplicateDesignCommand) (Design, error) {
-	return Design{}, ErrDesignNotImplemented
+func (s *designService) DuplicateDesign(ctx context.Context, cmd DuplicateDesignCommand) (Design, error) {
+	if s.designs == nil || s.versions == nil {
+		return Design{}, ErrDesignRepositoryUnavailable
+	}
+
+	sourceID := strings.TrimSpace(cmd.SourceDesignID)
+	if sourceID == "" {
+		return Design{}, fmt.Errorf("%w: source_design_id is required", ErrDesignInvalidInput)
+	}
+	actorID := strings.TrimSpace(cmd.RequestedBy)
+	if actorID == "" {
+		return Design{}, fmt.Errorf("%w: requested_by is required", ErrDesignInvalidInput)
+	}
+
+	source, err := s.designs.FindByID(ctx, sourceID)
+	if err != nil {
+		return Design{}, s.mapRepositoryError(err)
+	}
+
+	ownerID := strings.TrimSpace(source.OwnerID)
+	if ownerID == "" {
+		return Design{}, fmt.Errorf("%w: source design owner missing", ErrDesignInvalidInput)
+	}
+	if !strings.EqualFold(ownerID, actorID) {
+		return Design{}, ErrDesignNotFound
+	}
+	if source.Status == DesignStatusDeleted {
+		return Design{}, fmt.Errorf("%w: source design status %q cannot be duplicated", ErrDesignInvalidInput, source.Status)
+	}
+
+	now := s.now()
+	newDesignID := s.nextDesignID()
+	versionID := s.nextVersionID()
+
+	label := strings.TrimSpace(source.Label)
+	if cmd.OverrideName != nil {
+		if trimmed := strings.TrimSpace(*cmd.OverrideName); trimmed != "" {
+			label = trimmed
+		}
+	}
+	if label == "" {
+		label = defaultDesignLabel(newDesignID, source.Type, source.TextLines)
+	}
+	if len(label) > maxDesignLabelLen {
+		label = label[:maxDesignLabelLen]
+	}
+
+	textLines := cloneStrings(source.TextLines)
+	if len(textLines) == 0 && len(source.Source.TextLines) > 0 {
+		textLines = cloneStrings(source.Source.TextLines)
+	}
+
+	assets, uploadAsset, logoAsset, tasks, err := s.prepareDuplicateAssets(source, newDesignID, versionID)
+	if err != nil {
+		return Design{}, err
+	}
+
+	rawName := strings.TrimSpace(source.Source.RawName)
+	if cmd.OverrideName != nil {
+		if trimmed := strings.TrimSpace(*cmd.OverrideName); trimmed != "" {
+			rawName = trimmed
+		}
+	}
+	if rawName == "" {
+		rawName = label
+	}
+
+	sourceLines := cloneStrings(source.Source.TextLines)
+	if len(sourceLines) == 0 && len(textLines) > 0 {
+		sourceLines = cloneStrings(textLines)
+	}
+
+	snapshot := s.buildDuplicateSnapshot(source, label, textLines, assets, uploadAsset, logoAsset, rawName)
+
+	thumbnailURL := strings.TrimSpace(assets.PreviewURL)
+	if thumbnailURL == "" {
+		thumbnailURL = strings.TrimSpace(source.ThumbnailURL)
+	}
+
+	design := Design{
+		ID:         newDesignID,
+		OwnerID:    ownerID,
+		Label:      label,
+		Type:       source.Type,
+		TextLines:  cloneStrings(textLines),
+		FontID:     source.FontID,
+		MaterialID: source.MaterialID,
+		Template:   source.Template,
+		Locale:     source.Locale,
+		Shape:      source.Shape,
+		SizeMM:     source.SizeMM,
+		Source: DesignSource{
+			Type:        firstNonEmptyDesignType(source.Source.Type, source.Type),
+			RawName:     rawName,
+			TextLines:   sourceLines,
+			UploadAsset: cloneAssetReference(uploadAsset),
+			LogoAsset:   cloneAssetReference(logoAsset),
+		},
+		Assets:           assets,
+		Status:           DesignStatusDraft,
+		ThumbnailURL:     thumbnailURL,
+		Version:          1,
+		CurrentVersionID: versionID,
+		Snapshot:         snapshot,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+
+	version := DesignVersion{
+		ID:        versionID,
+		DesignID:  newDesignID,
+		Version:   1,
+		Snapshot:  cloneSnapshot(snapshot),
+		CreatedAt: now,
+		CreatedBy: actorID,
+	}
+
+	if err := s.runInTx(ctx, func(txCtx context.Context) error {
+		if err := s.designs.Insert(txCtx, design); err != nil {
+			return s.mapRepositoryError(err)
+		}
+		if err := s.versions.Append(txCtx, version); err != nil {
+			return s.mapRepositoryError(err)
+		}
+		return nil
+	}); err != nil {
+		return Design{}, err
+	}
+
+	s.recordAuditDuplicate(ctx, source, design, actorID)
+	s.copyAssetsAsync(ctx, tasks)
+
+	return design, nil
+}
+
+type assetCopyTask struct {
+	sourceBucket string
+	sourceObject string
+	destBucket   string
+	destObject   string
+}
+
+func (s *designService) prepareDuplicateAssets(source Design, newDesignID, versionID string) (DesignAssets, *DesignAssetReference, *DesignAssetReference, []assetCopyTask, error) {
+	assets := DesignAssets{}
+	tasks := make([]assetCopyTask, 0, 4)
+
+	previewPath := strings.TrimSpace(source.Assets.PreviewPath)
+	if previewPath != "" {
+		fileName := fileNameFromPath(previewPath, previewFileName)
+		newPreviewPath, err := storage.BuildObjectPath(storage.PurposePreview, storage.PathParams{
+			DesignID:  newDesignID,
+			VersionID: versionID,
+			FileName:  fileName,
+		})
+		if err != nil {
+			return DesignAssets{}, nil, nil, nil, fmt.Errorf("%w: %v", ErrDesignInvalidInput, err)
+		}
+		assets.PreviewPath = newPreviewPath
+		assets.PreviewURL = buildBucketURL(s.assetsBucket, newPreviewPath)
+		tasks = appendCopyTask(tasks, assetCopyTask{
+			sourceBucket: s.assetsBucket,
+			sourceObject: previewPath,
+			destBucket:   s.assetsBucket,
+			destObject:   newPreviewPath,
+		})
+	} else if url := strings.TrimSpace(source.Assets.PreviewURL); url != "" {
+		assets.PreviewURL = url
+	}
+
+	var (
+		uploadAsset *DesignAssetReference
+		logoAsset   *DesignAssetReference
+	)
+
+	// Vector assets are generated for typed designs and should be copied alongside the master asset.
+	originalUpload := cloneAssetReference(source.Source.UploadAsset)
+	vectorPath := strings.TrimSpace(source.Assets.VectorPath)
+	var newVectorPath string
+	if vectorPath != "" {
+		vectorFile := fileNameFromPath(vectorPath, vectorFileName)
+		pathParams := storage.PathParams{
+			DesignID: newDesignID,
+			UploadID: "render-" + versionID,
+			FileName: vectorFile,
+		}
+		computed, err := storage.BuildObjectPath(storage.PurposeDesignMaster, pathParams)
+		if err != nil {
+			return DesignAssets{}, nil, nil, nil, fmt.Errorf("%w: %v", ErrDesignInvalidInput, err)
+		}
+		newVectorPath = computed
+		assets.VectorPath = newVectorPath
+	}
+
+	sourcePath := strings.TrimSpace(source.Assets.SourcePath)
+	if newVectorPath != "" && (originalUpload == nil || strings.TrimSpace(originalUpload.ObjectPath) == vectorPath) {
+		bucket := firstNonEmptyString(assetBucket(originalUpload), s.assetsBucket)
+		if bucket == "" {
+			bucket = s.assetsBucket
+		}
+		fileName := fileNameFromPath(vectorPath, vectorFileName)
+		uploadAsset = &DesignAssetReference{
+			AssetID:     "render-" + versionID,
+			Bucket:      bucket,
+			ObjectPath:  newVectorPath,
+			FileName:    fileName,
+			ContentType: firstNonEmptyString(assetContentType(originalUpload), "image/svg+xml"),
+			SizeBytes:   0,
+			Checksum:    "",
+		}
+		if originalUpload != nil {
+			uploadAsset.SizeBytes = originalUpload.SizeBytes
+			uploadAsset.Checksum = strings.TrimSpace(originalUpload.Checksum)
+		}
+		assets.SourcePath = newVectorPath
+		tasks = appendCopyTask(tasks, assetCopyTask{
+			sourceBucket: firstNonEmptyString(assetBucket(originalUpload), s.assetsBucket),
+			sourceObject: firstNonEmptyString(assetObjectPath(originalUpload), vectorPath),
+			destBucket:   bucket,
+			destObject:   newVectorPath,
+		})
+	} else if originalUpload != nil && strings.TrimSpace(originalUpload.ObjectPath) != "" {
+		fileName := firstNonEmptyString(originalUpload.FileName, fileNameFromPath(originalUpload.ObjectPath, "source"))
+		newUploadID := "upload-" + s.newID()
+		newSourcePath, err := storage.BuildObjectPath(storage.PurposeDesignMaster, storage.PathParams{
+			DesignID: newDesignID,
+			UploadID: newUploadID,
+			FileName: fileName,
+		})
+		if err != nil {
+			return DesignAssets{}, nil, nil, nil, fmt.Errorf("%w: %v", ErrDesignInvalidInput, err)
+		}
+		bucket := firstNonEmptyString(originalUpload.Bucket, s.assetsBucket)
+		if bucket == "" {
+			bucket = s.assetsBucket
+		}
+		uploadAsset = &DesignAssetReference{
+			AssetID:     newUploadID,
+			Bucket:      bucket,
+			ObjectPath:  newSourcePath,
+			FileName:    fileName,
+			ContentType: originalUpload.ContentType,
+			SizeBytes:   originalUpload.SizeBytes,
+			Checksum:    strings.TrimSpace(originalUpload.Checksum),
+		}
+		assets.SourcePath = newSourcePath
+		tasks = appendCopyTask(tasks, assetCopyTask{
+			sourceBucket: firstNonEmptyString(assetBucket(originalUpload), s.assetsBucket),
+			sourceObject: originalUpload.ObjectPath,
+			destBucket:   bucket,
+			destObject:   newSourcePath,
+		})
+	} else if sourcePath != "" {
+		fileName := fileNameFromPath(sourcePath, "source")
+		newUploadID := "upload-" + s.newID()
+		newSourcePath, err := storage.BuildObjectPath(storage.PurposeDesignMaster, storage.PathParams{
+			DesignID: newDesignID,
+			UploadID: newUploadID,
+			FileName: fileName,
+		})
+		if err != nil {
+			return DesignAssets{}, nil, nil, nil, fmt.Errorf("%w: %v", ErrDesignInvalidInput, err)
+		}
+		assets.SourcePath = newSourcePath
+		bucket := s.assetsBucket
+		uploadAsset = &DesignAssetReference{
+			AssetID:    newUploadID,
+			Bucket:     bucket,
+			ObjectPath: newSourcePath,
+			FileName:   fileName,
+		}
+		tasks = appendCopyTask(tasks, assetCopyTask{
+			sourceBucket: s.assetsBucket,
+			sourceObject: sourcePath,
+			destBucket:   bucket,
+			destObject:   newSourcePath,
+		})
+	}
+
+	// If vector path exists and wasn't handled above, ensure copy task is queued.
+	if newVectorPath != "" && (len(tasks) == 0 || tasks[len(tasks)-1].destObject != newVectorPath) {
+		tasks = appendCopyTask(tasks, assetCopyTask{
+			sourceBucket: firstNonEmptyString(assetBucket(originalUpload), s.assetsBucket),
+			sourceObject: firstNonEmptyString(assetObjectPath(originalUpload), vectorPath),
+			destBucket:   firstNonEmptyString(assetBucket(uploadAsset), s.assetsBucket),
+			destObject:   newVectorPath,
+		})
+	}
+
+	// Logo assets are optional; copy if present.
+	if originalLogo := source.Source.LogoAsset; originalLogo != nil && strings.TrimSpace(originalLogo.ObjectPath) != "" {
+		fileName := firstNonEmptyString(originalLogo.FileName, fileNameFromPath(originalLogo.ObjectPath, "logo"))
+		newLogoID := "logo-" + s.newID()
+		newLogoPath, err := storage.BuildObjectPath(storage.PurposeDesignMaster, storage.PathParams{
+			DesignID: newDesignID,
+			UploadID: newLogoID,
+			FileName: fileName,
+		})
+		if err != nil {
+			return DesignAssets{}, nil, nil, nil, fmt.Errorf("%w: %v", ErrDesignInvalidInput, err)
+		}
+		bucket := firstNonEmptyString(assetBucket(originalLogo), s.assetsBucket)
+		if bucket == "" {
+			bucket = s.assetsBucket
+		}
+		logoAsset = &DesignAssetReference{
+			AssetID:     newLogoID,
+			Bucket:      bucket,
+			ObjectPath:  newLogoPath,
+			FileName:    fileName,
+			ContentType: originalLogo.ContentType,
+			SizeBytes:   originalLogo.SizeBytes,
+			Checksum:    strings.TrimSpace(originalLogo.Checksum),
+		}
+		tasks = appendCopyTask(tasks, assetCopyTask{
+			sourceBucket: firstNonEmptyString(assetBucket(originalLogo), s.assetsBucket),
+			sourceObject: assetObjectPath(originalLogo),
+			destBucket:   bucket,
+			destObject:   newLogoPath,
+		})
+	}
+
+	return assets, uploadAsset, logoAsset, tasks, nil
+}
+
+func (s *designService) buildDuplicateSnapshot(source Design, label string, textLines []string, assets DesignAssets, uploadAsset, logoAsset *DesignAssetReference, rawName string) map[string]any {
+	snapshot := cloneSnapshot(source.Snapshot)
+	if snapshot == nil {
+		snapshot = make(map[string]any)
+	}
+	snapshot["label"] = label
+	snapshot["status"] = string(DesignStatusDraft)
+	if len(textLines) > 0 {
+		snapshot["textLines"] = cloneStrings(textLines)
+	} else {
+		delete(snapshot, "textLines")
+	}
+	snapshot["type"] = string(source.Type)
+
+	assetsSnapshot := map[string]any{}
+	if assets.SourcePath != "" {
+		assetsSnapshot["sourcePath"] = assets.SourcePath
+	}
+	if assets.VectorPath != "" {
+		assetsSnapshot["vectorPath"] = assets.VectorPath
+	}
+	if assets.PreviewPath != "" {
+		assetsSnapshot["previewPath"] = assets.PreviewPath
+	}
+	if assets.PreviewURL != "" {
+		assetsSnapshot["previewUrl"] = assets.PreviewURL
+	}
+	if len(assetsSnapshot) > 0 {
+		snapshot["assets"] = assetsSnapshot
+	} else {
+		delete(snapshot, "assets")
+	}
+
+	sourceSnapshot := map[string]any{}
+	if existing, ok := snapshot["source"].(map[string]any); ok && len(existing) > 0 {
+		sourceSnapshot = maps.Clone(existing)
+	}
+	sourceSnapshot["type"] = string(firstNonEmptyDesignType(source.Source.Type, source.Type))
+	sourceSnapshot["rawName"] = rawName
+	if len(textLines) > 0 {
+		sourceSnapshot["textLines"] = cloneStrings(textLines)
+	} else {
+		delete(sourceSnapshot, "textLines")
+	}
+	if uploadAsset != nil {
+		sourceSnapshot["uploadAsset"] = assetReferenceSnapshot(uploadAsset)
+	} else {
+		delete(sourceSnapshot, "uploadAsset")
+	}
+	if logoAsset != nil {
+		sourceSnapshot["logoAsset"] = assetReferenceSnapshot(logoAsset)
+	} else {
+		delete(sourceSnapshot, "logoAsset")
+	}
+	snapshot["source"] = sourceSnapshot
+	return snapshot
+}
+
+func (s *designService) copyAssetsAsync(ctx context.Context, tasks []assetCopyTask) {
+	if len(tasks) == 0 || s.assetCopier == nil {
+		return
+	}
+	background := context.WithoutCancel(ctx)
+	go func(copyTasks []assetCopyTask) {
+		for _, task := range copyTasks {
+			if err := s.assetCopier.CopyObject(background, task.sourceBucket, task.sourceObject, task.destBucket, task.destObject); err != nil {
+				if s.logger != nil {
+					s.logger(background, "design.asset_copy_failed", map[string]any{
+						"sourceBucket": task.sourceBucket,
+						"sourceObject": task.sourceObject,
+						"destBucket":   task.destBucket,
+						"destObject":   task.destObject,
+						"error":        err.Error(),
+					})
+				}
+			}
+		}
+	}(append([]assetCopyTask(nil), tasks...))
+}
+
+func appendCopyTask(tasks []assetCopyTask, task assetCopyTask) []assetCopyTask {
+	sourceBucket := strings.TrimSpace(task.sourceBucket)
+	sourceObject := strings.TrimSpace(task.sourceObject)
+	destBucket := strings.TrimSpace(task.destBucket)
+	destObject := strings.TrimSpace(task.destObject)
+	if sourceBucket == "" || sourceObject == "" || destBucket == "" || destObject == "" {
+		return tasks
+	}
+	if sourceBucket == destBucket && sourceObject == destObject {
+		return tasks
+	}
+	normalised := assetCopyTask{
+		sourceBucket: sourceBucket,
+		sourceObject: sourceObject,
+		destBucket:   destBucket,
+		destObject:   destObject,
+	}
+	for _, existing := range tasks {
+		if existing == normalised {
+			return tasks
+		}
+	}
+	return append(tasks, normalised)
+}
+
+func fileNameFromPath(objectPath, fallback string) string {
+	trimmed := strings.TrimSpace(objectPath)
+	if trimmed == "" {
+		return fallback
+	}
+	base := path.Base(trimmed)
+	if base == "." || base == "/" || base == "" {
+		return fallback
+	}
+	return base
+}
+
+func firstNonEmptyDesignType(values ...DesignType) DesignType {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(string(value)); trimmed != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func assetBucket(ref *DesignAssetReference) string {
+	if ref == nil {
+		return ""
+	}
+	return ref.Bucket
+}
+
+func assetObjectPath(ref *DesignAssetReference) string {
+	if ref == nil {
+		return ""
+	}
+	return ref.ObjectPath
+}
+
+func assetContentType(ref *DesignAssetReference) string {
+	if ref == nil {
+		return ""
+	}
+	return ref.ContentType
 }
 
 func (s *designService) RequestAISuggestion(context.Context, AISuggestionRequest) (AISuggestion, error) {
@@ -930,6 +1410,27 @@ func (s *designService) recordAudit(ctx context.Context, design Design, params c
 		TargetRef:  fmt.Sprintf("/designs/%s", design.ID),
 		Severity:   "info",
 		OccurredAt: design.CreatedAt,
+		Metadata:   metadata,
+	}
+	s.audit.Record(ctx, record)
+}
+
+func (s *designService) recordAuditDuplicate(ctx context.Context, source, duplicate Design, actorID string) {
+	if s.audit == nil {
+		return
+	}
+	metadata := map[string]any{
+		"sourceDesignId": source.ID,
+		"newVersionId":   duplicate.CurrentVersionID,
+		"type":           string(duplicate.Type),
+	}
+	record := AuditLogRecord{
+		Actor:      actorID,
+		ActorType:  "user",
+		Action:     "design.duplicate",
+		TargetRef:  fmt.Sprintf("/designs/%s", duplicate.ID),
+		Severity:   "info",
+		OccurredAt: duplicate.CreatedAt,
 		Metadata:   metadata,
 	}
 	s.audit.Record(ctx, record)

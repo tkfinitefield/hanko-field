@@ -51,6 +51,7 @@ func (h *DesignHandlers) Routes(r chi.Router) {
 	}
 	r.Get("/", h.listDesigns)
 	r.Post("/", h.createDesign)
+	r.Post("/{designID}/duplicate", h.duplicateDesign)
 	r.Get("/{designID}/versions", h.listDesignVersions)
 	r.Get("/{designID}/versions/{versionID}", h.getDesignVersion)
 	r.Get("/{designID}", h.getDesign)
@@ -490,6 +491,77 @@ func (h *DesignHandlers) deleteDesign(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *DesignHandlers) duplicateDesign(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	requester := strings.TrimSpace(identity.UID)
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+
+	var override *string
+	if r.Body != nil {
+		body, err := readLimitedBody(r, maxDesignRequestBody)
+		if err != nil {
+			if errors.Is(err, errEmptyBody) {
+				// No overrides provided; continue with defaults.
+			} else {
+				status := http.StatusBadRequest
+				code := "invalid_request"
+				if errors.Is(err, errBodyTooLarge) {
+					status = http.StatusRequestEntityTooLarge
+					code = "payload_too_large"
+				}
+				httpx.WriteError(ctx, w, httpx.NewError(code, err.Error(), status))
+				return
+			}
+		} else if len(body) > 0 {
+			var req duplicateDesignRequest
+			if err := json.Unmarshal(body, &req); err != nil {
+				httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "invalid JSON payload", http.StatusBadRequest))
+				return
+			}
+			if req.Label != nil {
+				if trimmed := strings.TrimSpace(*req.Label); trimmed != "" {
+					value := trimmed
+					override = &value
+				}
+			}
+		}
+	}
+
+	cmd := services.DuplicateDesignCommand{
+		SourceDesignID: designID,
+		RequestedBy:    requester,
+	}
+	if override != nil {
+		cmd.OverrideName = override
+	}
+
+	duplicate, err := h.designs.DuplicateDesign(ctx, cmd)
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	response := createDesignResponse{
+		Design: buildDesignPayload(duplicate),
+	}
+	writeJSONResponse(w, http.StatusCreated, response)
+}
+
 func (h *DesignHandlers) createDesign(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.designs == nil {
@@ -543,11 +615,17 @@ func (h *DesignHandlers) writeDesignError(ctx context.Context, w http.ResponseWr
 		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
 	case errors.Is(err, services.ErrDesignConflict):
 		httpx.WriteError(ctx, w, httpx.NewError("design_conflict", "design conflict", http.StatusConflict))
+	case errors.Is(err, services.ErrDesignNotFound):
+		httpx.WriteError(ctx, w, httpx.NewError("design_not_found", "design not found", http.StatusNotFound))
 	case errors.Is(err, services.ErrDesignRepositoryUnavailable), errors.Is(err, services.ErrDesignRendererUnavailable):
 		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
 	default:
 		httpx.WriteError(ctx, w, httpx.NewError("internal_error", "internal server error", http.StatusInternalServerError))
 	}
+}
+
+type duplicateDesignRequest struct {
+	Label *string `json:"label"`
 }
 
 type createDesignRequest struct {
