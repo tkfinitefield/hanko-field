@@ -11,9 +11,18 @@ import (
 
 // Currency formats amounts (in minor units) with the given ISO currency code.
 func Currency(amount int64, currency string) string {
-	major := float64(amount) / 100.0
 	symbol := currencySymbol(currency)
-	return fmt.Sprintf("%s%.2f", symbol, major)
+
+	sign := ""
+	if amount < 0 {
+		sign = "-"
+		amount = -amount
+	}
+
+	major := amount / 100
+	minor := amount % 100
+
+	return fmt.Sprintf("%s%s%d.%02d", sign, symbol, major, minor)
 }
 
 // Date formats the timestamp in the provided layout (defaults to 2006-01-02 15:04 MST).
