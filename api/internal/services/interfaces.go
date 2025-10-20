@@ -563,15 +563,34 @@ type DeleteAddressCommand struct {
 }
 
 type AddPaymentMethodCommand struct {
-	UserID    string
-	Provider  string
-	Reference string
-	Token     string
+	UserID      string
+	Provider    string
+	Token       string
+	MakeDefault bool
 }
 
 type RemovePaymentMethodCommand struct {
 	UserID          string
 	PaymentMethodID string
+}
+
+// PaymentMethodMetadata contains PSP-sourced attributes describing a payment instrument.
+type PaymentMethodMetadata struct {
+	Token    string
+	Brand    string
+	Last4    string
+	ExpMonth int
+	ExpYear  int
+}
+
+// PaymentMethodVerifier resolves PSP tokens into metadata prior to persistence.
+type PaymentMethodVerifier interface {
+	VerifyPaymentMethod(ctx context.Context, provider string, token string) (PaymentMethodMetadata, error)
+}
+
+// OutstandingInvoiceChecker reports whether a user has unpaid invoices blocking payment method removal.
+type OutstandingInvoiceChecker interface {
+	HasOutstandingInvoices(ctx context.Context, userID string) (bool, error)
 }
 
 type ToggleFavoriteCommand struct {

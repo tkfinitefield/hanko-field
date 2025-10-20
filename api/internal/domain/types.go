@@ -505,12 +505,14 @@ type PromotionUsage struct {
 type PaymentMethod struct {
 	ID        string
 	Provider  string
-	Reference string
+	Token     string
 	Brand     string
 	Last4     string
 	ExpMonth  int
 	ExpYear   int
+	IsDefault bool
 	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // InventoryReservationLine stores per-SKU quantities for a reservation.

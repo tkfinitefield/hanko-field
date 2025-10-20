@@ -54,6 +54,7 @@ func (h *MeHandlers) Routes(r chi.Router) {
 	r.Get("/", h.getProfile)
 	r.Put("/", h.updateProfile)
 	r.Route("/addresses", h.addressRoutes)
+	r.Route("/payment-methods", h.paymentMethodRoutes)
 }
 
 func (h *MeHandlers) getProfile(w http.ResponseWriter, r *http.Request) {

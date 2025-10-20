@@ -231,6 +231,8 @@ type PaymentMethodRepository interface {
 	List(ctx context.Context, userID string) ([]domain.PaymentMethod, error)
 	Insert(ctx context.Context, userID string, method domain.PaymentMethod) (domain.PaymentMethod, error)
 	Delete(ctx context.Context, userID string, paymentMethodID string) error
+	Get(ctx context.Context, userID string, paymentMethodID string) (domain.PaymentMethod, error)
+	SetDefault(ctx context.Context, userID string, paymentMethodID string) (domain.PaymentMethod, error)
 }
 
 // FavoriteRepository tracks favorite designs per user.

@@ -25,6 +25,12 @@ type memoryAddressRepo struct {
 	seq   int
 }
 
+type memoryPaymentMethodRepo struct {
+	store map[string]map[string]domain.PaymentMethod
+	clock func() time.Time
+	seq   int
+}
+
 type repoErr struct {
 	err      error
 	notFound bool
@@ -47,6 +53,13 @@ func newMemoryUserRepo(clock func() time.Time) *memoryUserRepo {
 func newMemoryAddressRepo(clock func() time.Time) *memoryAddressRepo {
 	return &memoryAddressRepo{
 		store: make(map[string]map[string]domain.Address),
+		clock: clock,
+	}
+}
+
+func newMemoryPaymentMethodRepo(clock func() time.Time) *memoryPaymentMethodRepo {
+	return &memoryPaymentMethodRepo{
+		store: make(map[string]map[string]domain.PaymentMethod),
 		clock: clock,
 	}
 }
@@ -235,6 +248,125 @@ func (m *memoryAddressRepo) SetDefaultFlags(_ context.Context, userID string, ad
 	return addr, nil
 }
 
+func (m *memoryPaymentMethodRepo) List(_ context.Context, userID string) ([]domain.PaymentMethod, error) {
+	if m.store == nil {
+		return nil, nil
+	}
+	bucket := m.store[userID]
+	result := make([]domain.PaymentMethod, 0, len(bucket))
+	for _, pm := range bucket {
+		result = append(result, clonePaymentMethod(pm))
+	}
+	sort.Slice(result, func(i, j int) bool {
+		switch {
+		case result[i].CreatedAt.After(result[j].CreatedAt):
+			return true
+		case result[i].CreatedAt.Before(result[j].CreatedAt):
+			return false
+		default:
+			return result[i].ID < result[j].ID
+		}
+	})
+	return result, nil
+}
+
+func (m *memoryPaymentMethodRepo) Insert(_ context.Context, userID string, method domain.PaymentMethod) (domain.PaymentMethod, error) {
+	if m.store == nil {
+		m.store = make(map[string]map[string]domain.PaymentMethod)
+	}
+	bucket := m.store[userID]
+	if bucket == nil {
+		bucket = make(map[string]domain.PaymentMethod)
+		m.store[userID] = bucket
+	}
+
+	token := strings.TrimSpace(method.Token)
+	for _, existing := range bucket {
+		if strings.TrimSpace(existing.Token) == token {
+			return domain.PaymentMethod{}, &repoErr{err: errors.New("duplicate token"), conflict: true}
+		}
+	}
+
+	id := strings.TrimSpace(method.ID)
+	if id == "" {
+		m.seq++
+		id = fmt.Sprintf("pm-%d", m.seq)
+	}
+
+	now := m.clock().UTC()
+	if method.CreatedAt.IsZero() {
+		method.CreatedAt = now
+	} else {
+		method.CreatedAt = method.CreatedAt.UTC()
+	}
+	method.UpdatedAt = now
+	method.ID = id
+
+	if method.IsDefault {
+		for key, other := range bucket {
+			if other.IsDefault {
+				other.IsDefault = false
+				bucket[key] = other
+			}
+		}
+	}
+
+	bucket[id] = clonePaymentMethod(method)
+	return clonePaymentMethod(method), nil
+}
+
+func (m *memoryPaymentMethodRepo) Delete(_ context.Context, userID string, paymentMethodID string) error {
+	if m.store == nil {
+		return nil
+	}
+	if bucket := m.store[userID]; bucket != nil {
+		delete(bucket, paymentMethodID)
+	}
+	return nil
+}
+
+func (m *memoryPaymentMethodRepo) Get(_ context.Context, userID string, paymentMethodID string) (domain.PaymentMethod, error) {
+	if m.store == nil {
+		return domain.PaymentMethod{}, errors.New("not found")
+	}
+	if bucket := m.store[userID]; bucket != nil {
+		if pm, ok := bucket[paymentMethodID]; ok {
+			return clonePaymentMethod(pm), nil
+		}
+	}
+	return domain.PaymentMethod{}, errors.New("not found")
+}
+
+func (m *memoryPaymentMethodRepo) SetDefault(_ context.Context, userID string, paymentMethodID string) (domain.PaymentMethod, error) {
+	bucket := m.store[userID]
+	if bucket == nil {
+		return domain.PaymentMethod{}, errors.New("not found")
+	}
+	target, ok := bucket[paymentMethodID]
+	if !ok {
+		return domain.PaymentMethod{}, errors.New("not found")
+	}
+	for key, pm := range bucket {
+		if key == paymentMethodID {
+			continue
+		}
+		if pm.IsDefault {
+			pm.IsDefault = false
+			pm.UpdatedAt = m.clock().UTC()
+			bucket[key] = pm
+		}
+	}
+	target.IsDefault = true
+	target.UpdatedAt = m.clock().UTC()
+	bucket[paymentMethodID] = target
+	return clonePaymentMethod(target), nil
+}
+
+func clonePaymentMethod(method domain.PaymentMethod) domain.PaymentMethod {
+	copied := method
+	return copied
+}
+
 type captureAuditService struct {
 	records []AuditLogRecord
 }
@@ -257,6 +389,28 @@ func (s *stubFirebase) GetUser(_ context.Context, uid string) (*firebaseauth.Use
 		return nil, fmt.Errorf("firebase user %s not found", uid)
 	}
 	return record, nil
+}
+
+type stubPaymentVerifier struct {
+	verifyFunc func(ctx context.Context, provider string, token string) (PaymentMethodMetadata, error)
+}
+
+func (s *stubPaymentVerifier) VerifyPaymentMethod(ctx context.Context, provider string, token string) (PaymentMethodMetadata, error) {
+	if s != nil && s.verifyFunc != nil {
+		return s.verifyFunc(ctx, provider, token)
+	}
+	return PaymentMethodMetadata{}, errors.New("not implemented")
+}
+
+type stubInvoiceChecker struct {
+	checkFunc func(ctx context.Context, userID string) (bool, error)
+}
+
+func (s *stubInvoiceChecker) HasOutstandingInvoices(ctx context.Context, userID string) (bool, error) {
+	if s != nil && s.checkFunc != nil {
+		return s.checkFunc(ctx, userID)
+	}
+	return false, nil
 }
 
 func TestUserServiceGetProfileSeedsFromFirebase(t *testing.T) {
@@ -700,6 +854,252 @@ func TestUserServiceSetUserActiveConflict(t *testing.T) {
 	})
 	if !errors.Is(err, errProfileConflict) {
 		t.Fatalf("expected profile conflict, got %v", err)
+	}
+}
+
+func TestUserServicePaymentMethodsLifecycle(t *testing.T) {
+	ctx := context.Background()
+	current := time.Date(2024, 9, 1, 9, 0, 0, 0, time.UTC)
+	clock := func() time.Time {
+		now := current
+		current = current.Add(time.Second)
+		return now
+	}
+
+	userRepo := newMemoryUserRepo(clock)
+	paymentRepo := newMemoryPaymentMethodRepo(clock)
+	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
+	verifier := &stubPaymentVerifier{
+		verifyFunc: func(ctx context.Context, provider string, token string) (PaymentMethodMetadata, error) {
+			return PaymentMethodMetadata{
+				Token:    token,
+				Brand:    "visa",
+				Last4:    token[len(token)-4:],
+				ExpMonth: 12,
+				ExpYear:  2030,
+			}, nil
+		},
+	}
+
+	svc, err := NewUserService(UserServiceDeps{
+		Users:           userRepo,
+		PaymentMethods:  paymentRepo,
+		PaymentVerifier: verifier,
+		Firebase:        firebase,
+		Clock:           clock,
+	})
+	if err != nil {
+		t.Fatalf("new user service: %v", err)
+	}
+
+	first, err := svc.AddPaymentMethod(ctx, AddPaymentMethodCommand{
+		UserID:   "user-pay",
+		Provider: "Stripe",
+		Token:    "pm_1000",
+	})
+	if err != nil {
+		t.Fatalf("add payment method: %v", err)
+	}
+	if !first.IsDefault {
+		t.Fatalf("expected first method to be default")
+	}
+	if first.Brand != "visa" || first.Last4 != "1000" {
+		t.Fatalf("expected metadata populated, got brand=%s last4=%s", first.Brand, first.Last4)
+	}
+
+	second, err := svc.AddPaymentMethod(ctx, AddPaymentMethodCommand{
+		UserID:   "user-pay",
+		Provider: "stripe",
+		Token:    "pm_2000",
+	})
+	if err != nil {
+		t.Fatalf("add second payment method: %v", err)
+	}
+	if second.IsDefault {
+		t.Fatalf("expected second method not default by default")
+	}
+
+	third, err := svc.AddPaymentMethod(ctx, AddPaymentMethodCommand{
+		UserID:      "user-pay",
+		Provider:    "stripe",
+		Token:       "pm_3000",
+		MakeDefault: true,
+	})
+	if err != nil {
+		t.Fatalf("add third payment method: %v", err)
+	}
+	if !third.IsDefault {
+		t.Fatalf("expected make_default to mark card as default")
+	}
+
+	methods, err := svc.ListPaymentMethods(ctx, "user-pay")
+	if err != nil {
+		t.Fatalf("list payment methods: %v", err)
+	}
+	if len(methods) != 3 {
+		t.Fatalf("expected 3 methods, got %d", len(methods))
+	}
+	if methods[0].ID != third.ID {
+		t.Fatalf("expected default method first, got %s", methods[0].ID)
+	}
+}
+
+func TestUserServiceAddPaymentMethodDuplicate(t *testing.T) {
+	ctx := context.Background()
+	current := time.Date(2024, 9, 2, 9, 0, 0, 0, time.UTC)
+	clock := func() time.Time {
+		now := current
+		current = current.Add(time.Second)
+		return now
+	}
+
+	userRepo := newMemoryUserRepo(clock)
+	paymentRepo := newMemoryPaymentMethodRepo(clock)
+	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
+	verifier := &stubPaymentVerifier{
+		verifyFunc: func(ctx context.Context, provider string, token string) (PaymentMethodMetadata, error) {
+			return PaymentMethodMetadata{Token: token}, nil
+		},
+	}
+
+	svc, err := NewUserService(UserServiceDeps{
+		Users:           userRepo,
+		PaymentMethods:  paymentRepo,
+		PaymentVerifier: verifier,
+		Firebase:        firebase,
+		Clock:           clock,
+	})
+	if err != nil {
+		t.Fatalf("new user service: %v", err)
+	}
+
+	if _, err := svc.AddPaymentMethod(ctx, AddPaymentMethodCommand{
+		UserID:   "user-dup",
+		Provider: "stripe",
+		Token:    "pm_dup",
+	}); err != nil {
+		t.Fatalf("seed payment method: %v", err)
+	}
+
+	_, err = svc.AddPaymentMethod(ctx, AddPaymentMethodCommand{
+		UserID:   "user-dup",
+		Provider: "stripe",
+		Token:    "pm_dup",
+	})
+	if !errors.Is(err, errPaymentMethodDuplicate) {
+		t.Fatalf("expected duplicate error, got %v", err)
+	}
+}
+
+func TestUserServiceRemovePaymentMethodReassignsDefault(t *testing.T) {
+	ctx := context.Background()
+	current := time.Date(2024, 9, 3, 9, 0, 0, 0, time.UTC)
+	clock := func() time.Time {
+		now := current
+		current = current.Add(time.Second)
+		return now
+	}
+
+	userRepo := newMemoryUserRepo(clock)
+	paymentRepo := newMemoryPaymentMethodRepo(clock)
+	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
+	verifier := &stubPaymentVerifier{
+		verifyFunc: func(ctx context.Context, provider string, token string) (PaymentMethodMetadata, error) {
+			return PaymentMethodMetadata{Token: token}, nil
+		},
+	}
+
+	svc, err := NewUserService(UserServiceDeps{
+		Users:           userRepo,
+		PaymentMethods:  paymentRepo,
+		PaymentVerifier: verifier,
+		Firebase:        firebase,
+		Clock:           clock,
+	})
+	if err != nil {
+		t.Fatalf("new user service: %v", err)
+	}
+
+	first, err := svc.AddPaymentMethod(ctx, AddPaymentMethodCommand{UserID: "user-rem", Provider: "stripe", Token: "pm_one"})
+	if err != nil {
+		t.Fatalf("add first: %v", err)
+	}
+	second, err := svc.AddPaymentMethod(ctx, AddPaymentMethodCommand{UserID: "user-rem", Provider: "stripe", Token: "pm_two"})
+	if err != nil {
+		t.Fatalf("add second: %v", err)
+	}
+	third, err := svc.AddPaymentMethod(ctx, AddPaymentMethodCommand{UserID: "user-rem", Provider: "stripe", Token: "pm_three", MakeDefault: true})
+	if err != nil {
+		t.Fatalf("add third: %v", err)
+	}
+
+	if err := svc.RemovePaymentMethod(ctx, RemovePaymentMethodCommand{
+		UserID:          "user-rem",
+		PaymentMethodID: third.ID,
+	}); err != nil {
+		t.Fatalf("remove default: %v", err)
+	}
+
+	methods, err := svc.ListPaymentMethods(ctx, "user-rem")
+	if err != nil {
+		t.Fatalf("list methods: %v", err)
+	}
+	if len(methods) != 2 {
+		t.Fatalf("expected 2 methods, got %d", len(methods))
+	}
+	if !methods[0].IsDefault {
+		t.Fatalf("expected default reassigned, got %+v", methods[0])
+	}
+	if methods[0].ID != first.ID && methods[0].ID != second.ID {
+		t.Fatalf("unexpected default id %s", methods[0].ID)
+	}
+}
+
+func TestUserServiceRemovePaymentMethodBlockedByInvoices(t *testing.T) {
+	ctx := context.Background()
+	current := time.Date(2024, 9, 4, 9, 0, 0, 0, time.UTC)
+	clock := func() time.Time {
+		now := current
+		current = current.Add(time.Second)
+		return now
+	}
+
+	userRepo := newMemoryUserRepo(clock)
+	paymentRepo := newMemoryPaymentMethodRepo(clock)
+	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
+	verifier := &stubPaymentVerifier{
+		verifyFunc: func(ctx context.Context, provider string, token string) (PaymentMethodMetadata, error) {
+			return PaymentMethodMetadata{Token: token}, nil
+		},
+	}
+
+	svc, err := NewUserService(UserServiceDeps{
+		Users:           userRepo,
+		PaymentMethods:  paymentRepo,
+		PaymentVerifier: verifier,
+		Invoices: &stubInvoiceChecker{
+			checkFunc: func(ctx context.Context, userID string) (bool, error) {
+				return true, nil
+			},
+		},
+		Firebase: firebase,
+		Clock:    clock,
+	})
+	if err != nil {
+		t.Fatalf("new user service: %v", err)
+	}
+
+	first, err := svc.AddPaymentMethod(ctx, AddPaymentMethodCommand{UserID: "user-inv", Provider: "stripe", Token: "pm_inv"})
+	if err != nil {
+		t.Fatalf("add method: %v", err)
+	}
+
+	err = svc.RemovePaymentMethod(ctx, RemovePaymentMethodCommand{
+		UserID:          "user-inv",
+		PaymentMethodID: first.ID,
+	})
+	if !errors.Is(err, errPaymentMethodInUse) {
+		t.Fatalf("expected in-use error, got %v", err)
 	}
 }
 

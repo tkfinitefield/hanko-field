@@ -29,10 +29,15 @@ type stripeRefundAPI interface {
 	New(params *stripe.RefundParams) (*stripe.Refund, error)
 }
 
+type stripePaymentMethodAPI interface {
+	Get(id string, params *stripe.PaymentMethodParams) (*stripe.PaymentMethod, error)
+}
+
 type stripeClients struct {
-	sessions stripeSessionAPI
-	intents  stripePaymentIntentAPI
-	refunds  stripeRefundAPI
+	sessions       stripeSessionAPI
+	intents        stripePaymentIntentAPI
+	refunds        stripeRefundAPI
+	paymentMethods stripePaymentMethodAPI
 }
 
 // StripeProviderConfig configures the StripeProvider.
@@ -66,13 +71,14 @@ func NewStripeProvider(cfg StripeProviderConfig) (*StripeProvider, error) {
 	} else {
 		sc := client.New(apiKey, cfg.Backends)
 		clients = stripeClients{
-			sessions: sc.CheckoutSessions,
-			intents:  sc.PaymentIntents,
-			refunds:  sc.Refunds,
+			sessions:       sc.CheckoutSessions,
+			intents:        sc.PaymentIntents,
+			refunds:        sc.Refunds,
+			paymentMethods: sc.PaymentMethods,
 		}
 	}
 
-	if clients.sessions == nil || clients.intents == nil || clients.refunds == nil {
+	if clients.sessions == nil || clients.intents == nil || clients.refunds == nil || clients.paymentMethods == nil {
 		return nil, errors.New("stripe: incomplete client configuration")
 	}
 

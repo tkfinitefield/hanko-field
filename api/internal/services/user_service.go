@@ -36,7 +36,13 @@ var (
 	errInvalidAddressCountry        = errors.New("user: invalid address country")
 	errInvalidAddressPostalCode     = errors.New("user: invalid address postal code")
 	errInvalidAddressPhone          = errors.New("user: invalid address phone")
-	errPaymentMethodsNotImplemented = errors.New("user: payment method operations not yet implemented")
+	errPaymentRepositoryUnavailable = errors.New("user: payment method repository not configured")
+	errPaymentVerifierUnavailable   = errors.New("user: payment method verifier not configured")
+	errPaymentProviderRequired      = errors.New("user: payment provider is required")
+	errPaymentTokenRequired         = errors.New("user: payment token is required")
+	errPaymentMethodNotFound        = errors.New("user: payment method not found")
+	errPaymentMethodDuplicate       = errors.New("user: payment method already exists")
+	errPaymentMethodInUse           = errors.New("user: payment method has outstanding invoices")
 	errFavoritesNotImplemented      = errors.New("user: favorites operations not yet implemented")
 	emailMaskSuffix                 = "@hanko-field.invalid"
 	notificationKeyPattern          = regexp.MustCompile(`^[a-z0-9_.-]{1,40}$`)
@@ -72,27 +78,41 @@ var (
 	ErrUserInvalidAddressPostalCode = errInvalidAddressPostalCode
 	// ErrUserInvalidAddressPhone indicates the phone number failed validation.
 	ErrUserInvalidAddressPhone = errInvalidAddressPhone
+	// ErrUserPaymentMethodNotFound indicates the requested payment method does not exist.
+	ErrUserPaymentMethodNotFound = errPaymentMethodNotFound
+	// ErrUserPaymentMethodDuplicate indicates the PSP token already exists for the user.
+	ErrUserPaymentMethodDuplicate = errPaymentMethodDuplicate
+	// ErrUserPaymentMethodInUse indicates the payment method cannot be removed due to outstanding invoices.
+	ErrUserPaymentMethodInUse = errPaymentMethodInUse
+	// ErrUserPaymentProviderRequired indicates the provider input was empty.
+	ErrUserPaymentProviderRequired = errPaymentProviderRequired
+	// ErrUserPaymentTokenRequired indicates the token input was empty.
+	ErrUserPaymentTokenRequired = errPaymentTokenRequired
 )
 
 // UserServiceDeps bundles the dependencies required to construct a user service instance.
 type UserServiceDeps struct {
-	Users          repositories.UserRepository
-	Addresses      repositories.AddressRepository
-	PaymentMethods repositories.PaymentMethodRepository
-	Favorites      repositories.FavoriteRepository
-	Audit          AuditLogService
-	Firebase       auth.UserGetter
-	Clock          func() time.Time
+	Users           repositories.UserRepository
+	Addresses       repositories.AddressRepository
+	PaymentMethods  repositories.PaymentMethodRepository
+	PaymentVerifier PaymentMethodVerifier
+	Invoices        OutstandingInvoiceChecker
+	Favorites       repositories.FavoriteRepository
+	Audit           AuditLogService
+	Firebase        auth.UserGetter
+	Clock           func() time.Time
 }
 
 type userService struct {
-	users          repositories.UserRepository
-	addresses      repositories.AddressRepository
-	paymentMethods repositories.PaymentMethodRepository
-	favorites      repositories.FavoriteRepository
-	audit          AuditLogService
-	firebase       auth.UserGetter
-	clock          func() time.Time
+	users           repositories.UserRepository
+	addresses       repositories.AddressRepository
+	paymentMethods  repositories.PaymentMethodRepository
+	paymentVerifier PaymentMethodVerifier
+	invoices        OutstandingInvoiceChecker
+	favorites       repositories.FavoriteRepository
+	audit           AuditLogService
+	firebase        auth.UserGetter
+	clock           func() time.Time
 }
 
 // NewUserService wires dependencies into a concrete UserService implementation.
@@ -110,12 +130,14 @@ func NewUserService(deps UserServiceDeps) (UserService, error) {
 	}
 
 	return &userService{
-		users:          deps.Users,
-		addresses:      deps.Addresses,
-		paymentMethods: deps.PaymentMethods,
-		favorites:      deps.Favorites,
-		audit:          deps.Audit,
-		firebase:       deps.Firebase,
+		users:           deps.Users,
+		addresses:       deps.Addresses,
+		paymentMethods:  deps.PaymentMethods,
+		paymentVerifier: deps.PaymentVerifier,
+		invoices:        deps.Invoices,
+		favorites:       deps.Favorites,
+		audit:           deps.Audit,
+		firebase:        deps.Firebase,
 		clock: func() time.Time {
 			return clock().UTC()
 		},
@@ -449,15 +471,169 @@ func (s *userService) DeleteAddress(ctx context.Context, cmd DeleteAddressComman
 }
 
 func (s *userService) ListPaymentMethods(ctx context.Context, userID string) ([]PaymentMethod, error) {
-	return nil, errPaymentMethodsNotImplemented
+	if s.paymentMethods == nil {
+		return nil, errPaymentRepositoryUnavailable
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, errUserIDRequired
+	}
+	items, err := s.paymentMethods.List(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	copied := append([]PaymentMethod(nil), items...)
+	slices.SortStableFunc(copied, func(a, b PaymentMethod) int {
+		if a.IsDefault && !b.IsDefault {
+			return -1
+		}
+		if !a.IsDefault && b.IsDefault {
+			return 1
+		}
+		switch {
+		case a.CreatedAt.After(b.CreatedAt):
+			return -1
+		case a.CreatedAt.Before(b.CreatedAt):
+			return 1
+		default:
+			return strings.Compare(a.ID, b.ID)
+		}
+	})
+	return copied, nil
 }
 
 func (s *userService) AddPaymentMethod(ctx context.Context, cmd AddPaymentMethodCommand) (PaymentMethod, error) {
-	return PaymentMethod{}, errPaymentMethodsNotImplemented
+	if s.paymentMethods == nil {
+		return PaymentMethod{}, errPaymentRepositoryUnavailable
+	}
+	if s.paymentVerifier == nil {
+		return PaymentMethod{}, errPaymentVerifierUnavailable
+	}
+
+	userID := strings.TrimSpace(cmd.UserID)
+	if userID == "" {
+		return PaymentMethod{}, errUserIDRequired
+	}
+
+	provider := normaliseProvider(cmd.Provider)
+	if provider == "" {
+		return PaymentMethod{}, errPaymentProviderRequired
+	}
+
+	token := strings.TrimSpace(cmd.Token)
+	if token == "" {
+		return PaymentMethod{}, errPaymentTokenRequired
+	}
+
+	meta, err := s.paymentVerifier.VerifyPaymentMethod(ctx, provider, token)
+	if err != nil {
+		return PaymentMethod{}, err
+	}
+
+	if trimmed := strings.TrimSpace(meta.Token); trimmed != "" {
+		token = trimmed
+	}
+
+	existing, err := s.paymentMethods.List(ctx, userID)
+	if err != nil {
+		return PaymentMethod{}, err
+	}
+	for _, method := range existing {
+		if strings.TrimSpace(method.Token) == token {
+			return PaymentMethod{}, errPaymentMethodDuplicate
+		}
+	}
+
+	now := s.clock()
+	method := PaymentMethod{
+		Provider:  provider,
+		Token:     token,
+		Brand:     strings.TrimSpace(meta.Brand),
+		Last4:     strings.TrimSpace(meta.Last4),
+		ExpMonth:  meta.ExpMonth,
+		ExpYear:   meta.ExpYear,
+		IsDefault: cmd.MakeDefault,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if len(existing) == 0 {
+		method.IsDefault = true
+	}
+
+	saved, err := s.paymentMethods.Insert(ctx, userID, method)
+	if err != nil {
+		if isConflict(err) {
+			return PaymentMethod{}, errPaymentMethodDuplicate
+		}
+		return PaymentMethod{}, err
+	}
+	return saved, nil
 }
 
 func (s *userService) RemovePaymentMethod(ctx context.Context, cmd RemovePaymentMethodCommand) error {
-	return errPaymentMethodsNotImplemented
+	if s.paymentMethods == nil {
+		return errPaymentRepositoryUnavailable
+	}
+
+	userID := strings.TrimSpace(cmd.UserID)
+	paymentMethodID := strings.TrimSpace(cmd.PaymentMethodID)
+	if userID == "" {
+		return errUserIDRequired
+	}
+	if paymentMethodID == "" {
+		return errPaymentMethodNotFound
+	}
+
+	method, err := s.paymentMethods.Get(ctx, userID, paymentMethodID)
+	if err != nil {
+		if isNotFound(err) {
+			return errPaymentMethodNotFound
+		}
+		return err
+	}
+
+	if s.invoices != nil {
+		blocked, err := s.invoices.HasOutstandingInvoices(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return errPaymentMethodInUse
+		}
+	}
+
+	if err := s.paymentMethods.Delete(ctx, userID, paymentMethodID); err != nil {
+		if isNotFound(err) {
+			return errPaymentMethodNotFound
+		}
+		return err
+	}
+
+	if !method.IsDefault {
+		return nil
+	}
+
+	remaining, err := s.paymentMethods.List(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if len(remaining) == 0 {
+		return nil
+	}
+
+	next, ok := selectNextDefault(remaining)
+	if !ok {
+		return nil
+	}
+
+	if _, err := s.paymentMethods.SetDefault(ctx, userID, next.ID); err != nil {
+		if isNotFound(err) {
+			return errPaymentMethodNotFound
+		}
+		return err
+	}
+
+	return nil
 }
 
 func (s *userService) ListFavorites(ctx context.Context, userID string, pager Pagination) (domain.CursorPage[FavoriteDesign], error) {
@@ -872,6 +1048,32 @@ func stringFromPointer(value *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*value)
+}
+
+func normaliseProvider(provider string) string {
+	return strings.ToLower(strings.TrimSpace(provider))
+}
+
+func selectNextDefault(methods []PaymentMethod) (PaymentMethod, bool) {
+	for _, method := range methods {
+		if method.IsDefault {
+			return method, true
+		}
+	}
+	if len(methods) == 0 {
+		return PaymentMethod{}, false
+	}
+	candidate := methods[0]
+	for _, method := range methods[1:] {
+		if method.CreatedAt.After(candidate.CreatedAt) {
+			candidate = method
+			continue
+		}
+		if method.CreatedAt.Equal(candidate.CreatedAt) && strings.Compare(method.ID, candidate.ID) < 0 {
+			candidate = method
+		}
+	}
+	return candidate, true
 }
 
 func profileFromFirebase(record *firebaseauth.UserRecord, now time.Time) domain.UserProfile {

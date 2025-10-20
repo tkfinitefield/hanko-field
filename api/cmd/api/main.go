@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/hanko-field/api/internal/handlers"
+	"github.com/hanko-field/api/internal/payments"
 	"github.com/hanko-field/api/internal/platform/auth"
 	"github.com/hanko-field/api/internal/platform/config"
 	pfirestore "github.com/hanko-field/api/internal/platform/firestore"
@@ -150,12 +151,30 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to initialise address repository", zap.Error(err))
 	}
+	paymentRepo, err := firestoreRepo.NewPaymentMethodRepository(firestoreProvider)
+	if err != nil {
+		logger.Fatal("failed to initialise payment method repository", zap.Error(err))
+	}
+
+	if strings.TrimSpace(cfg.PSP.StripeAPIKey) == "" {
+		logger.Fatal("stripe api key is required for payment method management")
+	}
+	stripeVerifier, err := payments.NewStripePaymentMethodVerifier(payments.StripeProviderConfig{
+		APIKey: cfg.PSP.StripeAPIKey,
+	})
+	if err != nil {
+		logger.Fatal("failed to initialise stripe payment verifier", zap.Error(err))
+	}
+	paymentVerifier := &providerPaymentVerifier{stripe: stripeVerifier}
+
 	userService, err := services.NewUserService(services.UserServiceDeps{
-		Users:     userRepo,
-		Addresses: addressRepo,
-		Audit:     nil,
-		Firebase:  firebaseVerifier,
-		Clock:     time.Now,
+		Users:           userRepo,
+		Addresses:       addressRepo,
+		PaymentMethods:  paymentRepo,
+		PaymentVerifier: paymentVerifier,
+		Audit:           nil,
+		Firebase:        firebaseVerifier,
+		Clock:           time.Now,
 	})
 	if err != nil {
 		logger.Fatal("failed to initialise user service", zap.Error(err))
@@ -608,4 +627,30 @@ func uniqueStrings(values []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+type providerPaymentVerifier struct {
+	stripe *payments.StripePaymentMethodVerifier
+}
+
+func (p *providerPaymentVerifier) VerifyPaymentMethod(ctx context.Context, provider string, token string) (services.PaymentMethodMetadata, error) {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "stripe":
+		if p.stripe == nil {
+			return services.PaymentMethodMetadata{}, fmt.Errorf("stripe payment verifier unavailable")
+		}
+		details, err := p.stripe.Lookup(ctx, token)
+		if err != nil {
+			return services.PaymentMethodMetadata{}, err
+		}
+		return services.PaymentMethodMetadata{
+			Token:    details.Token,
+			Brand:    details.Brand,
+			Last4:    details.Last4,
+			ExpMonth: details.ExpMonth,
+			ExpYear:  details.ExpYear,
+		}, nil
+	default:
+		return services.PaymentMethodMetadata{}, fmt.Errorf("unsupported payment provider %q", provider)
+	}
 }

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	domain "github.com/hanko-field/api/internal/domain"
 	"github.com/hanko-field/api/internal/platform/auth"
 	"github.com/hanko-field/api/internal/services"
@@ -242,6 +243,109 @@ func TestMeHandlersUpdateProfile(t *testing.T) {
 	}
 }
 
+func TestMeHandlersListPaymentMethods(t *testing.T) {
+	svc := &stubUserService{
+		listPaymentMethodsFunc: func(ctx context.Context, userID string) ([]services.PaymentMethod, error) {
+			if userID != "user-1" {
+				t.Fatalf("expected user-1, got %s", userID)
+			}
+			return []services.PaymentMethod{
+				{ID: "pm_1", Provider: "stripe", Token: "pm_token", Brand: "visa", Last4: "4242", ExpMonth: 12, ExpYear: 2030, IsDefault: true},
+			}, nil
+		},
+	}
+	handler := NewMeHandlers(nil, svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/me/payment-methods", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	handler.listPaymentMethods(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var payload []paymentMethodPayload
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload) != 1 {
+		t.Fatalf("expected 1 payment method, got %d", len(payload))
+	}
+	if payload[0].ID != "pm_1" || payload[0].Provider != "stripe" || !payload[0].IsDefault {
+		t.Fatalf("unexpected payload %#v", payload[0])
+	}
+}
+
+func TestMeHandlersCreatePaymentMethod(t *testing.T) {
+	var captured services.AddPaymentMethodCommand
+	svc := &stubUserService{
+		addPaymentMethodFunc: func(ctx context.Context, cmd services.AddPaymentMethodCommand) (services.PaymentMethod, error) {
+			captured = cmd
+			return services.PaymentMethod{
+				ID:        "pm_new",
+				Provider:  cmd.Provider,
+				Token:     cmd.Token,
+				IsDefault: true,
+			}, nil
+		},
+	}
+	handler := NewMeHandlers(nil, svc)
+
+	body := `{"provider":"stripe","token":"pm_new","make_default":true}`
+	req := httptest.NewRequest(http.MethodPost, "/me/payment-methods", strings.NewReader(body))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-2"}))
+
+	rr := httptest.NewRecorder()
+	handler.createPaymentMethod(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rr.Code)
+	}
+	if captured.UserID != "user-2" || captured.Provider != "stripe" || captured.Token != "pm_new" || !captured.MakeDefault {
+		t.Fatalf("unexpected command %#v", captured)
+	}
+	if rr.Header().Get("Location") == "" {
+		t.Fatalf("expected location header")
+	}
+
+	var payload paymentMethodPayload
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.ID != "pm_new" || !payload.IsDefault {
+		t.Fatalf("unexpected payload %#v", payload)
+	}
+}
+
+func TestMeHandlersDeletePaymentMethod(t *testing.T) {
+	var removed services.RemovePaymentMethodCommand
+	svc := &stubUserService{
+		removePaymentMethodFunc: func(ctx context.Context, cmd services.RemovePaymentMethodCommand) error {
+			removed = cmd
+			return nil
+		},
+	}
+	handler := NewMeHandlers(nil, svc)
+
+	req := httptest.NewRequest(http.MethodDelete, "/me/payment-methods/pm_123", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-3"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("paymentMethodID", "pm_123")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rr := httptest.NewRecorder()
+	handler.deletePaymentMethod(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d", rr.Code)
+	}
+	if removed.UserID != "user-3" || removed.PaymentMethodID != "pm_123" {
+		t.Fatalf("unexpected remove command %#v", removed)
+	}
+}
+
 func TestMeHandlersUpdateProfileRejectsDisallowedField(t *testing.T) {
 	svc := &stubUserService{
 		getProfileFunc: func(ctx context.Context, userID string) (services.UserProfile, error) {
@@ -383,11 +487,14 @@ func TestMeHandlersUpdateProfileConflict(t *testing.T) {
 }
 
 type stubUserService struct {
-	getProfileFunc    func(ctx context.Context, userID string) (services.UserProfile, error)
-	updateProfileFunc func(ctx context.Context, cmd services.UpdateProfileCommand) (services.UserProfile, error)
-	listAddressesFunc func(ctx context.Context, userID string) ([]services.Address, error)
-	upsertAddressFunc func(ctx context.Context, cmd services.UpsertAddressCommand) (services.Address, error)
-	deleteAddressFunc func(ctx context.Context, cmd services.DeleteAddressCommand) error
+	getProfileFunc          func(ctx context.Context, userID string) (services.UserProfile, error)
+	updateProfileFunc       func(ctx context.Context, cmd services.UpdateProfileCommand) (services.UserProfile, error)
+	listAddressesFunc       func(ctx context.Context, userID string) ([]services.Address, error)
+	upsertAddressFunc       func(ctx context.Context, cmd services.UpsertAddressCommand) (services.Address, error)
+	deleteAddressFunc       func(ctx context.Context, cmd services.DeleteAddressCommand) error
+	listPaymentMethodsFunc  func(ctx context.Context, userID string) ([]services.PaymentMethod, error)
+	addPaymentMethodFunc    func(ctx context.Context, cmd services.AddPaymentMethodCommand) (services.PaymentMethod, error)
+	removePaymentMethodFunc func(ctx context.Context, cmd services.RemovePaymentMethodCommand) error
 }
 
 func (s *stubUserService) GetProfile(ctx context.Context, userID string) (services.UserProfile, error) {
@@ -438,14 +545,23 @@ func (s *stubUserService) DeleteAddress(ctx context.Context, cmd services.Delete
 }
 
 func (s *stubUserService) ListPaymentMethods(ctx context.Context, userID string) ([]services.PaymentMethod, error) {
+	if s != nil && s.listPaymentMethodsFunc != nil {
+		return s.listPaymentMethodsFunc(ctx, userID)
+	}
 	return nil, errors.New("not implemented")
 }
 
 func (s *stubUserService) AddPaymentMethod(ctx context.Context, cmd services.AddPaymentMethodCommand) (services.PaymentMethod, error) {
+	if s != nil && s.addPaymentMethodFunc != nil {
+		return s.addPaymentMethodFunc(ctx, cmd)
+	}
 	return services.PaymentMethod{}, errors.New("not implemented")
 }
 
 func (s *stubUserService) RemovePaymentMethod(ctx context.Context, cmd services.RemovePaymentMethodCommand) error {
+	if s != nil && s.removePaymentMethodFunc != nil {
+		return s.removePaymentMethodFunc(ctx, cmd)
+	}
 	return errors.New("not implemented")
 }
 
