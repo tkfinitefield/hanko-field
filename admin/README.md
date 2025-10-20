@@ -24,6 +24,7 @@ make ensure-tailwind   # downloads tailwindcss standalone binary
 - `make css` – single build of Tailwind output (minified) to `public/static/app.css`.
 - `make css-watch` – Tailwind watch mode without starting the Go server.
 - `make lint` – `gofmt` and `go vet`.
+- `make test-ui` – run integration smoke tests with `httptest` + DOM assertions.
 
 `air` watches `*.go` and `*.templ` files (configured via `.air.toml`). Tailwind scans the paths listed in `tailwind.config.js`.
 

@@ -11,7 +11,7 @@
 - [x] [Configure chi/echo router with middleware for auth, CSRF, caching headers, and htmx request detection.](doc/admin/tasks/006-configure-chi-echo-router-with-middleware-for-auth-csrf-caching-headers-and-htmx-request-d.md)
 - [x] [Establish HTML template structure (`layouts`, `partials`, `components`) and helper functions (i18n, currency, date formatting).](doc/admin/tasks/007-establish-html-template-structure-layouts-partials-components-and-helper-functions-i18n-cu.md)
 - [x] [Implement Tailwind configuration, design tokens, and base components library (buttons, tables, forms, modals, toasts).](doc/admin/tasks/008-implement-tailwind-configuration-design-tokens-and-base-components-library-buttons-tables-.md)
-- [ ] [Set up integration tests harness (httptest + DOM assertions) and smoke test environment for admin flows.](doc/admin/tasks/009-set-up-integration-tests-harness-httptest-dom-assertions-and-smoke-test-environment-for-ad.md)
+- [x] [Set up integration tests harness (httptest + DOM assertions) and smoke test environment for admin flows.](doc/admin/tasks/009-set-up-integration-tests-harness-httptest-dom-assertions-and-smoke-test-environment-for-ad.md)
 
 ## 2. Authentication, Authorization, and Session Management
 - [ ] [Implement Firebase ID token verification for staff/admin, including refresh and error handling UX.](doc/admin/tasks/010-implement-firebase-id-token-verification-for-staff-admin-including-refresh-and-error-handl.md)

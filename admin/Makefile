@@ -67,6 +67,10 @@ lint: ## Run gofmt and go vet
 	@mkdir -p $(GOCACHE)
 	@GOCACHE=$(GOCACHE) go vet ./...
 
+.PHONY: test-ui
+test-ui: ## Run admin integration smoke tests
+	@go test ./internal/admin/httpserver
+
 .PHONY: ensure-tailwind
 ensure-tailwind: ## Download Tailwind standalone binary if required version missing
 	@mkdir -p $(BIN_DIR)

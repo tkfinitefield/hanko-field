@@ -27,6 +27,7 @@ This downloads the Tailwind standalone executable into `admin/bin/`.
 - `make css` – build a minified Tailwind bundle at `public/static/app.css`.
 - `make css-watch` – run Tailwind in watch mode only.
 - `make lint` – `gofmt` and `go vet`.
+- `make test-ui` – execute httptest-based integration smoke tests (see `internal/admin/httpserver/server_integration_test.go`).
 
 Go build cache is redirected to `.gocache` to remain within the repo sandbox. Static assets are embedded from `public/static`.
 
