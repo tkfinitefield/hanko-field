@@ -29,6 +29,18 @@
       </div>
     </footer>
     <script src="/assets/js/htmx.min.js"></script>
+    <script>
+      (function(){
+        function getCookie(name){
+          const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)'));
+          return m ? decodeURIComponent(m[1]) : '';
+        }
+        document.addEventListener('htmx:configRequest', function(e){
+          var token = getCookie('csrf_token');
+          if (token) { e.detail.headers['X-CSRF-Token'] = token; }
+        });
+      })();
+    </script>
   </body>
 </html>
 {{ end }}

@@ -32,6 +32,7 @@ Create the following secrets or update substitutions in `cloudbuild.yaml` to mat
 - `web-FIREBASE_API_KEY`
 - `web-FIREBASE_AUTH_DOMAIN`
 - `web-FIREBASE_PROJECT_ID`
+ - `web-SESSION_SIGNING_KEY` (session cookie HMAC key)
 
 Cloud Build deploy step uses `--set-secrets` to mount these into Cloud Run env vars.
 
