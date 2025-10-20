@@ -477,10 +477,43 @@ func (m *memoryDesignRepo) FindByID(_ context.Context, designID string) (domain.
 
 func (m *memoryDesignRepo) ListByOwner(_ context.Context, ownerID string, filter repositories.DesignListFilter) (domain.CursorPage[domain.Design], error) {
 	items := make([]domain.Design, 0)
-	for _, design := range m.store {
-		if design.OwnerID == ownerID {
-			items = append(items, cloneDesign(design))
+	statusAllow := make(map[string]struct{})
+	if len(filter.Status) > 0 {
+		for _, status := range filter.Status {
+			statusAllow[strings.ToLower(strings.TrimSpace(status))] = struct{}{}
 		}
+	}
+	typeAllow := make(map[string]struct{})
+	if len(filter.Types) > 0 {
+		for _, t := range filter.Types {
+			typeAllow[strings.ToLower(strings.TrimSpace(t))] = struct{}{}
+		}
+	}
+	var updatedAfter *time.Time
+	if filter.UpdatedAfter != nil {
+		value := filter.UpdatedAfter.UTC()
+		if !value.IsZero() {
+			updatedAfter = &value
+		}
+	}
+	for _, design := range m.store {
+		if design.OwnerID != ownerID {
+			continue
+		}
+		if len(statusAllow) > 0 {
+			if _, ok := statusAllow[strings.ToLower(string(design.Status))]; !ok {
+				continue
+			}
+		}
+		if len(typeAllow) > 0 {
+			if _, ok := typeAllow[strings.ToLower(string(design.Type))]; !ok {
+				continue
+			}
+		}
+		if updatedAfter != nil && !design.UpdatedAt.After(*updatedAfter) {
+			continue
+		}
+		items = append(items, cloneDesign(design))
 	}
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].UpdatedAt.After(items[j].UpdatedAt)
@@ -499,6 +532,15 @@ func cloneDesign(design domain.Design) domain.Design {
 	copy := design
 	if design.Snapshot != nil {
 		copy.Snapshot = maps.Clone(design.Snapshot)
+	}
+	if len(design.Versions) > 0 {
+		copy.Versions = make([]domain.DesignVersion, len(design.Versions))
+		for i, version := range design.Versions {
+			copy.Versions[i] = version
+			if version.Snapshot != nil {
+				copy.Versions[i].Snapshot = maps.Clone(version.Snapshot)
+			}
+		}
 	}
 	return copy
 }

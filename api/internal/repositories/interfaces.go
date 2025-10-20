@@ -313,8 +313,10 @@ type HealthRepository interface {
 // Filter DTOs shared across repositories ------------------------------------
 
 type DesignListFilter struct {
-	Status     []string
-	Pagination domain.Pagination
+	Status       []string
+	Types        []string
+	UpdatedAfter *time.Time
+	Pagination   domain.Pagination
 }
 
 type OrderListFilter struct {

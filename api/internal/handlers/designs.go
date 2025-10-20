@@ -8,7 +8,9 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -18,6 +20,10 @@ import (
 )
 
 const maxDesignRequestBody = 256 * 1024
+const (
+	defaultDesignPageSize = 20
+	maxDesignPageSize     = 100
+)
 
 // DesignHandlers exposes design creation endpoints for authenticated users.
 type DesignHandlers struct {
@@ -41,7 +47,158 @@ func (h *DesignHandlers) Routes(r chi.Router) {
 	if h.authn != nil {
 		r.Use(h.authn.RequireFirebaseAuth())
 	}
+	r.Get("/", h.listDesigns)
 	r.Post("/", h.createDesign)
+	r.Get("/{designID}", h.getDesign)
+}
+
+func (h *DesignHandlers) listDesigns(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	ownerID := strings.TrimSpace(identity.UID)
+	requestedOwner := firstNonEmpty(
+		strings.TrimSpace(r.URL.Query().Get("user")),
+		strings.TrimSpace(r.URL.Query().Get("user_id")),
+	)
+	if requestedOwner != "" && !strings.EqualFold(requestedOwner, ownerID) {
+		if !identity.HasAnyRole(auth.RoleStaff, auth.RoleAdmin) {
+			httpx.WriteError(ctx, w, httpx.NewError("forbidden", "insufficient permissions", http.StatusForbidden))
+			return
+		}
+		ownerID = requestedOwner
+	}
+
+	statusFilters := parseFilterValues(r.URL.Query()["status"])
+	typeFilters := parseFilterValues(r.URL.Query()["type"])
+
+	var updatedAfter *time.Time
+	if updatedRaw := strings.TrimSpace(r.URL.Query().Get("updatedAfter")); updatedRaw != "" {
+		parsed, err := parseTimeParam(updatedRaw)
+		if err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", fmt.Sprintf("invalid updatedAfter: %v", err), http.StatusBadRequest))
+			return
+		}
+		updatedAfter = &parsed
+	}
+
+	pageSize := defaultDesignPageSize
+	if sizeRaw := strings.TrimSpace(r.URL.Query().Get("page_size")); sizeRaw != "" {
+		size, err := strconv.Atoi(sizeRaw)
+		if err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "page_size must be an integer", http.StatusBadRequest))
+			return
+		}
+		if size < 0 {
+			size = defaultDesignPageSize
+		}
+		if size > maxDesignPageSize {
+			size = maxDesignPageSize
+		}
+		if size == 0 {
+			pageSize = defaultDesignPageSize
+		} else {
+			pageSize = size
+		}
+	}
+
+	filter := services.DesignListFilter{
+		OwnerID:      ownerID,
+		Status:       statusFilters,
+		Types:        typeFilters,
+		UpdatedAfter: updatedAfter,
+		Pagination: services.Pagination{
+			PageSize:  pageSize,
+			PageToken: strings.TrimSpace(r.URL.Query().Get("page_token")),
+		},
+	}
+
+	page, err := h.designs.ListDesigns(ctx, filter)
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	items := make([]designPayload, 0, len(page.Items))
+	for _, design := range page.Items {
+		items = append(items, buildDesignPayload(design))
+	}
+
+	response := designListResponse{
+		Items:         items,
+		NextPageToken: page.NextPageToken,
+	}
+	writeJSONResponse(w, http.StatusOK, response)
+}
+
+func (h *DesignHandlers) getDesign(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+
+	includeHistory := false
+	if flagRaw := strings.TrimSpace(r.URL.Query().Get("includeHistory")); flagRaw != "" {
+		value, err := strconv.ParseBool(flagRaw)
+		if err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "includeHistory must be a boolean", http.StatusBadRequest))
+			return
+		}
+		includeHistory = value
+	}
+
+	opts := services.DesignReadOptions{}
+	if includeHistory {
+		opts.IncludeVersions = true
+	}
+
+	design, err := h.designs.GetDesign(ctx, designID, opts)
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	ownerID := strings.TrimSpace(identity.UID)
+	if ownerID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	if !strings.EqualFold(design.OwnerID, ownerID) && !identity.HasAnyRole(auth.RoleStaff, auth.RoleAdmin) {
+		httpx.WriteError(ctx, w, httpx.NewError("design_not_found", "design not found", http.StatusNotFound))
+		return
+	}
+
+	payload := buildDesignPayload(design)
+	if includeHistory && len(design.Versions) > 0 {
+		payload.Versions = make([]designVersionPayload, 0, len(design.Versions))
+		for _, version := range design.Versions {
+			payload.Versions = append(payload.Versions, buildDesignVersionPayload(version))
+		}
+	}
+
+	writeJSONResponse(w, http.StatusOK, payload)
 }
 
 func (h *DesignHandlers) createDesign(w http.ResponseWriter, r *http.Request) {
@@ -204,24 +361,38 @@ type createDesignResponse struct {
 }
 
 type designPayload struct {
-	ID               string              `json:"id"`
-	Label            string              `json:"label"`
-	Type             string              `json:"type"`
-	TextLines        []string            `json:"text_lines"`
-	FontID           string              `json:"font_id,omitempty"`
-	MaterialID       string              `json:"material_id,omitempty"`
-	TemplateID       string              `json:"template_id,omitempty"`
-	Locale           string              `json:"locale,omitempty"`
-	Shape            string              `json:"shape,omitempty"`
-	SizeMM           float64             `json:"size_mm,omitempty"`
-	Status           string              `json:"status"`
-	ThumbnailURL     string              `json:"thumbnail_url,omitempty"`
-	CurrentVersionID string              `json:"current_version_id"`
-	Assets           designAssetsPayload `json:"assets"`
-	Source           designSourcePayload `json:"source"`
-	Snapshot         map[string]any      `json:"snapshot,omitempty"`
-	CreatedAt        string              `json:"created_at,omitempty"`
-	UpdatedAt        string              `json:"updated_at,omitempty"`
+	ID               string                 `json:"id"`
+	Label            string                 `json:"label"`
+	Type             string                 `json:"type"`
+	TextLines        []string               `json:"text_lines"`
+	FontID           string                 `json:"font_id,omitempty"`
+	MaterialID       string                 `json:"material_id,omitempty"`
+	TemplateID       string                 `json:"template_id,omitempty"`
+	Locale           string                 `json:"locale,omitempty"`
+	Shape            string                 `json:"shape,omitempty"`
+	SizeMM           float64                `json:"size_mm,omitempty"`
+	Status           string                 `json:"status"`
+	ThumbnailURL     string                 `json:"thumbnail_url,omitempty"`
+	CurrentVersionID string                 `json:"current_version_id"`
+	Assets           designAssetsPayload    `json:"assets"`
+	Source           designSourcePayload    `json:"source"`
+	Snapshot         map[string]any         `json:"snapshot,omitempty"`
+	CreatedAt        string                 `json:"created_at,omitempty"`
+	UpdatedAt        string                 `json:"updated_at,omitempty"`
+	Versions         []designVersionPayload `json:"versions,omitempty"`
+}
+
+type designVersionPayload struct {
+	ID        string         `json:"id"`
+	Version   int            `json:"version"`
+	Snapshot  map[string]any `json:"snapshot,omitempty"`
+	CreatedAt string         `json:"created_at,omitempty"`
+	CreatedBy string         `json:"created_by,omitempty"`
+}
+
+type designListResponse struct {
+	Items         []designPayload `json:"items"`
+	NextPageToken string          `json:"next_page_token,omitempty"`
 }
 
 type designAssetsPayload struct {
@@ -286,6 +457,23 @@ func buildDesignPayload(design services.Design) designPayload {
 	return payload
 }
 
+func buildDesignVersionPayload(version services.DesignVersion) designVersionPayload {
+	payload := designVersionPayload{
+		ID:      version.ID,
+		Version: version.Version,
+	}
+	if len(version.Snapshot) > 0 {
+		payload.Snapshot = cloneMap(version.Snapshot)
+	}
+	if !version.CreatedAt.IsZero() {
+		payload.CreatedAt = formatTime(version.CreatedAt)
+	}
+	if strings.TrimSpace(version.CreatedBy) != "" {
+		payload.CreatedBy = strings.TrimSpace(version.CreatedBy)
+	}
+	return payload
+}
+
 func assetRefPayloadFrom(ref *services.DesignAssetReference) *assetRefPayload {
 	if ref == nil {
 		return nil
@@ -313,4 +501,48 @@ func cloneMap(src map[string]any) map[string]any {
 		return nil
 	}
 	return maps.Clone(src)
+}
+
+func parseFilterValues(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	filters := make([]string, 0, len(values))
+	for _, raw := range values {
+		for _, part := range strings.Split(raw, ",") {
+			trimmed := strings.ToLower(strings.TrimSpace(part))
+			if trimmed == "" {
+				continue
+			}
+			if _, exists := seen[trimmed]; exists {
+				continue
+			}
+			seen[trimmed] = struct{}{}
+			filters = append(filters, trimmed)
+		}
+	}
+	return filters
+}
+
+func parseTimeParam(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, errors.New("timestamp is empty")
+	}
+	if ts, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return ts.UTC(), nil
+	}
+	if ts, err := time.Parse(time.RFC3339, value); err == nil {
+		return ts.UTC(), nil
+	}
+	return time.Time{}, fmt.Errorf("must be RFC3339 timestamp")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

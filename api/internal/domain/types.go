@@ -112,6 +112,7 @@ type Design struct {
 	Version          int
 	CurrentVersionID string
 	Snapshot         map[string]any
+	Versions         []DesignVersion
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	LastOrderedAt    *time.Time

@@ -269,13 +269,26 @@ func (s *designService) CreateDesign(ctx context.Context, cmd CreateDesignComman
 }
 
 // GetDesign fetches a single design by ID.
-func (s *designService) GetDesign(ctx context.Context, designID string, _ DesignReadOptions) (Design, error) {
+func (s *designService) GetDesign(ctx context.Context, designID string, opts DesignReadOptions) (Design, error) {
 	if s.designs == nil {
 		return Design{}, ErrDesignRepositoryUnavailable
 	}
 	design, err := s.designs.FindByID(ctx, designID)
 	if err != nil {
 		return Design{}, s.mapRepositoryError(err)
+	}
+	if opts.IncludeVersions {
+		if s.versions == nil {
+			return Design{}, ErrDesignRepositoryUnavailable
+		}
+		page, err := s.versions.ListByDesign(ctx, design.ID, domain.Pagination{})
+		if err != nil {
+			return Design{}, s.mapRepositoryError(err)
+		}
+		if len(page.Items) > 0 {
+			design.Versions = make([]domain.DesignVersion, len(page.Items))
+			copy(design.Versions, page.Items)
+		}
 	}
 	return design, nil
 }
@@ -286,8 +299,10 @@ func (s *designService) ListDesigns(ctx context.Context, filter DesignListFilter
 		return domain.CursorPage[Design]{}, ErrDesignRepositoryUnavailable
 	}
 	page, err := s.designs.ListByOwner(ctx, filter.OwnerID, repositories.DesignListFilter{
-		Status:     filter.Status,
-		Pagination: filter.Pagination,
+		Status:       filter.Status,
+		Types:        filter.Types,
+		UpdatedAfter: filter.UpdatedAfter,
+		Pagination:   filter.Pagination,
 	})
 	if err != nil {
 		return domain.CursorPage[Design]{}, s.mapRepositoryError(err)

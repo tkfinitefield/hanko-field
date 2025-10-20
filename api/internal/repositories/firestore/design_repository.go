@@ -143,6 +143,15 @@ func (r *DesignRepository) ListByOwner(ctx context.Context, ownerID string, filt
 	}
 
 	statusFilters := normaliseStatuses(filter.Status)
+	typeFilters := normaliseTypes(filter.Types)
+
+	var updatedAfter *time.Time
+	if filter.UpdatedAfter != nil {
+		value := filter.UpdatedAfter.UTC()
+		if !value.IsZero() {
+			updatedAfter = &value
+		}
+	}
 
 	docs, err := r.base.Query(ctx, func(q firestore.Query) firestore.Query {
 		q = q.Where("ownerUid", "==", ownerID)
@@ -155,6 +164,19 @@ func (r *DesignRepository) ListByOwner(ctx context.Context, ownerID string, filt
 				statusFilters = statusFilters[:10]
 			}
 			q = q.Where("status", "in", statusFilters)
+		}
+
+		if len(typeFilters) == 1 {
+			q = q.Where("type", "==", typeFilters[0])
+		} else if len(typeFilters) > 1 {
+			if len(typeFilters) > 10 {
+				typeFilters = typeFilters[:10]
+			}
+			q = q.Where("type", "in", typeFilters)
+		}
+
+		if updatedAfter != nil {
+			q = q.Where("updatedAt", ">", *updatedAfter)
 		}
 
 		q = q.OrderBy("updatedAt", firestore.Desc).OrderBy(firestore.DocumentID, firestore.Desc)
@@ -490,6 +512,26 @@ func normaliseStatuses(statuses []string) []string {
 	seen := make(map[string]struct{})
 	for _, status := range statuses {
 		trimmed := strings.ToLower(strings.TrimSpace(status))
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+	return normalized
+}
+
+func normaliseTypes(types []string) []string {
+	if len(types) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(types))
+	seen := make(map[string]struct{})
+	for _, t := range types {
+		trimmed := strings.ToLower(strings.TrimSpace(t))
 		if trimmed == "" {
 			continue
 		}

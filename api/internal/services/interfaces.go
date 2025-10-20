@@ -329,8 +329,10 @@ type DesignReadOptions struct {
 }
 
 type DesignListFilter struct {
-	OwnerID string
-	Status  []string
+	OwnerID      string
+	Status       []string
+	Types        []string
+	UpdatedAfter *time.Time
 	Pagination
 }
 
