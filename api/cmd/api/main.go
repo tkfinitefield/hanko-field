@@ -151,6 +151,11 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to initialise address repository", zap.Error(err))
 	}
+	favoriteRepo, err := firestoreRepo.NewFavoriteRepository(firestoreProvider)
+	if err != nil {
+		logger.Fatal("failed to initialise favorite repository", zap.Error(err))
+	}
+	designFinder := newFirestoreDesignFinder(firestoreProvider)
 	paymentRepo, err := firestoreRepo.NewPaymentMethodRepository(firestoreProvider)
 	if err != nil {
 		logger.Fatal("failed to initialise payment method repository", zap.Error(err))
@@ -172,6 +177,8 @@ func main() {
 		Addresses:       addressRepo,
 		PaymentMethods:  paymentRepo,
 		PaymentVerifier: paymentVerifier,
+		Favorites:       favoriteRepo,
+		Designs:         designFinder,
 		Audit:           nil,
 		Firebase:        firebaseVerifier,
 		Clock:           time.Now,
@@ -653,4 +660,87 @@ func (p *providerPaymentVerifier) VerifyPaymentMethod(ctx context.Context, provi
 	default:
 		return services.PaymentMethodMetadata{}, fmt.Errorf("unsupported payment provider %q", provider)
 	}
+}
+
+type firestoreDesignFinder struct {
+	provider *pfirestore.Provider
+}
+
+func newFirestoreDesignFinder(provider *pfirestore.Provider) services.DesignFinder {
+	if provider == nil {
+		return nil
+	}
+	return &firestoreDesignFinder{provider: provider}
+}
+
+func (f *firestoreDesignFinder) FindByID(ctx context.Context, designID string) (services.Design, error) {
+	if f == nil || f.provider == nil {
+		return services.Design{}, fmt.Errorf("design finder not configured")
+	}
+	trimmed := strings.TrimSpace(designID)
+	if trimmed == "" {
+		return services.Design{}, &favoriteNotFoundError{err: errors.New("design id required")}
+	}
+	client, err := f.provider.Client(ctx)
+	if err != nil {
+		return services.Design{}, err
+	}
+	snap, err := client.Collection("designs").Doc(trimmed).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return services.Design{}, &favoriteNotFoundError{err: err}
+		}
+		return services.Design{}, err
+	}
+
+	data := snap.Data()
+	ownerRef, _ := data["ownerRef"].(string)
+	statusValue, _ := data["status"].(string)
+	locale, _ := data["locale"].(string)
+	template := ""
+	if style, ok := data["style"].(map[string]any); ok {
+		if ref, ok := style["templateRef"].(string); ok {
+			template = ref
+		}
+	}
+
+	var snapshot map[string]any
+	if raw, ok := data["snapshot"].(map[string]any); ok && len(raw) > 0 {
+		snapshot = raw
+	}
+
+	updatedAt := snap.UpdateTime
+	if ts, ok := data["updatedAt"].(time.Time); ok && !ts.IsZero() {
+		updatedAt = ts
+	}
+
+	design := services.Design{
+		ID:        trimmed,
+		OwnerID:   extractOwnerID(ownerRef),
+		Status:    statusValue,
+		Template:  template,
+		Locale:    locale,
+		Snapshot:  snapshot,
+		UpdatedAt: updatedAt,
+	}
+	return design, nil
+}
+
+type favoriteNotFoundError struct {
+	err error
+}
+
+func (e *favoriteNotFoundError) Error() string       { return e.err.Error() }
+func (e *favoriteNotFoundError) Unwrap() error       { return e.err }
+func (e *favoriteNotFoundError) IsNotFound() bool    { return true }
+func (e *favoriteNotFoundError) IsConflict() bool    { return false }
+func (e *favoriteNotFoundError) IsUnavailable() bool { return false }
+
+func extractOwnerID(ref string) string {
+	trimmed := strings.TrimSpace(ref)
+	trimmed = strings.TrimPrefix(trimmed, "/")
+	if strings.HasPrefix(trimmed, "users/") {
+		return trimmed[len("users/"):]
+	}
+	return trimmed
 }

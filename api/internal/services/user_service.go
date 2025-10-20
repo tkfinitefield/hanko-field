@@ -21,38 +21,43 @@ import (
 )
 
 var (
-	errUserIDRequired               = errors.New("user: user id is required")
-	errActorIDRequired              = errors.New("user: actor id is required")
-	errInvalidDisplayName           = errors.New("user: invalid display name")
-	errInvalidLanguageTag           = errors.New("user: invalid language tag")
-	errInvalidNotificationKey       = errors.New("user: invalid notification key")
-	errProfileConflict              = errors.New("user: profile has been modified")
-	errAddressRepositoryUnavailable = errors.New("user: address repository not configured")
-	errAddressIDRequired            = errors.New("user: address id is required")
-	errAddressNotFound              = errors.New("user: address not found")
-	errInvalidAddressRecipient      = errors.New("user: invalid address recipient")
-	errInvalidAddressLine1          = errors.New("user: invalid address line1")
-	errInvalidAddressCity           = errors.New("user: invalid address city")
-	errInvalidAddressCountry        = errors.New("user: invalid address country")
-	errInvalidAddressPostalCode     = errors.New("user: invalid address postal code")
-	errInvalidAddressPhone          = errors.New("user: invalid address phone")
-	errPaymentRepositoryUnavailable = errors.New("user: payment method repository not configured")
-	errPaymentVerifierUnavailable   = errors.New("user: payment method verifier not configured")
-	errPaymentProviderRequired      = errors.New("user: payment provider is required")
-	errPaymentTokenRequired         = errors.New("user: payment token is required")
-	errPaymentMethodNotFound        = errors.New("user: payment method not found")
-	errPaymentMethodDuplicate       = errors.New("user: payment method already exists")
-	errPaymentMethodInUse           = errors.New("user: payment method has outstanding invoices")
-	errFavoritesNotImplemented      = errors.New("user: favorites operations not yet implemented")
-	emailMaskSuffix                 = "@hanko-field.invalid"
-	notificationKeyPattern          = regexp.MustCompile(`^[a-z0-9_.-]{1,40}$`)
-	addressPhonePattern             = regexp.MustCompile(`^[0-9+()\-\s]{6,20}$`)
-	addressCountryPattern           = regexp.MustCompile(`^[A-Za-z]{2}$`)
-	addressPostalPattern            = regexp.MustCompile(`^[0-9A-Za-z\-\s]{3,16}$`)
-	auditActionProfileUpdate        = "user.profile.update"
-	auditActionProfileMask          = "user.profile.mask"
-	auditActionProfileActivate      = "user.profile.activate"
-	auditActionProfileDeactivate    = "user.profile.deactivate"
+	errUserIDRequired                 = errors.New("user: user id is required")
+	errActorIDRequired                = errors.New("user: actor id is required")
+	errInvalidDisplayName             = errors.New("user: invalid display name")
+	errInvalidLanguageTag             = errors.New("user: invalid language tag")
+	errInvalidNotificationKey         = errors.New("user: invalid notification key")
+	errProfileConflict                = errors.New("user: profile has been modified")
+	errAddressRepositoryUnavailable   = errors.New("user: address repository not configured")
+	errAddressIDRequired              = errors.New("user: address id is required")
+	errAddressNotFound                = errors.New("user: address not found")
+	errInvalidAddressRecipient        = errors.New("user: invalid address recipient")
+	errInvalidAddressLine1            = errors.New("user: invalid address line1")
+	errInvalidAddressCity             = errors.New("user: invalid address city")
+	errInvalidAddressCountry          = errors.New("user: invalid address country")
+	errInvalidAddressPostalCode       = errors.New("user: invalid address postal code")
+	errInvalidAddressPhone            = errors.New("user: invalid address phone")
+	errPaymentRepositoryUnavailable   = errors.New("user: payment method repository not configured")
+	errPaymentVerifierUnavailable     = errors.New("user: payment method verifier not configured")
+	errPaymentProviderRequired        = errors.New("user: payment provider is required")
+	errPaymentTokenRequired           = errors.New("user: payment token is required")
+	errPaymentMethodNotFound          = errors.New("user: payment method not found")
+	errPaymentMethodDuplicate         = errors.New("user: payment method already exists")
+	errPaymentMethodInUse             = errors.New("user: payment method has outstanding invoices")
+	errFavoritesRepositoryUnavailable = errors.New("user: favorites repository not configured")
+	errFavoriteDesignRequired         = errors.New("user: design id is required")
+	errFavoriteLimitExceeded          = errors.New("user: favorite limit reached")
+	errFavoriteDesignNotFound         = errors.New("user: design not found")
+	errFavoriteDesignForbidden        = errors.New("user: design is not shareable or owned by user")
+	errDesignRepositoryUnavailable    = errors.New("user: design repository not configured")
+	emailMaskSuffix                   = "@hanko-field.invalid"
+	notificationKeyPattern            = regexp.MustCompile(`^[a-z0-9_.-]{1,40}$`)
+	addressPhonePattern               = regexp.MustCompile(`^[0-9+()\-\s]{6,20}$`)
+	addressCountryPattern             = regexp.MustCompile(`^[A-Za-z]{2}$`)
+	addressPostalPattern              = regexp.MustCompile(`^[0-9A-Za-z\-\s]{3,16}$`)
+	auditActionProfileUpdate          = "user.profile.update"
+	auditActionProfileMask            = "user.profile.mask"
+	auditActionProfileActivate        = "user.profile.activate"
+	auditActionProfileDeactivate      = "user.profile.deactivate"
 )
 
 var (
@@ -88,7 +93,21 @@ var (
 	ErrUserPaymentProviderRequired = errPaymentProviderRequired
 	// ErrUserPaymentTokenRequired indicates the token input was empty.
 	ErrUserPaymentTokenRequired = errPaymentTokenRequired
+	// ErrUserFavoriteLimitExceeded indicates the user has reached the maximum favorites allowed.
+	ErrUserFavoriteLimitExceeded = errFavoriteLimitExceeded
+	// ErrUserFavoriteDesignNotFound indicates the referenced design was not found or inaccessible.
+	ErrUserFavoriteDesignNotFound = errFavoriteDesignNotFound
+	// ErrUserFavoriteDesignForbidden indicates the design is not owned or shareable.
+	ErrUserFavoriteDesignForbidden = errFavoriteDesignForbidden
 )
+
+const maxFavorites = 200
+
+var shareableDesignStatuses = map[string]struct{}{
+	"ready":   {},
+	"ordered": {},
+	"locked":  {},
+}
 
 // UserServiceDeps bundles the dependencies required to construct a user service instance.
 type UserServiceDeps struct {
@@ -98,6 +117,7 @@ type UserServiceDeps struct {
 	PaymentVerifier PaymentMethodVerifier
 	Invoices        OutstandingInvoiceChecker
 	Favorites       repositories.FavoriteRepository
+	Designs         DesignFinder
 	Audit           AuditLogService
 	Firebase        auth.UserGetter
 	Clock           func() time.Time
@@ -110,6 +130,7 @@ type userService struct {
 	paymentVerifier PaymentMethodVerifier
 	invoices        OutstandingInvoiceChecker
 	favorites       repositories.FavoriteRepository
+	designs         DesignFinder
 	audit           AuditLogService
 	firebase        auth.UserGetter
 	clock           func() time.Time
@@ -136,6 +157,7 @@ func NewUserService(deps UserServiceDeps) (UserService, error) {
 		paymentVerifier: deps.PaymentVerifier,
 		invoices:        deps.Invoices,
 		favorites:       deps.Favorites,
+		designs:         deps.Designs,
 		audit:           deps.Audit,
 		firebase:        deps.Firebase,
 		clock: func() time.Time {
@@ -637,11 +659,132 @@ func (s *userService) RemovePaymentMethod(ctx context.Context, cmd RemovePayment
 }
 
 func (s *userService) ListFavorites(ctx context.Context, userID string, pager Pagination) (domain.CursorPage[FavoriteDesign], error) {
-	return domain.CursorPage[FavoriteDesign]{}, errFavoritesNotImplemented
+	if s.favorites == nil {
+		return domain.CursorPage[FavoriteDesign]{}, errFavoritesRepositoryUnavailable
+	}
+
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return domain.CursorPage[FavoriteDesign]{}, errUserIDRequired
+	}
+
+	pageRequest := pager
+	if pageRequest.PageSize <= 0 || pageRequest.PageSize > maxFavorites {
+		pageRequest.PageSize = maxFavorites
+	}
+
+	repoPage, err := s.favorites.List(ctx, userID, pageRequest)
+	if err != nil {
+		return domain.CursorPage[FavoriteDesign]{}, err
+	}
+
+	lookup := map[string]*Design{}
+	if s.designs != nil {
+		for _, fav := range repoPage.Items {
+			designID := strings.TrimSpace(fav.DesignID)
+			if designID == "" {
+				continue
+			}
+			if _, exists := lookup[designID]; exists {
+				continue
+			}
+			design, err := s.designs.FindByID(ctx, designID)
+			if err != nil {
+				if isNotFound(err) {
+					_ = s.favorites.Delete(ctx, userID, designID)
+					continue
+				}
+				return domain.CursorPage[FavoriteDesign]{}, err
+			}
+			copy := design
+			lookup[designID] = &copy
+		}
+	}
+
+	items := make([]FavoriteDesign, 0, len(repoPage.Items))
+	for _, fav := range repoPage.Items {
+		fd := FavoriteDesign{
+			DesignID: fav.DesignID,
+			AddedAt:  fav.AddedAt,
+		}
+		if d, ok := lookup[fav.DesignID]; ok {
+			fd.Design = d
+		}
+		items = append(items, fd)
+	}
+
+	return domain.CursorPage[FavoriteDesign]{
+		Items:         items,
+		NextPageToken: repoPage.NextPageToken,
+	}, nil
 }
 
 func (s *userService) ToggleFavorite(ctx context.Context, cmd ToggleFavoriteCommand) error {
-	return errFavoritesNotImplemented
+	if s.favorites == nil {
+		return errFavoritesRepositoryUnavailable
+	}
+
+	userID := strings.TrimSpace(cmd.UserID)
+	if userID == "" {
+		return errUserIDRequired
+	}
+
+	designID := strings.TrimSpace(cmd.DesignID)
+	if designID == "" {
+		return errFavoriteDesignRequired
+	}
+
+	repoPage, err := s.favorites.List(ctx, userID, Pagination{PageSize: maxFavorites})
+	if err != nil {
+		return err
+	}
+
+	exists := false
+	for _, fav := range repoPage.Items {
+		if strings.EqualFold(fav.DesignID, designID) {
+			exists = true
+			break
+		}
+	}
+
+	if cmd.Mark {
+		if exists {
+			return nil
+		}
+		if len(repoPage.Items) >= maxFavorites {
+			return ErrUserFavoriteLimitExceeded
+		}
+		if s.designs == nil {
+			return errDesignRepositoryUnavailable
+		}
+		design, err := s.designs.FindByID(ctx, designID)
+		if err != nil {
+			if isNotFound(err) {
+				return ErrUserFavoriteDesignNotFound
+			}
+			return err
+		}
+		if !s.canFavoriteDesign(userID, design) {
+			return ErrUserFavoriteDesignForbidden
+		}
+		now := s.clock()
+		if err := s.favorites.Put(ctx, userID, designID, now); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if !exists {
+		return nil
+	}
+
+	if err := s.favorites.Delete(ctx, userID, designID); err != nil {
+		if isNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *userService) getProfile(ctx context.Context, userID string, seed bool) (domain.UserProfile, error) {
@@ -1074,6 +1217,15 @@ func selectNextDefault(methods []PaymentMethod) (PaymentMethod, bool) {
 		}
 	}
 	return candidate, true
+}
+
+func (s *userService) canFavoriteDesign(userID string, design Design) bool {
+	if strings.EqualFold(strings.TrimSpace(design.OwnerID), strings.TrimSpace(userID)) {
+		return true
+	}
+	status := strings.ToLower(strings.TrimSpace(design.Status))
+	_, ok := shareableDesignStatuses[status]
+	return ok
 }
 
 func profileFromFirebase(record *firebaseauth.UserRecord, now time.Time) domain.UserProfile {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"testing"
@@ -29,6 +30,14 @@ type memoryPaymentMethodRepo struct {
 	store map[string]map[string]domain.PaymentMethod
 	clock func() time.Time
 	seq   int
+}
+
+type memoryFavoriteRepo struct {
+	store map[string]map[string]domain.FavoriteDesign
+}
+
+type memoryDesignRepo struct {
+	store map[string]domain.Design
 }
 
 type repoErr struct {
@@ -61,6 +70,18 @@ func newMemoryPaymentMethodRepo(clock func() time.Time) *memoryPaymentMethodRepo
 	return &memoryPaymentMethodRepo{
 		store: make(map[string]map[string]domain.PaymentMethod),
 		clock: clock,
+	}
+}
+
+func newMemoryFavoriteRepo() *memoryFavoriteRepo {
+	return &memoryFavoriteRepo{
+		store: make(map[string]map[string]domain.FavoriteDesign),
+	}
+}
+
+func newMemoryDesignRepo() *memoryDesignRepo {
+	return &memoryDesignRepo{
+		store: make(map[string]domain.Design),
 	}
 }
 
@@ -365,6 +386,138 @@ func (m *memoryPaymentMethodRepo) SetDefault(_ context.Context, userID string, p
 func clonePaymentMethod(method domain.PaymentMethod) domain.PaymentMethod {
 	copied := method
 	return copied
+}
+
+func (m *memoryFavoriteRepo) List(_ context.Context, userID string, pager domain.Pagination) (domain.CursorPage[domain.FavoriteDesign], error) {
+	bucket := m.store[userID]
+	if bucket == nil {
+		return domain.CursorPage[domain.FavoriteDesign]{}, nil
+	}
+	items := make([]domain.FavoriteDesign, 0, len(bucket))
+	for _, fav := range bucket {
+		items = append(items, fav)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].AddedAt.Equal(items[j].AddedAt) {
+			return items[i].DesignID > items[j].DesignID
+		}
+		return items[i].AddedAt.After(items[j].AddedAt)
+	})
+	start := 0
+	if token := strings.TrimSpace(pager.PageToken); token != "" {
+		for idx, fav := range items {
+			if fav.DesignID == token {
+				start = idx + 1
+				break
+			}
+		}
+	}
+	if start > len(items) {
+		start = len(items)
+	}
+	items = items[start:]
+	limit := pager.PageSize
+	if limit <= 0 || limit > len(items) {
+		limit = len(items)
+	}
+	nextToken := ""
+	if limit < len(items) {
+		nextToken = items[limit-1].DesignID
+		items = items[:limit]
+	}
+	result := make([]domain.FavoriteDesign, len(items))
+	copy(result, items)
+	return domain.CursorPage[domain.FavoriteDesign]{
+		Items:         result,
+		NextPageToken: nextToken,
+	}, nil
+}
+
+func (m *memoryFavoriteRepo) Put(_ context.Context, userID string, designID string, addedAt time.Time) error {
+	if m.store == nil {
+		m.store = make(map[string]map[string]domain.FavoriteDesign)
+	}
+	bucket := m.store[userID]
+	if bucket == nil {
+		bucket = make(map[string]domain.FavoriteDesign)
+		m.store[userID] = bucket
+	}
+	if existing, ok := bucket[designID]; ok {
+		existing.DesignID = designID
+		bucket[designID] = existing
+		return nil
+	}
+	bucket[designID] = domain.FavoriteDesign{DesignID: designID, AddedAt: addedAt.UTC()}
+	return nil
+}
+
+func (m *memoryFavoriteRepo) Delete(_ context.Context, userID string, designID string) error {
+	if m.store == nil {
+		return nil
+	}
+	if bucket := m.store[userID]; bucket != nil {
+		delete(bucket, designID)
+	}
+	return nil
+}
+
+func (m *memoryDesignRepo) Insert(_ context.Context, design domain.Design) error {
+	if m.store == nil {
+		m.store = make(map[string]domain.Design)
+	}
+	m.store[design.ID] = cloneDesign(design)
+	return nil
+}
+
+func (m *memoryDesignRepo) Update(_ context.Context, design domain.Design) error {
+	if m.store == nil {
+		return errors.New("not found")
+	}
+	m.store[design.ID] = cloneDesign(design)
+	return nil
+}
+
+func (m *memoryDesignRepo) SoftDelete(_ context.Context, designID string, _ time.Time) error {
+	if m.store != nil {
+		delete(m.store, designID)
+	}
+	return nil
+}
+
+func (m *memoryDesignRepo) FindByID(_ context.Context, designID string) (domain.Design, error) {
+	design, ok := m.store[designID]
+	if !ok {
+		return domain.Design{}, &repoErr{err: fmt.Errorf("design %s not found", designID), notFound: true}
+	}
+	return cloneDesign(design), nil
+}
+
+func (m *memoryDesignRepo) ListByOwner(_ context.Context, ownerID string, filter repositories.DesignListFilter) (domain.CursorPage[domain.Design], error) {
+	items := make([]domain.Design, 0)
+	for _, design := range m.store {
+		if design.OwnerID == ownerID {
+			items = append(items, cloneDesign(design))
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].UpdatedAt.After(items[j].UpdatedAt)
+	})
+	limit := filter.Pagination.PageSize
+	if limit <= 0 || limit > len(items) {
+		limit = len(items)
+	}
+	if limit < len(items) {
+		items = items[:limit]
+	}
+	return domain.CursorPage[domain.Design]{Items: items}, nil
+}
+
+func cloneDesign(design domain.Design) domain.Design {
+	copy := design
+	if design.Snapshot != nil {
+		copy.Snapshot = maps.Clone(design.Snapshot)
+	}
+	return copy
 }
 
 type captureAuditService struct {
@@ -1105,6 +1258,151 @@ func TestUserServiceRemovePaymentMethodBlockedByInvoices(t *testing.T) {
 
 func ptr[T any](value T) *T {
 	return &value
+}
+
+func TestUserServiceToggleFavoriteAddAndList(t *testing.T) {
+	ctx := context.Background()
+	current := time.Date(2024, 10, 1, 11, 0, 0, 0, time.UTC)
+	clock := func() time.Time {
+		now := current
+		current = current.Add(time.Second)
+		return now
+	}
+
+	userRepo := newMemoryUserRepo(clock)
+	favoriteRepo := newMemoryFavoriteRepo()
+	designRepo := newMemoryDesignRepo()
+	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
+
+	if err := designRepo.Insert(ctx, domain.Design{ID: "design-1", OwnerID: "user-fav", Status: "draft", UpdatedAt: clock()}); err != nil {
+		t.Fatalf("insert design: %v", err)
+	}
+
+	svc, err := NewUserService(UserServiceDeps{
+		Users:     userRepo,
+		Favorites: favoriteRepo,
+		Designs:   designRepo,
+		Firebase:  firebase,
+		Clock:     clock,
+	})
+	if err != nil {
+		t.Fatalf("new user service: %v", err)
+	}
+
+	if err := svc.ToggleFavorite(ctx, ToggleFavoriteCommand{UserID: "user-fav", DesignID: "design-1", Mark: true}); err != nil {
+		t.Fatalf("toggle favorite add: %v", err)
+	}
+
+	page, err := svc.ListFavorites(ctx, "user-fav", Pagination{})
+	if err != nil {
+		t.Fatalf("list favorites: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("expected 1 favorite, got %d", len(page.Items))
+	}
+	fav := page.Items[0]
+	if fav.DesignID != "design-1" {
+		t.Fatalf("unexpected design id %s", fav.DesignID)
+	}
+	if fav.Design == nil || fav.Design.ID != "design-1" {
+		t.Fatalf("expected design metadata included, got %+v", fav.Design)
+	}
+
+	// idempotent add should not error or duplicate
+	if err := svc.ToggleFavorite(ctx, ToggleFavoriteCommand{UserID: "user-fav", DesignID: "design-1", Mark: true}); err != nil {
+		t.Fatalf("toggle favorite idempotent add: %v", err)
+	}
+	page, err = svc.ListFavorites(ctx, "user-fav", Pagination{})
+	if err != nil {
+		t.Fatalf("list favorites: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("expected 1 favorite after duplicate add, got %d", len(page.Items))
+	}
+
+	// removal should succeed silently
+	if err := svc.ToggleFavorite(ctx, ToggleFavoriteCommand{UserID: "user-fav", DesignID: "design-1", Mark: false}); err != nil {
+		t.Fatalf("toggle favorite remove: %v", err)
+	}
+	page, err = svc.ListFavorites(ctx, "user-fav", Pagination{})
+	if err != nil {
+		t.Fatalf("list favorites: %v", err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("expected favorites cleared, got %d", len(page.Items))
+	}
+}
+
+func TestUserServiceToggleFavoriteLimit(t *testing.T) {
+	ctx := context.Background()
+	current := time.Date(2024, 10, 2, 9, 0, 0, 0, time.UTC)
+	clock := func() time.Time {
+		now := current
+		current = current.Add(time.Minute)
+		return now
+	}
+
+	userRepo := newMemoryUserRepo(clock)
+	favoriteRepo := newMemoryFavoriteRepo()
+	designRepo := newMemoryDesignRepo()
+	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
+
+	for i := 0; i < 200; i++ {
+		designID := fmt.Sprintf("design-%03d", i)
+		designRepo.Insert(ctx, domain.Design{ID: designID, OwnerID: "user-limit", Status: "draft", UpdatedAt: clock()})
+		_ = favoriteRepo.Put(ctx, "user-limit", designID, clock())
+	}
+
+	svc, err := NewUserService(UserServiceDeps{
+		Users:     userRepo,
+		Favorites: favoriteRepo,
+		Designs:   designRepo,
+		Firebase:  firebase,
+		Clock:     clock,
+	})
+	if err != nil {
+		t.Fatalf("new user service: %v", err)
+	}
+
+	designRepo.Insert(ctx, domain.Design{ID: "design-extra", OwnerID: "user-limit", Status: "draft", UpdatedAt: clock()})
+
+	err = svc.ToggleFavorite(ctx, ToggleFavoriteCommand{UserID: "user-limit", DesignID: "design-extra", Mark: true})
+	if !errors.Is(err, ErrUserFavoriteLimitExceeded) {
+		t.Fatalf("expected favorite limit error, got %v", err)
+	}
+}
+
+func TestUserServiceToggleFavoriteShareable(t *testing.T) {
+	ctx := context.Background()
+	clock := func() time.Time { return time.Date(2024, 10, 3, 8, 0, 0, 0, time.UTC) }
+
+	userRepo := newMemoryUserRepo(clock)
+	favoriteRepo := newMemoryFavoriteRepo()
+	designRepo := newMemoryDesignRepo()
+	firebase := &stubFirebase{records: map[string]*firebaseauth.UserRecord{}}
+
+	designRepo.Insert(ctx, domain.Design{ID: "shared-design", OwnerID: "other", Status: "ready", UpdatedAt: clock()})
+	designRepo.Insert(ctx, domain.Design{ID: "private-design", OwnerID: "other", Status: "draft", UpdatedAt: clock()})
+
+	svc, err := NewUserService(UserServiceDeps{
+		Users:     userRepo,
+		Favorites: favoriteRepo,
+		Designs:   designRepo,
+		Firebase:  firebase,
+		Clock:     clock,
+	})
+	if err != nil {
+		t.Fatalf("new user service: %v", err)
+	}
+
+	if err := svc.ToggleFavorite(ctx, ToggleFavoriteCommand{UserID: "user-share", DesignID: "shared-design", Mark: true}); err != nil {
+		t.Fatalf("toggle favorite shareable: %v", err)
+	}
+
+	err = svc.ToggleFavorite(ctx, ToggleFavoriteCommand{UserID: "user-share", DesignID: "private-design", Mark: true})
+	if !errors.Is(err, ErrUserFavoriteDesignForbidden) {
+		t.Fatalf("expected forbidden error, got %v", err)
+	}
 }
 
 func cloneProfile(profile domain.UserProfile) domain.UserProfile {

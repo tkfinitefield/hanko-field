@@ -96,6 +96,7 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 			Addresses:      reg.Addresses(),
 			PaymentMethods: reg.PaymentMethods(),
 			Favorites:      reg.Favorites(),
+			Designs:        reg.Designs(),
 			Audit:          svc.Audit,
 			Firebase:       firebase,
 			Clock:          time.Now,

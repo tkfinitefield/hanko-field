@@ -48,7 +48,6 @@ type (
 	RegistrabilityCheckResult = domain.RegistrabilityCheckResult
 	Address                   = domain.Address
 	UserProfile               = domain.UserProfile
-	FavoriteDesign            = domain.FavoriteDesign
 	InventoryReservationLine  = domain.InventoryReservationLine
 	InventoryReservation      = domain.InventoryReservation
 	InventorySnapshot         = domain.InventorySnapshot
@@ -106,6 +105,13 @@ type CartService interface {
 type CheckoutService interface {
 	CreateCheckoutSession(ctx context.Context, cmd CreateCheckoutSessionCommand) (CheckoutSession, error)
 	ConfirmClientCompletion(ctx context.Context, cmd ConfirmCheckoutCommand) error
+}
+
+// FavoriteDesign enriches favorite records with resolved design metadata.
+type FavoriteDesign struct {
+	DesignID string
+	AddedAt  time.Time
+	Design   *Design
 }
 
 // OrderService encapsulates order read/write flows including cancellation and reorders.
@@ -591,6 +597,11 @@ type PaymentMethodVerifier interface {
 // OutstandingInvoiceChecker reports whether a user has unpaid invoices blocking payment method removal.
 type OutstandingInvoiceChecker interface {
 	HasOutstandingInvoices(ctx context.Context, userID string) (bool, error)
+}
+
+// DesignFinder exposes the read operations required for user favorites validation.
+type DesignFinder interface {
+	FindByID(ctx context.Context, designID string) (Design, error)
 }
 
 type ToggleFavoriteCommand struct {

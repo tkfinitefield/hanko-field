@@ -346,6 +346,112 @@ func TestMeHandlersDeletePaymentMethod(t *testing.T) {
 	}
 }
 
+func TestMeHandlersListFavorites(t *testing.T) {
+	addedAt := time.Date(2024, 9, 1, 12, 0, 0, 0, time.UTC)
+	svc := &stubUserService{
+		listFavoritesFunc: func(ctx context.Context, userID string, pager services.Pagination) (domain.CursorPage[services.FavoriteDesign], error) {
+			if userID != "user-1" {
+				t.Fatalf("expected user-1, got %s", userID)
+			}
+			return domain.CursorPage[services.FavoriteDesign]{
+				Items: []services.FavoriteDesign{
+					{
+						DesignID: "design-1",
+						AddedAt:  addedAt,
+						Design: &services.Design{
+							ID:        "design-1",
+							OwnerID:   "user-1",
+							Status:    "draft",
+							Template:  "template-a",
+							Locale:    "ja-JP",
+							UpdatedAt: addedAt,
+						},
+					},
+				},
+			}, nil
+		},
+	}
+	handler := NewMeHandlers(nil, svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/me/favorites", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	handler.listFavorites(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var payload []favoritePayload
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload) != 1 {
+		t.Fatalf("expected 1 favorite, got %d", len(payload))
+	}
+	if payload[0].DesignID != "design-1" || payload[0].AddedAt == "" {
+		t.Fatalf("unexpected payload %#v", payload[0])
+	}
+	if payload[0].Design == nil || payload[0].Design.ID != "design-1" {
+		t.Fatalf("expected design metadata, got %#v", payload[0].Design)
+	}
+}
+
+func TestMeHandlersAddFavorite(t *testing.T) {
+	var captured services.ToggleFavoriteCommand
+	svc := &stubUserService{
+		toggleFavoriteFunc: func(ctx context.Context, cmd services.ToggleFavoriteCommand) error {
+			captured = cmd
+			return nil
+		},
+	}
+	handler := NewMeHandlers(nil, svc)
+
+	req := httptest.NewRequest(http.MethodPut, "/me/favorites/design-1", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-2"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "design-1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rr := httptest.NewRecorder()
+	handler.addFavorite(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d", rr.Code)
+	}
+	if captured.UserID != "user-2" || captured.DesignID != "design-1" || !captured.Mark {
+		t.Fatalf("unexpected command %#v", captured)
+	}
+}
+
+func TestMeHandlersRemoveFavorite(t *testing.T) {
+	var captured services.ToggleFavoriteCommand
+	svc := &stubUserService{
+		toggleFavoriteFunc: func(ctx context.Context, cmd services.ToggleFavoriteCommand) error {
+			captured = cmd
+			return nil
+		},
+	}
+	handler := NewMeHandlers(nil, svc)
+
+	req := httptest.NewRequest(http.MethodDelete, "/me/favorites/design-2", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-3"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "design-2")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rr := httptest.NewRecorder()
+	handler.removeFavorite(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d", rr.Code)
+	}
+	if captured.UserID != "user-3" || captured.DesignID != "design-2" || captured.Mark {
+		t.Fatalf("unexpected command %#v", captured)
+	}
+}
+
 func TestMeHandlersUpdateProfileRejectsDisallowedField(t *testing.T) {
 	svc := &stubUserService{
 		getProfileFunc: func(ctx context.Context, userID string) (services.UserProfile, error) {
@@ -495,6 +601,8 @@ type stubUserService struct {
 	listPaymentMethodsFunc  func(ctx context.Context, userID string) ([]services.PaymentMethod, error)
 	addPaymentMethodFunc    func(ctx context.Context, cmd services.AddPaymentMethodCommand) (services.PaymentMethod, error)
 	removePaymentMethodFunc func(ctx context.Context, cmd services.RemovePaymentMethodCommand) error
+	listFavoritesFunc       func(ctx context.Context, userID string, pager services.Pagination) (domain.CursorPage[services.FavoriteDesign], error)
+	toggleFavoriteFunc      func(ctx context.Context, cmd services.ToggleFavoriteCommand) error
 }
 
 func (s *stubUserService) GetProfile(ctx context.Context, userID string) (services.UserProfile, error) {
@@ -566,9 +674,15 @@ func (s *stubUserService) RemovePaymentMethod(ctx context.Context, cmd services.
 }
 
 func (s *stubUserService) ListFavorites(ctx context.Context, userID string, pager services.Pagination) (domain.CursorPage[services.FavoriteDesign], error) {
+	if s != nil && s.listFavoritesFunc != nil {
+		return s.listFavoritesFunc(ctx, userID, pager)
+	}
 	return domain.CursorPage[services.FavoriteDesign]{}, errors.New("not implemented")
 }
 
 func (s *stubUserService) ToggleFavorite(ctx context.Context, cmd services.ToggleFavoriteCommand) error {
+	if s != nil && s.toggleFavoriteFunc != nil {
+		return s.toggleFavoriteFunc(ctx, cmd)
+	}
 	return errors.New("not implemented")
 }
