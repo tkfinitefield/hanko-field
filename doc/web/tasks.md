@@ -18,7 +18,7 @@
 - [x] [Implement base layout (`/layouts/_base.html`) with header, footer, responsive nav, and modal container.](doc/web/tasks/011-implement-base-layout-layouts-base-html-with-header-footer-responsive-nav-and-modal-contai.md)
 - [x] [Build navigation menu, breadcrumbs, and active state handling based on current route.](doc/web/tasks/012-build-navigation-menu-breadcrumbs-and-active-state-handling-based-on-current-route.md)
 - [x] [Create reusable components (hero, cards, tables, forms, button sets, skeleton loaders) with Tailwind variants.](doc/web/tasks/013-create-reusable-components-hero-cards-tables-forms-button-sets-skeleton-loaders-with-tailw.md)
-- [ ] [Implement shared modals system with htmx targets and close triggers (ESC, overlay click).](doc/web/tasks/014-implement-shared-modals-system-with-htmx-targets-and-close-triggers-esc-overlay-click.md)
+- [x] [Implement shared modals system with htmx targets and close triggers (ESC, overlay click).](doc/web/tasks/014-implement-shared-modals-system-with-htmx-targets-and-close-triggers-esc-overlay-click.md)
 - [ ] [Provide SEO/OGP tags, structured data helpers, and analytics instrumentation hooks.](doc/web/tasks/015-provide-seo-ogp-tags-structured-data-helpers-and-analytics-instrumentation-hooks.md)
 
 ## 3. Landing & Exploration

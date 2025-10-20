@@ -122,6 +122,8 @@ func main() {
     r.Get("/templates", TemplatesHandler)
     r.Get("/guides", GuidesHandler)
     r.Get("/account", AccountHandler)
+    // Modal demo fragment (htmx)
+    r.Get("/modals/demo", DemoModalHandler)
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -218,6 +220,30 @@ func parsePageTemplates(page string) (*template.Template, error) {
     // page
     files = append(files, filepath.Join(templatesDir, "pages", page+".tmpl"))
     return root.ParseFiles(files...)
+}
+
+// renderTemplate executes a named template (partial/fragment) without the base layout.
+func renderTemplate(w http.ResponseWriter, r *http.Request, name string, data any) {
+    w.Header().Set("Content-Type", "text/html; charset=utf-8")
+    var t *template.Template
+    if devMode {
+        tc, err := parseTemplates()
+        if err != nil {
+            http.Error(w, fmt.Sprintf("template parse error: %v", err), http.StatusInternalServerError)
+            return
+        }
+        t = tc
+    } else {
+        t = tmplCache
+    }
+    if t == nil {
+        http.Error(w, "template not initialized", http.StatusInternalServerError)
+        return
+    }
+    if err := t.ExecuteTemplate(w, name, data); err != nil {
+        http.Error(w, fmt.Sprintf("template exec error: %v", err), http.StatusInternalServerError)
+        return
+    }
 }
 
 // render executes the base layout. In dev mode, templates are reparsed on each request.
@@ -331,4 +357,17 @@ func AccountHandler(w http.ResponseWriter, r *http.Request) {
     vm.Nav = nav.Build(vm.Path)
     vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
     renderPage(w, r, "account", vm)
+}
+
+// DemoModalHandler returns a demo modal fragment for HTMX insertion.
+func DemoModalHandler(w http.ResponseWriter, r *http.Request) {
+    lang := mw.Lang(r)
+    _ = lang // reserved for future i18n of title/buttons
+    props := map[string]any{
+        "ID":    "demo-modal",
+        "Title": "Demo Modal",
+        "Body":  "This is a shared modal opened via HTMX. Press ESC or click the overlay to close.",
+        // No FooterTmpl provided → default Close button with data-modal-close
+    }
+    renderTemplate(w, r, "c_modal", props)
 }

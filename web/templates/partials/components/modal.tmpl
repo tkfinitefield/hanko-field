@@ -1,0 +1,36 @@
+{{ define "c_modal" }}
+{{ $id := .ID }}{{ if not $id }}{{ $id = "modal" }}{{ end }}
+{{ $size := .Size }}{{ if not $size }}{{ $size = "md" }}{{ end }}
+{{ $w := "max-w-md" }}
+{{ if eq $size "sm" }}{{ $w = "max-w-sm" }}{{ else if eq $size "lg" }}{{ $w = "max-w-2xl" }}{{ else if eq $size "xl" }}{{ $w = "max-w-3xl" }}{{ end }}
+<div class="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby="{{ $id }}_title">
+  <div class="fixed inset-0 bg-black/50" data-modal-overlay></div>
+  <div class="fixed inset-0 flex items-center justify-center p-4">
+    <div class="relative w-full {{ $w }}" data-modal-container>
+      <div class="bg-white rounded-lg shadow-lg ring-1 ring-black/5 overflow-hidden">
+        <div class="flex items-start justify-between px-4 py-3 border-b border-gray-100">
+          <h2 id="{{ $id }}_title" class="text-base font-semibold text-gray-900">{{ .Title }}</h2>
+          <button type="button" class="ml-3 rounded-md p-2 text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-600" aria-label="Close" data-modal-close>
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="px-4 py-4">
+          {{ if .BodyTmpl }}
+            {{ slot .BodyTmpl .BodyData }}
+          {{ else }}
+            {{ if .Body }}{{ .Body }}{{ end }}
+          {{ end }}
+        </div>
+        <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-end gap-3">
+          {{ if .FooterTmpl }}
+            {{ slot .FooterTmpl .FooterData }}
+          {{ else }}
+            <button type="button" class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium border border-gray-300 hover:bg-gray-50" data-modal-close>Close</button>
+          {{ end }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{{ end }}
+

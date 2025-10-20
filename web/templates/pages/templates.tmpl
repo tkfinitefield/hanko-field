@@ -34,6 +34,15 @@
   </div>
 
   <div>
+    <h2 class="text-lg font-semibold mb-3">Modals</h2>
+    <div class="flex items-center gap-3">
+      <a href="#" class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+         hx-get="/modals/demo" hx-target="#modal-root" hx-swap="innerHTML">Open Demo Modal</a>
+    </div>
+    <p class="mt-2 text-sm text-gray-500">Opens into <code>#modal-root</code>. Close with ESC, overlay click, or the Close button.</p>
+  </div>
+
+  <div>
     <h2 class="text-lg font-semibold mb-3">Cards</h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       {{ template "c_card" (dict "Variant" "outlined" "Title" "Template #1" "Description" "Outlined card" "ContentTmpl" "demo_card_body" "ContentData" "Small, reusable composition.") }}

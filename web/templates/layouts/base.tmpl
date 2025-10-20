@@ -167,6 +167,59 @@
         }
       })();
     </script>
+    <script>
+      (function(){
+        var modalRoot = document.getElementById('modal-root');
+        if (!modalRoot) return;
+        var lastFocus = null;
+        function getFocusable(container){
+          return container.querySelectorAll('a, button, input, textarea, select, [tabindex]:not([tabindex="-1"])');
+        }
+        function focusFirst(){
+          var modal = modalRoot.querySelector('[data-modal-container]');
+          if (!modal) return;
+          var f = getFocusable(modal);
+          if (f.length) { f[0].focus(); }
+        }
+        function closeModal(){
+          modalRoot.innerHTML = '';
+          document.body.classList.remove('overflow-hidden');
+          if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch(_){} }
+          document.removeEventListener('keydown', trap, true);
+        }
+        function trap(e){
+          // ESC closes
+          if (e.key === 'Escape') { e.preventDefault(); closeModal(); return; }
+          if (e.key !== 'Tab') return;
+          var modal = modalRoot.querySelector('[data-modal-container]');
+          if (!modal) return;
+          var focusables = Array.prototype.slice.call(getFocusable(modal));
+          if (!focusables.length) return;
+          var idx = focusables.indexOf(document.activeElement);
+          if (e.shiftKey) {
+            if (idx <= 0) { focusables[focusables.length - 1].focus(); e.preventDefault(); }
+          } else {
+            if (idx === focusables.length - 1) { focusables[0].focus(); e.preventDefault(); }
+          }
+        }
+        // Open on swap into modal-root
+        document.body.addEventListener('htmx:afterSwap', function(e){
+          if (e.target !== modalRoot) return;
+          lastFocus = document.activeElement;
+          document.body.classList.add('overflow-hidden');
+          focusFirst();
+          document.addEventListener('keydown', trap, true);
+        });
+        // Delegated clicks
+        modalRoot.addEventListener('click', function(e){
+          var t = e.target;
+          if (t.closest('[data-modal-close]')) { e.preventDefault(); closeModal(); return; }
+          if (t.closest('[data-modal-overlay]')) { e.preventDefault(); closeModal(); return; }
+        });
+        // Expose for custom usage if needed
+        window.hankoModalClose = closeModal;
+      })();
+    </script>
   </body>
 </html>
 {{ end }}
