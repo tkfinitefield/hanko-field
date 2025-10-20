@@ -67,14 +67,12 @@ func buildAuthenticator(ctx context.Context) middleware.Authenticator {
 		ProjectID: projectID,
 	})
 	if err != nil {
-		log.Printf("failed to initialise Firebase app: %v", err)
-		return nil
+		log.Fatalf("failed to initialise Firebase app: %v", err)
 	}
 
 	client, err := app.Auth(ctx)
 	if err != nil {
-		log.Printf("failed to initialise Firebase auth client: %v", err)
-		return nil
+		log.Fatalf("failed to initialise Firebase auth client: %v", err)
 	}
 
 	log.Printf("Firebase authenticator enabled (project=%s)", projectID)
