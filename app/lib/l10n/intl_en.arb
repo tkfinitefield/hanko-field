@@ -1,0 +1,26 @@
+{
+  "@@locale": "en",
+  "appTitle": "Hanko Field",
+  "@appTitle": {
+    "description": "Application title"
+  },
+
+  "counterScreenTitle": "Sample Counter",
+  "@counterScreenTitle": {
+    "description": "Title for the sample counter screen"
+  },
+
+  "increment": "Increment",
+  "@increment": {
+    "description": "Button label to increment count"
+  },
+
+  "countLabel": "Count: {value}",
+  "@countLabel": {
+    "description": "Displays the current counter value",
+    "placeholders": {
+      "value": { "type": "int" }
+    }
+  }
+}
+

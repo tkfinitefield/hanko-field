@@ -18,6 +18,7 @@ analyzer:
     - android/**
     - windows/**
     - web/**
+    - lib/l10n/gen/**
     - test/**.mocks.dart
     - lib/**.g.dart
     - lib/**.freezed.dart

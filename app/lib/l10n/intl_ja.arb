@@ -1,0 +1,8 @@
+{
+  "@@locale": "ja",
+  "appTitle": "ハンコフィールド",
+  "counterScreenTitle": "サンプルカウンター",
+  "increment": "インクリメント",
+  "countLabel": "カウント: {value}"
+}
+

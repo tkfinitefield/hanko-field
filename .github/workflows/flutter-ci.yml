@@ -1,0 +1,69 @@
+name: Flutter CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'app/**'
+      - '.github/workflows/flutter-ci.yml'
+      - '.pre-commit-config.yaml'
+  pull_request:
+    paths:
+      - 'app/**'
+      - '.github/workflows/flutter-ci.yml'
+      - '.pre-commit-config.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COVERAGE_MIN: '60'
+
+jobs:
+  app:
+    name: App (Flutter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Generate localizations
+        run: flutter gen-l10n
+
+      - name: Format (check only)
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze (no fatal warnings/infos)
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Custom lints (Riverpod)
+        run: dart run custom_lint
+
+      - name: Test (with coverage)
+        run: flutter test --coverage --test-randomize-ordering-seed random
+
+      - name: Check coverage threshold
+        if: success()
+        run: dart run tool/check_coverage.dart --lcov=coverage/lcov.info --min=${{ env.COVERAGE_MIN }}
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-coverage-lcov
+          path: app/coverage/lcov.info
+          if-no-files-found: warn
+

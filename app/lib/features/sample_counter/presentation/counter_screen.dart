@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:app/l10n/gen/app_localizations.dart';
 
-import '../application/providers.dart';
+import 'package:app/features/sample_counter/application/providers.dart';
 
 class CounterScreen extends ConsumerWidget {
   const CounterScreen({super.key});
@@ -9,19 +10,19 @@ class CounterScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final counter = ref.watch(counterProvider);
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Sample Counter')),
+      appBar: AppBar(title: Text(l10n.counterScreenTitle)),
       body: Center(
         child: switch (counter) {
           AsyncData(:final value) => Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Count: $value'),
+                Text(l10n.countLabel(value)),
                 const SizedBox(height: 16),
                 FilledButton(
-                  onPressed: () =>
-                      ref.read(counterProvider.notifier).increment(),
-                  child: const Text('Increment'),
+                  onPressed: () => ref.read(counterProvider.notifier).increment(),
+                  child: Text(l10n.increment),
                 ),
               ],
             ),

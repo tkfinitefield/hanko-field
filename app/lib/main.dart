@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:app/l10n/gen/app_localizations.dart';
 
-import 'core/app/app_flavor.dart';
+import 'package:app/core/app/app_flavor.dart';
+import 'package:app/core/theme/app_theme.dart';
 
 void main() {
   runApp(const ProviderScope(child: App()));
@@ -14,11 +16,11 @@ class App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final config = ref.watch(appConfigProvider);
     return MaterialApp(
-      title: config.displayName,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2A2A2A)),
-        useMaterial3: true,
-      ),
+      onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         appBar: AppBar(title: Text(config.displayName)),
         body: Center(
