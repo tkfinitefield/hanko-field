@@ -11,6 +11,7 @@ import (
     "path/filepath"
     "strings"
     "time"
+    "sync"
 
     handlersPkg "finitefield.org/hanko-web/internal/handlers"
     "finitefield.org/hanko-web/internal/format"
@@ -29,6 +30,9 @@ var (
     devMode   bool
     tmplCache *template.Template
     i18nBundle *i18n.Bundle
+    // per-page cache in production to avoid reparse on each request
+    pageTmplCache = map[string]*template.Template{}
+    pageTmplMu sync.RWMutex
 )
 
 func main() {
@@ -133,14 +137,18 @@ func main() {
 	}
 }
 
-func parseTemplates() (*template.Template, error) {
-    funcMap := template.FuncMap{
+func tmplFuncMap() template.FuncMap {
+    return template.FuncMap{
         "now":      time.Now,
         "nowf":     func(layout string) string { return time.Now().Format(layout) },
         "tlang":    func(lang, key string) string { if i18nBundle == nil { return key }; return i18nBundle.T(lang, key) },
         "fmtDate":  func(ts time.Time, lang string) string { return format.FmtDate(ts, lang) },
         "fmtMoney": func(amount int64, currency, lang string) string { return format.FmtCurrency(amount, currency, lang) },
     }
+}
+
+func parseTemplates() (*template.Template, error) {
+    funcMap := tmplFuncMap()
 	// Recursively discover and parse all .tmpl files. Note: ParseGlob doesn't support **.
 	var files []string
 	if err := filepath.WalkDir(templatesDir, func(path string, d fs.DirEntry, err error) error {
@@ -161,6 +169,29 @@ func parseTemplates() (*template.Template, error) {
 		return nil, fmt.Errorf("no templates found under %s", templatesDir)
 	}
 	return template.New("_root").Funcs(funcMap).ParseFiles(files...)
+}
+
+// parsePageTemplates builds a template set with the shared layout/partials and one page.
+func parsePageTemplates(page string) (*template.Template, error) {
+    funcMap := tmplFuncMap()
+    var files []string
+    // layouts
+    _ = filepath.WalkDir(filepath.Join(templatesDir, "layouts"), func(path string, d fs.DirEntry, err error) error {
+        if err != nil { return err }
+        if d.IsDir() { return nil }
+        if strings.HasSuffix(d.Name(), ".tmpl") { files = append(files, path) }
+        return nil
+    })
+    // partials
+    _ = filepath.WalkDir(filepath.Join(templatesDir, "partials"), func(path string, d fs.DirEntry, err error) error {
+        if err != nil { return err }
+        if d.IsDir() { return nil }
+        if strings.HasSuffix(d.Name(), ".tmpl") { files = append(files, path) }
+        return nil
+    })
+    // page
+    files = append(files, filepath.Join(templatesDir, "pages", page+".tmpl"))
+    return template.New("_root").Funcs(funcMap).ParseFiles(files...)
 }
 
 // render executes the base layout. In dev mode, templates are reparsed on each request.
@@ -187,6 +218,43 @@ func render(w http.ResponseWriter, r *http.Request, data any) {
 	}
 }
 
+// renderPage executes the base layout with page-specific content definitions.
+func renderPage(w http.ResponseWriter, r *http.Request, page string, data any) {
+    w.Header().Set("Content-Type", "text/html; charset=utf-8")
+    var t *template.Template
+    if devMode {
+        var err error
+        t, err = parsePageTemplates(page)
+        if err != nil {
+            http.Error(w, fmt.Sprintf("template parse error: %v", err), http.StatusInternalServerError)
+            return
+        }
+    } else {
+        pageTmplMu.RLock()
+        t = pageTmplCache[page]
+        pageTmplMu.RUnlock()
+        if t == nil {
+            var err error
+            t, err = parsePageTemplates(page)
+            if err != nil {
+                http.Error(w, fmt.Sprintf("template parse error: %v", err), http.StatusInternalServerError)
+                return
+            }
+            pageTmplMu.Lock()
+            pageTmplCache[page] = t
+            pageTmplMu.Unlock()
+        }
+    }
+    if t == nil {
+        http.Error(w, "template not initialized", http.StatusInternalServerError)
+        return
+    }
+    if err := t.ExecuteTemplate(w, "base", data); err != nil {
+        http.Error(w, fmt.Sprintf("template exec error: %v", err), http.StatusInternalServerError)
+        return
+    }
+}
+
 // HomeHandler renders the landing page.
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
     lang := mw.Lang(r)
@@ -199,7 +267,7 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
         vm.SEO.Title = i18nBundle.T(lang, "home.seo.title")
         vm.SEO.Description = i18nBundle.T(lang, "home.seo.description")
     }
-    render(w, r, vm)
+    renderPage(w, r, "home", vm)
 }
 
 // Generic page handlers
@@ -209,7 +277,7 @@ func ShopHandler(w http.ResponseWriter, r *http.Request) {
     vm.Path = r.URL.Path
     vm.Nav = nav.Build(vm.Path)
     vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
-    render(w, r, vm)
+    renderPage(w, r, "shop", vm)
 }
 
 func TemplatesHandler(w http.ResponseWriter, r *http.Request) {
@@ -218,7 +286,7 @@ func TemplatesHandler(w http.ResponseWriter, r *http.Request) {
     vm.Path = r.URL.Path
     vm.Nav = nav.Build(vm.Path)
     vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
-    render(w, r, vm)
+    renderPage(w, r, "templates", vm)
 }
 
 func GuidesHandler(w http.ResponseWriter, r *http.Request) {
@@ -227,7 +295,7 @@ func GuidesHandler(w http.ResponseWriter, r *http.Request) {
     vm.Path = r.URL.Path
     vm.Nav = nav.Build(vm.Path)
     vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
-    render(w, r, vm)
+    renderPage(w, r, "guides", vm)
 }
 
 func AccountHandler(w http.ResponseWriter, r *http.Request) {
@@ -236,5 +304,5 @@ func AccountHandler(w http.ResponseWriter, r *http.Request) {
     vm.Path = r.URL.Path
     vm.Nav = nav.Build(vm.Path)
     vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
-    render(w, r, vm)
+    renderPage(w, r, "account", vm)
 }
