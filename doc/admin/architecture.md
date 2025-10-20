@@ -108,6 +108,16 @@ func TableFragment(w http.ResponseWriter, r *http.Request) error {
 4. Layout components link to `/public/static/app.css`; helper wrappers can evolve once fingerprinting is introduced.
 5. JavaScript enhancements (e.g., Alpine.js) can ship as additional files in `public/static` built via separate scripts.
 
+## Middleware Stack
+
+- `RequestID`, `RealIP`, `Logger`, `Recoverer`, `Timeout` from chi.
+- Custom middleware per admin routes:
+  - `HTMX()` annotates HX headers and exposes `middleware.IsHTMXRequest(ctx)` for handlers.
+  - `NoStore()` sets `Cache-Control: no-store` for authenticated pages.
+  - `Auth()` validates Firebase (placeholder) bearer tokens, injects `middleware.User`, and redirects unauthenticated browsers to `ADMIN_BASE_PATH + "/login"` while returning 401 + `HX-Redirect` for htmx requests.
+  - `CSRF()` issues double-submit cookies (`admin_csrf` by default) and enforces `X-CSRF-Token` on unsafe verbs; use `middleware.CSRFTokenFromContext(ctx)` to embed tokens into forms/meta tags.
+- Fragment endpoints should be registered via `httpserver.RegisterFragment(r, "/path", handler)` to ensure they are htmx-only.
+
 ## Request Flow
 
 ```mermaid

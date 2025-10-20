@@ -34,6 +34,7 @@ Go build cache is redirected to `.gocache` to remain within the repo sandbox. St
 
 - `ADMIN_HTTP_ADDR` (default `:8080`) controls the listen address.
 - `ADMIN_BASE_PATH` (default `/admin`) sets the mount point for all admin routes.
+- Attach an `Authorization: Bearer <token>` header (any non-empty token accepted by the default authenticator) when exploring authenticated routes locally. Browsers without a token will be redirected to `/admin/login`.
 
 ## Notes
 

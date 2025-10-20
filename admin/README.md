@@ -36,6 +36,10 @@ Environment variables:
 
 Run `make ensure-tailwind` after changing `TAILWIND_VERSION` in the `Makefile`; the rule verifies the installed binary matches the requested version and re-downloads if needed.
 
+### Authentication
+
+The default authenticator accepts any non-empty bearer token for local development. Include an `Authorization: Bearer <token>` header in requests (e.g., via browser extension) until Firebase integration is wired in. Unauthenticated browsers are redirected to `<ADMIN_BASE_PATH>/login`.
+
 ## Layout
 
 - `cmd/admin` – entrypoint.
