@@ -62,12 +62,18 @@ func Session(next http.Handler) http.Handler {
 		// attach to context
 		ctx := contextWithSession(r, sd)
 		// proceed
-		rw := NewResponseRecorder(w)
-		next.ServeHTTP(rw, r.WithContext(ctx))
-		// persist if needed (new or changed)
-		if sd.dirty || !fromCookie {
-			writeSessionCookie(rw, r, sd)
-		}
+        rw := NewResponseRecorder(w)
+        // ensure cookie is set just before first write if needed
+        rw.SetBeforeWrite(func(w http.ResponseWriter) {
+            if sd.dirty || !fromCookie {
+                writeSessionCookie(w, r, sd)
+            }
+        })
+        next.ServeHTTP(rw, r.WithContext(ctx))
+        // If nothing was written yet (e.g., HEAD), persist cookie now
+        if !rw.wrote && (sd.dirty || !fromCookie) {
+            writeSessionCookie(w, r, sd)
+        }
 	})
 }
 
@@ -96,40 +102,40 @@ func (s *SessionData) MarkDirty() { s.dirty = true; s.UpdatedAt = time.Now().UTC
 
 // readSessionCookie parses and verifies the session cookie
 func readSessionCookie(r *http.Request) (*SessionData, bool) {
-	c, err := r.Cookie(sessionCookieName)
-	if err != nil || c.Value == "" {
-		return &SessionData{}, false
-	}
-	parts := strings.Split(c.Value, ".")
-	if len(parts) != 2 {
-		return &SessionData{}, false
-	}
-	payloadB, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
-		return &SessionData{}, false
-	}
-	sigB, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return &SessionData{}, false
-	}
-	mac := hmac.New(sha256.New, sessionSignKey)
-	mac.Write(payloadB)
-	if !hmac.Equal(sigB, mac.Sum(nil)) {
-		return &SessionData{}, false
-	}
-	var sd SessionData
-	if err := json.Unmarshal(payloadB, &sd); err != nil {
-		return &SessionData{}, false
-	}
-	return &sd, true
+    c, err := r.Cookie(sessionCookieName)
+    if err != nil || c.Value == "" {
+        return &SessionData{}, false
+    }
+    parts := strings.Split(c.Value, ".")
+    if len(parts) != 2 {
+        return &SessionData{}, false
+    }
+    payloadB, err := base64.RawURLEncoding.DecodeString(parts[0])
+    if err != nil {
+        return &SessionData{}, false
+    }
+    sigB, err := base64.RawURLEncoding.DecodeString(parts[1])
+    if err != nil {
+        return &SessionData{}, false
+    }
+    mac := hmac.New(sha256.New, sessionSignKey)
+    mac.Write(payloadB)
+    if !hmac.Equal(sigB, mac.Sum(nil)) {
+        return &SessionData{}, false
+    }
+    var sd SessionData
+    if err := json.Unmarshal(payloadB, &sd); err != nil {
+        return &SessionData{}, false
+    }
+    return &sd, true
 }
 
 func writeSessionCookie(w http.ResponseWriter, r *http.Request, sd *SessionData) {
-	b, _ := json.Marshal(sd)
-	payload := base64.RawURLEncoding.EncodeToString(b)
-	mac := hmac.New(sha256.New, sessionSignKey)
-	mac.Write([]byte(payload))
-	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+    b, _ := json.Marshal(sd)
+    payload := base64.RawURLEncoding.EncodeToString(b)
+    mac := hmac.New(sha256.New, sessionSignKey)
+    mac.Write(b)
+    sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	val := payload + "." + sig
 	// httpOnly to prevent JS access
 	http.SetCookie(w, &http.Cookie{

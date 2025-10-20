@@ -12,7 +12,7 @@
 - [x] [Configure build/release pipeline for Cloud Run deployment (Dockerfile, cloudbuild.yaml, env configs).](doc/web/tasks/007-configure-build-release-pipeline-for-cloud-run-deployment-dockerfile-cloudbuild-yaml-env-c.md)
 - [x] [Implement middleware stack (auth, CSRF, session, logging, caching) shared across SSR and htmx fragments.](doc/web/tasks/008-implement-middleware-stack-auth-csrf-session-logging-caching-shared-across-ssr-and-htmx-fr.md)
 - [x] [Set up localization (i18n dictionaries), formatting helpers, and SEO metadata utilities.](doc/web/tasks/009-set-up-localization-i18n-dictionaries-formatting-helpers-and-seo-metadata-utilities.md)
-- [ ] [Establish integration/unit testing harness (httptest, HTML assertions, htmx interactions).](doc/web/tasks/010-establish-integration-unit-testing-harness-httptest-html-assertions-htmx-interactions.md)
+- [x] [Establish integration/unit testing harness (httptest, HTML assertions, htmx interactions).](doc/web/tasks/010-establish-integration-unit-testing-harness-httptest-html-assertions-htmx-interactions.md)
 
 ## 2. Shared Layout & Components
 - [ ] [Implement base layout (`/layouts/_base.html`) with header, footer, responsive nav, and modal container.](doc/web/tasks/011-implement-base-layout-layouts-base-html-with-header-footer-responsive-nav-and-modal-contai.md)

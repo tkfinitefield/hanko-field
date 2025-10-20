@@ -26,4 +26,15 @@ type SEOData struct {
     Title       string
     Description string
     Canonical   string
+    OG          struct{
+        Title       string
+        Description string
+        Image       string
+        Type        string
+    }
+    Twitter     struct{
+        Card  string
+        Site  string
+        Image string
+    }
 }

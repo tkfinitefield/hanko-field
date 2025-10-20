@@ -14,9 +14,15 @@ func FmtCurrency(minor int64, currency, lang string) string {
     case "JPY":
         return fmt.Sprintf("¥%s", thousandSep(minor))
     case "USD":
-        // assume cents; round to 2 decimals
-        dollars := float64(minor) / 100.0
-        return fmt.Sprintf("$%,.2f", dollars)
+        // assume cents; format with 2 decimals
+        neg := minor < 0
+        if neg { minor = -minor }
+        major := minor / 100
+        cents := minor % 100
+        head := thousandSep(major)
+        tail := fmt.Sprintf("%02d", cents)
+        if neg { return "-$" + head + "." + tail }
+        return "$" + head + "." + tail
     default:
         // generic minor units
         return fmt.Sprintf("%s %s", currency, thousandSep(minor))
@@ -45,4 +51,3 @@ func FmtDate(t time.Time, lang string) string {
         return t.Format("Jan 2, 2006")
     }
 }
-

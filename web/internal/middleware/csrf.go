@@ -1,11 +1,11 @@
 package middleware
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"net/http"
-	"strings"
-	"time"
+    "crypto/rand"
+    "encoding/hex"
+    "net/http"
+    "strings"
+    "time"
 )
 
 const csrfCookieName = "csrf_token"
@@ -40,20 +40,20 @@ func CSRF(next http.Handler) http.Handler {
 		}
 
 		// For unsafe methods, verify header AND (optionally) cookie token
-		if !isSafeMethod(r.Method) {
-			// Skip CSRF check for programmatic clients sending Authorization Bearer (non-browser)
-			if auth := r.Header.Get("Authorization"); auth == "" || !strings.HasPrefix(strings.ToLower(auth), "bearer ") {
-				hdr := r.Header.Get("X-CSRF-Token")
-				if hdr == "" || hdr != token {
-					writeError(w, r, http.StatusForbidden, "invalid CSRF token")
-					return
-				}
-				if c, err := r.Cookie(csrfCookieName); err != nil || c.Value != token {
-					writeError(w, r, http.StatusForbidden, "invalid CSRF token")
-					return
-				}
-			}
-		}
+        if !isSafeMethod(r.Method) {
+            // Skip CSRF check for programmatic clients sending Authorization Bearer (non-browser)
+            if auth := r.Header.Get("Authorization"); auth == "" || !strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+                hdr := r.Header.Get("X-CSRF-Token")
+                if hdr == "" || hdr != token {
+                    writeError(w, r, http.StatusForbidden, "invalid CSRF token")
+                    return
+                }
+                if c, err := r.Cookie(csrfCookieName); err != nil || c.Value != token {
+                    writeError(w, r, http.StatusForbidden, "invalid CSRF token")
+                    return
+                }
+            }
+        }
 
 		next.ServeHTTP(w, r)
 	})

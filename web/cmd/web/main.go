@@ -130,6 +130,7 @@ func main() {
 func parseTemplates() (*template.Template, error) {
     funcMap := template.FuncMap{
         "now":      time.Now,
+        "nowf":     func(layout string) string { return time.Now().Format(layout) },
         "tlang":    func(lang, key string) string { if i18nBundle == nil { return key }; return i18nBundle.T(lang, key) },
         "fmtDate":  func(ts time.Time, lang string) string { return format.FmtDate(ts, lang) },
         "fmtMoney": func(amount int64, currency, lang string) string { return format.FmtCurrency(amount, currency, lang) },
