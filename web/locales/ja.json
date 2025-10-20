@@ -21,8 +21,17 @@
   "home.compare.col.shape": "形状",
   "home.compare.col.size": "サイズ",
   "home.compare.col.price": "価格",
+  "home.compare.empty": "条件に一致する商品がありません",
   "home.guides.title": "最新ガイド",
   "home.guides.subtitle": "はじめての方に役立つ記事",
+  "filter.all": "すべて",
+  "filter.apply": "絞り込む",
+  "shape.round": "丸型",
+  "shape.square": "角型",
+  "shape.rect": "長方形",
+  "size.small": "小",
+  "size.medium": "中",
+  "size.large": "大",
   "cta.create": "印影を作る",
   "cta.explore": "素材から探す"
 }

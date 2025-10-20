@@ -4,15 +4,32 @@
         hx-get="/frags/compare/sku-table"
         hx-target="#compare-frag"
         hx-swap="outerHTML">
-    {{ template "c_select" (dict "Name" "shape" "Label" "Shape" "Options" (list (dict "Value" "" "Label" "All") (dict "Value" "round" "Label" "Round") (dict "Value" "square" "Label" "Square") (dict "Value" "rect" "Label" "Rect") ) "Value" .Shape) }}
-    {{ template "c_select" (dict "Name" "size" "Label" "Size" "Options" (list (dict "Value" "" "Label" "All") (dict "Value" "small" "Label" "Small") (dict "Value" "medium" "Label" "Medium") (dict "Value" "large" "Label" "Large") ) "Value" .Size) }}
+    {{ template "c_select" (dict 
+      "Name" "shape" 
+      "Label" (tlang $.Lang "home.compare.col.shape") 
+      "Options" (list 
+        (dict "Value" "" "Label" (tlang $.Lang "filter.all"))
+        (dict "Value" "round" "Label" (tlang $.Lang "shape.round"))
+        (dict "Value" "square" "Label" (tlang $.Lang "shape.square"))
+        (dict "Value" "rect" "Label" (tlang $.Lang "shape.rect"))
+      ) 
+      "Value" .Shape) }}
+    {{ template "c_select" (dict 
+      "Name" "size" 
+      "Label" (tlang $.Lang "home.compare.col.size") 
+      "Options" (list 
+        (dict "Value" "" "Label" (tlang $.Lang "filter.all"))
+        (dict "Value" "small" "Label" (tlang $.Lang "size.small"))
+        (dict "Value" "medium" "Label" (tlang $.Lang "size.medium"))
+        (dict "Value" "large" "Label" (tlang $.Lang "size.large"))
+      ) 
+      "Value" .Size) }}
     <div class="flex items-end">
-      {{ template "c_button" (dict "Label" "Filter" "Variant" "secondary" "Type" "submit") }}
+      {{ template "c_button" (dict "Label" (tlang $.Lang "filter.apply") "Variant" "secondary" "Type" "submit") }}
     </div>
   </form>
   <div>
-    {{ template "c_table" (dict "Columns" .Columns "Rows" .Rows "EmptyMessage" "No matching SKUs") }}
+    {{ template "c_table" (dict "Columns" .Columns "Rows" .Rows "EmptyMessage" (tlang $.Lang "home.compare.empty")) }}
   </div>
 </div>
 {{ end }}
-

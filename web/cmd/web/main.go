@@ -522,6 +522,7 @@ func CompareSKUTableFrag(w http.ResponseWriter, r *http.Request) {
         "Rows":    rows,
         "Shape":   shape,
         "Size":    size,
+        "Lang":    lang,
     }
     renderTemplate(w, r, "frag_compare_sku_table", props)
 }

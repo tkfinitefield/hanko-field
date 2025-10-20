@@ -21,8 +21,17 @@
   "home.compare.col.shape": "Shape",
   "home.compare.col.size": "Size",
   "home.compare.col.price": "Price",
+  "home.compare.empty": "No matching SKUs",
   "home.guides.title": "Latest Guides",
   "home.guides.subtitle": "Helpful articles to get started.",
+  "filter.all": "All",
+  "filter.apply": "Filter",
+  "shape.round": "Round",
+  "shape.square": "Square",
+  "shape.rect": "Rect",
+  "size.small": "Small",
+  "size.medium": "Medium",
+  "size.large": "Large",
   "cta.create": "Create a Seal",
   "cta.explore": "Explore Materials"
 }
