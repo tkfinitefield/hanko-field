@@ -36,6 +36,7 @@ Go build cache is redirected to `.gocache` to remain within the repo sandbox. St
 - `ADMIN_HTTP_ADDR` (default `:8080`) controls the listen address.
 - `ADMIN_BASE_PATH` (default `/admin`) sets the mount point for all admin routes.
 - Attach an `Authorization: Bearer <token>` header (any non-empty token accepted by the default authenticator) when exploring authenticated routes locally. Browsers without a token will be redirected to `/admin/login`.
+- Set `FIREBASE_PROJECT_ID` together with `GOOGLE_APPLICATION_CREDENTIALS` to enable Firebase ID token verification. When using the Firebase Auth emulator, also provide `FIREBASE_AUTH_EMULATOR_HOST`.
 
 ## Notes
 

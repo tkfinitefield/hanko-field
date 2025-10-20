@@ -34,6 +34,9 @@ Environment variables:
 
 - `ADMIN_HTTP_ADDR` – bind address (default `:8080`)
 - `ADMIN_BASE_PATH` – mount point for the admin UI (default `/admin`)
+- `FIREBASE_PROJECT_ID` – enables Firebase ID token verification when provided (requires service account credentials)
+- `GOOGLE_APPLICATION_CREDENTIALS` – path to service account JSON used by the Firebase Admin SDK
+- `FIREBASE_AUTH_EMULATOR_HOST` – optional host for the Firebase Auth emulator during local development
 
 Run `make ensure-tailwind` after changing `TAILWIND_VERSION` in the `Makefile`; the rule verifies the installed binary matches the requested version and re-downloads if needed.
 

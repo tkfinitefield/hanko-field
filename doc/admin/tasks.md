@@ -14,7 +14,7 @@
 - [x] [Set up integration tests harness (httptest + DOM assertions) and smoke test environment for admin flows.](doc/admin/tasks/009-set-up-integration-tests-harness-httptest-dom-assertions-and-smoke-test-environment-for-ad.md)
 
 ## 2. Authentication, Authorization, and Session Management
-- [ ] [Implement Firebase ID token verification for staff/admin, including refresh and error handling UX.](doc/admin/tasks/010-implement-firebase-id-token-verification-for-staff-admin-including-refresh-and-error-handl.md)
+- [x] [Implement Firebase ID token verification for staff/admin, including refresh and error handling UX.](doc/admin/tasks/010-implement-firebase-id-token-verification-for-staff-admin-including-refresh-and-error-handl.md)
 - [ ] [Build session middleware storing user info, CSRF tokens, and feature flags; add remember-me support if required.](doc/admin/tasks/011-build-session-middleware-storing-user-info-csrf-tokens-and-feature-flags-add-remember-me-s.md)
 - [ ] [Implement RBAC guard utilities for template rendering (sidebar filtering, action visibility).](doc/admin/tasks/012-implement-rbac-guard-utilities-for-template-rendering-sidebar-filtering-action-visibility.md)
 - [ ] [Create login/logout flows (`/admin/login`, `/admin/logout`) with error states and redirect logic.](doc/admin/tasks/013-create-login-logout-flows-admin-login-admin-logout-with-error-states-and-redirect-logic.md)

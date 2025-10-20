@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -65,6 +66,32 @@ func TestAuthMiddleware(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d", rr.Code)
 		}
+	})
+
+	t.Run("token from cookie passes through", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+		req.AddCookie(&http.Cookie{Name: "__session", Value: "valid"})
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rr.Code)
+		}
+	})
+
+	t.Run("expired token triggers refresh header", func(t *testing.T) {
+		auth.err = NewAuthError(ReasonTokenExpired, errors.New("expired"))
+		req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+		req.Header.Set("Authorization", "Bearer valid")
+		req.Header.Set("HX-Request", "true")
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", rr.Code)
+		}
+		if rr.Header().Get("HX-Refresh") != "true" {
+			t.Fatalf("expected HX-Refresh header")
+		}
+		auth.err = nil
 	})
 }
 
