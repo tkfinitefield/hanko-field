@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 
 	appsession "finitefield.org/hanko-admin/internal/admin/session"
@@ -145,22 +146,18 @@ func parseBearerToken(header string) string {
 }
 
 func cookieToken(r *http.Request) string {
-	candidates := []string{"Authorization", "__session", "idToken", "IDToken"}
-	for _, name := range candidates {
-		c, err := r.Cookie(name)
-		if err != nil {
-			continue
-		}
-		val := strings.TrimSpace(c.Value)
-		if val == "" {
-			continue
-		}
-		if strings.HasPrefix(strings.ToLower(val), "bearer ") {
-			return strings.TrimSpace(val[7:])
-		}
-		return val
+	c, err := r.Cookie("Authorization")
+	if err != nil {
+		return ""
 	}
-	return ""
+	val := strings.TrimSpace(c.Value)
+	if val == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(val), "bearer ") {
+		return strings.TrimSpace(val[7:])
+	}
+	return val
 }
 
 func handleUnauthorized(w http.ResponseWriter, r *http.Request, loginPath, reason string) {
@@ -171,7 +168,8 @@ func handleUnauthorized(w http.ResponseWriter, r *http.Request, loginPath, reaso
 		reason = ReasonTokenInvalid
 	}
 
-	target := buildLoginRedirectURL(loginPath, reason, extractNextParam(r, loginPath))
+	next := extractNextParam(r, loginPath)
+	target := buildLoginRedirectURL(loginPath, reason, next)
 
 	if IsHTMXRequest(r.Context()) {
 		if reason == ReasonTokenExpired {
@@ -191,40 +189,27 @@ func extractNextParam(r *http.Request, loginPath string) string {
 		return ""
 	}
 
-	raw := r.URL.RequestURI()
-	if raw == "" {
+	base := deriveBasePath(loginPath)
+	candidate := sanitizeRedirectCandidate(base, r.URL.RequestURI())
+	if candidate == "" {
+		pathOnly := r.URL.Path
+		if pathOnly != "" {
+			candidate = sanitizeRedirectCandidate(base, pathOnly)
+			if candidate != "" && r.URL.RawQuery != "" {
+				candidate += "?" + r.URL.RawQuery
+			}
+		}
+	}
+
+	if candidate == "" {
 		return ""
 	}
 
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed == nil || parsed.IsAbs() {
+	if loginPath != "" && samePath(pathComponent(candidate), loginPath) {
 		return ""
 	}
 
-	path := parsed.Path
-	if path == "" {
-		return ""
-	}
-
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
-	if samePath(path, loginPath) {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString(path)
-	if parsed.RawQuery != "" {
-		b.WriteString("?")
-		b.WriteString(parsed.RawQuery)
-	}
-	if parsed.Fragment != "" {
-		b.WriteString("#")
-		b.WriteString(parsed.Fragment)
-	}
-	return b.String()
+	return candidate
 }
 
 func buildLoginRedirectURL(loginPath, reason, next string) string {
@@ -271,6 +256,115 @@ func samePath(a, b string) bool {
 		return p
 	}
 	return trim(a) == trim(b)
+}
+
+func sanitizeRedirectCandidate(basePath, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	if parsed.Scheme != "" || parsed.Host != "" {
+		return ""
+	}
+
+	pathPart := parsed.Path
+	if pathPart == "" {
+		pathPart = "/"
+	}
+
+	unescaped, err := url.PathUnescape(pathPart)
+	if err != nil {
+		return ""
+	}
+	if strings.Contains(unescaped, "\\") {
+		return ""
+	}
+
+	cleaned := path.Clean(unescaped)
+	if !strings.HasPrefix(cleaned, "/") {
+		cleaned = "/" + cleaned
+	}
+	if strings.HasPrefix(cleaned, "//") {
+		return ""
+	}
+
+	normalisedBase := normalizeRedirectBase(basePath)
+	if normalisedBase != "/" && !hasPathPrefix(cleaned, normalisedBase) {
+		return ""
+	}
+
+	result := cleaned
+	if parsed.RawQuery != "" {
+		result += "?" + parsed.RawQuery
+	}
+	if parsed.Fragment != "" {
+		result += "#" + parsed.Fragment
+	}
+	return result
+}
+
+func deriveBasePath(loginPath string) string {
+	loginPath = strings.TrimSpace(loginPath)
+	if loginPath == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(loginPath, "/") {
+		loginPath = "/" + loginPath
+	}
+	base := path.Dir(loginPath)
+	if base == "." || base == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(base, "/") {
+		base = "/" + base
+	}
+	if len(base) > 1 && strings.HasSuffix(base, "/") {
+		base = strings.TrimRight(base, "/")
+	}
+	return base
+}
+
+func normalizeRedirectBase(base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(base, "/") {
+		base = "/" + base
+	}
+	if len(base) > 1 && strings.HasSuffix(base, "/") {
+		base = strings.TrimRight(base, "/")
+	}
+	return base
+}
+
+func hasPathPrefix(candidate, base string) bool {
+	if base == "/" {
+		return strings.HasPrefix(candidate, "/")
+	}
+	if !strings.HasPrefix(candidate, base) {
+		return false
+	}
+	if len(candidate) == len(base) {
+		return true
+	}
+	return candidate[len(base)] == '/'
+}
+
+func pathComponent(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return parsed.Path
 }
 
 func destroySession(ctx context.Context) {

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -25,7 +26,7 @@ type authHandlers struct {
 
 func newAuthHandlers(authenticator custommw.Authenticator, basePath, loginPath string) *authHandlers {
 	if authenticator == nil {
-		authenticator = custommw.DefaultAuthenticator()
+		panic("auth: authenticator is required")
 	}
 	if strings.TrimSpace(basePath) == "" {
 		basePath = "/"
@@ -67,12 +68,6 @@ func (h *authHandlers) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	recordedNext := r.PostFormValue("next")
 	remember := parseCheckbox(r.PostFormValue("remember"))
 	token := strings.TrimSpace(r.PostFormValue("id_token"))
-	if token == "" {
-		token = strings.TrimSpace(r.PostFormValue("token"))
-	}
-	if token == "" {
-		token = strings.TrimSpace(r.PostFormValue("password"))
-	}
 	refreshToken := strings.TrimSpace(r.PostFormValue("refresh_token"))
 
 	state := &loginFormState{
@@ -263,57 +258,15 @@ func (h *authHandlers) messageForQuery(q url.Values) string {
 	}
 }
 
-func (h *authHandlers) normalizeNext(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.IsAbs() {
-		return ""
-	}
-	path := parsed.Path
-	if path == "" {
-		return ""
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	if h.loginPath != "" && samePath(path, h.loginPath) {
-		return ""
-	}
-	if !h.allowedPath(path) {
-		return ""
-	}
-	result := path
-	if parsed.RawQuery != "" {
-		result += "?" + parsed.RawQuery
-	}
-	if parsed.Fragment != "" {
-		result += "#" + parsed.Fragment
-	}
-	return result
-}
-
 func (h *authHandlers) redirectTarget(raw string) string {
 	next := h.normalizeNext(raw)
 	if next != "" {
 		return next
 	}
-	if h.basePath == "" {
+	if strings.TrimSpace(h.basePath) == "" {
 		return "/"
 	}
 	return h.basePath
-}
-
-func (h *authHandlers) allowedPath(path string) bool {
-	if path == "" {
-		return false
-	}
-	if h.basePath == "/" {
-		return strings.HasPrefix(path, "/")
-	}
-	return strings.HasPrefix(path, h.basePath)
 }
 
 func (h *authHandlers) setAuthCookie(w http.ResponseWriter, r *http.Request, token string, remember bool) {
@@ -421,4 +374,106 @@ func samePath(a, b string) bool {
 		return p
 	}
 	return trim(a) == trim(b)
+}
+
+func (h *authHandlers) normalizeNext(raw string) string {
+	sanitized := sanitizeNextTarget(h.basePath, raw)
+	if sanitized == "" {
+		return ""
+	}
+
+	if h.loginPath != "" {
+		if samePath(pathOnly(sanitized), h.loginPath) {
+			return ""
+		}
+	}
+	return sanitized
+}
+
+func sanitizeNextTarget(basePath, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	if parsed.Scheme != "" || parsed.Host != "" {
+		return ""
+	}
+
+	pathValue := parsed.Path
+	if pathValue == "" {
+		pathValue = "/"
+	}
+
+	unescaped, err := url.PathUnescape(pathValue)
+	if err != nil {
+		return ""
+	}
+	if strings.Contains(unescaped, "\\") {
+		return ""
+	}
+
+	cleaned := path.Clean(unescaped)
+	if !strings.HasPrefix(cleaned, "/") {
+		cleaned = "/" + cleaned
+	}
+	if strings.HasPrefix(cleaned, "//") {
+		return ""
+	}
+
+	normalisedBase := normalizeBase(basePath)
+	if normalisedBase != "/" && !hasSafePrefix(cleaned, normalisedBase) {
+		return ""
+	}
+
+	target := cleaned
+	if parsed.RawQuery != "" {
+		target += "?" + parsed.RawQuery
+	}
+	if parsed.Fragment != "" {
+		target += "#" + parsed.Fragment
+	}
+	return target
+}
+
+func normalizeBase(base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(base, "/") {
+		base = "/" + base
+	}
+	if len(base) > 1 && strings.HasSuffix(base, "/") {
+		base = strings.TrimRight(base, "/")
+	}
+	return base
+}
+
+func hasSafePrefix(pathValue, base string) bool {
+	if base == "/" {
+		return strings.HasPrefix(pathValue, "/")
+	}
+	if !strings.HasPrefix(pathValue, base) {
+		return false
+	}
+	if len(pathValue) == len(base) {
+		return true
+	}
+	return pathValue[len(base)] == '/'
+}
+
+func pathOnly(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return parsed.Path
 }

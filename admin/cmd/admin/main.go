@@ -37,6 +37,10 @@ func main() {
 	}
 	cfg.Session.CookiePath = cfg.BasePath
 
+	if cfg.Authenticator == nil {
+		log.Fatal("admin: authenticator not configured; refusing to start")
+	}
+
 	srv := httpserver.New(cfg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -122,8 +126,11 @@ func boolPtr(v bool) *bool {
 func buildAuthenticator(ctx context.Context) middleware.Authenticator {
 	projectID := os.Getenv("FIREBASE_PROJECT_ID")
 	if projectID == "" {
-		log.Printf("FIREBASE_PROJECT_ID not set; using passthrough authenticator")
-		return nil
+		if getEnvBool("ADMIN_ALLOW_INSECURE_AUTH", false) {
+			log.Printf("WARNING: ADMIN_ALLOW_INSECURE_AUTH enabled; using insecure passthrough authenticator. Do NOT use in production.")
+			return middleware.DefaultAuthenticator()
+		}
+		log.Fatal("FIREBASE_PROJECT_ID not set and ADMIN_ALLOW_INSECURE_AUTH is false; refusing to start without authenticator")
 	}
 
 	app, err := firebase.NewApp(ctx, &firebase.Config{

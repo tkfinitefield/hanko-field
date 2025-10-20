@@ -101,7 +101,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 	t.Run("token from cookie passes through", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/admin", nil)
-		req.AddCookie(&http.Cookie{Name: "__session", Value: "valid"})
+		req.AddCookie(&http.Cookie{Name: "Authorization", Value: "valid"})
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
 		if rr.Code != http.StatusOK {

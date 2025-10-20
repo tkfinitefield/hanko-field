@@ -65,7 +65,7 @@ func New(cfg Config) *http.Server {
 
 	authenticator := cfg.Authenticator
 	if authenticator == nil {
-		authenticator = custommw.DefaultAuthenticator()
+		log.Fatalf("admin: authenticator is required; refusing to start without configured authenticator")
 	}
 
 	sessionStore := cfg.SessionStore

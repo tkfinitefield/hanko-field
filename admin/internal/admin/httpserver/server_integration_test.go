@@ -170,6 +170,37 @@ func TestLogoutClearsSession(t *testing.T) {
 	require.Equal(t, middleware.ReasonMissingToken, reloc.Query().Get("reason"))
 }
 
+func TestLoginRejectsExternalNextParameter(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "safe-token"}
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth))
+
+	client := noRedirectClient(t)
+	seedLoginCSRF(t, client, ts.URL+"/admin/login")
+	csrf := findCSRFCookie(t, client.Jar, ts.URL+"/admin/login")
+	require.NotEmpty(t, csrf)
+
+	form := url.Values{}
+	form.Set("id_token", auth.Token)
+	form.Set("csrf_token", csrf)
+	form.Set("next", "http://evil.example/phish")
+
+	resp, err := client.PostForm(ts.URL+"/admin/login", form)
+	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	require.Equal(t, "/admin", resp.Header.Get("Location"))
+
+	// Ensure encoded double slash is also rejected.
+	form.Set("next", "%2f%2fevil.example/another")
+	resp, err = client.PostForm(ts.URL+"/admin/login", form)
+	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	require.Equal(t, "/admin", resp.Header.Get("Location"))
+}
+
 type tokenAuthenticator struct {
 	Token string
 }

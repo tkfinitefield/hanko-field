@@ -35,6 +35,7 @@ func NewServer(t testing.TB, opts ...ServerOption) *httptest.Server {
 		LoginPath:      "",
 		CSRFCookieName: "csrf_token",
 		CSRFHeaderName: "X-CSRF-Token",
+		Authenticator:  middleware.DefaultAuthenticator(),
 	}
 
 	for _, opt := range opts {
