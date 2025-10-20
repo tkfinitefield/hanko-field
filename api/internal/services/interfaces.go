@@ -98,6 +98,8 @@ type DesignService interface {
 	CreateDesign(ctx context.Context, cmd CreateDesignCommand) (Design, error)
 	GetDesign(ctx context.Context, designID string, opts DesignReadOptions) (Design, error)
 	ListDesigns(ctx context.Context, filter DesignListFilter) (domain.CursorPage[Design], error)
+	ListDesignVersions(ctx context.Context, designID string, filter DesignVersionListFilter) (domain.CursorPage[DesignVersion], error)
+	GetDesignVersion(ctx context.Context, designID string, versionID string, opts DesignVersionReadOptions) (DesignVersion, error)
 	UpdateDesign(ctx context.Context, cmd UpdateDesignCommand) (Design, error)
 	DeleteDesign(ctx context.Context, cmd DeleteDesignCommand) error
 	DuplicateDesign(ctx context.Context, cmd DuplicateDesignCommand) (Design, error)
@@ -326,6 +328,15 @@ type DesignAssetInput struct {
 type DesignReadOptions struct {
 	IncludeVersions    bool
 	IncludeSuggestions bool
+}
+
+type DesignVersionListFilter struct {
+	Pagination    Pagination
+	IncludeAssets bool
+}
+
+type DesignVersionReadOptions struct {
+	IncludeAssets bool
 }
 
 type DesignListFilter struct {

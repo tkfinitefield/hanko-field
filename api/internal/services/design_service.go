@@ -311,6 +311,54 @@ func (s *designService) ListDesigns(ctx context.Context, filter DesignListFilter
 	return page, nil
 }
 
+func (s *designService) ListDesignVersions(ctx context.Context, designID string, filter DesignVersionListFilter) (domain.CursorPage[DesignVersion], error) {
+	if s.versions == nil {
+		return domain.CursorPage[DesignVersion]{}, ErrDesignRepositoryUnavailable
+	}
+
+	designID = strings.TrimSpace(designID)
+	if designID == "" {
+		return domain.CursorPage[DesignVersion]{}, fmt.Errorf("%w: design_id is required", ErrDesignInvalidInput)
+	}
+
+	page, err := s.versions.ListByDesign(ctx, designID, domain.Pagination(filter.Pagination))
+	if err != nil {
+		return domain.CursorPage[DesignVersion]{}, s.mapRepositoryError(err)
+	}
+
+	if !filter.IncludeAssets && len(page.Items) > 0 {
+		for i, version := range page.Items {
+			page.Items[i].Snapshot = stripSnapshotAssets(version.Snapshot)
+		}
+	}
+
+	return page, nil
+}
+
+func (s *designService) GetDesignVersion(ctx context.Context, designID, versionID string, opts DesignVersionReadOptions) (DesignVersion, error) {
+	if s.versions == nil {
+		return DesignVersion{}, ErrDesignRepositoryUnavailable
+	}
+
+	designID = strings.TrimSpace(designID)
+	if designID == "" {
+		return DesignVersion{}, fmt.Errorf("%w: design_id is required", ErrDesignInvalidInput)
+	}
+	versionID = strings.TrimSpace(versionID)
+	if versionID == "" {
+		return DesignVersion{}, fmt.Errorf("%w: version_id is required", ErrDesignInvalidInput)
+	}
+
+	version, err := s.versions.FindByID(ctx, designID, versionID)
+	if err != nil {
+		return DesignVersion{}, s.mapRepositoryError(err)
+	}
+	if !opts.IncludeAssets {
+		version.Snapshot = stripSnapshotAssets(version.Snapshot)
+	}
+	return version, nil
+}
+
 func (s *designService) UpdateDesign(ctx context.Context, cmd UpdateDesignCommand) (Design, error) {
 	if s.designs == nil || s.versions == nil {
 		return Design{}, ErrDesignRepositoryUnavailable
@@ -1025,6 +1073,21 @@ func cloneSnapshot(src map[string]any) map[string]any {
 		return nil
 	}
 	return maps.Clone(src)
+}
+
+func stripSnapshotAssets(snapshot map[string]any) map[string]any {
+	if len(snapshot) == 0 {
+		return nil
+	}
+	copy := cloneSnapshot(snapshot)
+	if copy == nil {
+		return nil
+	}
+	delete(copy, "assets")
+	if len(copy) == 0 {
+		return nil
+	}
+	return copy
 }
 
 func cloneMetadata(src map[string]any) map[string]any {

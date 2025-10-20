@@ -45,13 +45,17 @@ func (r *DesignVersionRepository) Append(ctx context.Context, version domain.Des
 		return errors.New("design version repository: version id is required")
 	}
 
+	config, assetsDoc := splitDesignVersionSnapshot(version.Snapshot)
+
 	coll, err := r.collection(ctx, designID)
 	if err != nil {
 		return err
 	}
 
 	doc := designVersionDocument{
-		Version:    version.Version,
+		Sequence:   version.Version,
+		Config:     config,
+		Assets:     assetsDoc,
 		Snapshot:   cloneMap(version.Snapshot),
 		ChangeNote: "",
 		CreatedAt:  version.CreatedAt.UTC(),
@@ -88,11 +92,11 @@ func (r *DesignVersionRepository) ListByDesign(ctx context.Context, designID str
 
 	var startAfter []any
 	if token := strings.TrimSpace(pager.PageToken); token != "" {
-		versionNum, docID, err := decodeDesignVersionToken(token)
+		sequence, docID, err := decodeDesignVersionToken(token)
 		if err != nil {
 			return domain.CursorPage[domain.DesignVersion]{}, fmt.Errorf("design version repository: invalid page token: %w", err)
 		}
-		startAfter = []any{versionNum, docID}
+		startAfter = []any{sequence, docID}
 	}
 
 	coll, err := r.collection(ctx, designID)
@@ -100,7 +104,7 @@ func (r *DesignVersionRepository) ListByDesign(ctx context.Context, designID str
 		return domain.CursorPage[domain.DesignVersion]{}, err
 	}
 
-	query := coll.OrderBy("version", firestore.Desc).OrderBy(firestore.DocumentID, firestore.Desc)
+	query := coll.OrderBy("sequence", firestore.Desc).OrderBy(firestore.DocumentID, firestore.Desc)
 	if len(startAfter) == 2 {
 		query = query.StartAfter(startAfter...)
 	}
@@ -142,7 +146,7 @@ func (r *DesignVersionRepository) ListByDesign(ctx context.Context, designID str
 	nextToken := ""
 	if limit > 0 && len(rows) == fetchLimit {
 		last := rows[len(rows)-1]
-		nextToken = encodeDesignVersionToken(last.data.Version, last.id)
+		nextToken = encodeDesignVersionToken(last.data.Sequence, last.id)
 		rows = rows[:len(rows)-1]
 	}
 
@@ -157,12 +161,144 @@ func (r *DesignVersionRepository) ListByDesign(ctx context.Context, designID str
 	}, nil
 }
 
+// FindByID returns a single version of the design.
+func (r *DesignVersionRepository) FindByID(ctx context.Context, designID string, versionID string) (domain.DesignVersion, error) {
+	if r == nil || r.provider == nil {
+		return domain.DesignVersion{}, errors.New("design version repository not initialised")
+	}
+	designID = normalizeDesignID(designID)
+	if designID == "" {
+		return domain.DesignVersion{}, errors.New("design version repository: design id is required")
+	}
+	versionID = strings.TrimSpace(versionID)
+	if versionID == "" {
+		return domain.DesignVersion{}, errors.New("design version repository: version id is required")
+	}
+
+	coll, err := r.collection(ctx, designID)
+	if err != nil {
+		return domain.DesignVersion{}, err
+	}
+
+	snap, err := coll.Doc(versionID).Get(ctx)
+	if err != nil {
+		return domain.DesignVersion{}, pfirestore.WrapError("design_versions.get", err)
+	}
+
+	var doc designVersionDocument
+	if err := snap.DataTo(&doc); err != nil {
+		return domain.DesignVersion{}, fmt.Errorf("design version repository: decode %s: %w", snap.Ref.ID, err)
+	}
+
+	return decodeDesignVersion(designID, snap.Ref.ID, doc, snap.CreateTime, snap.UpdateTime), nil
+}
+
 type designVersionDocument struct {
-	Version    int            `firestore:"version"`
-	Snapshot   map[string]any `firestore:"snapshot"`
-	ChangeNote string         `firestore:"changeNote,omitempty"`
-	CreatedAt  time.Time      `firestore:"createdAt"`
-	CreatedBy  string         `firestore:"createdBy"`
+	Sequence   int                          `firestore:"sequence"`
+	Config     map[string]any               `firestore:"config,omitempty"`
+	Assets     *designVersionAssetsDocument `firestore:"assets,omitempty"`
+	Snapshot   map[string]any               `firestore:"snapshot,omitempty"`
+	ChangeNote string                       `firestore:"changeNote,omitempty"`
+	CreatedAt  time.Time                    `firestore:"createdAt"`
+	CreatedBy  string                       `firestore:"createdBy"`
+}
+
+type designVersionAssetsDocument struct {
+	SourcePath  string `firestore:"sourcePath,omitempty"`
+	VectorPath  string `firestore:"vectorPath,omitempty"`
+	PreviewPath string `firestore:"previewPath,omitempty"`
+	PreviewURL  string `firestore:"previewUrl,omitempty"`
+}
+
+func (a *designVersionAssetsDocument) isZero() bool {
+	if a == nil {
+		return true
+	}
+	return strings.TrimSpace(a.SourcePath) == "" &&
+		strings.TrimSpace(a.VectorPath) == "" &&
+		strings.TrimSpace(a.PreviewPath) == "" &&
+		strings.TrimSpace(a.PreviewURL) == ""
+}
+
+func (a *designVersionAssetsDocument) toMap() map[string]any {
+	if a == nil || a.isZero() {
+		return nil
+	}
+	result := make(map[string]any)
+	if value := strings.TrimSpace(a.SourcePath); value != "" {
+		result["sourcePath"] = value
+	}
+	if value := strings.TrimSpace(a.VectorPath); value != "" {
+		result["vectorPath"] = value
+	}
+	if value := strings.TrimSpace(a.PreviewPath); value != "" {
+		result["previewPath"] = value
+	}
+	if value := strings.TrimSpace(a.PreviewURL); value != "" {
+		result["previewUrl"] = value
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func splitDesignVersionSnapshot(snapshot map[string]any) (map[string]any, *designVersionAssetsDocument) {
+	if len(snapshot) == 0 {
+		return nil, nil
+	}
+	config := cloneMap(snapshot)
+	if len(config) == 0 {
+		return nil, nil
+	}
+	rawAssets, ok := config["assets"]
+	if !ok {
+		return config, nil
+	}
+
+	assetsMap := extractAssetMap(rawAssets)
+	delete(config, "assets")
+
+	var assetsDoc *designVersionAssetsDocument
+	if len(assetsMap) > 0 {
+		doc := &designVersionAssetsDocument{
+			SourcePath:  stringValue(assetsMap, "sourcePath"),
+			VectorPath:  stringValue(assetsMap, "vectorPath"),
+			PreviewPath: stringValue(assetsMap, "previewPath"),
+			PreviewURL:  stringValue(assetsMap, "previewUrl"),
+		}
+		if !doc.isZero() {
+			assetsDoc = doc
+		}
+	}
+
+	if len(config) == 0 {
+		config = nil
+	}
+	return config, assetsDoc
+}
+
+func extractAssetMap(value any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	raw, ok := value.(map[string]any)
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	return cloneMap(raw)
+}
+
+func stringValue(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	if value, ok := m[key]; ok {
+		if s, ok := value.(string); ok {
+			return strings.TrimSpace(s)
+		}
+	}
+	return ""
 }
 
 func (r *DesignVersionRepository) collection(ctx context.Context, designID string) (*firestore.CollectionRef, error) {
@@ -174,11 +310,24 @@ func (r *DesignVersionRepository) collection(ctx context.Context, designID strin
 }
 
 func decodeDesignVersion(designID, versionID string, doc designVersionDocument, createdAt, updatedAt time.Time) domain.DesignVersion {
+	snapshot := cloneMap(doc.Snapshot)
+	if len(snapshot) == 0 && len(doc.Config) > 0 {
+		snapshot = cloneMap(doc.Config)
+	}
+	if doc.Assets != nil && !doc.Assets.isZero() {
+		if snapshot == nil {
+			snapshot = make(map[string]any)
+		}
+		if assets := doc.Assets.toMap(); len(assets) > 0 {
+			snapshot["assets"] = assets
+		}
+	}
+
 	version := domain.DesignVersion{
 		ID:        strings.TrimSpace(versionID),
 		DesignID:  designID,
-		Version:   doc.Version,
-		Snapshot:  cloneMap(doc.Snapshot),
+		Version:   doc.Sequence,
+		Snapshot:  cloneMap(snapshot),
 		CreatedAt: chooseTime(doc.CreatedAt, createdAt),
 		CreatedBy: strings.TrimSpace(doc.CreatedBy),
 	}

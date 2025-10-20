@@ -78,6 +78,8 @@ func (s *stubDesignRepository) ListByOwner(_ context.Context, ownerID string, _ 
 
 type stubDesignVersionRepository struct {
 	appended []domain.DesignVersion
+	listFn   func(context.Context, string, domain.Pagination) (domain.CursorPage[domain.DesignVersion], error)
+	findFn   func(context.Context, string, string) (domain.DesignVersion, error)
 }
 
 func (s *stubDesignVersionRepository) Append(_ context.Context, version domain.DesignVersion) error {
@@ -85,8 +87,18 @@ func (s *stubDesignVersionRepository) Append(_ context.Context, version domain.D
 	return nil
 }
 
-func (s *stubDesignVersionRepository) ListByDesign(context.Context, string, domain.Pagination) (domain.CursorPage[domain.DesignVersion], error) {
+func (s *stubDesignVersionRepository) ListByDesign(ctx context.Context, designID string, pager domain.Pagination) (domain.CursorPage[domain.DesignVersion], error) {
+	if s.listFn != nil {
+		return s.listFn(ctx, designID, pager)
+	}
 	return domain.CursorPage[domain.DesignVersion]{}, errors.New("not implemented")
+}
+
+func (s *stubDesignVersionRepository) FindByID(ctx context.Context, designID, versionID string) (domain.DesignVersion, error) {
+	if s.findFn != nil {
+		return s.findFn(ctx, designID, versionID)
+	}
+	return domain.DesignVersion{}, errors.New("not implemented")
 }
 
 func TestDesignService_CreateDesignTyped(t *testing.T) {
@@ -233,6 +245,124 @@ func TestDesignService_CreateDesignUploaded(t *testing.T) {
 	}
 	if design.Assets.VectorPath != "" {
 		t.Fatalf("expected empty vector path for uploaded design")
+	}
+}
+
+func TestDesignService_ListDesignVersions_StripsAssetsWhenExcluded(t *testing.T) {
+	versions := &stubDesignVersionRepository{
+		listFn: func(context.Context, string, domain.Pagination) (domain.CursorPage[domain.DesignVersion], error) {
+			return domain.CursorPage[domain.DesignVersion]{
+				Items: []domain.DesignVersion{
+					{
+						ID:       "ver_1",
+						DesignID: "dsg_1",
+						Version:  1,
+						Snapshot: map[string]any{
+							"label":  "Initial",
+							"assets": map[string]any{"previewUrl": "https://cdn/ver_1.png"},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      &stubDesignRepository{},
+		Versions:     versions,
+		AssetsBucket: "bucket",
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	page, err := svc.ListDesignVersions(context.Background(), "dsg_1", DesignVersionListFilter{
+		Pagination:    Pagination{PageSize: 5},
+		IncludeAssets: false,
+	})
+	if err != nil {
+		t.Fatalf("ListDesignVersions error: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(page.Items))
+	}
+	if _, ok := page.Items[0].Snapshot["assets"]; ok {
+		t.Fatalf("expected assets stripped from snapshot")
+	}
+}
+
+func TestDesignService_ListDesignVersions_KeepsAssetsWhenIncluded(t *testing.T) {
+	versions := &stubDesignVersionRepository{
+		listFn: func(context.Context, string, domain.Pagination) (domain.CursorPage[domain.DesignVersion], error) {
+			return domain.CursorPage[domain.DesignVersion]{
+				Items: []domain.DesignVersion{
+					{
+						ID:       "ver_2",
+						DesignID: "dsg_1",
+						Version:  2,
+						Snapshot: map[string]any{
+							"label":  "Updated",
+							"assets": map[string]any{"previewUrl": "https://cdn/ver_2.png"},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      &stubDesignRepository{},
+		Versions:     versions,
+		AssetsBucket: "bucket",
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	page, err := svc.ListDesignVersions(context.Background(), "dsg_1", DesignVersionListFilter{
+		IncludeAssets: true,
+	})
+	if err != nil {
+		t.Fatalf("ListDesignVersions error: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(page.Items))
+	}
+	if _, ok := page.Items[0].Snapshot["assets"]; !ok {
+		t.Fatalf("expected assets retained in snapshot")
+	}
+}
+
+func TestDesignService_GetDesignVersion_StripsAssetsWhenExcluded(t *testing.T) {
+	versions := &stubDesignVersionRepository{
+		findFn: func(context.Context, string, string) (domain.DesignVersion, error) {
+			return domain.DesignVersion{
+				ID:       "ver_1",
+				DesignID: "dsg_1",
+				Version:  1,
+				Snapshot: map[string]any{
+					"label":  "Initial",
+					"assets": map[string]any{"previewUrl": "https://cdn/ver_1.png"},
+				},
+			}, nil
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      &stubDesignRepository{},
+		Versions:     versions,
+		AssetsBucket: "bucket",
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	version, err := svc.GetDesignVersion(context.Background(), "dsg_1", "ver_1", DesignVersionReadOptions{})
+	if err != nil {
+		t.Fatalf("GetDesignVersion error: %v", err)
+	}
+	if _, ok := version.Snapshot["assets"]; ok {
+		t.Fatalf("expected assets removed when IncludeAssets=false")
 	}
 }
 

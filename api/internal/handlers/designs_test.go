@@ -303,6 +303,221 @@ func TestDesignHandlers_GetDesign_NotFoundForOtherUser(t *testing.T) {
 	}
 }
 
+func TestDesignHandlers_ListDesignVersions_Success(t *testing.T) {
+	now := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	var capturedFilter services.DesignVersionListFilter
+	stub := &stubDesignService{
+		getFn: func(context.Context, string, services.DesignReadOptions) (services.Design, error) {
+			return services.Design{ID: "dsg_1", OwnerID: "user-1"}, nil
+		},
+		listVersionsFn: func(_ context.Context, designID string, filter services.DesignVersionListFilter) (domain.CursorPage[services.DesignVersion], error) {
+			if designID != "dsg_1" {
+				t.Fatalf("expected designID dsg_1, got %s", designID)
+			}
+			capturedFilter = filter
+			return domain.CursorPage[services.DesignVersion]{
+				Items: []services.DesignVersion{
+					{
+						ID:      "ver_1",
+						Version: 1,
+						Snapshot: map[string]any{
+							"label": "Initial",
+							"assets": map[string]any{
+								"previewUrl": "https://cdn.example/ver_1.png",
+							},
+						},
+						CreatedAt: now,
+						CreatedBy: "user-1",
+					},
+				},
+				NextPageToken: "next-token",
+			}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodGet, "/designs/dsg_1/versions?page_size=10", nil)
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	res := httptest.NewRecorder()
+	handler.listDesignVersions(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.Result().StatusCode)
+	}
+	if capturedFilter.IncludeAssets {
+		t.Fatalf("expected IncludeAssets to be false")
+	}
+	if capturedFilter.Pagination.PageSize != 10 {
+		t.Fatalf("expected page_size 10, got %d", capturedFilter.Pagination.PageSize)
+	}
+
+	var payload designVersionListResponse
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.NextPageToken != "next-token" {
+		t.Fatalf("unexpected next page token: %s", payload.NextPageToken)
+	}
+	if len(payload.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(payload.Items))
+	}
+	if payload.Items[0].Assets != nil {
+		t.Fatalf("expected assets omitted when includeAssets=false")
+	}
+	if payload.Items[0].Snapshot == nil {
+		t.Fatalf("expected snapshot to be present")
+	}
+	if _, ok := payload.Items[0].Snapshot["assets"]; ok {
+		t.Fatalf("expected assets removed from snapshot")
+	}
+}
+
+func TestDesignHandlers_ListDesignVersions_IncludeAssets(t *testing.T) {
+	stub := &stubDesignService{
+		getFn: func(context.Context, string, services.DesignReadOptions) (services.Design, error) {
+			return services.Design{ID: "dsg_1", OwnerID: "user-1"}, nil
+		},
+		listVersionsFn: func(_ context.Context, designID string, filter services.DesignVersionListFilter) (domain.CursorPage[services.DesignVersion], error) {
+			if !filter.IncludeAssets {
+				t.Fatalf("expected IncludeAssets to be true")
+			}
+			return domain.CursorPage[services.DesignVersion]{
+				Items: []services.DesignVersion{
+					{
+						ID:      "ver_2",
+						Version: 2,
+						Snapshot: map[string]any{
+							"label": "Updated",
+							"assets": map[string]any{
+								"previewUrl": "https://cdn.example/ver_2.png",
+							},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodGet, "/designs/dsg_1/versions?includeAssets=true", nil)
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	res := httptest.NewRecorder()
+	handler.listDesignVersions(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.Result().StatusCode)
+	}
+
+	var payload designVersionListResponse
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(payload.Items))
+	}
+	if payload.Items[0].Assets == nil || payload.Items[0].Assets.PreviewURL != "https://cdn.example/ver_2.png" {
+		t.Fatalf("expected assets with previewUrl, got %+v", payload.Items[0].Assets)
+	}
+	if payload.Items[0].Snapshot == nil {
+		t.Fatalf("expected snapshot to be present")
+	}
+	if _, ok := payload.Items[0].Snapshot["assets"]; !ok {
+		t.Fatalf("expected assets retained in snapshot")
+	}
+}
+
+func TestDesignHandlers_GetDesignVersion_Success(t *testing.T) {
+	now := time.Now().UTC()
+	var capturedOpts services.DesignVersionReadOptions
+	stub := &stubDesignService{
+		getFn: func(context.Context, string, services.DesignReadOptions) (services.Design, error) {
+			return services.Design{ID: "dsg_1", OwnerID: "user-1"}, nil
+		},
+		getVersionFn: func(_ context.Context, designID, versionID string, opts services.DesignVersionReadOptions) (services.DesignVersion, error) {
+			if designID != "dsg_1" || versionID != "ver_1" {
+				t.Fatalf("unexpected ids: %s / %s", designID, versionID)
+			}
+			capturedOpts = opts
+			return services.DesignVersion{
+				ID:      versionID,
+				Version: 1,
+				Snapshot: map[string]any{
+					"label": "Initial",
+					"assets": map[string]any{
+						"previewUrl": "https://cdn.example/ver_1.png",
+					},
+				},
+				CreatedAt: now,
+				CreatedBy: "user-1",
+			}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodGet, "/designs/dsg_1/versions/ver_1?includeAssets=true", nil)
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	routeCtx.URLParams.Add("versionID", "ver_1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	res := httptest.NewRecorder()
+	handler.getDesignVersion(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.Result().StatusCode)
+	}
+	if !capturedOpts.IncludeAssets {
+		t.Fatalf("expected IncludeAssets to be true")
+	}
+
+	var payload designVersionPayload
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.ID != "ver_1" {
+		t.Fatalf("unexpected payload id: %s", payload.ID)
+	}
+	if payload.Assets == nil || payload.Assets.PreviewURL != "https://cdn.example/ver_1.png" {
+		t.Fatalf("expected assets with previewUrl, got %+v", payload.Assets)
+	}
+	if payload.Snapshot == nil {
+		t.Fatalf("expected snapshot")
+	}
+}
+
+func TestDesignHandlers_GetDesignVersion_NotOwner(t *testing.T) {
+	stub := &stubDesignService{
+		getFn: func(context.Context, string, services.DesignReadOptions) (services.Design, error) {
+			return services.Design{ID: "dsg_1", OwnerID: "someone-else"}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodGet, "/designs/dsg_1/versions/ver_1", nil)
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	routeCtx.URLParams.Add("versionID", "ver_1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	res := httptest.NewRecorder()
+	handler.getDesignVersion(res, req)
+
+	if res.Result().StatusCode != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", res.Result().StatusCode)
+	}
+}
+
 func TestDesignHandlers_UpdateDesign_Success(t *testing.T) {
 	updatedAt := time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
 	var captured services.UpdateDesignCommand
@@ -450,11 +665,13 @@ func TestDesignHandlers_DeleteDesign_NotOwner(t *testing.T) {
 }
 
 type stubDesignService struct {
-	createFn func(context.Context, services.CreateDesignCommand) (services.Design, error)
-	getFn    func(context.Context, string, services.DesignReadOptions) (services.Design, error)
-	listFn   func(context.Context, services.DesignListFilter) (domain.CursorPage[services.Design], error)
-	updateFn func(context.Context, services.UpdateDesignCommand) (services.Design, error)
-	deleteFn func(context.Context, services.DeleteDesignCommand) error
+	createFn       func(context.Context, services.CreateDesignCommand) (services.Design, error)
+	getFn          func(context.Context, string, services.DesignReadOptions) (services.Design, error)
+	listFn         func(context.Context, services.DesignListFilter) (domain.CursorPage[services.Design], error)
+	listVersionsFn func(context.Context, string, services.DesignVersionListFilter) (domain.CursorPage[services.DesignVersion], error)
+	getVersionFn   func(context.Context, string, string, services.DesignVersionReadOptions) (services.DesignVersion, error)
+	updateFn       func(context.Context, services.UpdateDesignCommand) (services.Design, error)
+	deleteFn       func(context.Context, services.DeleteDesignCommand) error
 }
 
 func (s *stubDesignService) CreateDesign(ctx context.Context, cmd services.CreateDesignCommand) (services.Design, error) {
@@ -476,6 +693,20 @@ func (s *stubDesignService) ListDesigns(ctx context.Context, filter services.Des
 		return s.listFn(ctx, filter)
 	}
 	return domain.CursorPage[services.Design]{}, nil
+}
+
+func (s *stubDesignService) ListDesignVersions(ctx context.Context, designID string, filter services.DesignVersionListFilter) (domain.CursorPage[services.DesignVersion], error) {
+	if s.listVersionsFn != nil {
+		return s.listVersionsFn(ctx, designID, filter)
+	}
+	return domain.CursorPage[services.DesignVersion]{}, nil
+}
+
+func (s *stubDesignService) GetDesignVersion(ctx context.Context, designID, versionID string, opts services.DesignVersionReadOptions) (services.DesignVersion, error) {
+	if s.getVersionFn != nil {
+		return s.getVersionFn(ctx, designID, versionID, opts)
+	}
+	return services.DesignVersion{}, nil
 }
 
 func (s *stubDesignService) UpdateDesign(ctx context.Context, cmd services.UpdateDesignCommand) (services.Design, error) {

@@ -21,8 +21,10 @@ import (
 
 const maxDesignRequestBody = 256 * 1024
 const (
-	defaultDesignPageSize = 20
-	maxDesignPageSize     = 100
+	defaultDesignPageSize        = 20
+	maxDesignPageSize            = 100
+	defaultDesignVersionPageSize = 20
+	maxDesignVersionPageSize     = 100
 )
 
 // DesignHandlers exposes design creation endpoints for authenticated users.
@@ -49,6 +51,8 @@ func (h *DesignHandlers) Routes(r chi.Router) {
 	}
 	r.Get("/", h.listDesigns)
 	r.Post("/", h.createDesign)
+	r.Get("/{designID}/versions", h.listDesignVersions)
+	r.Get("/{designID}/versions/{versionID}", h.getDesignVersion)
 	r.Get("/{designID}", h.getDesign)
 	r.Put("/{designID}", h.updateDesign)
 	r.Delete("/{designID}", h.deleteDesign)
@@ -196,10 +200,163 @@ func (h *DesignHandlers) getDesign(w http.ResponseWriter, r *http.Request) {
 	if includeHistory && len(design.Versions) > 0 {
 		payload.Versions = make([]designVersionPayload, 0, len(design.Versions))
 		for _, version := range design.Versions {
-			payload.Versions = append(payload.Versions, buildDesignVersionPayload(version))
+			payload.Versions = append(payload.Versions, buildDesignVersionPayload(version, true))
 		}
 	}
 
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *DesignHandlers) listDesignVersions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+
+	includeAssets := false
+	if raw := strings.TrimSpace(r.URL.Query().Get("includeAssets")); raw != "" {
+		flag, err := strconv.ParseBool(raw)
+		if err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "includeAssets must be a boolean", http.StatusBadRequest))
+			return
+		}
+		includeAssets = flag
+	}
+
+	pageSize := defaultDesignVersionPageSize
+	if raw := strings.TrimSpace(r.URL.Query().Get("page_size")); raw != "" {
+		size, err := strconv.Atoi(raw)
+		if err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "page_size must be an integer", http.StatusBadRequest))
+			return
+		}
+		if size < 0 {
+			size = defaultDesignVersionPageSize
+		}
+		if size > maxDesignVersionPageSize {
+			size = maxDesignVersionPageSize
+		}
+		if size == 0 {
+			pageSize = defaultDesignVersionPageSize
+		} else {
+			pageSize = size
+		}
+	}
+
+	design, err := h.designs.GetDesign(ctx, designID, services.DesignReadOptions{})
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	ownerID := strings.TrimSpace(identity.UID)
+	if ownerID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	if !strings.EqualFold(design.OwnerID, ownerID) && !identity.HasAnyRole(auth.RoleStaff, auth.RoleAdmin) {
+		httpx.WriteError(ctx, w, httpx.NewError("design_not_found", "design not found", http.StatusNotFound))
+		return
+	}
+
+	filter := services.DesignVersionListFilter{
+		Pagination: services.Pagination{
+			PageSize:  pageSize,
+			PageToken: strings.TrimSpace(r.URL.Query().Get("page_token")),
+		},
+		IncludeAssets: includeAssets,
+	}
+
+	page, err := h.designs.ListDesignVersions(ctx, designID, filter)
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	items := make([]designVersionPayload, 0, len(page.Items))
+	for _, version := range page.Items {
+		items = append(items, buildDesignVersionPayload(version, includeAssets))
+	}
+
+	response := designVersionListResponse{
+		Items:         items,
+		NextPageToken: page.NextPageToken,
+	}
+	writeJSONResponse(w, http.StatusOK, response)
+}
+
+func (h *DesignHandlers) getDesignVersion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+	versionID := strings.TrimSpace(chi.URLParam(r, "versionID"))
+	if versionID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "version id is required", http.StatusBadRequest))
+		return
+	}
+
+	includeAssets := false
+	if raw := strings.TrimSpace(r.URL.Query().Get("includeAssets")); raw != "" {
+		flag, err := strconv.ParseBool(raw)
+		if err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "includeAssets must be a boolean", http.StatusBadRequest))
+			return
+		}
+		includeAssets = flag
+	}
+
+	design, err := h.designs.GetDesign(ctx, designID, services.DesignReadOptions{})
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	ownerID := strings.TrimSpace(identity.UID)
+	if ownerID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	if !strings.EqualFold(design.OwnerID, ownerID) && !identity.HasAnyRole(auth.RoleStaff, auth.RoleAdmin) {
+		httpx.WriteError(ctx, w, httpx.NewError("design_not_found", "design not found", http.StatusNotFound))
+		return
+	}
+
+	version, err := h.designs.GetDesignVersion(ctx, designID, versionID, services.DesignVersionReadOptions{
+		IncludeAssets: includeAssets,
+	})
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	payload := buildDesignVersionPayload(version, includeAssets)
 	writeJSONResponse(w, http.StatusOK, payload)
 }
 
@@ -515,16 +672,22 @@ type designPayload struct {
 }
 
 type designVersionPayload struct {
-	ID        string         `json:"id"`
-	Version   int            `json:"version"`
-	Snapshot  map[string]any `json:"snapshot,omitempty"`
-	CreatedAt string         `json:"created_at,omitempty"`
-	CreatedBy string         `json:"created_by,omitempty"`
+	ID        string               `json:"id"`
+	Version   int                  `json:"version"`
+	Snapshot  map[string]any       `json:"snapshot,omitempty"`
+	Assets    *designAssetsPayload `json:"assets,omitempty"`
+	CreatedAt string               `json:"created_at,omitempty"`
+	CreatedBy string               `json:"created_by,omitempty"`
 }
 
 type designListResponse struct {
 	Items         []designPayload `json:"items"`
 	NextPageToken string          `json:"next_page_token,omitempty"`
+}
+
+type designVersionListResponse struct {
+	Items         []designVersionPayload `json:"items"`
+	NextPageToken string                 `json:"next_page_token,omitempty"`
 }
 
 type designAssetsPayload struct {
@@ -589,19 +752,61 @@ func buildDesignPayload(design services.Design) designPayload {
 	return payload
 }
 
-func buildDesignVersionPayload(version services.DesignVersion) designVersionPayload {
+func buildDesignVersionPayload(version services.DesignVersion, includeAssets bool) designVersionPayload {
 	payload := designVersionPayload{
 		ID:      version.ID,
 		Version: version.Version,
 	}
 	if len(version.Snapshot) > 0 {
-		payload.Snapshot = cloneMap(version.Snapshot)
+		snapshot := cloneMap(version.Snapshot)
+		if snapshot != nil && !includeAssets {
+			delete(snapshot, "assets")
+			if len(snapshot) == 0 {
+				snapshot = nil
+			}
+		}
+		if snapshot != nil {
+			payload.Snapshot = snapshot
+		}
+		if includeAssets {
+			if assets := designAssetsPayloadFromSnapshot(version.Snapshot); assets != nil {
+				payload.Assets = assets
+			}
+		}
+	} else if includeAssets {
+		if assets := designAssetsPayloadFromSnapshot(version.Snapshot); assets != nil {
+			payload.Assets = assets
+		}
 	}
 	if !version.CreatedAt.IsZero() {
 		payload.CreatedAt = formatTime(version.CreatedAt)
 	}
 	if strings.TrimSpace(version.CreatedBy) != "" {
 		payload.CreatedBy = strings.TrimSpace(version.CreatedBy)
+	}
+	return payload
+}
+
+func designAssetsPayloadFromSnapshot(snapshot map[string]any) *designAssetsPayload {
+	if len(snapshot) == 0 {
+		return nil
+	}
+	raw, ok := snapshot["assets"]
+	if !ok {
+		return nil
+	}
+	assetsMap, ok := raw.(map[string]any)
+	if !ok || len(assetsMap) == 0 {
+		return nil
+	}
+	payload := &designAssetsPayload{
+		SourcePath:  stringFromAny(assetsMap["sourcePath"]),
+		VectorPath:  stringFromAny(assetsMap["vectorPath"]),
+		PreviewPath: stringFromAny(assetsMap["previewPath"]),
+		PreviewURL:  stringFromAny(assetsMap["previewUrl"]),
+	}
+	if payload.SourcePath == "" && payload.VectorPath == "" && payload.PreviewPath == "" && payload.PreviewURL == "" {
+		return nil
 	}
 	return payload
 }
@@ -633,6 +838,16 @@ func cloneMap(src map[string]any) map[string]any {
 		return nil
 	}
 	return maps.Clone(src)
+}
+
+func stringFromAny(value any) string {
+	if value == nil {
+		return ""
+	}
+	if s, ok := value.(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return ""
 }
 
 func parseFilterValues(values []string) []string {
