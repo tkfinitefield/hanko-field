@@ -5,8 +5,8 @@
 {{ if eq $size "sm" }}{{ $w = "max-w-sm" }}{{ else if eq $size "lg" }}{{ $w = "max-w-2xl" }}{{ else if eq $size "xl" }}{{ $w = "max-w-3xl" }}{{ end }}
 <div class="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby="{{ $id }}_title">
   <div class="fixed inset-0 bg-black/50" data-modal-overlay></div>
-  <div class="fixed inset-0 flex items-center justify-center p-4">
-    <div class="relative w-full {{ $w }}" data-modal-container>
+  <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+    <div class="relative w-full {{ $w }} pointer-events-auto" data-modal-container>
       <div class="bg-white rounded-lg shadow-lg ring-1 ring-black/5 overflow-hidden">
         <div class="flex items-start justify-between px-4 py-3 border-b border-gray-100">
           <h2 id="{{ $id }}_title" class="text-base font-semibold text-gray-900">{{ .Title }}</h2>
@@ -33,4 +33,3 @@
   </div>
 </div>
 {{ end }}
-
