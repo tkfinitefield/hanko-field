@@ -68,8 +68,8 @@ func main() {
 	// can set these headers in production environments.
 	r.Use(middleware.RealIP)
 	r.Use(mw.HTMX)
-    r.Use(mw.Session)
-    r.Use(mw.Auth)
+	r.Use(mw.Session)
+	r.Use(mw.Auth)
 	r.Use(mw.CSRF)
 	r.Use(mw.VaryLocale)
 	r.Use(mw.Logger)

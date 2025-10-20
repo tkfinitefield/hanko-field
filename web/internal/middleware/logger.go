@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"encoding/json"
-	chiMid "github.com/go-chi/chi/v5/middleware"
+	chimw "github.com/go-chi/chi/v5/middleware"
 	"log"
 	"net/http"
 	"os"
@@ -31,10 +31,10 @@ func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		// wrap writer to capture status
-		rw := &statusWriter{ResponseWriter: w, status: 200}
+		rw := NewResponseRecorder(w)
 		next.ServeHTTP(rw, r)
 		// build entry
-		rid := chiMid.GetReqID(r.Context())
+		rid := chimw.GetReqID(r.Context())
 		if rid != "" {
 			r = r.WithContext(WithRequestID(r.Context(), rid))
 		}
@@ -48,7 +48,7 @@ func Logger(next http.Handler) http.Handler {
 			Message:    "request",
 			Method:     r.Method,
 			Path:       r.URL.Path,
-			Status:     rw.status,
+			Status:     rw.Status(),
 			DurationMs: time.Since(start).Milliseconds(),
 			RemoteIP:   clientIP(r),
 			RequestID:  rid,
@@ -64,15 +64,7 @@ func Logger(next http.Handler) http.Handler {
 	})
 }
 
-type statusWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *statusWriter) WriteHeader(code int) {
-	w.status = code
-	w.ResponseWriter.WriteHeader(code)
-}
+// status capturing now uses ResponseRecorder in wrap.go
 
 func clientIP(r *http.Request) string {
 	// Trust X-Forwarded-For set by Cloud Run (last IP is client)

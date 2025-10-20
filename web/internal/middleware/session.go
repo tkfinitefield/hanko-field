@@ -21,6 +21,7 @@ type SessionData struct {
 	UserID    string    `json:"uid,omitempty"`
 	Locale    string    `json:"locale,omitempty"`
 	CartID    string    `json:"cart,omitempty"`
+	CSRFToken string    `json:"csrf,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 	// internal dirty flag; not serialized
@@ -55,12 +56,13 @@ func Session(next http.Handler) http.Handler {
 			sd.ID = randID()
 			sd.CreatedAt = time.Now().UTC()
 			sd.UpdatedAt = sd.CreatedAt
+			sd.CSRFToken = newCSRFToken()
 			sd.dirty = true
 		}
 		// attach to context
 		ctx := contextWithSession(r, sd)
 		// proceed
-		rw := &responseRecorder{ResponseWriter: w, status: 200}
+		rw := NewResponseRecorder(w)
 		next.ServeHTTP(rw, r.WithContext(ctx))
 		// persist if needed (new or changed)
 		if sd.dirty || !fromCookie {
@@ -141,15 +143,11 @@ func writeSessionCookie(w http.ResponseWriter, r *http.Request, sd *SessionData)
 	})
 }
 
-// responseRecorder captures status code for logging later if needed
-type responseRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (rw *responseRecorder) WriteHeader(statusCode int) {
-	rw.status = statusCode
-	rw.ResponseWriter.WriteHeader(statusCode)
+// RegenerateID assigns a new session ID and CSRF token to prevent fixation after auth.
+func (s *SessionData) RegenerateID() {
+	s.ID = randID()
+	s.CSRFToken = newCSRFToken()
+	s.MarkDirty()
 }
 
 // helpers
