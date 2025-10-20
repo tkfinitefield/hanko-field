@@ -1,15 +1,14 @@
-{{ define "title" }}Hanko Field – Welcome{{ end }}
+{{ define "title" }}{{ tlang $.Lang "home.title" }}{{ end }}
 
 {{ define "content" }}
 <section class="py-10">
   <div class="mx-auto max-w-3xl text-center">
-    <h1 class="text-3xl md:text-4xl font-bold tracking-tight">{{ .Title }}</h1>
-    <p class="mt-4 text-gray-600">{{ .Message }}</p>
+    <h1 class="text-3xl md:text-4xl font-bold tracking-tight">{{ tlang $.Lang "home.hero.title" }}</h1>
+    <p class="mt-4 text-gray-600">{{ tlang $.Lang "home.hero.message" }}</p>
     <div class="mt-8 flex items-center justify-center gap-4">
-      <a href="/design/new" class="px-5 py-3 rounded-md bg-indigo-600 text-white hover:bg-indigo-500">印影を作る</a>
-      <a href="/shop" class="px-5 py-3 rounded-md border border-gray-300 hover:bg-gray-100">素材から探す</a>
+      <a href="/design/new" class="px-5 py-3 rounded-md bg-indigo-600 text-white hover:bg-indigo-500">{{ tlang $.Lang "cta.create" }}</a>
+      <a href="/shop" class="px-5 py-3 rounded-md border border-gray-300 hover:bg-gray-100">{{ tlang $.Lang "cta.explore" }}</a>
     </div>
   </div>
 </section>
 {{ end }}
-

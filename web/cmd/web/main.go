@@ -1,29 +1,33 @@
 package main
 
 import (
-	"flag"
-	"fmt"
-	"html/template"
-	"io/fs"
-	"log"
-	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
+    "flag"
+    "fmt"
+    "html/template"
+    "io/fs"
+    "log"
+    "net/http"
+    "os"
+    "path/filepath"
+    "strings"
+    "time"
 
-	handlersPkg "finitefield.org/hanko-web/internal/handlers"
-	mw "finitefield.org/hanko-web/internal/middleware"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+    handlersPkg "finitefield.org/hanko-web/internal/handlers"
+    "finitefield.org/hanko-web/internal/format"
+    "finitefield.org/hanko-web/internal/i18n"
+    mw "finitefield.org/hanko-web/internal/middleware"
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
 )
 
 var (
-	templatesDir = "templates"
-	publicDir    = "public"
-	// devMode is set in main() based on env: HANKO_WEB_DEV (preferred) or DEV (fallback)
-	devMode   bool
-	tmplCache *template.Template
+    templatesDir = "templates"
+    publicDir    = "public"
+    localesDir   = "locales"
+    // devMode is set in main() based on env: HANKO_WEB_DEV (preferred) or DEV (fallback)
+    devMode   bool
+    tmplCache *template.Template
+    i18nBundle *i18n.Bundle
 )
 
 func main() {
@@ -42,15 +46,28 @@ func main() {
 		port = "8080"
 	}
 	flag.StringVar(&addr, "addr", ":"+port, "HTTP listen address")
-	flag.StringVar(&tmplPath, "templates", templatesDir, "templates directory")
-	flag.StringVar(&pubPath, "public", publicDir, "public assets directory")
-	flag.Parse()
+    flag.StringVar(&tmplPath, "templates", templatesDir, "templates directory")
+    flag.StringVar(&pubPath, "public", publicDir, "public assets directory")
+    flag.StringVar(&localesDir, "locales", localesDir, "locales directory")
+    flag.Parse()
 
 	templatesDir = tmplPath
 	publicDir = pubPath
 
-	// Dev mode: prefer HANKO_WEB_DEV, fallback to DEV
-	devMode = os.Getenv("HANKO_WEB_DEV") != "" || os.Getenv("DEV") != ""
+    // Dev mode: prefer HANKO_WEB_DEV, fallback to DEV
+    devMode = os.Getenv("HANKO_WEB_DEV") != "" || os.Getenv("DEV") != ""
+
+    // Load i18n bundle
+    sup := []string{"ja", "en"}
+    if v := os.Getenv("HANKO_WEB_LOCALES"); v != "" {
+        sup = strings.Split(v, ",")
+        for i := range sup { sup[i] = strings.TrimSpace(sup[i]) }
+    }
+    var err error
+    i18nBundle, err = i18n.Load(localesDir, "ja", sup)
+    if err != nil {
+        log.Printf("i18n load failed: %v", err)
+    }
 
 	if !devMode {
 		// Parse templates once in production
@@ -67,13 +84,16 @@ func main() {
 	// X-Forwarded-For to determine the client IP. Ensure only trusted proxies
 	// can set these headers in production environments.
 	r.Use(middleware.RealIP)
-	r.Use(mw.HTMX)
-	r.Use(mw.Session)
-	r.Use(mw.Auth)
-	r.Use(mw.CSRF)
-	r.Use(mw.VaryLocale)
-	r.Use(mw.Logger)
-	r.Use(middleware.Recoverer)
+    r.Use(mw.HTMX)
+    r.Use(mw.Session)
+    if i18nBundle != nil {
+        r.Use(mw.Locale(i18nBundle))
+    }
+    r.Use(mw.Auth)
+    r.Use(mw.CSRF)
+    r.Use(mw.VaryLocale)
+    r.Use(mw.Logger)
+    r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5))
 	r.Use(middleware.Timeout(30 * time.Second))
 
@@ -108,9 +128,12 @@ func main() {
 }
 
 func parseTemplates() (*template.Template, error) {
-	funcMap := template.FuncMap{
-		"now": time.Now,
-	}
+    funcMap := template.FuncMap{
+        "now":      time.Now,
+        "tlang":    func(lang, key string) string { if i18nBundle == nil { return key }; return i18nBundle.T(lang, key) },
+        "fmtDate":  func(ts time.Time, lang string) string { return format.FmtDate(ts, lang) },
+        "fmtMoney": func(amount int64, currency, lang string) string { return format.FmtCurrency(amount, currency, lang) },
+    }
 	// Recursively discover and parse all .tmpl files. Note: ParseGlob doesn't support **.
 	var files []string
 	if err := filepath.WalkDir(templatesDir, func(path string, d fs.DirEntry, err error) error {
@@ -159,6 +182,7 @@ func render(w http.ResponseWriter, r *http.Request, data any) {
 
 // HomeHandler renders the landing page.
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
-	vm := handlersPkg.BuildHomeData()
-	render(w, r, vm)
+    lang := mw.Lang(r)
+    vm := handlersPkg.BuildHomeData(lang)
+    render(w, r, vm)
 }
