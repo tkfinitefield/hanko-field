@@ -195,6 +195,48 @@ func TestDesignService_CreateDesignUploaded(t *testing.T) {
 	}
 }
 
+func TestDesignService_CreateDesignUploadedKeepsObjectPath(t *testing.T) {
+	repo := &stubDesignRepository{}
+	versions := &stubDesignVersionRepository{}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      repo,
+		Versions:     versions,
+		AssetsBucket: "bucket-default",
+		Clock:        func() time.Time { return time.Unix(0, 0).UTC() },
+		IDGenerator:  func() string { return "seq" },
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	cmd := CreateDesignCommand{
+		OwnerID: "user-1",
+		ActorID: "user-1",
+		Type:    DesignTypeUploaded,
+		Upload: &DesignAssetInput{
+			AssetID:     "upload-123",
+			Bucket:      "custom-bucket",
+			ObjectPath:  "uploads/user-1/upload-123/source.png",
+			FileName:    "source.png",
+			ContentType: "image/png",
+			SizeBytes:   1024,
+		},
+	}
+
+	design, err := svc.CreateDesign(context.Background(), cmd)
+	if err != nil {
+		t.Fatalf("CreateDesign error: %v", err)
+	}
+
+	if design.Assets.SourcePath != "uploads/user-1/upload-123/source.png" {
+		t.Fatalf("expected original object path preserved, got %s", design.Assets.SourcePath)
+	}
+	if design.Source.UploadAsset == nil || design.Source.UploadAsset.Bucket != "custom-bucket" {
+		t.Fatalf("expected bucket metadata preserved, got %+v", design.Source.UploadAsset)
+	}
+}
+
 func TestDesignService_CreateDesignInvalidInput(t *testing.T) {
 	repo := &stubDesignRepository{}
 	versions := &stubDesignVersionRepository{}

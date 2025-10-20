@@ -452,24 +452,26 @@ func (s *designService) planAssets(ctx context.Context, designID, versionID stri
 
 	// Determine source path for master asset.
 	if sourceAsset != nil {
-		uploadID := sourceAsset.AssetID
-		if uploadID == "" {
-			uploadID = "upload-" + s.newID()
-			sourceAsset.AssetID = uploadID
+		if sourceAsset.ObjectPath == "" {
+			uploadID := sourceAsset.AssetID
+			if uploadID == "" {
+				uploadID = "upload-" + s.newID()
+				sourceAsset.AssetID = uploadID
+			}
+			fileName := sourceAsset.FileName
+			if fileName == "" {
+				fileName = "source"
+			}
+			objectPath, err := storage.BuildObjectPath(storage.PurposeDesignMaster, storage.PathParams{
+				DesignID: designID,
+				UploadID: uploadID,
+				FileName: fileName,
+			})
+			if err != nil {
+				return assetPlan{}, fmt.Errorf("%w: %v", ErrDesignInvalidInput, err)
+			}
+			sourceAsset.ObjectPath = objectPath
 		}
-		fileName := sourceAsset.FileName
-		if fileName == "" {
-			fileName = "source"
-		}
-		objectPath, err := storage.BuildObjectPath(storage.PurposeDesignMaster, storage.PathParams{
-			DesignID: designID,
-			UploadID: uploadID,
-			FileName: fileName,
-		})
-		if err != nil {
-			return assetPlan{}, fmt.Errorf("%w: %v", ErrDesignInvalidInput, err)
-		}
-		sourceAsset.ObjectPath = objectPath
 		if sourceAsset.Bucket == "" {
 			sourceAsset.Bucket = s.assetsBucket
 		}
