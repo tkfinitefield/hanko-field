@@ -1868,6 +1868,50 @@ func TestDesignService_UpdateAISuggestionStatus_Conflict(t *testing.T) {
 	}
 }
 
+func TestDesignService_UpdateAISuggestionStatus_RejectConflict(t *testing.T) {
+	designRepo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_rej_conflict": {
+				ID:      "dsg_rej_conflict",
+				OwnerID: "user_conflict",
+				Status:  domain.DesignStatusReady,
+			},
+		},
+	}
+	suggestionRepo := &stubSuggestionRepository{
+		store: map[string]map[string]domain.AISuggestion{
+			"dsg_rej_conflict": {
+				"as_rejected": {
+					ID:       "as_rejected",
+					DesignID: "dsg_rej_conflict",
+					Status:   "rejected",
+				},
+			},
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      designRepo,
+		Versions:     &stubDesignVersionRepository{},
+		Suggestions:  suggestionRepo,
+		Jobs:         &stubJobDispatcher{},
+		AssetsBucket: "bucket",
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	_, err = svc.UpdateAISuggestionStatus(context.Background(), AISuggestionStatusCommand{
+		DesignID:     "dsg_rej_conflict",
+		SuggestionID: "as_rejected",
+		Action:       "reject",
+		ActorID:      "user_conflict",
+	})
+	if !errors.Is(err, ErrDesignConflict) {
+		t.Fatalf("expected conflict on repeated reject, got %v", err)
+	}
+}
+
 func TestDesignService_UpdateAISuggestionStatus_Unauthorized(t *testing.T) {
 	designRepo := &stubDesignRepository{
 		store: map[string]domain.Design{

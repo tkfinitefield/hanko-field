@@ -1291,21 +1291,21 @@ func (s *designService) UpdateAISuggestionStatus(ctx context.Context, cmd AISugg
 
 	switch action {
 	case "accept":
-		if category != "completed" {
-			return AISuggestion{}, fmt.Errorf("%w: suggestion status %q cannot be accepted", ErrDesignInvalidInput, suggestion.Status)
-		}
 		if currentStatus == "accepted" || currentStatus == "applied" {
 			return AISuggestion{}, ErrDesignConflict
 		}
 		if category == "rejected" {
 			return AISuggestion{}, ErrDesignConflict
 		}
-	case "reject":
 		if category != "completed" {
-			return AISuggestion{}, fmt.Errorf("%w: suggestion status %q cannot be rejected", ErrDesignInvalidInput, suggestion.Status)
+			return AISuggestion{}, fmt.Errorf("%w: suggestion status %q cannot be accepted", ErrDesignInvalidInput, suggestion.Status)
 		}
+	case "reject":
 		if category == "rejected" || currentStatus == "accepted" || currentStatus == "applied" {
 			return AISuggestion{}, ErrDesignConflict
+		}
+		if category != "completed" {
+			return AISuggestion{}, fmt.Errorf("%w: suggestion status %q cannot be rejected", ErrDesignInvalidInput, suggestion.Status)
 		}
 	}
 
