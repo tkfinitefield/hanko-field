@@ -1199,25 +1199,18 @@ func (s *designService) ListAISuggestions(ctx context.Context, designID string, 
 
 	statusFilters := normalizeSuggestionStatusFilters(filter.Status)
 
-	page, err := s.suggestions.ListByDesign(ctx, designID, domain.Pagination(filter.Pagination))
+	query := repositories.AISuggestionListFilter{
+		Pagination: filter.Pagination,
+	}
+	if len(statusFilters) > 0 {
+		query.Status = expandSuggestionStatusFilters(statusFilters)
+	}
+
+	page, err := s.suggestions.ListByDesign(ctx, designID, query)
 	if err != nil {
 		return domain.CursorPage[AISuggestion]{}, s.mapRepositoryError(err)
 	}
 
-	if len(statusFilters) == 0 {
-		return page, nil
-	}
-
-	items := make([]AISuggestion, 0, len(page.Items))
-	for _, suggestion := range page.Items {
-		if suggestionMatchesStatusCategory(suggestion.Status, statusFilters) {
-			items = append(items, suggestion)
-		}
-	}
-	page.Items = items
-	if len(items) == 0 {
-		page.NextPageToken = ""
-	}
 	return page, nil
 }
 
@@ -1895,33 +1888,41 @@ func normalizeSuggestionStatusFilters(values []string) []string {
 	return normalized
 }
 
-func suggestionMatchesStatusCategory(status string, filters []string) bool {
+func expandSuggestionStatusFilters(filters []string) []string {
 	if len(filters) == 0 {
-		return true
+		return nil
 	}
-
-	current := strings.ToLower(strings.TrimSpace(status))
+	expanded := make([]string, 0, len(filters))
+	seen := make(map[string]struct{}, len(filters)*2)
+	add := func(values ...string) {
+		for _, value := range values {
+			trimmed := strings.ToLower(strings.TrimSpace(value))
+			if trimmed == "" {
+				continue
+			}
+			if _, exists := seen[trimmed]; exists {
+				continue
+			}
+			seen[trimmed] = struct{}{}
+			expanded = append(expanded, trimmed)
+		}
+	}
 	for _, filter := range filters {
 		switch filter {
 		case "queued":
-			if current == "queued" || current == "pending" || current == "in_progress" {
-				return true
-			}
+			add("queued", "pending", "in_progress")
 		case "completed":
-			if current == "proposed" || current == "accepted" || current == "applied" || current == "succeeded" || current == "completed" {
-				return true
-			}
+			add("proposed", "accepted", "applied", "succeeded", "completed")
 		case "rejected":
-			if current == "rejected" || current == "expired" || current == "failed" || current == "canceled" {
-				return true
-			}
+			add("rejected", "expired", "failed", "canceled")
 		default:
-			if current == filter {
-				return true
-			}
+			add(filter)
 		}
 	}
-	return false
+	if len(expanded) == 0 {
+		return nil
+	}
+	return expanded
 }
 
 func cloneAssetReference(ref *DesignAssetReference) *DesignAssetReference {

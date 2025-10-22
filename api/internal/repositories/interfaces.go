@@ -71,7 +71,7 @@ type AISuggestionRepository interface {
 	Insert(ctx context.Context, suggestion domain.AISuggestion) error
 	FindByID(ctx context.Context, designID string, suggestionID string) (domain.AISuggestion, error)
 	UpdateStatus(ctx context.Context, designID string, suggestionID string, status string, metadata map[string]any) (domain.AISuggestion, error)
-	ListByDesign(ctx context.Context, designID string, pager domain.Pagination) (domain.CursorPage[domain.AISuggestion], error)
+	ListByDesign(ctx context.Context, designID string, filter AISuggestionListFilter) (domain.CursorPage[domain.AISuggestion], error)
 }
 
 // AIJobRepository persists AI job metadata and lifecycle state.
@@ -318,6 +318,11 @@ type DesignListFilter struct {
 	Types        []string
 	UpdatedAfter *time.Time
 	Pagination   domain.Pagination
+}
+
+type AISuggestionListFilter struct {
+	Status     []string
+	Pagination domain.Pagination
 }
 
 type OrderListFilter struct {

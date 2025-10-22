@@ -31,15 +31,40 @@ const (
 
 // DesignHandlers exposes design creation endpoints for authenticated users.
 type DesignHandlers struct {
-	authn   *auth.Authenticator
-	designs services.DesignService
+	authn             *auth.Authenticator
+	designs           services.DesignService
+	resolveStorageURL StorageURLResolver
 }
 
+// StorageURLResolver resolves a bucket/object pair to a fully qualified URL.
+type StorageURLResolver func(bucket, object string) string
+
+// DesignHandlerOption mutates handler configuration during construction.
+type DesignHandlerOption func(*DesignHandlers)
+
+const defaultStorageBaseURL = "https://storage.googleapis.com"
+
 // NewDesignHandlers constructs a new DesignHandlers instance.
-func NewDesignHandlers(authn *auth.Authenticator, designs services.DesignService) *DesignHandlers {
-	return &DesignHandlers{
-		authn:   authn,
-		designs: designs,
+func NewDesignHandlers(authn *auth.Authenticator, designs services.DesignService, opts ...DesignHandlerOption) *DesignHandlers {
+	handler := &DesignHandlers{
+		authn:             authn,
+		designs:           designs,
+		resolveStorageURL: defaultStorageURLResolver,
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(handler)
+		}
+	}
+	return handler
+}
+
+// WithStorageURLResolver overrides the storage URL resolver used by the handler.
+func WithStorageURLResolver(resolver StorageURLResolver) DesignHandlerOption {
+	return func(h *DesignHandlers) {
+		if resolver != nil {
+			h.resolveStorageURL = resolver
+		}
 	}
 }
 
@@ -286,7 +311,7 @@ func (h *DesignHandlers) listAISuggestions(w http.ResponseWriter, r *http.Reques
 
 	items := make([]aiSuggestionPayload, 0, len(page.Items))
 	for _, suggestion := range page.Items {
-		items = append(items, buildAISuggestionPayload(suggestion))
+		items = append(items, h.buildAISuggestionPayload(suggestion))
 	}
 
 	response := aiSuggestionListResponse{
@@ -343,7 +368,7 @@ func (h *DesignHandlers) getAISuggestion(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	payload := buildAISuggestionPayload(suggestion)
+	payload := h.buildAISuggestionPayload(suggestion)
 	writeJSONResponse(w, http.StatusOK, payload)
 }
 
@@ -1080,7 +1105,7 @@ type assetRefPayload struct {
 	Checksum    string `json:"checksum,omitempty"`
 }
 
-func buildAISuggestionPayload(suggestion services.AISuggestion) aiSuggestionPayload {
+func (h *DesignHandlers) buildAISuggestionPayload(suggestion services.AISuggestion) aiSuggestionPayload {
 	status := strings.TrimSpace(suggestion.Status)
 	if status == "" {
 		status = "queued"
@@ -1111,7 +1136,7 @@ func buildAISuggestionPayload(suggestion services.AISuggestion) aiSuggestionPayl
 
 	var result map[string]any
 	if raw != nil {
-		if res := mapFromAny(raw["result"]); len(res) > 0 {
+		if res := mapFromAny(raw["result"]); res != nil && len(res) > 0 {
 			payload.Result = cloneMap(res)
 			result = payload.Result
 		}
@@ -1173,7 +1198,7 @@ func buildAISuggestionPayload(suggestion services.AISuggestion) aiSuggestionPayl
 		payload.Diagnostics = diagnostics
 	}
 
-	if preview := extractSuggestionPreviewFromSources(raw, result); preview != nil {
+	if preview := h.extractSuggestionPreviewFromSources(raw, result); preview != nil {
 		payload.Preview = preview
 	}
 
@@ -1513,16 +1538,16 @@ func diagnosticFromMap(data map[string]any) *aiSuggestionDiagnosticPayload {
 	return &diag
 }
 
-func extractSuggestionPreviewFromSources(sources ...map[string]any) *aiSuggestionPreviewPayload {
+func (h *DesignHandlers) extractSuggestionPreviewFromSources(sources ...map[string]any) *aiSuggestionPreviewPayload {
 	for _, src := range sources {
-		if preview := extractSuggestionPreview(src); preview != nil {
+		if preview := h.extractSuggestionPreview(src); preview != nil {
 			return preview
 		}
 	}
 	return nil
 }
 
-func extractSuggestionPreview(source map[string]any) *aiSuggestionPreviewPayload {
+func (h *DesignHandlers) extractSuggestionPreview(source map[string]any) *aiSuggestionPreviewPayload {
 	if len(source) == 0 {
 		return nil
 	}
@@ -1552,7 +1577,7 @@ func extractSuggestionPreview(source map[string]any) *aiSuggestionPreviewPayload
 		payload.PreviewURL = payload.SignedPreviewURL
 	}
 	if payload.PreviewURL == "" && payload.Bucket != "" && payload.ObjectPath != "" {
-		if url := buildStorageURL(payload.Bucket, payload.ObjectPath); url != "" {
+		if url := h.buildStorageURL(payload.Bucket, payload.ObjectPath); url != "" {
 			payload.PreviewURL = url
 			if payload.SignedPreviewURL == "" {
 				payload.SignedPreviewURL = url
@@ -1568,6 +1593,28 @@ func extractSuggestionPreview(source map[string]any) *aiSuggestionPreviewPayload
 	return payload
 }
 
+func (h *DesignHandlers) buildStorageURL(bucket, object string) string {
+	resolver := defaultStorageURLResolver
+	if h != nil && h.resolveStorageURL != nil {
+		resolver = h.resolveStorageURL
+	}
+	return resolver(bucket, object)
+}
+
+func defaultStorageURLResolver(bucket, object string) string {
+	bucket = strings.TrimSpace(bucket)
+	object = strings.TrimSpace(object)
+	if bucket == "" || object == "" {
+		return ""
+	}
+	object = strings.TrimPrefix(object, "/")
+	base := strings.TrimRight(strings.TrimSpace(defaultStorageBaseURL), "/")
+	if base == "" {
+		base = "https://storage.googleapis.com"
+	}
+	return fmt.Sprintf("%s/%s/%s", base, bucket, object)
+}
+
 func mapFromAny(value any) map[string]any {
 	if value == nil {
 		return nil
@@ -1578,16 +1625,6 @@ func mapFromAny(value any) map[string]any {
 	default:
 		return nil
 	}
-}
-
-func buildStorageURL(bucket, object string) string {
-	bucket = strings.TrimSpace(bucket)
-	object = strings.TrimSpace(object)
-	if bucket == "" || object == "" {
-		return ""
-	}
-	object = strings.TrimPrefix(object, "/")
-	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, object)
 }
 
 func deriveSuggestionStatusCategory(status string) string {

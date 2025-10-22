@@ -186,15 +186,30 @@ func (s *stubSuggestionRepository) UpdateStatus(ctx context.Context, designID st
 	return cloneSuggestionRecord(record), nil
 }
 
-func (s *stubSuggestionRepository) ListByDesign(ctx context.Context, designID string, pager domain.Pagination) (domain.CursorPage[domain.AISuggestion], error) {
+func (s *stubSuggestionRepository) ListByDesign(ctx context.Context, designID string, filter repositories.AISuggestionListFilter) (domain.CursorPage[domain.AISuggestion], error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	page := domain.CursorPage[domain.AISuggestion]{}
 	if s.store == nil {
 		return page, nil
 	}
+	var allowed map[string]struct{}
+	if len(filter.Status) > 0 {
+		allowed = make(map[string]struct{}, len(filter.Status))
+		for _, status := range filter.Status {
+			if trimmed := strings.ToLower(strings.TrimSpace(status)); trimmed != "" {
+				allowed[trimmed] = struct{}{}
+			}
+		}
+	}
 	if suggestions, ok := s.store[designID]; ok {
 		for _, suggestion := range suggestions {
+			if len(allowed) > 0 {
+				current := strings.ToLower(strings.TrimSpace(suggestion.Status))
+				if _, ok := allowed[current]; !ok {
+					continue
+				}
+			}
 			page.Items = append(page.Items, cloneSuggestionRecord(suggestion))
 		}
 	}

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -151,12 +152,27 @@ func (r *inMemorySuggestionRepo) UpdateStatus(_ context.Context, designID string
 	return domain.AISuggestion{}, &jobRepoErr{notFound: true, msg: "suggestion not found"}
 }
 
-func (r *inMemorySuggestionRepo) ListByDesign(_ context.Context, designID string, pager domain.Pagination) (domain.CursorPage[domain.AISuggestion], error) {
+func (r *inMemorySuggestionRepo) ListByDesign(_ context.Context, designID string, filter repositories.AISuggestionListFilter) (domain.CursorPage[domain.AISuggestion], error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	page := domain.CursorPage[domain.AISuggestion]{}
+	var allowed map[string]struct{}
+	if len(filter.Status) > 0 {
+		allowed = make(map[string]struct{}, len(filter.Status))
+		for _, status := range filter.Status {
+			if trimmed := strings.ToLower(strings.TrimSpace(status)); trimmed != "" {
+				allowed[trimmed] = struct{}{}
+			}
+		}
+	}
 	if suggestions, ok := r.suggestions[designID]; ok {
 		for _, suggestion := range suggestions {
+			if len(allowed) > 0 {
+				current := strings.ToLower(strings.TrimSpace(suggestion.Status))
+				if _, ok := allowed[current]; !ok {
+					continue
+				}
+			}
 			page.Items = append(page.Items, cloneSuggestion(suggestion))
 		}
 	}
