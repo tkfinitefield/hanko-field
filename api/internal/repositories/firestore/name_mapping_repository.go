@@ -150,6 +150,7 @@ func encodeNameMappingDocument(mapping domain.NameMapping) nameMappingDocument {
 		Source:            strings.TrimSpace(mapping.Source),
 		Candidates:        candidates,
 		SelectedCandidate: selected,
+		SelectedAt:        cloneTime(mapping.SelectedAt),
 		ExpiresAt:         cloneTime(mapping.ExpiresAt),
 		CreatedAt:         mapping.CreatedAt.UTC(),
 		UpdatedAt:         mapping.UpdatedAt.UTC(),
@@ -195,6 +196,7 @@ func decodeNameMappingDocument(doc nameMappingDocument) domain.NameMapping {
 		Source:            doc.Source,
 		Candidates:        candidates,
 		SelectedCandidate: selected,
+		SelectedAt:        cloneTime(doc.SelectedAt),
 		ExpiresAt:         cloneTime(doc.ExpiresAt),
 		CreatedAt:         doc.CreatedAt.UTC(),
 		UpdatedAt:         doc.UpdatedAt.UTC(),
@@ -225,6 +227,7 @@ type nameMappingDocument struct {
 	Source            string                         `firestore:"source,omitempty"`
 	Candidates        []nameMappingCandidateDocument `firestore:"candidates"`
 	SelectedCandidate *nameMappingCandidateDocument  `firestore:"selectedCandidate,omitempty"`
+	SelectedAt        *time.Time                     `firestore:"selectedAt,omitempty"`
 	ExpiresAt         *time.Time                     `firestore:"expiresAt,omitempty"`
 	CreatedAt         time.Time                      `firestore:"createdAt"`
 	UpdatedAt         time.Time                      `firestore:"updatedAt"`

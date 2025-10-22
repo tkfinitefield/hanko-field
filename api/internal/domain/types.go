@@ -561,6 +561,7 @@ type UserProfile struct {
 	UpdatedAt         time.Time
 	PiiMaskedAt       *time.Time
 	LastSyncTime      time.Time
+	NameMappingRef    *string
 }
 
 // FavoriteDesign ties a user to a design ID for fast lookups.

@@ -43,6 +43,7 @@ type NameMapping struct {
 	Status            NameMappingStatus
 	Candidates        []NameMappingCandidate
 	SelectedCandidate *NameMappingCandidate
+	SelectedAt        *time.Time
 	Source            string
 	ExpiresAt         *time.Time
 	CreatedAt         time.Time

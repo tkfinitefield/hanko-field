@@ -9,17 +9,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/hanko-field/api/internal/platform/auth"
 	"github.com/hanko-field/api/internal/services"
 )
 
 type stubNameMappingService struct {
 	convertFunc func(ctx context.Context, cmd services.NameConversionCommand) (services.NameMapping, error)
+	selectFunc  func(ctx context.Context, cmd services.NameMappingSelectCommand) (services.NameMapping, error)
 }
 
 func (s *stubNameMappingService) ConvertName(ctx context.Context, cmd services.NameConversionCommand) (services.NameMapping, error) {
 	if s.convertFunc != nil {
 		return s.convertFunc(ctx, cmd)
+	}
+	return services.NameMapping{}, nil
+}
+
+func (s *stubNameMappingService) SelectCandidate(ctx context.Context, cmd services.NameMappingSelectCommand) (services.NameMapping, error) {
+	if s.selectFunc != nil {
+		return s.selectFunc(ctx, cmd)
 	}
 	return services.NameMapping{}, nil
 }
@@ -121,6 +131,103 @@ func TestNameMappingHandlersConvert_Unauthenticated(t *testing.T) {
 	resp := httptest.NewRecorder()
 
 	handler.convert(resp, req)
+
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", resp.Code)
+	}
+}
+
+func TestNameMappingHandlersSelect_Success(t *testing.T) {
+	now := time.Date(2024, 6, 10, 8, 0, 0, 0, time.UTC)
+	selected := services.NameMappingCandidate{ID: "cand-2", Kanji: "齋藤", Kana: []string{"サイトウ"}, Score: 0.91}
+	mapping := services.NameMapping{
+		ID:                "nmap_ready",
+		UserID:            "user-1",
+		Input:             services.NameMappingInput{Latin: "Saito", Locale: "en"},
+		Status:            services.NameMappingStatusSelected,
+		SelectedCandidate: &selected,
+		SelectedAt:        &now,
+		Candidates: []services.NameMappingCandidate{
+			{ID: "cand-1", Kanji: "佐藤", Kana: []string{"サトウ"}, Score: 0.88},
+			selected,
+		},
+		CreatedAt: now.Add(-time.Hour),
+		UpdatedAt: now,
+	}
+
+	var received services.NameMappingSelectCommand
+	svc := &stubNameMappingService{
+		selectFunc: func(ctx context.Context, cmd services.NameMappingSelectCommand) (services.NameMapping, error) {
+			received = cmd
+			return mapping, nil
+		},
+	}
+
+	handler := NewNameMappingHandlers(nil, svc)
+	body := bytes.NewBufferString(`{"selected":"cand-2"}`)
+	req := httptest.NewRequest(http.MethodPost, "/name-mappings/nmap_ready:select", body)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mappingId", "nmap_ready")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	resp := httptest.NewRecorder()
+
+	handler.selectCandidate(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.Code)
+	}
+
+	if received.MappingID != "nmap_ready" {
+		t.Fatalf("expected mapping id nmap_ready, got %s", received.MappingID)
+	}
+	if received.CandidateID != "cand-2" {
+		t.Fatalf("expected candidate cand-2, got %s", received.CandidateID)
+	}
+
+	var payload nameMappingResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("expected JSON payload: %v", err)
+	}
+	if payload.Mapping.SelectedCandidate == nil || payload.Mapping.SelectedCandidate.ID != "cand-2" {
+		t.Fatalf("expected selected candidate cand-2 in payload, got %#v", payload.Mapping.SelectedCandidate)
+	}
+	if payload.Mapping.SelectedAt != formatTime(now) {
+		t.Fatalf("expected selected_at %s, got %s", formatTime(now), payload.Mapping.SelectedAt)
+	}
+}
+
+func TestNameMappingHandlersSelect_Error(t *testing.T) {
+	svc := &stubNameMappingService{
+		selectFunc: func(ctx context.Context, cmd services.NameMappingSelectCommand) (services.NameMapping, error) {
+			return services.NameMapping{}, services.ErrNameMappingConflict
+		},
+	}
+
+	handler := NewNameMappingHandlers(nil, svc)
+	req := httptest.NewRequest(http.MethodPost, "/name-mappings/nmap_ready:select", bytes.NewBufferString(`{"selected":"cand-1"}`))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mappingId", "nmap_ready")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	resp := httptest.NewRecorder()
+
+	handler.selectCandidate(resp, req)
+
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", resp.Code)
+	}
+}
+
+func TestNameMappingHandlersSelect_Unauthenticated(t *testing.T) {
+	handler := NewNameMappingHandlers(nil, &stubNameMappingService{})
+	req := httptest.NewRequest(http.MethodPost, "/name-mappings/nmap_ready:select", bytes.NewBufferString(`{"selected":"cand-1"}`))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mappingId", "nmap_ready")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	resp := httptest.NewRecorder()
+
+	handler.selectCandidate(resp, req)
 
 	if resp.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d", resp.Code)

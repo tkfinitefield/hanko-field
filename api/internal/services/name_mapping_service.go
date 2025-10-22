@@ -32,6 +32,15 @@ var ErrNameMappingUnsupportedLocale = errNameMappingUnsupportedLocale
 // ErrNameMappingUnavailable indicates the service cannot complete the request due to missing dependencies.
 var ErrNameMappingUnavailable = errors.New("name_mapping: service unavailable")
 
+// ErrNameMappingNotFound indicates the requested mapping does not exist.
+var ErrNameMappingNotFound = errors.New("name_mapping: not found")
+
+// ErrNameMappingUnauthorized indicates the mapping does not belong to the caller.
+var ErrNameMappingUnauthorized = errors.New("name_mapping: unauthorized")
+
+// ErrNameMappingConflict indicates the requested operation conflicts with existing state.
+var ErrNameMappingConflict = errors.New("name_mapping: conflict")
+
 const (
 	defaultNameMappingCacheTTL = 24 * time.Hour
 	defaultNameMappingSource   = "hanko-fallback"
@@ -87,6 +96,7 @@ var ErrTransliterationUnavailable = errors.New("transliteration: unavailable")
 // NameMappingServiceDeps wires the repository and transliteration dependencies for name mapping operations.
 type NameMappingServiceDeps struct {
 	Repository     repositories.NameMappingRepository
+	Users          repositories.UserRepository
 	Transliterator TransliterationProvider
 	Clock          func() time.Time
 	IDGenerator    func() string
@@ -96,6 +106,7 @@ type NameMappingServiceDeps struct {
 
 type nameMappingService struct {
 	repo     repositories.NameMappingRepository
+	profiles repositories.UserRepository
 	provider TransliterationProvider
 	now      func() time.Time
 	newID    func() string
@@ -132,6 +143,7 @@ func NewNameMappingService(deps NameMappingServiceDeps) (NameMappingService, err
 
 	return &nameMappingService{
 		repo:     deps.Repository,
+		profiles: deps.Users,
 		provider: deps.Transliterator,
 		now:      func() time.Time { return clock().UTC() },
 		newID:    func() string { return nameMappingIDPrefix + strings.ToLower(idGen()) },
@@ -276,6 +288,151 @@ func (s *nameMappingService) ConvertName(ctx context.Context, cmd NameConversion
 	}
 
 	return mapping, nil
+}
+
+// SelectCandidate persists the chosen candidate, locking the mapping for future use.
+func (s *nameMappingService) SelectCandidate(ctx context.Context, cmd NameMappingSelectCommand) (NameMapping, error) {
+	if s == nil || s.repo == nil {
+		return NameMapping{}, ErrNameMappingUnavailable
+	}
+
+	userID := strings.TrimSpace(cmd.UserID)
+	mappingID := strings.TrimSpace(cmd.MappingID)
+	candidateID := strings.TrimSpace(cmd.CandidateID)
+
+	if userID == "" || mappingID == "" || candidateID == "" {
+		return NameMapping{}, ErrNameMappingInvalidInput
+	}
+
+	mapping, err := s.repo.FindByID(ctx, mappingID)
+	if err != nil {
+		if isRepoNotFound(err) {
+			return NameMapping{}, ErrNameMappingNotFound
+		}
+		return NameMapping{}, ErrNameMappingUnavailable
+	}
+
+	if strings.TrimSpace(mapping.UserID) != userID {
+		return NameMapping{}, ErrNameMappingUnauthorized
+	}
+
+	switch mapping.Status {
+	case domain.NameMappingStatusReady, domain.NameMappingStatusSelected:
+		// allowed
+	case domain.NameMappingStatusExpired:
+		return NameMapping{}, ErrNameMappingInvalidInput
+	default:
+		return NameMapping{}, ErrNameMappingInvalidInput
+	}
+
+	var selectedCandidate *domain.NameMappingCandidate
+	for _, cand := range mapping.Candidates {
+		if strings.TrimSpace(cand.ID) == candidateID {
+			copy := cand
+			selectedCandidate = &copy
+			break
+		}
+	}
+	if selectedCandidate == nil {
+		return NameMapping{}, ErrNameMappingInvalidInput
+	}
+
+	now := s.now()
+
+	if mapping.Status == domain.NameMappingStatusSelected {
+		if mapping.SelectedCandidate != nil && strings.TrimSpace(mapping.SelectedCandidate.ID) == candidateID {
+			if mapping.SelectedAt == nil {
+				selectionTime := now
+				mapping.SelectedAt = &selectionTime
+				mapping.UpdatedAt = now
+				if err := s.repo.Update(ctx, mapping); err != nil {
+					return NameMapping{}, s.translateSelectionRepoError(err)
+				}
+			}
+			if err := s.storeSelectionOnProfile(ctx, userID, mapping.ID); err != nil {
+				return NameMapping{}, err
+			}
+			return mapping, nil
+		}
+		if !cmd.AllowOverride {
+			return NameMapping{}, ErrNameMappingConflict
+		}
+	}
+
+	mapping.Status = domain.NameMappingStatusSelected
+	mapping.SelectedCandidate = selectedCandidate
+	selectionTime := now
+	mapping.SelectedAt = &selectionTime
+	mapping.UpdatedAt = now
+
+	if err := s.repo.Update(ctx, mapping); err != nil {
+		return NameMapping{}, s.translateSelectionRepoError(err)
+	}
+
+	if err := s.storeSelectionOnProfile(ctx, userID, mapping.ID); err != nil {
+		return NameMapping{}, err
+	}
+
+	return mapping, nil
+}
+
+func (s *nameMappingService) translateSelectionRepoError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if isRepoNotFound(err) {
+		return ErrNameMappingNotFound
+	}
+	var repoErr repositories.RepositoryError
+	if errors.As(err, &repoErr) {
+		if repoErr.IsConflict() {
+			return ErrNameMappingConflict
+		}
+		if repoErr.IsUnavailable() {
+			return ErrNameMappingUnavailable
+		}
+	}
+	return ErrNameMappingUnavailable
+}
+
+func (s *nameMappingService) storeSelectionOnProfile(ctx context.Context, userID, mappingID string) error {
+	if s.profiles == nil {
+		return nil
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return ErrNameMappingUnavailable
+	}
+	profile, err := s.profiles.FindByID(ctx, userID)
+	if err != nil {
+		if isRepoNotFound(err) {
+			return ErrNameMappingUnavailable
+		}
+		return ErrNameMappingUnavailable
+	}
+
+	ref := strings.TrimSpace(mappingID)
+	current := ""
+	if profile.NameMappingRef != nil {
+		current = strings.TrimSpace(*profile.NameMappingRef)
+	}
+	if current == ref {
+		return nil
+	}
+
+	if ref == "" {
+		profile.NameMappingRef = nil
+	} else {
+		value := ref
+		profile.NameMappingRef = &value
+	}
+	if profile.LastSyncTime.IsZero() {
+		profile.LastSyncTime = profile.UpdatedAt
+	}
+	if _, err := s.profiles.UpdateProfile(ctx, profile); err != nil {
+		return ErrNameMappingUnavailable
+	}
+	return nil
 }
 
 func (s *nameMappingService) performTransliteration(ctx context.Context, req TransliterationRequest) (TransliterationResult, bool, error) {

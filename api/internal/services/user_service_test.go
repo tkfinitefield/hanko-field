@@ -1449,6 +1449,10 @@ func cloneProfile(profile domain.UserProfile) domain.UserProfile {
 		t := *profile.PiiMaskedAt
 		copy.PiiMaskedAt = &t
 	}
+	if profile.NameMappingRef != nil {
+		value := *profile.NameMappingRef
+		copy.NameMappingRef = &value
+	}
 	return copy
 }
 

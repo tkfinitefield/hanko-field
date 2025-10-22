@@ -224,6 +224,7 @@ func main() {
 	nameMappingLogger := logger.Named("name_mapping")
 	nameMappingService, err := services.NewNameMappingService(services.NameMappingServiceDeps{
 		Repository: nameMappingRepo,
+		Users:      userRepo,
 		Clock:      time.Now,
 		Logger: func(_ context.Context, event string, fields map[string]any) {
 			zFields := make([]zap.Field, 0, len(fields)+1)

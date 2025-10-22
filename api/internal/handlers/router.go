@@ -103,6 +103,7 @@ func NewRouter(opts ...Option) chi.Router {
 			cfg.nameMaps(api)
 		} else {
 			registerNotImplementedRoute(api, "/name-mappings:convert", "nameMappings")
+			registerNotImplementedRoute(api, "/name-mappings/{mappingId}:select", "nameMappings")
 		}
 		mount("/cart", cfg.cart, "cart", nil)
 		mount("/orders", cfg.orders, "orders", nil)

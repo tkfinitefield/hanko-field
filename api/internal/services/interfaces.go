@@ -218,6 +218,7 @@ type UserService interface {
 // NameMappingService orchestrates transliteration requests and caching logic for kanji candidate mappings.
 type NameMappingService interface {
 	ConvertName(ctx context.Context, cmd NameConversionCommand) (NameMapping, error)
+	SelectCandidate(ctx context.Context, cmd NameMappingSelectCommand) (NameMapping, error)
 }
 
 // InventoryEventPublisher accepts inventory stock change notifications for downstream processing.
@@ -732,6 +733,14 @@ type NameConversionCommand struct {
 	Gender       string
 	Context      map[string]string
 	ForceRefresh bool
+}
+
+// NameMappingSelectCommand finalises a candidate selection for a mapping.
+type NameMappingSelectCommand struct {
+	UserID        string
+	MappingID     string
+	CandidateID   string
+	AllowOverride bool
 }
 
 type InventoryReserveCommand struct {

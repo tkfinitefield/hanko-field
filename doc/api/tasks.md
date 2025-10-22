@@ -64,7 +64,7 @@
 
 ### 5.3 Name Mapping
 - [x] [048 Implement name conversion endpoint invoking transliteration service and returning ranked candidates.](./tasks/048-implement-name-conversion-endpoint-invoking-transliteration-service-and-returnin.md)
-- [ ] [049 Implement mapping selection endpoint persisting chosen candidate and locking mapping.](./tasks/049-implement-mapping-selection-endpoint-persisting-chosen-candidate-and-locking-map.md)
+- [x] [049 Implement mapping selection endpoint persisting chosen candidate and locking mapping.](./tasks/049-implement-mapping-selection-endpoint-persisting-chosen-candidate-and-locking-map.md)
 
 ### 5.4 Cart & Checkout
 - [ ] [050 Implement cart retrieval endpoint keyed by user/session with lazy creation.](./tasks/050-implement-cart-retrieval-endpoint-keyed-by-user-session-with-lazy-creation.md)

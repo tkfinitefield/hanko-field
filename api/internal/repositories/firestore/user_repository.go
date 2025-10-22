@@ -137,6 +137,7 @@ type userDocument struct {
 	CreatedAt         time.Time          `firestore:"createdAt"`
 	UpdatedAt         time.Time          `firestore:"updatedAt"`
 	PiiMaskedAt       *time.Time         `firestore:"piiMaskedAt,omitempty"`
+	NameMappingRef    *string            `firestore:"nameMappingRef,omitempty"`
 }
 
 type providerDocument struct {
@@ -164,6 +165,7 @@ func toDomainProfile(doc userDocument) domain.UserProfile {
 		CreatedAt:         doc.CreatedAt,
 		UpdatedAt:         doc.UpdatedAt,
 		PiiMaskedAt:       doc.PiiMaskedAt,
+		NameMappingRef:    doc.NameMappingRef,
 	}
 	if profile.NotificationPrefs == nil {
 		profile.NotificationPrefs = domain.NotificationPreferences{}
@@ -208,6 +210,13 @@ func fromDomainProfile(profile domain.UserProfile, now time.Time) userDocument {
 	}
 	if doc.Roles == nil {
 		doc.Roles = []string{}
+	}
+	if profile.NameMappingRef != nil {
+		trimmed := strings.TrimSpace(*profile.NameMappingRef)
+		if trimmed != "" {
+			value := trimmed
+			doc.NameMappingRef = &value
+		}
 	}
 	return doc
 }
