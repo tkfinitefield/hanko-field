@@ -99,7 +99,11 @@ func NewRouter(opts ...Option) chi.Router {
 		mount("/public", cfg.public, "public", nil)
 		mount("/me", cfg.me, "me", nil)
 		mount("/designs", cfg.designs, "designs", nil)
-		mount("/name-mappings", cfg.nameMaps, "nameMappings", nil)
+		if cfg.nameMaps != nil {
+			cfg.nameMaps(api)
+		} else {
+			registerNotImplementedRoute(api, "/name-mappings:convert", "nameMappings")
+		}
 		mount("/cart", cfg.cart, "cart", nil)
 		mount("/orders", cfg.orders, "orders", nil)
 		mount("/admin", cfg.admin, "admin", nil)
@@ -209,4 +213,11 @@ func registerNotImplemented(r chi.Router, name string) {
 	r.HandleFunc("/", handler)
 	r.NotFound(handler)
 	r.MethodNotAllowed(handler)
+}
+
+func registerNotImplementedRoute(r chi.Router, path string, name string) {
+	handler := func(w http.ResponseWriter, req *http.Request) {
+		httpx.WriteError(req.Context(), w, httpx.NewError("not_implemented", fmt.Sprintf("%s routes not implemented", name), http.StatusNotImplemented))
+	}
+	r.HandleFunc(path, handler)
 }

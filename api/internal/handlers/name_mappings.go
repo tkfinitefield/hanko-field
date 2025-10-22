@@ -35,10 +35,13 @@ func (h *NameMappingHandlers) Routes(r chi.Router) {
 	if r == nil {
 		return
 	}
+
+	route := r
 	if h.authn != nil {
-		r.Use(h.authn.RequireFirebaseAuth())
+		route = route.With(h.authn.RequireFirebaseAuth())
 	}
-	r.Post(":convert", h.convert)
+
+	route.Post("/name-mappings:convert", h.convert)
 }
 
 func (h *NameMappingHandlers) convert(w http.ResponseWriter, r *http.Request) {
