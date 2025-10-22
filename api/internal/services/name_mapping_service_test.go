@@ -329,6 +329,7 @@ func TestNameMappingServiceSelect_Success(t *testing.T) {
 		},
 		CreatedAt: now.Add(-time.Hour),
 		UpdatedAt: now.Add(-time.Hour),
+		ExpiresAt: pointerToTime(now.Add(-30 * time.Minute)),
 	}
 	repo := &fakeNameMappingRepository{existing: &mapping}
 	profile := domain.UserProfile{
@@ -362,6 +363,9 @@ func TestNameMappingServiceSelect_Success(t *testing.T) {
 	}
 	if result.SelectedAt == nil || !result.SelectedAt.Equal(now) {
 		t.Fatalf("expected selectedAt %s, got %#v", now, result.SelectedAt)
+	}
+	if result.ExpiresAt != nil {
+		t.Fatalf("expected expiresAt cleared, got %#v", result.ExpiresAt)
 	}
 	if len(repo.updated) != 1 {
 		t.Fatalf("expected repository update once, got %d", len(repo.updated))
@@ -416,6 +420,7 @@ func TestNameMappingServiceSelect_Idempotent(t *testing.T) {
 		SelectedCandidate: &selected,
 		SelectedAt:        &selectedAt,
 		UpdatedAt:         now.Add(-time.Hour),
+		ExpiresAt:         pointerToTime(now.Add(-10 * time.Minute)),
 	}
 	repo := &fakeNameMappingRepository{existing: &mapping}
 	users := &fakeUserRepository{
@@ -445,8 +450,11 @@ func TestNameMappingServiceSelect_Idempotent(t *testing.T) {
 	if !result.SelectedAt.Equal(selectedAt) {
 		t.Fatalf("expected selectedAt unchanged, got %s", result.SelectedAt)
 	}
-	if len(repo.updated) != 0 {
-		t.Fatalf("expected no repository updates for idempotent selection")
+	if result.ExpiresAt != nil {
+		t.Fatalf("expected expiresAt cleared for idempotent selection, got %#v", result.ExpiresAt)
+	}
+	if len(repo.updated) != 1 {
+		t.Fatalf("expected repository updated once for idempotent selection, got %d", len(repo.updated))
 	}
 	if len(users.updateLogs) != 0 {
 		t.Fatalf("expected no profile updates for idempotent selection")
@@ -502,6 +510,7 @@ func TestNameMappingServiceSelect_Override(t *testing.T) {
 		SelectedCandidate: &selected,
 		SelectedAt:        pointerToTime(now.Add(-time.Hour)),
 		UpdatedAt:         now.Add(-time.Hour),
+		ExpiresAt:         pointerToTime(now.Add(-15 * time.Minute)),
 	}
 	repo := &fakeNameMappingRepository{existing: &mapping}
 	users := &fakeUserRepository{profile: domain.UserProfile{ID: "user-1", LastSyncTime: now}}
@@ -528,6 +537,9 @@ func TestNameMappingServiceSelect_Override(t *testing.T) {
 	}
 	if result.SelectedAt == nil || !result.SelectedAt.Equal(now) {
 		t.Fatalf("expected selectedAt updated to now")
+	}
+	if result.ExpiresAt != nil {
+		t.Fatalf("expected expiresAt cleared on override, got %#v", result.ExpiresAt)
 	}
 	if len(repo.updated) != 1 {
 		t.Fatalf("expected single repository update, got %d", len(repo.updated))

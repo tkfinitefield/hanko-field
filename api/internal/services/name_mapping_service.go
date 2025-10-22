@@ -341,9 +341,17 @@ func (s *nameMappingService) SelectCandidate(ctx context.Context, cmd NameMappin
 
 	if mapping.Status == domain.NameMappingStatusSelected {
 		if mapping.SelectedCandidate != nil && strings.TrimSpace(mapping.SelectedCandidate.ID) == candidateID {
+			needsUpdate := false
 			if mapping.SelectedAt == nil {
 				selectionTime := now
 				mapping.SelectedAt = &selectionTime
+				needsUpdate = true
+			}
+			if mapping.ExpiresAt != nil {
+				mapping.ExpiresAt = nil
+				needsUpdate = true
+			}
+			if needsUpdate {
 				mapping.UpdatedAt = now
 				if err := s.repo.Update(ctx, mapping); err != nil {
 					return NameMapping{}, s.translateSelectionRepoError(err)
@@ -363,6 +371,7 @@ func (s *nameMappingService) SelectCandidate(ctx context.Context, cmd NameMappin
 	mapping.SelectedCandidate = selectedCandidate
 	selectionTime := now
 	mapping.SelectedAt = &selectionTime
+	mapping.ExpiresAt = nil
 	mapping.UpdatedAt = now
 
 	if err := s.repo.Update(ctx, mapping); err != nil {
