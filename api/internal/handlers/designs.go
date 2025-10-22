@@ -25,6 +25,8 @@ const (
 	maxDesignPageSize            = 100
 	defaultDesignVersionPageSize = 20
 	maxDesignVersionPageSize     = 100
+	defaultAISuggestionPageSize  = 20
+	maxAISuggestionPageSize      = 50
 )
 
 // DesignHandlers exposes design creation endpoints for authenticated users.
@@ -52,7 +54,9 @@ func (h *DesignHandlers) Routes(r chi.Router) {
 	r.Get("/", h.listDesigns)
 	r.Post("/", h.createDesign)
 	r.Post("/{designID}/duplicate", h.duplicateDesign)
+	r.Get("/{designID}/ai-suggestions", h.listAISuggestions)
 	r.Post("/{designID}/ai-suggestions", h.requestAISuggestion)
+	r.Get("/{designID}/ai-suggestions/{suggestionID}", h.getAISuggestion)
 	r.Get("/{designID}/versions", h.listDesignVersions)
 	r.Get("/{designID}/versions/{versionID}", h.getDesignVersion)
 	r.Get("/{designID}", h.getDesign)
@@ -206,6 +210,140 @@ func (h *DesignHandlers) getDesign(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *DesignHandlers) listAISuggestions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+
+	pageSize := defaultAISuggestionPageSize
+	if raw := strings.TrimSpace(r.URL.Query().Get("page_size")); raw != "" {
+		size, err := strconv.Atoi(raw)
+		if err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "page_size must be an integer", http.StatusBadRequest))
+			return
+		}
+		if size < 0 {
+			size = defaultAISuggestionPageSize
+		}
+		if size > maxAISuggestionPageSize {
+			size = maxAISuggestionPageSize
+		}
+		if size == 0 {
+			pageSize = defaultAISuggestionPageSize
+		} else {
+			pageSize = size
+		}
+	}
+
+	statusFilters := parseFilterValues(r.URL.Query()["status"])
+
+	design, err := h.designs.GetDesign(ctx, designID, services.DesignReadOptions{})
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	ownerID := strings.TrimSpace(identity.UID)
+	if ownerID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	if !strings.EqualFold(design.OwnerID, ownerID) && !identity.HasAnyRole(auth.RoleStaff, auth.RoleAdmin) {
+		httpx.WriteError(ctx, w, httpx.NewError("design_not_found", "design not found", http.StatusNotFound))
+		return
+	}
+
+	filter := services.AISuggestionFilter{
+		Status: statusFilters,
+		Pagination: services.Pagination{
+			PageSize:  pageSize,
+			PageToken: strings.TrimSpace(r.URL.Query().Get("page_token")),
+		},
+	}
+
+	page, err := h.designs.ListAISuggestions(ctx, designID, filter)
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	items := make([]aiSuggestionPayload, 0, len(page.Items))
+	for _, suggestion := range page.Items {
+		items = append(items, buildAISuggestionPayload(suggestion))
+	}
+
+	response := aiSuggestionListResponse{
+		Items:         items,
+		NextPageToken: page.NextPageToken,
+	}
+	writeJSONResponse(w, http.StatusOK, response)
+}
+
+func (h *DesignHandlers) getAISuggestion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+
+	suggestionID := strings.TrimSpace(chi.URLParam(r, "suggestionID"))
+	if suggestionID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "suggestion id is required", http.StatusBadRequest))
+		return
+	}
+
+	design, err := h.designs.GetDesign(ctx, designID, services.DesignReadOptions{})
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	ownerID := strings.TrimSpace(identity.UID)
+	if ownerID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	if !strings.EqualFold(design.OwnerID, ownerID) && !identity.HasAnyRole(auth.RoleStaff, auth.RoleAdmin) {
+		httpx.WriteError(ctx, w, httpx.NewError("design_not_found", "design not found", http.StatusNotFound))
+		return
+	}
+
+	suggestion, err := h.designs.GetAISuggestion(ctx, designID, suggestionID)
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	payload := buildAISuggestionPayload(suggestion)
 	writeJSONResponse(w, http.StatusOK, payload)
 }
 
@@ -717,6 +855,62 @@ type aiSuggestionResponse struct {
 	PollingURL   string `json:"pollingUrl"`
 }
 
+type aiSuggestionListResponse struct {
+	Items         []aiSuggestionPayload `json:"items"`
+	NextPageToken string                `json:"next_page_token,omitempty"`
+}
+
+type aiSuggestionPayload struct {
+	SuggestionID    string                          `json:"suggestion_id"`
+	DesignID        string                          `json:"design_id,omitempty"`
+	Method          string                          `json:"method,omitempty"`
+	Model           string                          `json:"model,omitempty"`
+	Status          string                          `json:"status"`
+	StatusCategory  string                          `json:"status_category"`
+	JobID           string                          `json:"job_id,omitempty"`
+	JobRef          string                          `json:"job_ref,omitempty"`
+	Prompt          string                          `json:"prompt,omitempty"`
+	Parameters      map[string]any                  `json:"parameters,omitempty"`
+	Metadata        map[string]any                  `json:"metadata,omitempty"`
+	Summary         *aiSuggestionSummaryPayload     `json:"summary,omitempty"`
+	Preview         *aiSuggestionPreviewPayload     `json:"preview,omitempty"`
+	Diagnostics     []aiSuggestionDiagnosticPayload `json:"diagnostics,omitempty"`
+	Tags            []string                        `json:"tags,omitempty"`
+	Delta           map[string]any                  `json:"delta,omitempty"`
+	Result          map[string]any                  `json:"result,omitempty"`
+	Registrability  *bool                           `json:"registrability,omitempty"`
+	AcceptedAt      string                          `json:"accepted_at,omitempty"`
+	AcceptedBy      string                          `json:"accepted_by,omitempty"`
+	RejectionReason string                          `json:"rejection_reason,omitempty"`
+	CreatedAt       string                          `json:"created_at,omitempty"`
+	UpdatedAt       string                          `json:"updated_at,omitempty"`
+	ExpiresAt       string                          `json:"expires_at,omitempty"`
+	Payload         map[string]any                  `json:"payload,omitempty"`
+}
+
+type aiSuggestionSummaryPayload struct {
+	Score    *float64           `json:"score,omitempty"`
+	Scores   map[string]float64 `json:"scores,omitempty"`
+	QueuedAt string             `json:"queued_at,omitempty"`
+}
+
+type aiSuggestionPreviewPayload struct {
+	PreviewURL       string `json:"preview_url,omitempty"`
+	SignedPreviewURL string `json:"signed_preview_url,omitempty"`
+	DiffURL          string `json:"diff_url,omitempty"`
+	SvgURL           string `json:"svg_url,omitempty"`
+	AssetRef         string `json:"asset_ref,omitempty"`
+	Bucket           string `json:"bucket,omitempty"`
+	ObjectPath       string `json:"object_path,omitempty"`
+	ThumbnailURL     string `json:"thumbnail_url,omitempty"`
+}
+
+type aiSuggestionDiagnosticPayload struct {
+	Code     string `json:"code"`
+	Severity string `json:"severity,omitempty"`
+	Detail   string `json:"detail,omitempty"`
+}
+
 type duplicateDesignRequest struct {
 	Label *string `json:"label"`
 }
@@ -886,6 +1080,110 @@ type assetRefPayload struct {
 	Checksum    string `json:"checksum,omitempty"`
 }
 
+func buildAISuggestionPayload(suggestion services.AISuggestion) aiSuggestionPayload {
+	status := strings.TrimSpace(suggestion.Status)
+	if status == "" {
+		status = "queued"
+	}
+
+	payload := aiSuggestionPayload{
+		SuggestionID:   suggestion.ID,
+		DesignID:       strings.TrimSpace(suggestion.DesignID),
+		Method:         strings.TrimSpace(suggestion.Method),
+		Status:         status,
+		StatusCategory: deriveSuggestionStatusCategory(status),
+	}
+
+	if !suggestion.CreatedAt.IsZero() {
+		payload.CreatedAt = formatTime(suggestion.CreatedAt)
+	}
+	if !suggestion.UpdatedAt.IsZero() {
+		payload.UpdatedAt = formatTime(suggestion.UpdatedAt)
+	}
+	if suggestion.ExpiresAt != nil && !suggestion.ExpiresAt.IsZero() {
+		payload.ExpiresAt = formatTime(*suggestion.ExpiresAt)
+	}
+
+	raw := cloneMap(suggestion.Payload)
+	if raw != nil {
+		payload.Payload = raw
+	}
+
+	var result map[string]any
+	if raw != nil {
+		if res := mapFromAny(raw["result"]); len(res) > 0 {
+			payload.Result = cloneMap(res)
+			result = payload.Result
+		}
+	}
+
+	payload.Method = firstNonEmpty(
+		payload.Method,
+		stringFromAny(valueFromMaps("method", raw, result)),
+	)
+	payload.Model = firstNonEmpty(
+		payload.Model,
+		stringFromAny(valueFromMaps("model", raw, result)),
+	)
+	payload.Prompt = firstNonEmpty(
+		payload.Prompt,
+		stringFromAny(valueFromMaps("prompt", raw, result)),
+	)
+
+	if params := cloneMap(mapFromAny(valueFromMaps("parameters", raw, result))); len(params) > 0 {
+		payload.Parameters = params
+	}
+	if metadata := cloneMap(mapFromAny(valueFromMaps("metadata", raw, result))); len(metadata) > 0 {
+		payload.Metadata = metadata
+	}
+	if delta := cloneMap(mapFromAny(valueFromMaps("delta", raw, result))); len(delta) > 0 {
+		payload.Delta = delta
+	}
+	if tags := stringSliceFromAny(valueFromMaps("tags", raw, result)); len(tags) > 0 {
+		payload.Tags = tags
+	}
+	if val, ok := boolFromAny(valueFromMaps("registrability", raw, result)); ok {
+		payload.Registrability = &val
+	}
+	if acceptedAt := stringFromAny(valueFromMaps("acceptedAt", raw, result)); acceptedAt != "" {
+		payload.AcceptedAt = acceptedAt
+	}
+	if acceptedBy := stringFromAny(valueFromMaps("acceptedBy", raw, result)); acceptedBy != "" {
+		payload.AcceptedBy = acceptedBy
+	}
+	if reason := stringFromAny(valueFromMaps("rejectionReason", raw, result)); reason != "" {
+		payload.RejectionReason = reason
+	}
+
+	if jobID := stringFromAny(valueFromMaps("jobId", raw, result)); jobID != "" {
+		payload.JobID = jobID
+	}
+	if jobRef := stringFromAny(valueFromMaps("jobRef", raw, result)); jobRef != "" {
+		payload.JobRef = jobRef
+	}
+	if payload.JobRef == "" && payload.JobID != "" {
+		payload.JobRef = fmt.Sprintf("/aiJobs/%s", payload.JobID)
+	}
+
+	if summary := buildAISuggestionSummary(raw, result); summary != nil {
+		payload.Summary = summary
+	}
+
+	if diagnostics := diagnosticsFromAny(valueFromMaps("diagnostics", raw, result)); len(diagnostics) > 0 {
+		payload.Diagnostics = diagnostics
+	}
+
+	if preview := extractSuggestionPreviewFromSources(raw, result); preview != nil {
+		payload.Preview = preview
+	}
+
+	if payload.Summary != nil && payload.Summary.Score == nil && len(payload.Summary.Scores) == 0 && payload.Summary.QueuedAt == "" {
+		payload.Summary = nil
+	}
+
+	return payload
+}
+
 func buildDesignPayload(design services.Design) designPayload {
 	payload := designPayload{
 		ID:               design.ID,
@@ -1041,6 +1339,271 @@ func parseFilterValues(values []string) []string {
 		}
 	}
 	return filters
+}
+
+func valueFromMaps(key string, sources ...map[string]any) any {
+	for _, src := range sources {
+		if len(src) == 0 {
+			continue
+		}
+		if val, ok := src[key]; ok {
+			return val
+		}
+	}
+	return nil
+}
+
+func buildAISuggestionSummary(primary map[string]any, secondary map[string]any) *aiSuggestionSummaryPayload {
+	scoreValue, hasScore := floatFromAny(valueFromMaps("score", primary, secondary))
+	scores := extractScores(valueFromMaps("scores", primary, secondary))
+	queuedAt := stringFromAny(valueFromMaps("queuedAt", primary, secondary))
+
+	if !hasScore && len(scores) == 0 && queuedAt == "" {
+		return nil
+	}
+
+	summary := &aiSuggestionSummaryPayload{
+		Scores:   scores,
+		QueuedAt: queuedAt,
+	}
+	if hasScore {
+		summary.Score = &scoreValue
+	}
+	return summary
+}
+
+func extractScores(value any) map[string]float64 {
+	src := mapFromAny(value)
+	if len(src) == 0 {
+		return nil
+	}
+	scores := make(map[string]float64)
+	for key, raw := range src {
+		if score, ok := floatFromAny(raw); ok {
+			scores[key] = score
+		}
+	}
+	if len(scores) == 0 {
+		return nil
+	}
+	return scores
+}
+
+func floatFromAny(value any) (float64, bool) {
+	switch v := value.(type) {
+	case nil:
+		return 0, false
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case uint:
+		return float64(v), true
+	case uint64:
+		return float64(v), true
+	case uint32:
+		return float64(v), true
+	case json.Number:
+		if f, err := v.Float64(); err == nil {
+			return f, true
+		}
+	case string:
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			if f, err := strconv.ParseFloat(trimmed, 64); err == nil {
+				return f, true
+			}
+		}
+	}
+	return 0, false
+}
+
+func boolFromAny(value any) (bool, bool) {
+	switch v := value.(type) {
+	case nil:
+		return false, false
+	case bool:
+		return v, true
+	case string:
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			if parsed, err := strconv.ParseBool(trimmed); err == nil {
+				return parsed, true
+			}
+		}
+	}
+	return false, false
+}
+
+func stringSliceFromAny(value any) []string {
+	switch v := value.(type) {
+	case nil:
+		return nil
+	case []string:
+		if len(v) == 0 {
+			return nil
+		}
+		return slices.Clone(v)
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s := stringFromAny(item); s != "" {
+				out = append(out, s)
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	}
+	return nil
+}
+
+func diagnosticsFromAny(value any) []aiSuggestionDiagnosticPayload {
+	if value == nil {
+		return nil
+	}
+	var items []aiSuggestionDiagnosticPayload
+	switch v := value.(type) {
+	case []aiSuggestionDiagnosticPayload:
+		if len(v) == 0 {
+			return nil
+		}
+		items = append(items, v...)
+	case []map[string]any:
+		for _, entry := range v {
+			if diag := diagnosticFromMap(entry); diag != nil {
+				items = append(items, *diag)
+			}
+		}
+	case []any:
+		for _, entry := range v {
+			if diag := diagnosticFromMap(mapFromAny(entry)); diag != nil {
+				items = append(items, *diag)
+			}
+		}
+	default:
+		if diag := diagnosticFromMap(mapFromAny(v)); diag != nil {
+			items = append(items, *diag)
+		}
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	return items
+}
+
+func diagnosticFromMap(data map[string]any) *aiSuggestionDiagnosticPayload {
+	if len(data) == 0 {
+		return nil
+	}
+	code := stringFromAny(data["code"])
+	if code == "" {
+		return nil
+	}
+	diag := aiSuggestionDiagnosticPayload{
+		Code:     code,
+		Severity: stringFromAny(data["severity"]),
+		Detail:   stringFromAny(data["detail"]),
+	}
+	return &diag
+}
+
+func extractSuggestionPreviewFromSources(sources ...map[string]any) *aiSuggestionPreviewPayload {
+	for _, src := range sources {
+		if preview := extractSuggestionPreview(src); preview != nil {
+			return preview
+		}
+	}
+	return nil
+}
+
+func extractSuggestionPreview(source map[string]any) *aiSuggestionPreviewPayload {
+	if len(source) == 0 {
+		return nil
+	}
+	previewMap := mapFromAny(source["preview"])
+	if len(previewMap) == 0 {
+		if direct := stringFromAny(source["previewUrl"]); direct != "" {
+			previewMap = map[string]any{"previewUrl": direct}
+		}
+	}
+	if len(previewMap) == 0 {
+		return nil
+	}
+	payload := &aiSuggestionPreviewPayload{
+		PreviewURL:       stringFromAny(previewMap["previewUrl"]),
+		SignedPreviewURL: stringFromAny(previewMap["signedPreviewUrl"]),
+		DiffURL:          stringFromAny(previewMap["diffUrl"]),
+		SvgURL:           stringFromAny(previewMap["svgUrl"]),
+		AssetRef:         stringFromAny(previewMap["assetRef"]),
+		Bucket:           stringFromAny(previewMap["bucket"]),
+		ObjectPath:       stringFromAny(previewMap["objectPath"]),
+		ThumbnailURL:     stringFromAny(previewMap["thumbnailUrl"]),
+	}
+	if payload.SignedPreviewURL == "" {
+		payload.SignedPreviewURL = stringFromAny(previewMap["signedUrl"])
+	}
+	if payload.PreviewURL == "" && payload.SignedPreviewURL != "" {
+		payload.PreviewURL = payload.SignedPreviewURL
+	}
+	if payload.PreviewURL == "" && payload.Bucket != "" && payload.ObjectPath != "" {
+		if url := buildStorageURL(payload.Bucket, payload.ObjectPath); url != "" {
+			payload.PreviewURL = url
+			if payload.SignedPreviewURL == "" {
+				payload.SignedPreviewURL = url
+			}
+		}
+	}
+	if payload.SignedPreviewURL == "" && payload.PreviewURL != "" {
+		payload.SignedPreviewURL = payload.PreviewURL
+	}
+	if payload.PreviewURL == "" {
+		return nil
+	}
+	return payload
+}
+
+func mapFromAny(value any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	switch v := value.(type) {
+	case map[string]any:
+		return v
+	default:
+		return nil
+	}
+}
+
+func buildStorageURL(bucket, object string) string {
+	bucket = strings.TrimSpace(bucket)
+	object = strings.TrimSpace(object)
+	if bucket == "" || object == "" {
+		return ""
+	}
+	object = strings.TrimPrefix(object, "/")
+	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, object)
+}
+
+func deriveSuggestionStatusCategory(status string) string {
+	current := strings.ToLower(strings.TrimSpace(status))
+	switch current {
+	case "queued", "pending", "in_progress":
+		return "queued"
+	case "proposed", "accepted", "applied", "succeeded", "completed":
+		return "completed"
+	case "rejected", "expired", "failed", "canceled":
+		return "rejected"
+	case "":
+		return "queued"
+	default:
+		return current
+	}
 }
 
 func parseTimeParam(value string) (time.Time, error) {

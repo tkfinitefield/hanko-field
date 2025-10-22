@@ -105,6 +105,7 @@ type DesignService interface {
 	DuplicateDesign(ctx context.Context, cmd DuplicateDesignCommand) (Design, error)
 	RequestAISuggestion(ctx context.Context, cmd AISuggestionRequest) (AISuggestion, error)
 	ListAISuggestions(ctx context.Context, designID string, filter AISuggestionFilter) (domain.CursorPage[AISuggestion], error)
+	GetAISuggestion(ctx context.Context, designID string, suggestionID string) (AISuggestion, error)
 	UpdateAISuggestionStatus(ctx context.Context, cmd AISuggestionStatusCommand) (AISuggestion, error)
 	RequestRegistrabilityCheck(ctx context.Context, cmd RegistrabilityCheckCommand) (RegistrabilityCheckResult, error)
 }

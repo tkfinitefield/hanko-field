@@ -1187,8 +1187,59 @@ func (s *designService) RequestAISuggestion(ctx context.Context, cmd AISuggestio
 	return suggestion, nil
 }
 
-func (s *designService) ListAISuggestions(context.Context, string, AISuggestionFilter) (domain.CursorPage[AISuggestion], error) {
-	return domain.CursorPage[AISuggestion]{}, ErrDesignNotImplemented
+func (s *designService) ListAISuggestions(ctx context.Context, designID string, filter AISuggestionFilter) (domain.CursorPage[AISuggestion], error) {
+	if s.suggestions == nil {
+		return domain.CursorPage[AISuggestion]{}, ErrDesignNotImplemented
+	}
+
+	designID = strings.TrimSpace(designID)
+	if designID == "" {
+		return domain.CursorPage[AISuggestion]{}, fmt.Errorf("%w: design_id is required", ErrDesignInvalidInput)
+	}
+
+	statusFilters := normalizeSuggestionStatusFilters(filter.Status)
+
+	page, err := s.suggestions.ListByDesign(ctx, designID, domain.Pagination(filter.Pagination))
+	if err != nil {
+		return domain.CursorPage[AISuggestion]{}, s.mapRepositoryError(err)
+	}
+
+	if len(statusFilters) == 0 {
+		return page, nil
+	}
+
+	items := make([]AISuggestion, 0, len(page.Items))
+	for _, suggestion := range page.Items {
+		if suggestionMatchesStatusCategory(suggestion.Status, statusFilters) {
+			items = append(items, suggestion)
+		}
+	}
+	page.Items = items
+	if len(items) == 0 {
+		page.NextPageToken = ""
+	}
+	return page, nil
+}
+
+func (s *designService) GetAISuggestion(ctx context.Context, designID string, suggestionID string) (AISuggestion, error) {
+	if s.suggestions == nil {
+		return AISuggestion{}, ErrDesignNotImplemented
+	}
+
+	designID = strings.TrimSpace(designID)
+	if designID == "" {
+		return AISuggestion{}, fmt.Errorf("%w: design_id is required", ErrDesignInvalidInput)
+	}
+	suggestionID = strings.TrimSpace(suggestionID)
+	if suggestionID == "" {
+		return AISuggestion{}, fmt.Errorf("%w: suggestion_id is required", ErrDesignInvalidInput)
+	}
+
+	suggestion, err := s.suggestions.FindByID(ctx, designID, suggestionID)
+	if err != nil {
+		return AISuggestion{}, s.mapRepositoryError(err)
+	}
+	return suggestion, nil
 }
 
 func (s *designService) UpdateAISuggestionStatus(context.Context, AISuggestionStatusCommand) (AISuggestion, error) {
@@ -1821,6 +1872,56 @@ func cloneMetadata(src map[string]any) map[string]any {
 func suggestionIDFromKey(key string) string {
 	sum := sha1.Sum([]byte(strings.ToLower(strings.TrimSpace(key))))
 	return hex.EncodeToString(sum[:8])
+}
+
+func normalizeSuggestionStatusFilters(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if trimmed := strings.ToLower(strings.TrimSpace(value)); trimmed != "" {
+			if _, exists := seen[trimmed]; exists {
+				continue
+			}
+			seen[trimmed] = struct{}{}
+			normalized = append(normalized, trimmed)
+		}
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
+}
+
+func suggestionMatchesStatusCategory(status string, filters []string) bool {
+	if len(filters) == 0 {
+		return true
+	}
+
+	current := strings.ToLower(strings.TrimSpace(status))
+	for _, filter := range filters {
+		switch filter {
+		case "queued":
+			if current == "queued" || current == "pending" || current == "in_progress" {
+				return true
+			}
+		case "completed":
+			if current == "proposed" || current == "accepted" || current == "applied" || current == "succeeded" || current == "completed" {
+				return true
+			}
+		case "rejected":
+			if current == "rejected" || current == "expired" || current == "failed" || current == "canceled" {
+				return true
+			}
+		default:
+			if current == filter {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func cloneAssetReference(ref *DesignAssetReference) *DesignAssetReference {

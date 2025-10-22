@@ -370,6 +370,214 @@ func TestDesignHandlers_RequestAISuggestion_ServiceError(t *testing.T) {
 	}
 }
 
+func TestDesignHandlers_ListAISuggestions_Success(t *testing.T) {
+	now := time.Date(2025, 7, 1, 9, 0, 0, 0, time.UTC)
+	next := now.Add(2 * time.Minute)
+	capturedFilter := services.AISuggestionFilter{}
+	var capturedDesignID string
+
+	stub := &stubDesignService{
+		getFn: func(context.Context, string, services.DesignReadOptions) (services.Design, error) {
+			return services.Design{ID: "dsg_1", OwnerID: "user-1"}, nil
+		},
+		listAISuggestionsFn: func(_ context.Context, designID string, filter services.AISuggestionFilter) (domain.CursorPage[services.AISuggestion], error) {
+			capturedDesignID = designID
+			capturedFilter = filter
+			return domain.CursorPage[services.AISuggestion]{
+				Items: []services.AISuggestion{
+					{
+						ID:       "as_ready",
+						DesignID: "dsg_1",
+						Method:   "balance",
+						Status:   "proposed",
+						Payload: map[string]any{
+							"model":    "glyph-balancer@2025",
+							"score":    0.92,
+							"scores":   map[string]any{"balance": 0.95},
+							"queuedAt": now.Format(time.RFC3339Nano),
+							"parameters": map[string]any{
+								"strength": 0.8,
+							},
+							"metadata": map[string]any{
+								"channel": "app",
+							},
+							"tags": []any{"balanced", "featured"},
+							"preview": map[string]any{
+								"previewUrl":       "https://cdn.example/suggestion.png",
+								"signedPreviewUrl": "https://signed.example/suggestion.png?token=abc",
+								"diffUrl":          "https://cdn.example/suggestion-diff.png",
+								"thumbnailUrl":     "https://cdn.example/suggestion-thumb.png",
+								"assetRef":         "/assets/as_ready",
+								"bucket":           "design-assets",
+								"objectPath":       "ai/designs/dsg_1/as_ready.png",
+								"svgUrl":           "https://cdn.example/suggestion.svg",
+							},
+							"diagnostics": []any{
+								map[string]any{"code": "alignment", "severity": "warn", "detail": "Shifted baseline"},
+							},
+						},
+						CreatedAt: now,
+						UpdatedAt: next,
+					},
+				},
+				NextPageToken: "token-123",
+			}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodGet, "/designs/dsg_1/ai-suggestions?status=completed&page_size=5", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.listAISuggestions(rec, req)
+
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
+	}
+	if capturedDesignID != "dsg_1" {
+		t.Fatalf("expected designID dsg_1, got %s", capturedDesignID)
+	}
+	if capturedFilter.Pagination.PageSize != 5 {
+		t.Fatalf("expected page_size 5, got %d", capturedFilter.Pagination.PageSize)
+	}
+	if len(capturedFilter.Status) != 1 || capturedFilter.Status[0] != "completed" {
+		t.Fatalf("expected status filter [completed], got %+v", capturedFilter.Status)
+	}
+
+	var payload aiSuggestionListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.NextPageToken != "token-123" {
+		t.Fatalf("unexpected next page token: %s", payload.NextPageToken)
+	}
+	if len(payload.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(payload.Items))
+	}
+	item := payload.Items[0]
+	if item.SuggestionID != "as_ready" {
+		t.Fatalf("unexpected suggestion id %s", item.SuggestionID)
+	}
+	if item.StatusCategory != "completed" {
+		t.Fatalf("expected status category completed, got %s", item.StatusCategory)
+	}
+	if item.Summary == nil || item.Summary.Score == nil || *item.Summary.Score != 0.92 {
+		t.Fatalf("expected summary score 0.92, got %+v", item.Summary)
+	}
+	if item.Summary == nil || len(item.Summary.Scores) == 0 || item.Summary.Scores["balance"] != 0.95 {
+		t.Fatalf("expected balance score 0.95, got %+v", item.Summary)
+	}
+	if item.Preview == nil || item.Preview.SignedPreviewURL != "https://signed.example/suggestion.png?token=abc" {
+		t.Fatalf("expected signed preview url, got %+v", item.Preview)
+	}
+	if len(item.Diagnostics) != 1 || item.Diagnostics[0].Code != "alignment" {
+		t.Fatalf("expected diagnostics, got %+v", item.Diagnostics)
+	}
+	if item.Parameters == nil || item.Parameters["strength"] != 0.8 {
+		t.Fatalf("expected parameters propagated, got %+v", item.Parameters)
+	}
+	if item.Metadata == nil || item.Metadata["channel"] != "app" {
+		t.Fatalf("expected metadata propagated, got %+v", item.Metadata)
+	}
+	if len(item.Tags) != 2 {
+		t.Fatalf("expected tags populated, got %+v", item.Tags)
+	}
+	if item.CreatedAt != formatTime(now) {
+		t.Fatalf("expected createdAt %s, got %s", formatTime(now), item.CreatedAt)
+	}
+	if item.UpdatedAt != formatTime(next) {
+		t.Fatalf("expected updatedAt %s, got %s", formatTime(next), item.UpdatedAt)
+	}
+	if item.Payload == nil {
+		t.Fatalf("expected payload to be preserved")
+	}
+}
+
+func TestDesignHandlers_GetAISuggestion_Success(t *testing.T) {
+	now := time.Date(2025, 7, 2, 10, 0, 0, 0, time.UTC)
+	expires := now.Add(24 * time.Hour)
+
+	stub := &stubDesignService{
+		getFn: func(context.Context, string, services.DesignReadOptions) (services.Design, error) {
+			return services.Design{ID: "dsg_1", OwnerID: "user-1"}, nil
+		},
+		getAISuggestionFn: func(context.Context, string, string) (services.AISuggestion, error) {
+			return services.AISuggestion{
+				ID:       "as_detail",
+				DesignID: "dsg_1",
+				Method:   "balance",
+				Status:   "queued",
+				Payload: map[string]any{
+					"jobId":  "aj_55",
+					"prompt": "Balance glyph",
+					"result": map[string]any{
+						"score": 0.88,
+						"scores": map[string]any{
+							"legibility": 0.9,
+						},
+						"preview": map[string]any{
+							"bucket":     "design-assets",
+							"objectPath": "ai/dsg_1/as_detail.png",
+						},
+						"diagnostics": []any{
+							map[string]any{"code": "kerning", "detail": "Tight spacing"},
+						},
+					},
+				},
+				CreatedAt: now,
+				UpdatedAt: now,
+				ExpiresAt: &expires,
+			}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodGet, "/designs/dsg_1/ai-suggestions/as_detail", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	routeCtx.URLParams.Add("suggestionID", "as_detail")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.getAISuggestion(rec, req)
+
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
+	}
+
+	var payload aiSuggestionPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if payload.SuggestionID != "as_detail" {
+		t.Fatalf("expected suggestion id as_detail, got %s", payload.SuggestionID)
+	}
+	if payload.JobRef != "/aiJobs/aj_55" {
+		t.Fatalf("expected job ref /aiJobs/aj_55, got %s", payload.JobRef)
+	}
+	if payload.StatusCategory != "queued" {
+		t.Fatalf("expected status category queued, got %s", payload.StatusCategory)
+	}
+	if payload.Summary == nil || payload.Summary.Score == nil || *payload.Summary.Score != 0.88 {
+		t.Fatalf("expected summary score 0.88, got %+v", payload.Summary)
+	}
+	if payload.Preview == nil || payload.Preview.PreviewURL != "https://storage.googleapis.com/design-assets/ai/dsg_1/as_detail.png" {
+		t.Fatalf("expected preview url built from storage path, got %+v", payload.Preview)
+	}
+	if len(payload.Diagnostics) != 1 || payload.Diagnostics[0].Code != "kerning" {
+		t.Fatalf("expected diagnostics, got %+v", payload.Diagnostics)
+	}
+	if payload.ExpiresAt != formatTime(expires) {
+		t.Fatalf("expected expiresAt %s, got %s", formatTime(expires), payload.ExpiresAt)
+	}
+}
+
 func TestDesignHandlers_ListDesigns_Success(t *testing.T) {
 	var captured services.DesignListFilter
 	now := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
@@ -910,15 +1118,17 @@ func TestDesignHandlers_DeleteDesign_NotOwner(t *testing.T) {
 }
 
 type stubDesignService struct {
-	createFn       func(context.Context, services.CreateDesignCommand) (services.Design, error)
-	getFn          func(context.Context, string, services.DesignReadOptions) (services.Design, error)
-	listFn         func(context.Context, services.DesignListFilter) (domain.CursorPage[services.Design], error)
-	listVersionsFn func(context.Context, string, services.DesignVersionListFilter) (domain.CursorPage[services.DesignVersion], error)
-	getVersionFn   func(context.Context, string, string, services.DesignVersionReadOptions) (services.DesignVersion, error)
-	updateFn       func(context.Context, services.UpdateDesignCommand) (services.Design, error)
-	deleteFn       func(context.Context, services.DeleteDesignCommand) error
-	duplicateFn    func(context.Context, services.DuplicateDesignCommand) (services.Design, error)
-	aiRequestFn    func(context.Context, services.AISuggestionRequest) (services.AISuggestion, error)
+	createFn            func(context.Context, services.CreateDesignCommand) (services.Design, error)
+	getFn               func(context.Context, string, services.DesignReadOptions) (services.Design, error)
+	listFn              func(context.Context, services.DesignListFilter) (domain.CursorPage[services.Design], error)
+	listVersionsFn      func(context.Context, string, services.DesignVersionListFilter) (domain.CursorPage[services.DesignVersion], error)
+	getVersionFn        func(context.Context, string, string, services.DesignVersionReadOptions) (services.DesignVersion, error)
+	updateFn            func(context.Context, services.UpdateDesignCommand) (services.Design, error)
+	deleteFn            func(context.Context, services.DeleteDesignCommand) error
+	duplicateFn         func(context.Context, services.DuplicateDesignCommand) (services.Design, error)
+	aiRequestFn         func(context.Context, services.AISuggestionRequest) (services.AISuggestion, error)
+	listAISuggestionsFn func(context.Context, string, services.AISuggestionFilter) (domain.CursorPage[services.AISuggestion], error)
+	getAISuggestionFn   func(context.Context, string, string) (services.AISuggestion, error)
 }
 
 func (s *stubDesignService) CreateDesign(ctx context.Context, cmd services.CreateDesignCommand) (services.Design, error) {
@@ -984,8 +1194,18 @@ func (s *stubDesignService) RequestAISuggestion(ctx context.Context, req service
 	return services.AISuggestion{}, nil
 }
 
-func (s *stubDesignService) ListAISuggestions(context.Context, string, services.AISuggestionFilter) (domain.CursorPage[services.AISuggestion], error) {
+func (s *stubDesignService) ListAISuggestions(ctx context.Context, designID string, filter services.AISuggestionFilter) (domain.CursorPage[services.AISuggestion], error) {
+	if s.listAISuggestionsFn != nil {
+		return s.listAISuggestionsFn(ctx, designID, filter)
+	}
 	return domain.CursorPage[services.AISuggestion]{}, nil
+}
+
+func (s *stubDesignService) GetAISuggestion(ctx context.Context, designID, suggestionID string) (services.AISuggestion, error) {
+	if s.getAISuggestionFn != nil {
+		return s.getAISuggestionFn(ctx, designID, suggestionID)
+	}
+	return services.AISuggestion{}, nil
 }
 
 func (s *stubDesignService) UpdateAISuggestionStatus(context.Context, services.AISuggestionStatusCommand) (services.AISuggestion, error) {

@@ -1367,6 +1367,163 @@ func TestDesignService_RequestAISuggestion_InvalidInput(t *testing.T) {
 	}
 }
 
+func TestDesignService_ListAISuggestions_StatusFilters(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2025, 7, 1, 9, 0, 0, 0, time.UTC)
+
+	suggestions := &stubSuggestionRepository{
+		store: map[string]map[string]domain.AISuggestion{
+			"dsg_filters": {
+				"as_queue": {
+					ID:        "as_queue",
+					DesignID:  "dsg_filters",
+					Status:    "queued",
+					CreatedAt: now,
+					UpdatedAt: now,
+				},
+				"as_ready": {
+					ID:        "as_ready",
+					DesignID:  "dsg_filters",
+					Status:    "proposed",
+					CreatedAt: now,
+					UpdatedAt: now,
+				},
+				"as_reject": {
+					ID:        "as_reject",
+					DesignID:  "dsg_filters",
+					Status:    "rejected",
+					CreatedAt: now,
+					UpdatedAt: now,
+				},
+			},
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      &stubDesignRepository{},
+		Versions:     &stubDesignVersionRepository{},
+		Suggestions:  suggestions,
+		Jobs:         &stubJobDispatcher{},
+		AssetsBucket: "bucket",
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	assertIDs := func(t *testing.T, page domain.CursorPage[AISuggestion], expected ...string) {
+		t.Helper()
+		got := make(map[string]struct{}, len(page.Items))
+		for _, item := range page.Items {
+			got[item.ID] = struct{}{}
+		}
+		if len(got) != len(expected) {
+			t.Fatalf("expected %d items, got %d", len(expected), len(got))
+		}
+		for _, id := range expected {
+			if _, ok := got[id]; !ok {
+				t.Fatalf("expected suggestion %s in result, got %+v", id, got)
+			}
+		}
+	}
+
+	page, err := svc.ListAISuggestions(ctx, "dsg_filters", AISuggestionFilter{
+		Status: []string{"completed"},
+	})
+	if err != nil {
+		t.Fatalf("ListAISuggestions (completed) error: %v", err)
+	}
+	assertIDs(t, page, "as_ready")
+
+	page, err = svc.ListAISuggestions(ctx, "dsg_filters", AISuggestionFilter{
+		Status: []string{"queued"},
+	})
+	if err != nil {
+		t.Fatalf("ListAISuggestions (queued) error: %v", err)
+	}
+	assertIDs(t, page, "as_queue")
+
+	page, err = svc.ListAISuggestions(ctx, "dsg_filters", AISuggestionFilter{
+		Status: []string{"rejected"},
+	})
+	if err != nil {
+		t.Fatalf("ListAISuggestions (rejected) error: %v", err)
+	}
+	assertIDs(t, page, "as_reject")
+
+	page, err = svc.ListAISuggestions(ctx, "dsg_filters", AISuggestionFilter{
+		Status: []string{"queued", "completed"},
+	})
+	if err != nil {
+		t.Fatalf("ListAISuggestions (multi) error: %v", err)
+	}
+	assertIDs(t, page, "as_queue", "as_ready")
+}
+
+func TestDesignService_ListAISuggestions_InvalidInput(t *testing.T) {
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      &stubDesignRepository{},
+		Versions:     &stubDesignVersionRepository{},
+		Suggestions:  &stubSuggestionRepository{},
+		Jobs:         &stubJobDispatcher{},
+		AssetsBucket: "bucket",
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	_, err = svc.ListAISuggestions(context.Background(), "", AISuggestionFilter{})
+	if !errors.Is(err, ErrDesignInvalidInput) {
+		t.Fatalf("expected invalid input error, got %v", err)
+	}
+}
+
+func TestDesignService_GetAISuggestion(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now().UTC()
+	suggestions := &stubSuggestionRepository{
+		store: map[string]map[string]domain.AISuggestion{
+			"dsg_1": {
+				"as_ok": {
+					ID:        "as_ok",
+					DesignID:  "dsg_1",
+					Status:    "proposed",
+					CreatedAt: now,
+					UpdatedAt: now,
+				},
+			},
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      &stubDesignRepository{},
+		Versions:     &stubDesignVersionRepository{},
+		Suggestions:  suggestions,
+		Jobs:         &stubJobDispatcher{},
+		AssetsBucket: "bucket",
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	result, err := svc.GetAISuggestion(ctx, "dsg_1", "as_ok")
+	if err != nil {
+		t.Fatalf("GetAISuggestion error: %v", err)
+	}
+	if result.ID != "as_ok" {
+		t.Fatalf("expected as_ok, got %s", result.ID)
+	}
+
+	_, err = svc.GetAISuggestion(ctx, "dsg_1", "missing")
+	if !errors.Is(err, ErrDesignNotFound) {
+		t.Fatalf("expected design not found error, got %v", err)
+	}
+
+	_, err = svc.GetAISuggestion(ctx, "", "as_ok")
+	if !errors.Is(err, ErrDesignInvalidInput) {
+		t.Fatalf("expected invalid input error, got %v", err)
+	}
+}
+
 func cloneTestDesign(design domain.Design) domain.Design {
 	copy := design
 	if design.Snapshot != nil {
