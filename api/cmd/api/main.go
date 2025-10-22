@@ -172,6 +172,10 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to initialise favorite repository", zap.Error(err))
 	}
+	cartRepo, err := firestoreRepo.NewCartRepository(firestoreProvider)
+	if err != nil {
+		logger.Fatal("failed to initialise cart repository", zap.Error(err))
+	}
 	nameMappingRepo, err := firestoreRepo.NewNameMappingRepository(firestoreProvider)
 	if err != nil {
 		logger.Fatal("failed to initialise name mapping repository", zap.Error(err))
@@ -220,6 +224,25 @@ func main() {
 		logger.Fatal("failed to initialise user service", zap.Error(err))
 	}
 	meHandlers := handlers.NewMeHandlers(authenticator, userService)
+
+	cartLogger := logger.Named("cart")
+	cartService, err := services.NewCartService(services.CartServiceDeps{
+		Repository:      cartRepo,
+		Clock:           time.Now,
+		DefaultCurrency: "JPY",
+		Logger: func(ctx context.Context, event string, fields map[string]any) {
+			zFields := make([]zap.Field, 0, len(fields)+1)
+			zFields = append(zFields, zap.String("event", event))
+			for k, v := range fields {
+				zFields = append(zFields, zap.Any(k, v))
+			}
+			cartLogger.Debug("cart log", zFields...)
+		},
+	})
+	if err != nil {
+		logger.Fatal("failed to initialise cart service", zap.Error(err))
+	}
+	cartHandlers := handlers.NewCartHandlers(authenticator, cartService)
 
 	nameMappingLogger := logger.Named("name_mapping")
 	nameMappingService, err := services.NewNameMappingService(services.NameMappingServiceDeps{
@@ -276,6 +299,7 @@ func main() {
 	opts = append(opts, handlers.WithMeRoutes(meHandlers.Routes))
 	opts = append(opts, handlers.WithDesignRoutes(designHandlers.Routes))
 	opts = append(opts, handlers.WithNameMappingRoutes(nameMappingHandlers.Routes))
+	opts = append(opts, handlers.WithCartRoutes(cartHandlers.Routes))
 	publicHandlers := handlers.NewPublicHandlers()
 	opts = append(opts, handlers.WithPublicRoutes(publicHandlers.Routes))
 	if oidcMiddleware != nil {

@@ -67,7 +67,7 @@
 - [x] [049 Implement mapping selection endpoint persisting chosen candidate and locking mapping.](./tasks/049-implement-mapping-selection-endpoint-persisting-chosen-candidate-and-locking-map.md)
 
 ### 5.4 Cart & Checkout
-- [ ] [050 Implement cart retrieval endpoint keyed by user/session with lazy creation.](./tasks/050-implement-cart-retrieval-endpoint-keyed-by-user-session-with-lazy-creation.md)
+- [x] [050 Implement cart retrieval endpoint keyed by user/session with lazy creation.](./tasks/050-implement-cart-retrieval-endpoint-keyed-by-user-session-with-lazy-creation.md)
 - [ ] [051 Implement cart patch endpoint handling currency, shipping address, promotion hints.](./tasks/051-implement-cart-patch-endpoint-handling-currency-shipping-address-promotion-hints.md)
 - [ ] [052 Implement cart item CRUD with product availability validation and quantity checks.](./tasks/052-implement-cart-item-crud-with-product-availability-validation-and-quantity-check.md)
 - [ ] [053 Implement cart estimate endpoint calculating totals, promotions, tax, and shipping.](./tasks/053-implement-cart-estimate-endpoint-calculating-totals-promotions-tax-and-shipping.md)
