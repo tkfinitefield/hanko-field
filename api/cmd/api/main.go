@@ -172,6 +172,10 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to initialise favorite repository", zap.Error(err))
 	}
+	registrabilityRepo, err := firestoreRepo.NewDesignRegistrabilityRepository(firestoreProvider)
+	if err != nil {
+		logger.Fatal("failed to initialise registrability repository", zap.Error(err))
+	}
 	designRepo, err := firestoreRepo.NewDesignRepository(firestoreProvider)
 	if err != nil {
 		logger.Fatal("failed to initialise design repository", zap.Error(err))
@@ -213,12 +217,16 @@ func main() {
 	}
 	meHandlers := handlers.NewMeHandlers(authenticator, userService)
 
+	registrabilityEvaluator := services.NewHeuristicRegistrabilityEvaluator(time.Now)
+
 	designService, err := services.NewDesignService(services.DesignServiceDeps{
-		Designs:      designRepo,
-		Versions:     designVersionRepo,
-		AssetCopier:  assetCopier,
-		AssetsBucket: cfg.Storage.AssetsBucket,
-		Clock:        time.Now,
+		Designs:             designRepo,
+		Versions:            designVersionRepo,
+		AssetCopier:         assetCopier,
+		AssetsBucket:        cfg.Storage.AssetsBucket,
+		Clock:               time.Now,
+		Registrability:      registrabilityEvaluator,
+		RegistrabilityCache: registrabilityRepo,
 	})
 	if err != nil {
 		logger.Fatal("failed to initialise design service", zap.Error(err))
