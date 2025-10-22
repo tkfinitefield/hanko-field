@@ -1,0 +1,74 @@
+{{ define "frag_product_tab" }}
+{{ $detail := .Detail }}
+{{ $tab := .Tab }}
+{{ if eq $tab "specs" }}
+  <dl class="grid gap-4 sm:grid-cols-2">
+    {{ range $spec := $detail.Specs }}
+      <div>
+        <dt class="text-xs font-medium uppercase tracking-wide text-gray-500">{{ $spec.Label }}</dt>
+        <dd class="mt-1 text-sm text-gray-900">{{ $spec.Value }}</dd>
+      </div>
+    {{ end }}
+  </dl>
+{{ else if eq $tab "reviews" }}
+  <div class="space-y-6">
+    {{ template "c_rating_summary" (dict
+        "Lang" $.Lang
+        "Average" $detail.Reviews.Average
+        "Count" $detail.Reviews.Count
+        "Highlights" $detail.Reviews.Highlights
+        "Latest" $detail.Reviews.Latest
+        "Stars" $detail.ReviewStars
+        "Link" $detail.Reviews.Link
+    ) }}
+    {{ if $detail.Reviews.Breakdown }}
+      <div class="space-y-2">
+        <h3 class="text-sm font-medium text-gray-900">{{ if eq $.Lang "ja" }}評価の内訳{{ else }}Rating breakdown{{ end }}</h3>
+        <ul class="space-y-2 text-sm text-gray-700">
+          {{ range $detail.Reviews.Breakdown }}
+            <li class="flex items-center gap-3">
+              <span class="w-16 text-gray-500">{{ .Stars }}★</span>
+              <div class="h-2 flex-1 rounded-full bg-gray-100">
+                <div class="h-2 rounded-full bg-indigo-500" style="width: {{ .Percent }}%;"></div>
+              </div>
+              <span class="w-12 text-right text-xs text-gray-500">{{ .Percent }}%</span>
+            </li>
+          {{ end }}
+        </ul>
+      </div>
+    {{ end }}
+  </div>
+{{ else if eq $tab "faq" }}
+  <div class="space-y-3">
+    {{ range $qa := $detail.FAQ }}
+      <details class="group rounded-lg border border-gray-200 bg-white p-4 open:border-indigo-200 open:bg-indigo-50">
+        <summary class="flex cursor-pointer items-center justify-between text-sm font-medium text-gray-900">
+          <span>{{ $qa.Question }}</span>
+          <span class="ml-4 text-indigo-500 transition group-open:-rotate-180">
+            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M5 8l5 5 5-5H5z"/>
+            </svg>
+          </span>
+        </summary>
+        <p class="mt-3 text-sm text-gray-700 leading-relaxed">{{ $qa.Answer }}</p>
+      </details>
+    {{ end }}
+  </div>
+{{ else }}
+  <div class="space-y-4 text-sm text-gray-700">
+    {{ range $p := $detail.Description }}
+      <p>{{ $p }}</p>
+    {{ end }}
+    {{ if $detail.Highlights }}
+      <ul class="space-y-2">
+        {{ range $detail.Highlights }}
+          <li class="flex items-start gap-2">
+            <span class="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-indigo-500"></span>
+            <span>{{ . }}</span>
+          </li>
+        {{ end }}
+      </ul>
+    {{ end }}
+  </div>
+{{ end }}
+{{ end }}

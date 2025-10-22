@@ -1,0 +1,91 @@
+{{ define "frag_product_gallery" }}
+{{ $detail := .Detail }}
+{{ $mediaList := .MediaList }}
+{{ $activeID := .Active }}
+{{ $active := .ActiveMedia }}
+{{ if and $active $active.ID }}
+  {{ $activeID = $active.ID }}
+{{ end }}
+{{ if not $active }}
+  {{ range $mediaList }}
+    {{ if and $activeID (eq .ID $activeID) }}
+      {{ $active = . }}
+      {{ $activeID = .ID }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+{{ if not $active }}
+  {{ if $detail.DefaultMedia }}
+    {{ range $mediaList }}
+      {{ if eq .ID $detail.DefaultMedia }}
+        {{ $active = . }}
+        {{ $activeID = .ID }}
+      {{ end }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+{{ if and (not $active) (gt (len $mediaList) 0) }}
+  {{ $active = index $mediaList 0 }}
+  {{ $activeID = $active.ID }}
+{{ end }}
+<div id="product-gallery" class="space-y-3">
+  {{ if $active }}
+  <div class="relative overflow-hidden rounded-xl border border-gray-200 bg-white">
+    {{ if eq $active.Kind "video" }}
+      <video controls poster="{{ $active.Poster }}" class="h-full w-full rounded-xl" aria-label="{{ $active.Alt }}">
+        <source src="{{ $active.Src }}" type="video/mp4">
+      </video>
+    {{ else }}
+      <button type="button"
+              class="group relative block w-full overflow-hidden"
+              hx-get="/products/{{ $detail.Product.ID }}/gallery/modal?media={{ $active.ID }}"
+              hx-target="#modal-root"
+              hx-swap="innerHTML"
+              aria-label="{{ if eq $.Lang "ja" }}ギャラリーを拡大{{ else }}Open gallery modal{{ end }}">
+        <img src="{{ $active.Src }}" alt="{{ $active.Alt }}" class="w-full object-cover transition duration-300 group-hover:scale-[1.02]">
+        <span class="absolute bottom-3 right-3 inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-gray-700 shadow">
+          <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+            <path d="M11 3h6v6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M9 17H3v-6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M17 3l-6 6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M3 17l6-6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {{ if eq $.Lang "ja" }}ズーム{{ else }}Zoom{{ end }}
+        </span>
+      </button>
+    {{ end }}
+  </div>
+  {{ end }}
+
+  {{ if gt (len $mediaList) 1 }}
+  <div class="grid grid-cols-3 gap-2 sm:grid-cols-4">
+    {{ range $media := $mediaList }}
+      <button type="button"
+              class="relative overflow-hidden rounded-lg border {{ if eq $media.ID $activeID }}border-indigo-500 ring-2 ring-indigo-100{{ else }}border-gray-200 hover:border-indigo-300{{ end }}"
+              hx-get="/products/{{ $detail.Product.ID }}/gallery?media={{ $media.ID }}"
+              hx-target="#product-gallery"
+              hx-swap="outerHTML"
+              hx-push-url="false"
+              aria-label="{{ $media.Alt }}">
+        {{ if eq $media.Kind "video" }}
+          <div class="relative aspect-square bg-gray-100">
+            {{ if $media.Poster }}
+              <img src="{{ $media.Poster }}" alt="{{ $media.Alt }}" class="h-full w-full object-cover">
+            {{ else }}
+              <span class="flex h-full w-full items-center justify-center text-gray-400">Video</span>
+            {{ end }}
+            <span class="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
+              <svg class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M6 4l10 6-10 6z"/>
+              </svg>
+            </span>
+          </div>
+        {{ else }}
+          <img src="{{ if $media.Thumbnail }}{{ $media.Thumbnail }}{{ else }}{{ $media.Src }}{{ end }}" alt="{{ $media.Alt }}" class="h-full w-full object-cover">
+        {{ end }}
+      </button>
+    {{ end }}
+  </div>
+  {{ end }}
+</div>
+{{ end }}

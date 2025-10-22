@@ -1,0 +1,31 @@
+{{ define "frag_cart_add_confirmation" }}
+<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 shadow-sm" role="status">
+  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div class="flex items-start gap-3">
+      <span class="mt-0.5 inline-flex h-5 w-5 flex-none items-center justify-center rounded-full bg-emerald-500 text-white">
+        <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-7.1 7.1a1 1 0 01-1.414 0l-3.3-3.3a1 1 0 111.414-1.414l2.593 2.593 6.393-6.393a1 1 0 011.414 0z" clip-rule="evenodd"/>
+        </svg>
+      </span>
+      <div>
+        <p class="font-medium">{{ if eq .Lang "ja" }}カートに追加しました{{ else }}Added to cart{{ end }}</p>
+        <p class="text-xs text-emerald-900/80">
+          {{ if eq .Lang "ja" }}
+            {{ if .ProductName }}「{{ .ProductName }}」を{{ .Quantity }}点追加しました。{{ else }}商品を{{ .Quantity }}点追加しました。{{ end }}
+          {{ else }}
+            {{ if .ProductName }}Added {{ .Quantity }} × {{ .ProductName }}.{{ else }}Added {{ .Quantity }} item(s).{{ end }}
+          {{ end }}
+        </p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/cart" class="text-sm font-medium text-emerald-900 underline underline-offset-2 hover:text-emerald-700">
+        {{ if eq .Lang "ja" }}カートを見る{{ else }}View cart{{ end }}
+      </a>
+      <button type="button" class="text-sm text-emerald-900/80 hover:text-emerald-700" hx-on="click: this.closest('div[role=status]').remove()">
+        {{ if eq .Lang "ja" }}閉じる{{ else }}Dismiss{{ end }}
+      </button>
+    </div>
+  </div>
+</div>
+{{ end }}

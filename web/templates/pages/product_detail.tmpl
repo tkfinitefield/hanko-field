@@ -1,0 +1,203 @@
+{{ define "content" }}
+{{ $detail := .Product }}
+<section class="space-y-10">
+  <header class="flex flex-col gap-3 border-b border-gray-200 pb-6">
+    <p class="text-sm text-gray-500">{{ $detail.Subtitle }}</p>
+    <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight text-gray-900">{{ $detail.Product.Name }}</h1>
+        {{ if $detail.Lead }}<p class="mt-2 max-w-2xl text-gray-600">{{ $detail.Lead }}</p>{{ end }}
+      </div>
+      <div class="flex flex-col items-start gap-2 text-sm text-gray-600 md:items-end">
+        <div class="flex items-center gap-2">
+          {{ template "c_price_badge" (dict "Lang" $.Lang "Price" $detail.Product.PriceJPY "CompareAt" $detail.Product.CompareAtJPY "Currency" "JPY" "Note" $detail.PriceNote) }}
+          {{ if $detail.AvailabilityLabel }}
+            {{ template "c_status_pill" (dict "Label" $detail.AvailabilityLabel "Tone" $detail.AvailabilityTone) }}
+          {{ end }}
+        </div>
+        {{ if $detail.ShippingEstimate }}<p class="text-xs text-gray-500">{{ $detail.ShippingEstimate }}</p>{{ end }}
+      </div>
+    </div>
+  </header>
+
+  <div class="grid gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+    <div class="space-y-8">
+      <div id="product-gallery" hx-target="this" hx-swap="outerHTML">
+        {{ slot "frag_product_gallery" (dict "Lang" $.Lang "Detail" $detail "MediaList" $detail.Media "Active" $detail.DefaultMedia) }}
+      </div>
+
+      <section aria-labelledby="product-tabs">
+        <div data-product-tabs role="tablist" aria-label="{{ if eq $.Lang "ja" }}商品情報{{ else }}Product details{{ end }}" class="flex flex-wrap gap-2 border-b border-gray-200">
+          {{ $descLabel := "Description" }}
+          {{ $specLabel := "Specs" }}
+          {{ $reviewLabel := "Reviews" }}
+          {{ $faqLabel := "FAQ" }}
+          {{ if eq $.Lang "ja" }}
+            {{ $descLabel = "概要" }}
+            {{ $specLabel = "仕様" }}
+            {{ $reviewLabel = "レビュー" }}
+            {{ $faqLabel = "FAQ" }}
+          {{ end }}
+          {{ $tabs := list (dict "Key" "description" "Label" $descLabel) (dict "Key" "specs" "Label" $specLabel) (dict "Key" "reviews" "Label" $reviewLabel) (dict "Key" "faq" "Label" $faqLabel) }}
+          {{ range $idx, $tab := $tabs }}
+            {{ $isActive := eq $tab.Key "description" }}
+            <button
+              type="button"
+              role="tab"
+              data-tab="{{ $tab.Key }}"
+              aria-controls="product-tab-panel"
+              aria-selected="{{ if $isActive }}true{{ else }}false{{ end }}"
+              class="rounded-t-md border-b-2 px-4 py-2 text-sm font-medium transition {{ if $isActive }}border-indigo-500 bg-indigo-50 text-indigo-600{{ else }}border-transparent text-gray-600 hover:text-gray-900{{ end }}"
+              hx-get="/products/{{ $detail.Product.ID }}/tabs/{{ $tab.Key }}"
+              hx-target="#product-tab-panel"
+              hx-swap="innerHTML">
+              {{ $tab.Label }}
+            </button>
+          {{ end }}
+        </div>
+        <div id="product-tab-panel" role="tabpanel" class="rounded-b-lg border border-gray-200 bg-white p-6">
+          {{ slot "frag_product_tab" (dict "Lang" $.Lang "Tab" "description" "Detail" $detail) }}
+        </div>
+      </section>
+    </div>
+
+    <aside class="space-y-6">
+      <section aria-labelledby="purchase-panel" class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 id="purchase-panel" class="sr-only">{{ if eq $.Lang "ja" }}購入オプション{{ else }}Purchase options{{ end }}</h2>
+        <form hx-post="/cart/items" hx-target="#cart-feedback" hx-swap="innerHTML" class="space-y-5">
+          <input type="hidden" name="product_id" value="{{ $detail.Product.ID }}">
+          {{ range $opt := $detail.Options }}
+            <fieldset class="space-y-2">
+              <legend class="text-sm font-medium text-gray-900">{{ $opt.Label }}</legend>
+              {{ if $opt.Help }}<p class="text-xs text-gray-500">{{ $opt.Help }}</p>{{ end }}
+              <div class="grid gap-2">
+                {{ range $idx, $choice := $opt.Choices }}
+                  {{ $inputID := printf "%s-%d" $opt.Name $idx }}
+                  <label for="{{ $inputID }}" class="flex cursor-pointer items-start gap-3 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm hover:border-indigo-300">
+                    <input
+                      id="{{ $inputID }}"
+                      class="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500"
+                      type="radio"
+                      name="{{ $opt.Name }}"
+                      value="{{ $choice.Value }}"
+                      {{ if $choice.Selected }}checked{{ end }}
+                      {{ if $opt.Required }}required{{ end }}>
+                    <span>
+                      <span class="font-medium text-gray-900">{{ $choice.Label }}</span>
+                      {{ if $choice.Subtitle }}<span class="block text-xs text-gray-500">{{ $choice.Subtitle }}</span>{{ end }}
+                    </span>
+                  </label>
+                {{ end }}
+              </div>
+            </fieldset>
+          {{ end }}
+
+          <div class="space-y-2">
+            <label for="quantity" class="text-sm font-medium text-gray-900">{{ if eq $.Lang "ja" }}数量{{ else }}Quantity{{ end }}</label>
+            {{ template "c_stepper" (dict "Name" "quantity" "Value" 1 "Min" $detail.MinQty "Max" $detail.MaxQty) }}
+          </div>
+
+          {{ if $detail.Highlights }}
+            <ul class="space-y-2 rounded-md bg-gray-50 p-3 text-xs text-gray-600">
+              {{ range $detail.Highlights }}
+                <li class="flex gap-2">
+                  <span class="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-indigo-500"></span>
+                  <span>{{ . }}</span>
+                </li>
+              {{ end }}
+            </ul>
+          {{ end }}
+
+          <div class="flex flex-col gap-3 pt-2">
+            {{ $ctaLabel := "Add to cart" }}
+            {{ if eq $.Lang "ja" }}{{ $ctaLabel = "カートに追加" }}{{ end }}
+            {{ template "c_button" (dict "Label" $ctaLabel "Variant" "primary" "Type" "submit") }}
+            <button type="button" class="text-sm text-indigo-600 hover:text-indigo-500" hx-get="/products/{{ $detail.Product.ID }}/gallery/modal?media={{ $detail.DefaultMedia }}" hx-target="#modal-root" hx-swap="innerHTML">
+              {{ if eq $.Lang "ja" }}ギャラリーを拡大表示{{ else }}Open gallery modal{{ end }}
+            </button>
+          </div>
+          <div id="cart-feedback" aria-live="polite"></div>
+        </form>
+      </section>
+
+      <section aria-labelledby="rating-summary">
+        <h2 id="rating-summary" class="sr-only">{{ if eq $.Lang "ja" }}レビュー抜粋{{ else }}Review highlights{{ end }}</h2>
+        {{ slot "frag_product_reviews_snippet" (dict "Lang" $.Lang "Detail" $detail "Reviews" $detail.Reviews "Product" $detail.Product "Stars" $detail.ReviewStars) }}
+      </section>
+    </aside>
+  </div>
+
+  <section aria-labelledby="recommendations" class="space-y-4">
+    <div class="flex items-center justify-between">
+      <h2 id="recommendations" class="text-xl font-semibold text-gray-900">{{ if eq $.Lang "ja" }}おすすめ商品{{ else }}Recommended for you{{ end }}</h2>
+      <a href="/shop" class="text-sm text-indigo-600 hover:text-indigo-500">{{ if eq $.Lang "ja" }}一覧を見る{{ else }}Browse all{{ end }}</a>
+    </div>
+    {{ template "c_product_rail" (dict "Lang" $.Lang "Items" $detail.Recommended) }}
+  </section>
+</section>
+
+<script>
+(function(){
+  function initStepper(scope){
+    if (!scope || !scope.querySelectorAll) { return; }
+    scope.querySelectorAll('[data-stepper]').forEach(function(root){
+      if (root.__stepperReady) { return; }
+      root.__stepperReady = true;
+      var input = root.querySelector('[data-stepper-input]');
+      if (!input) { return; }
+      root.querySelectorAll('[data-stepper-action]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var step = parseInt(btn.getAttribute('data-stepper-action'), 10);
+          if (isNaN(step)) { step = 1; }
+          var min = parseInt(input.getAttribute('min') || '1', 10);
+          var max = parseInt(input.getAttribute('max') || '99', 10);
+          var value = parseInt(input.value || '0', 10);
+          if (isNaN(value)) { value = min; }
+          value += step;
+          if (value < min) { value = min; }
+          if (value > max) { value = max; }
+          input.value = value;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+      });
+    });
+  }
+
+  function initTabs(root){
+    if (!root) { return; }
+    var buttons = root.querySelectorAll('[data-tab]');
+    if (!buttons.length) { return; }
+    var update = function(activeBtn){
+      buttons.forEach(function(btn){
+        var active = btn === activeBtn;
+        btn.classList.toggle('border-indigo-500', active);
+        btn.classList.toggle('bg-indigo-50', active);
+        btn.classList.toggle('text-indigo-600', active);
+        btn.classList.toggle('border-transparent', !active);
+        btn.classList.toggle('text-gray-600', !active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+    };
+    buttons.forEach(function(btn){
+      btn.addEventListener('click', function(){
+        update(btn);
+      });
+    });
+  }
+
+  initStepper(document);
+  initTabs(document.querySelector('[data-product-tabs]'));
+
+  document.addEventListener('htmx:afterSwap', function(e){
+    if (!e.target) { return; }
+    if (e.target.id === 'product-gallery' || e.target.querySelector('[data-stepper]')) {
+      initStepper(e.target);
+    }
+    if (e.target.id === 'product-tab-panel') {
+      initTabs(document.querySelector('[data-product-tabs]'));
+    }
+  });
+})();
+</script>
+{{ end }}

@@ -1,0 +1,28 @@
+{{ define "frag_product_gallery_modal" }}
+{{ $media := .Media }}
+{{ $detail := .Detail }}
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-10" data-modal-overlay>
+  <div class="relative w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl" data-modal-container>
+    <button type="button" class="absolute right-4 top-4 inline-flex items-center rounded-full bg-black/70 p-2 text-white hover:bg-black/80 focus:outline-none focus:ring-2 focus:ring-white" data-modal-close aria-label="{{ if eq $.Lang "ja" }}閉じる{{ else }}Close modal{{ end }}">
+      <svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M4 4l12 12M16 4L4 16" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <div class="overflow-hidden bg-black">
+      {{ if eq $media.Kind "video" }}
+        <video controls autoplay poster="{{ $media.Poster }}" class="mx-auto h-full w-full">
+          <source src="{{ $media.Src }}" type="video/mp4">
+        </video>
+      {{ else }}
+        <img src="{{ $media.Src }}" alt="{{ $media.Alt }}" class="mx-auto max-h-[80vh] w-full object-contain">
+      {{ end }}
+    </div>
+    <div class="border-t border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
+      <div class="flex items-center justify-between">
+        <span class="font-medium text-gray-900">{{ $detail.Product.Name }}</span>
+        {{ if $media.Alt }}<span class="text-xs text-gray-500">{{ $media.Alt }}</span>{{ end }}
+      </div>
+    </div>
+  </div>
+</div>
+{{ end }}

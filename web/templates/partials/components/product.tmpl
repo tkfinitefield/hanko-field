@@ -1,0 +1,159 @@
+{{ define "c_price_badge" }}
+{{ $lang := .Lang }}{{ if not $lang }}{{ $lang = "ja" }}{{ end }}
+{{ $currency := .Currency }}{{ if not $currency }}{{ $currency = "JPY" }}{{ end }}
+{{ $price := .Price }}
+{{ $compare := .CompareAt }}
+{{ $note := .Note }}
+<div class="flex items-baseline gap-2">
+  <span class="text-2xl font-semibold text-gray-900">{{ fmtMoney $price $currency $lang }}</span>
+  {{ if and $compare (gt $compare 0) (gt $compare $price) }}
+    <span class="text-sm text-gray-400 line-through">{{ fmtMoney $compare $currency $lang }}</span>
+    <span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
+      {{ if eq $lang "ja" }}セール{{ else }}Sale{{ end }}
+    </span>
+  {{ end }}
+</div>
+{{ if $note }}<p class="mt-1 text-xs text-gray-500">{{ $note }}</p>{{ end }}
+{{ end }}
+
+{{ define "c_status_pill" }}
+{{ $tone := .Tone }}{{ if not $tone }}{{ $tone = "success" }}{{ end }}
+{{ $base := "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium" }}
+{{ $cls := $base }}
+{{ if eq $tone "warning" }}
+  {{ $cls = printf "%s %s" $cls "bg-amber-50 text-amber-700" }}
+{{ else if or (eq $tone "danger") (eq $tone "error") }}
+  {{ $cls = printf "%s %s" $cls "bg-red-50 text-red-600" }}
+{{ else }}
+  {{ $cls = printf "%s %s" $cls "bg-emerald-50 text-emerald-700" }}
+{{ end }}
+<span class="{{ $cls }}">
+  <span class="inline-block h-2 w-2 rounded-full bg-current"></span>
+  <span>{{ .Label }}</span>
+</span>
+{{ end }}
+
+{{ define "c_stepper" }}
+{{ $name := .Name }}{{ if not $name }}{{ $name = "quantity" }}{{ end }}
+{{ $value := .Value }}{{ if not $value }}{{ $value = 1 }}{{ end }}
+{{ $min := .Min }}{{ if not $min }}{{ $min = 1 }}{{ end }}
+{{ $max := .Max }}{{ if not $max }}{{ $max = 10 }}{{ end }}
+<div class="inline-flex items-center divide-x divide-gray-200 overflow-hidden rounded-md border border-gray-200" data-stepper data-stepper-name="{{ $name }}">
+  <button class="px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" type="button" data-stepper-action="-1" aria-label="Decrease">−</button>
+  <input type="number"
+         name="{{ $name }}"
+         value="{{ $value }}"
+         min="{{ $min }}"
+         max="{{ $max }}"
+         class="w-16 border-0 text-center text-sm font-medium text-gray-900 focus:outline-none focus:ring-0"
+         inputmode="numeric"
+         data-stepper-input>
+  <button class="px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" type="button" data-stepper-action="1" aria-label="Increase">＋</button>
+</div>
+{{ end }}
+
+{{ define "c_rating_summary" }}
+{{ $lang := .Lang }}{{ if not $lang }}{{ $lang = "ja" }}{{ end }}
+{{ $avg := .Average }}
+{{ $count := .Count }}
+{{ $stars := .Stars }}
+<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <div class="text-xl font-semibold text-gray-900">{{ printf "%.1f" $avg }}</div>
+      <div class="mt-1 flex items-center gap-1 text-amber-500">
+        {{ range $stars }}
+          {{ if eq . "full" }}
+            <svg class="h-4 w-4 fill-current" viewBox="0 0 20 20" aria-hidden="true"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.21 3.717a1 1 0 00.95.69h3.908c.969 0 1.371 1.24.588 1.81l-3.162 2.298a1 1 0 00-.364 1.118l1.209 3.717c.3.922-.755 1.688-1.538 1.118l-3.162-2.298a1 1 0 00-1.176 0l-3.162 2.298c-.783.57-1.838-.196-1.538-1.118l1.209-3.717a1 1 0 00-.364-1.118L2.34 9.144c-.783-.57-.38-1.81.588-1.81h3.909a1 1 0 00.95-.69l1.262-3.717z"/></svg>
+          {{ else if eq . "half" }}
+            <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true">
+              <defs>
+                <linearGradient id="half-star" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="50%" stop-color="currentColor"></stop>
+                  <stop offset="50%" stop-color="rgba(209,213,219,1)"></stop>
+                </linearGradient>
+              </defs>
+              <path fill="url(#half-star)" d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.21 3.717a1 1 0 00.95.69h3.908c.969 0 1.371 1.24.588 1.81l-3.162 2.298a1 1 0 00-.364 1.118l1.209 3.717c.3.922-.755 1.688-1.538 1.118l-3.162-2.298a1 1 0 00-1.176 0l-3.162 2.298c-.783.57-1.838-.196-1.538-1.118l1.209-3.717a1 1 0 00-.364-1.118L2.34 9.144c-.783-.57-.38-1.81.588-1.81h3.909a1 1 0 00.95-.69l1.262-3.717z"/>
+            </svg>
+          {{ else }}
+            <svg class="h-4 w-4 text-gray-300" viewBox="0 0 20 20" aria-hidden="true"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.21 3.717a1 1 0 00.95.69h3.908c.969 0 1.371 1.24.588 1.81l-3.162 2.298a1 1 0 00-.364 1.118l1.209 3.717c.3.922-.755 1.688-1.538 1.118l-3.162-2.298a1 1 0 00-1.176 0l-3.162 2.298c-.783.57-1.838-.196-1.538-1.118l1.209-3.717a1 1 0 00-.364-1.118L2.34 9.144c-.783-.57-.38-1.81.588-1.81h3.909a1 1 0 00.95-.69l1.262-3.717z"/></svg>
+          {{ end }}
+        {{ end }}
+      </div>
+      <p class="mt-1 text-xs text-gray-500">
+        {{ if eq $lang "ja" }}{{ $count }}件のレビュー{{ else }}Based on {{ $count }} reviews{{ end }}
+      </p>
+    </div>
+    {{ if .Link }}
+      <a href="{{ .Link }}" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">{{ if eq $lang "ja" }}すべて見る{{ else }}View all{{ end }}</a>
+    {{ end }}
+  </div>
+  {{ if .Highlights }}
+    <ul class="mt-4 space-y-1 text-sm text-gray-600">
+      {{ range .Highlights }}
+        <li class="flex items-start gap-2">
+          <span class="mt-0.5 h-1.5 w-1.5 flex-none rounded-full bg-indigo-500"></span>
+          <span>{{ . }}</span>
+        </li>
+      {{ end }}
+    </ul>
+  {{ end }}
+  {{ if .Latest }}
+    <div class="mt-4 space-y-3">
+      {{ range $i, $rev := .Latest }}
+        <figure class="rounded-md border border-gray-100 bg-gray-50 p-3 text-sm text-gray-700">
+          <blockquote class="italic">“{{ $rev.Quote }}”</blockquote>
+          <figcaption class="mt-2 flex items-center justify-between text-xs text-gray-500">
+            <span>{{ $rev.Author }}</span>
+            <span>{{ fmtDate $rev.Date $lang }}</span>
+          </figcaption>
+        </figure>
+      {{ end }}
+    </div>
+  {{ end }}
+</div>
+{{ end }}
+
+{{ define "c_product_card" }}
+{{ $lang := .Lang }}{{ if not $lang }}{{ $lang = "ja" }}{{ end }}
+<article class="group flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:shadow-md">
+  <div class="relative aspect-square overflow-hidden bg-gray-100">
+    <img src="{{ .Image }}" alt="{{ .Name }}" class="h-full w-full object-cover transition group-hover:scale-105" loading="lazy">
+    {{ if .Sale }}
+      <span class="absolute left-2 top-2 rounded-full bg-red-500 px-2 py-0.5 text-xs font-medium text-white">{{ if eq $lang "ja" }}セール{{ else }}Sale{{ end }}</span>
+    {{ end }}
+  </div>
+  <div class="flex flex-1 flex-col gap-2 p-4">
+    <h3 class="text-sm font-semibold text-gray-900">{{ .Name }}</h3>
+    <p class="text-xs text-gray-500">{{ .Subtitle }}</p>
+    <div class="mt-auto">
+      <div class="flex items-baseline gap-2 text-sm font-medium text-gray-900">
+        <span>{{ fmtMoney .Price "JPY" $lang }}</span>
+        {{ if .CompareAt }}
+          <span class="text-xs text-gray-400 line-through">{{ fmtMoney .CompareAt "JPY" $lang }}</span>
+        {{ end }}
+      </div>
+    </div>
+  </div>
+  <a href="/products/{{ .ID }}" class="sr-only">{{ .Name }}</a>
+</article>
+{{ end }}
+
+{{ define "c_product_rail" }}
+{{ $lang := .Lang }}{{ if not $lang }}{{ $lang = "ja" }}{{ end }}
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  {{ range .Items }}
+    {{ $subtitle := printf "%s • %s" (materialLabel $lang .Material) (shapeLabel $lang .Shape) }}
+    {{ template "c_product_card" (dict
+        "Lang" $lang
+        "Name" .Name
+        "Subtitle" $subtitle
+        "Price" .PriceJPY
+        "CompareAt" .CompareAtJPY
+        "Sale" .Sale
+        "ID" .ID
+        "Image" (printf "https://placehold.co/600x600?text=%s" (urlquery .Name))
+    ) }}
+  {{ end }}
+</div>
+{{ end }}

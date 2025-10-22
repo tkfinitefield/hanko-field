@@ -24,7 +24,7 @@
 ## 3. Landing & Exploration
 - [x] [Build landing page (`/`) with hero, comparison table fragment (`/frags/compare/sku-table`), and latest guides fragment.](doc/web/tasks/016-build-landing-page-with-hero-comparison-table-fragment-frags-compare-sku-table-and-latest-.md)
 - [x] [Implement shop listing (`/shop`) with filters form, results fragment (`/shop/table`), and pagination.](doc/web/tasks/017-implement-shop-listing-shop-with-filters-form-results-fragment-shop-table-and-pagination.md)
-- [ ] [Build product detail (`/products/{productId}`) with gallery fragment, review snippets, and add-to-cart form.](doc/web/tasks/018-build-product-detail-products-productid-with-gallery-fragment-review-snippets-and-add-to-c.md)
+- [x] [Build product detail (`/products/{productId}`) with gallery fragment, review snippets, and add-to-cart form.](doc/web/tasks/018-build-product-detail-products-productid-with-gallery-fragment-review-snippets-and-add-to-c.md)
 - [ ] [Implement templates listing/detail (`/templates`, `/templates/{templateId}`) with filter fragment and preview.](doc/web/tasks/019-implement-templates-listing-detail-templates-templates-templateid-with-filter-fragment-and.md)
 - [ ] [Build guides list/detail (`/guides`, `/guides/{slug}`) with CMS integration and SEO metadata.](doc/web/tasks/020-build-guides-list-detail-guides-guides-slug-with-cms-integration-and-seo-metadata.md)
 - [ ] [Implement static content pages (`/content/{slug}`, `/legal/{slug}`, `/status`) with caching and markdown rendering.](doc/web/tasks/021-implement-static-content-pages-content-slug-legal-slug-status-with-caching-and-markdown-re.md)

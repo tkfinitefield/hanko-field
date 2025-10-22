@@ -1,0 +1,15 @@
+{{ define "frag_product_reviews_snippet" }}
+{{ $reviews := .Reviews }}
+{{ $stars := .Stars }}
+{{ $resolvedStars := $stars }}
+{{ if not $resolvedStars }}{{ $resolvedStars = (ratingStars $reviews.Average) }}{{ end }}
+{{ template "c_rating_summary" (dict
+    "Lang" $.Lang
+    "Average" $reviews.Average
+    "Count" $reviews.Count
+    "Highlights" $reviews.Highlights
+    "Latest" $reviews.Latest
+    "Stars" $resolvedStars
+    "Link" $reviews.Link
+) }}
+{{ end }}
