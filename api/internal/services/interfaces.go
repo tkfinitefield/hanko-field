@@ -78,6 +78,10 @@ type (
 	SignedAssetResponse       = domain.SignedAssetResponse
 	PromotionUsage            = domain.PromotionUsage
 	PaymentMethod             = domain.PaymentMethod
+	NameMapping               = domain.NameMapping
+	NameMappingInput          = domain.NameMappingInput
+	NameMappingCandidate      = domain.NameMappingCandidate
+	NameMappingStatus         = domain.NameMappingStatus
 )
 
 const (
@@ -90,6 +94,11 @@ const (
 	DesignStatusOrdered = domain.DesignStatusOrdered
 	DesignStatusLocked  = domain.DesignStatusLocked
 	DesignStatusDeleted = domain.DesignStatusDeleted
+
+	NameMappingStatusPending  = domain.NameMappingStatusPending
+	NameMappingStatusReady    = domain.NameMappingStatusReady
+	NameMappingStatusSelected = domain.NameMappingStatusSelected
+	NameMappingStatusExpired  = domain.NameMappingStatusExpired
 )
 
 // DesignService orchestrates design lifecycle operations, coordinating repositories,
@@ -204,6 +213,11 @@ type UserService interface {
 	RemovePaymentMethod(ctx context.Context, cmd RemovePaymentMethodCommand) error
 	ListFavorites(ctx context.Context, userID string, pager Pagination) (domain.CursorPage[FavoriteDesign], error)
 	ToggleFavorite(ctx context.Context, cmd ToggleFavoriteCommand) error
+}
+
+// NameMappingService orchestrates transliteration requests and caching logic for kanji candidate mappings.
+type NameMappingService interface {
+	ConvertName(ctx context.Context, cmd NameConversionCommand) (NameMapping, error)
 }
 
 // InventoryEventPublisher accepts inventory stock change notifications for downstream processing.
@@ -708,6 +722,16 @@ type ToggleFavoriteCommand struct {
 	UserID   string
 	DesignID string
 	Mark     bool
+}
+
+// NameConversionCommand describes an authenticated request to generate kanji candidates.
+type NameConversionCommand struct {
+	UserID       string
+	Latin        string
+	Locale       string
+	Gender       string
+	Context      map[string]string
+	ForceRefresh bool
 }
 
 type InventoryReserveCommand struct {

@@ -22,6 +22,7 @@ type routerConfig struct {
 	public   RouteRegistrar
 	me       RouteRegistrar
 	designs  RouteRegistrar
+	nameMaps RouteRegistrar
 	cart     RouteRegistrar
 	orders   RouteRegistrar
 	admin    RouteRegistrar
@@ -98,6 +99,7 @@ func NewRouter(opts ...Option) chi.Router {
 		mount("/public", cfg.public, "public", nil)
 		mount("/me", cfg.me, "me", nil)
 		mount("/designs", cfg.designs, "designs", nil)
+		mount("/name-mappings", cfg.nameMaps, "nameMappings", nil)
 		mount("/cart", cfg.cart, "cart", nil)
 		mount("/orders", cfg.orders, "orders", nil)
 		mount("/admin", cfg.admin, "admin", nil)
@@ -140,6 +142,13 @@ func WithMeRoutes(reg RouteRegistrar) Option {
 func WithDesignRoutes(reg RouteRegistrar) Option {
 	return func(cfg *routerConfig) {
 		cfg.designs = reg
+	}
+}
+
+// WithNameMappingRoutes configures the registrar responsible for name mapping endpoints.
+func WithNameMappingRoutes(reg RouteRegistrar) Option {
+	return func(cfg *routerConfig) {
+		cfg.nameMaps = reg
 	}
 }
 

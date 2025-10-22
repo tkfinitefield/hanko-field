@@ -172,6 +172,10 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to initialise favorite repository", zap.Error(err))
 	}
+	nameMappingRepo, err := firestoreRepo.NewNameMappingRepository(firestoreProvider)
+	if err != nil {
+		logger.Fatal("failed to initialise name mapping repository", zap.Error(err))
+	}
 	registrabilityRepo, err := firestoreRepo.NewDesignRegistrabilityRepository(firestoreProvider)
 	if err != nil {
 		logger.Fatal("failed to initialise registrability repository", zap.Error(err))
@@ -217,6 +221,24 @@ func main() {
 	}
 	meHandlers := handlers.NewMeHandlers(authenticator, userService)
 
+	nameMappingLogger := logger.Named("name_mapping")
+	nameMappingService, err := services.NewNameMappingService(services.NameMappingServiceDeps{
+		Repository: nameMappingRepo,
+		Clock:      time.Now,
+		Logger: func(_ context.Context, event string, fields map[string]any) {
+			zFields := make([]zap.Field, 0, len(fields)+1)
+			zFields = append(zFields, zap.String("event", event))
+			for k, v := range fields {
+				zFields = append(zFields, zap.Any(k, v))
+			}
+			nameMappingLogger.Debug("name mapping log", zFields...)
+		},
+	})
+	if err != nil {
+		logger.Fatal("failed to initialise name mapping service", zap.Error(err))
+	}
+	nameMappingHandlers := handlers.NewNameMappingHandlers(authenticator, nameMappingService)
+
 	registrabilityEvaluator := services.NewHeuristicRegistrabilityEvaluator(time.Now)
 
 	designService, err := services.NewDesignService(services.DesignServiceDeps{
@@ -252,6 +274,7 @@ func main() {
 	opts = append(opts, handlers.WithHealthHandlers(healthHandlers))
 	opts = append(opts, handlers.WithMeRoutes(meHandlers.Routes))
 	opts = append(opts, handlers.WithDesignRoutes(designHandlers.Routes))
+	opts = append(opts, handlers.WithNameMappingRoutes(nameMappingHandlers.Routes))
 	publicHandlers := handlers.NewPublicHandlers()
 	opts = append(opts, handlers.WithPublicRoutes(publicHandlers.Routes))
 	if oidcMiddleware != nil {

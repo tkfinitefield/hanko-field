@@ -33,6 +33,7 @@ type Registry interface {
 	Content() ContentRepository
 	Assets() AssetRepository
 	AuditLogs() AuditLogRepository
+	NameMappings() NameMappingRepository
 	Counters() CounterRepository
 	Health() HealthRepository
 	UnitOfWork
@@ -248,6 +249,14 @@ type FavoriteRepository interface {
 	List(ctx context.Context, userID string, pager domain.Pagination) (domain.CursorPage[domain.FavoriteDesign], error)
 	Put(ctx context.Context, userID string, designID string, addedAt time.Time, limit int) (bool, error)
 	Delete(ctx context.Context, userID string, designID string) error
+}
+
+// NameMappingRepository persists transliteration results and selection state.
+type NameMappingRepository interface {
+	Insert(ctx context.Context, mapping domain.NameMapping) error
+	Update(ctx context.Context, mapping domain.NameMapping) error
+	FindByID(ctx context.Context, mappingID string) (domain.NameMapping, error)
+	FindByLookup(ctx context.Context, userID string, latin string, locale string) (domain.NameMapping, error)
 }
 
 // CatalogRepository bundles template/font/material/product storage with shared transactions.

@@ -63,7 +63,7 @@
 - [x] [047 Implement registrability-check endpoint integrating external service and caching results.](./tasks/047-implement-registrability-check-endpoint-integrating-external-service-and-caching.md)
 
 ### 5.3 Name Mapping
-- [ ] [048 Implement name conversion endpoint invoking transliteration service and returning ranked candidates.](./tasks/048-implement-name-conversion-endpoint-invoking-transliteration-service-and-returnin.md)
+- [x] [048 Implement name conversion endpoint invoking transliteration service and returning ranked candidates.](./tasks/048-implement-name-conversion-endpoint-invoking-transliteration-service-and-returnin.md)
 - [ ] [049 Implement mapping selection endpoint persisting chosen candidate and locking mapping.](./tasks/049-implement-mapping-selection-endpoint-persisting-chosen-candidate-and-locking-map.md)
 
 ### 5.4 Cart & Checkout
