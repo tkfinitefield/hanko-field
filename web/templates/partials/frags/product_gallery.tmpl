@@ -1,5 +1,6 @@
 {{ define "frag_product_gallery" }}
 {{ $detail := .Detail }}
+{{ $product := $detail.Product }}
 {{ $mediaList := .MediaList }}
 {{ $activeID := .Active }}
 {{ $active := .ActiveMedia }}
@@ -38,7 +39,7 @@
     {{ else }}
       <button type="button"
               class="group relative block w-full overflow-hidden"
-              hx-get="/products/{{ $detail.Product.ID }}/gallery/modal?media={{ $active.ID }}"
+              hx-get="/products/{{ $product.ID }}/gallery/modal?media={{ $active.ID }}"
               hx-target="#modal-root"
               hx-swap="innerHTML"
               aria-label="{{ if eq $.Lang "ja" }}ギャラリーを拡大{{ else }}Open gallery modal{{ end }}">
@@ -62,7 +63,7 @@
     {{ range $media := $mediaList }}
       <button type="button"
               class="relative overflow-hidden rounded-lg border {{ if eq $media.ID $activeID }}border-indigo-500 ring-2 ring-indigo-100{{ else }}border-gray-200 hover:border-indigo-300{{ end }}"
-              hx-get="/products/{{ $detail.Product.ID }}/gallery?media={{ $media.ID }}"
+              hx-get="/products/{{ $product.ID }}/gallery?media={{ $media.ID }}"
               hx-target="#product-gallery"
               hx-swap="outerHTML"
               hx-push-url="false"
