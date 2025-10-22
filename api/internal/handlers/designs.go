@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"slices"
@@ -81,6 +82,8 @@ func (h *DesignHandlers) Routes(r chi.Router) {
 	r.Post("/{designID}/duplicate", h.duplicateDesign)
 	r.Get("/{designID}/ai-suggestions", h.listAISuggestions)
 	r.Post("/{designID}/ai-suggestions", h.requestAISuggestion)
+	r.Post("/{designID}/ai-suggestions/{suggestionID}:accept", h.acceptAISuggestion)
+	r.Post("/{designID}/ai-suggestions/{suggestionID}:reject", h.rejectAISuggestion)
 	r.Get("/{designID}/ai-suggestions/{suggestionID}", h.getAISuggestion)
 	r.Get("/{designID}/versions", h.listDesignVersions)
 	r.Get("/{designID}/versions/{versionID}", h.getDesignVersion)
@@ -369,6 +372,114 @@ func (h *DesignHandlers) getAISuggestion(w http.ResponseWriter, r *http.Request)
 	}
 
 	payload := h.buildAISuggestionPayload(suggestion)
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *DesignHandlers) acceptAISuggestion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+	suggestionID := strings.TrimSpace(chi.URLParam(r, "suggestionID"))
+	if suggestionID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "suggestion id is required", http.StatusBadRequest))
+		return
+	}
+
+	result, err := h.designs.UpdateAISuggestionStatus(ctx, services.AISuggestionStatusCommand{
+		DesignID:     designID,
+		SuggestionID: suggestionID,
+		Action:       "accept",
+		ActorID:      strings.TrimSpace(identity.UID),
+	})
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	payload := h.buildAISuggestionPayload(result)
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *DesignHandlers) rejectAISuggestion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+	suggestionID := strings.TrimSpace(chi.URLParam(r, "suggestionID"))
+	if suggestionID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "suggestion id is required", http.StatusBadRequest))
+		return
+	}
+
+	var (
+		reasonValue      *string
+		normalizedReason string
+	)
+	if r.Body != nil {
+		data, err := io.ReadAll(io.LimitReader(r.Body, maxDesignRequestBody+1))
+		if err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "unable to read request body", http.StatusBadRequest))
+			return
+		}
+		if int64(len(data)) > maxDesignRequestBody {
+			httpx.WriteError(ctx, w, httpx.NewError("payload_too_large", "request body too large", http.StatusRequestEntityTooLarge))
+			return
+		}
+		if trimmed := strings.TrimSpace(string(data)); trimmed != "" {
+			var req aiSuggestionDecisionRequest
+			if err := json.Unmarshal(data, &req); err != nil {
+				httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "invalid JSON payload", http.StatusBadRequest))
+				return
+			}
+			if req.Reason != nil {
+				if reason := strings.TrimSpace(*req.Reason); reason != "" {
+					normalizedReason = strings.ToLower(reason)
+					reasonValue = &normalizedReason
+				}
+			}
+		}
+	}
+
+	result, err := h.designs.UpdateAISuggestionStatus(ctx, services.AISuggestionStatusCommand{
+		DesignID:     designID,
+		SuggestionID: suggestionID,
+		Action:       "reject",
+		ActorID:      strings.TrimSpace(identity.UID),
+		Reason:       reasonValue,
+	})
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	payload := h.buildAISuggestionPayload(result)
 	writeJSONResponse(w, http.StatusOK, payload)
 }
 
@@ -878,6 +989,10 @@ type aiSuggestionResponse struct {
 	SuggestionID string `json:"suggestionId"`
 	Status       string `json:"status"`
 	PollingURL   string `json:"pollingUrl"`
+}
+
+type aiSuggestionDecisionRequest struct {
+	Reason *string `json:"reason"`
 }
 
 type aiSuggestionListResponse struct {

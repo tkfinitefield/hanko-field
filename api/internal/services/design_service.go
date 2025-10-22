@@ -1235,8 +1235,222 @@ func (s *designService) GetAISuggestion(ctx context.Context, designID string, su
 	return suggestion, nil
 }
 
-func (s *designService) UpdateAISuggestionStatus(context.Context, AISuggestionStatusCommand) (AISuggestion, error) {
-	return AISuggestion{}, ErrDesignNotImplemented
+func (s *designService) UpdateAISuggestionStatus(ctx context.Context, cmd AISuggestionStatusCommand) (AISuggestion, error) {
+	if s.suggestions == nil {
+		return AISuggestion{}, ErrDesignNotImplemented
+	}
+
+	designID := strings.TrimSpace(cmd.DesignID)
+	if designID == "" {
+		return AISuggestion{}, fmt.Errorf("%w: design_id is required", ErrDesignInvalidInput)
+	}
+	suggestionID := strings.TrimSpace(cmd.SuggestionID)
+	if suggestionID == "" {
+		return AISuggestion{}, fmt.Errorf("%w: suggestion_id is required", ErrDesignInvalidInput)
+	}
+
+	action := strings.ToLower(strings.TrimSpace(cmd.Action))
+	if action == "" {
+		return AISuggestion{}, fmt.Errorf("%w: action is required", ErrDesignInvalidInput)
+	}
+	if action != "accept" && action != "reject" {
+		return AISuggestion{}, fmt.Errorf("%w: unsupported action %q", ErrDesignInvalidInput, action)
+	}
+
+	actorID := strings.TrimSpace(cmd.ActorID)
+	if actorID == "" {
+		return AISuggestion{}, fmt.Errorf("%w: actor_id is required", ErrDesignInvalidInput)
+	}
+
+	design, err := s.designs.FindByID(ctx, designID)
+	if err != nil {
+		return AISuggestion{}, s.mapRepositoryError(err)
+	}
+
+	ownerID := strings.TrimSpace(design.OwnerID)
+	if ownerID == "" {
+		return AISuggestion{}, fmt.Errorf("%w: design owner missing", ErrDesignInvalidInput)
+	}
+	if !strings.EqualFold(ownerID, actorID) {
+		return AISuggestion{}, ErrDesignNotFound
+	}
+	if design.Status == DesignStatusDeleted {
+		return AISuggestion{}, fmt.Errorf("%w: design status %q cannot update suggestions", ErrDesignInvalidInput, design.Status)
+	}
+	if action == "accept" && design.Status != DesignStatusDraft && design.Status != DesignStatusReady {
+		return AISuggestion{}, fmt.Errorf("%w: design status %q cannot accept suggestions", ErrDesignInvalidInput, design.Status)
+	}
+
+	suggestion, err := s.suggestions.FindByID(ctx, designID, suggestionID)
+	if err != nil {
+		return AISuggestion{}, s.mapRepositoryError(err)
+	}
+
+	currentStatus := strings.ToLower(strings.TrimSpace(suggestion.Status))
+	category := suggestionStatusCategory(currentStatus)
+
+	switch action {
+	case "accept":
+		if category != "completed" {
+			return AISuggestion{}, fmt.Errorf("%w: suggestion status %q cannot be accepted", ErrDesignInvalidInput, suggestion.Status)
+		}
+		if currentStatus == "accepted" || currentStatus == "applied" {
+			return AISuggestion{}, ErrDesignConflict
+		}
+		if category == "rejected" {
+			return AISuggestion{}, ErrDesignConflict
+		}
+	case "reject":
+		if category != "completed" {
+			return AISuggestion{}, fmt.Errorf("%w: suggestion status %q cannot be rejected", ErrDesignInvalidInput, suggestion.Status)
+		}
+		if category == "rejected" || currentStatus == "accepted" || currentStatus == "applied" {
+			return AISuggestion{}, ErrDesignConflict
+		}
+	}
+
+	now := s.now()
+	payloadUpdate := cloneMetadata(suggestion.Payload)
+	if payloadUpdate == nil {
+		payloadUpdate = make(map[string]any)
+	}
+
+	var (
+		nextStatus      = action
+		updatedDesign   Design
+		newVersion      domain.DesignVersion
+		applySuggestion bool
+	)
+
+	switch action {
+	case "accept":
+		payloadUpdate["acceptedAt"] = now.Format(time.RFC3339Nano)
+		payloadUpdate["acceptedBy"] = actorID
+		delete(payloadUpdate, "rejectionReason")
+		delete(payloadUpdate, "rejectedAt")
+		delete(payloadUpdate, "rejectedBy")
+
+		updatedDesign = design
+		if updatedDesign.Status == DesignStatusDraft {
+			updatedDesign.Status = DesignStatusReady
+		}
+
+		snapshot := cloneSnapshot(design.Snapshot)
+		if snapshot == nil {
+			snapshot = make(map[string]any)
+		}
+
+		preview := extractSuggestionPreviewInfo(payloadUpdate)
+
+		if preview.ObjectPath != "" {
+			updatedDesign.Assets.PreviewPath = preview.ObjectPath
+		}
+		if preview.PreviewURL != "" {
+			updatedDesign.Assets.PreviewURL = preview.PreviewURL
+		}
+		if preview.ThumbnailURL != "" {
+			updatedDesign.ThumbnailURL = preview.ThumbnailURL
+		} else if updatedDesign.ThumbnailURL == "" && preview.PreviewURL != "" {
+			updatedDesign.ThumbnailURL = preview.PreviewURL
+		}
+
+		assetsSnapshot := mapFromAny(snapshot["assets"])
+		if assetsSnapshot == nil {
+			assetsSnapshot = make(map[string]any)
+		}
+		if preview.ObjectPath != "" {
+			assetsSnapshot["previewPath"] = preview.ObjectPath
+		}
+		if preview.PreviewURL != "" {
+			assetsSnapshot["previewUrl"] = preview.PreviewURL
+		}
+		if preview.ThumbnailURL != "" {
+			assetsSnapshot["thumbnailUrl"] = preview.ThumbnailURL
+		}
+		if len(assetsSnapshot) > 0 {
+			snapshot["assets"] = assetsSnapshot
+		}
+		snapshot["status"] = string(updatedDesign.Status)
+
+		newVersionID := s.nextVersionID()
+		updatedDesign.Version = design.Version + 1
+		updatedDesign.CurrentVersionID = newVersionID
+		updatedDesign.UpdatedAt = now
+		snapshot["version"] = updatedDesign.Version
+		updatedDesign.Snapshot = snapshot
+
+		result := mapFromAny(payloadUpdate["result"])
+		if result == nil {
+			result = make(map[string]any)
+		}
+		result["newVersion"] = updatedDesign.Version
+		result["designVersionId"] = updatedDesign.CurrentVersionID
+		result["appliedAt"] = now.Format(time.RFC3339Nano)
+		payloadUpdate["result"] = result
+
+		newVersion = domain.DesignVersion{
+			ID:        newVersionID,
+			DesignID:  design.ID,
+			Version:   updatedDesign.Version,
+			Snapshot:  cloneSnapshot(snapshot),
+			CreatedAt: now,
+			CreatedBy: actorID,
+		}
+
+		nextStatus = "accepted"
+		applySuggestion = true
+
+	case "reject":
+		var reasonValue string
+		if cmd.Reason != nil {
+			trimmed := strings.ToLower(strings.TrimSpace(*cmd.Reason))
+			if trimmed != "" {
+				if _, ok := suggestionRejectionReasons[trimmed]; !ok {
+					return AISuggestion{}, fmt.Errorf("%w: unsupported rejection reason %q", ErrDesignInvalidInput, trimmed)
+				}
+				reasonValue = trimmed
+			}
+		}
+
+		payloadUpdate["rejectedAt"] = now.Format(time.RFC3339Nano)
+		payloadUpdate["rejectedBy"] = actorID
+		if reasonValue != "" {
+			payloadUpdate["rejectionReason"] = reasonValue
+		} else {
+			delete(payloadUpdate, "rejectionReason")
+		}
+		delete(payloadUpdate, "acceptedAt")
+		delete(payloadUpdate, "acceptedBy")
+		nextStatus = "rejected"
+	}
+
+	payloadUpdate["status"] = nextStatus
+
+	if err := s.runInTx(ctx, func(txCtx context.Context) error {
+		if applySuggestion {
+			if err := s.designs.Update(txCtx, updatedDesign); err != nil {
+				return s.mapRepositoryError(err)
+			}
+			if err := s.versions.Append(txCtx, newVersion); err != nil {
+				return s.mapRepositoryError(err)
+			}
+		}
+
+		updatedSuggestion, err := s.suggestions.UpdateStatus(txCtx, designID, suggestionID, nextStatus, cloneMetadata(payloadUpdate))
+		if err != nil {
+			return s.mapRepositoryError(err)
+		}
+		suggestion = updatedSuggestion
+		return nil
+	}); err != nil {
+		return AISuggestion{}, err
+	}
+
+	if applySuggestion {
+		s.recordAuditUpdate(ctx, design, updatedDesign, actorID)
+	}
+
+	return suggestion, nil
 }
 
 func (s *designService) RequestRegistrabilityCheck(context.Context, RegistrabilityCheckCommand) (RegistrabilityCheckResult, error) {
@@ -1923,6 +2137,118 @@ func expandSuggestionStatusFilters(filters []string) []string {
 		return nil
 	}
 	return expanded
+}
+
+var suggestionRejectionReasons = map[string]struct{}{
+	"not_needed":      {},
+	"worse_quality":   {},
+	"user_preference": {},
+	"invalid":         {},
+	"other":           {},
+}
+
+func suggestionStatusCategory(status string) string {
+	current := strings.ToLower(strings.TrimSpace(status))
+	switch current {
+	case "queued", "pending", "in_progress":
+		return "queued"
+	case "proposed", "accepted", "applied", "succeeded", "completed":
+		return "completed"
+	case "rejected", "expired", "failed", "canceled":
+		return "rejected"
+	case "":
+		return "queued"
+	default:
+		return current
+	}
+}
+
+type suggestionPreviewInfo struct {
+	PreviewURL   string
+	Bucket       string
+	ObjectPath   string
+	ThumbnailURL string
+}
+
+func extractSuggestionPreviewInfo(payload map[string]any) suggestionPreviewInfo {
+	info := suggestionPreviewInfo{}
+	if len(payload) == 0 {
+		return info
+	}
+	sources := []map[string]any{}
+	if result := mapFromAny(payload["result"]); len(result) > 0 {
+		sources = append(sources, result)
+	}
+	sources = append(sources, payload)
+	for _, src := range sources {
+		if len(src) == 0 {
+			continue
+		}
+		if previewMap := mapFromAny(src["preview"]); len(previewMap) > 0 {
+			if info.PreviewURL == "" {
+				info.PreviewURL = firstNonEmptyString(
+					stringFromAny(previewMap["previewUrl"]),
+					stringFromAny(previewMap["signedPreviewUrl"]),
+					stringFromAny(previewMap["signedUrl"]),
+				)
+			}
+			if info.Bucket == "" {
+				info.Bucket = stringFromAny(previewMap["bucket"])
+			}
+			if info.ObjectPath == "" {
+				info.ObjectPath = stringFromAny(previewMap["objectPath"])
+			}
+			if info.ThumbnailURL == "" {
+				info.ThumbnailURL = stringFromAny(previewMap["thumbnailUrl"])
+			}
+		}
+		if info.PreviewURL == "" {
+			info.PreviewURL = firstNonEmptyString(info.PreviewURL, stringFromAny(src["previewUrl"]))
+		}
+		if info.Bucket == "" {
+			info.Bucket = stringFromAny(src["bucket"])
+		}
+		if info.ObjectPath == "" {
+			info.ObjectPath = stringFromAny(src["objectPath"])
+		}
+		if info.ThumbnailURL == "" {
+			info.ThumbnailURL = stringFromAny(src["thumbnailUrl"])
+		}
+		if info.PreviewURL != "" && (info.ObjectPath != "" || info.ThumbnailURL != "") {
+			break
+		}
+	}
+	if info.PreviewURL == "" && info.ThumbnailURL != "" {
+		info.PreviewURL = info.ThumbnailURL
+	}
+	return info
+}
+
+func mapFromAny(value any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	switch v := value.(type) {
+	case map[string]any:
+		if len(v) == 0 {
+			return nil
+		}
+		return v
+	default:
+		return nil
+	}
+}
+
+func stringFromAny(value any) string {
+	if value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	default:
+		return ""
+	}
 }
 
 func cloneAssetReference(ref *DesignAssetReference) *DesignAssetReference {

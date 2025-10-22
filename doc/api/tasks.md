@@ -59,7 +59,7 @@
 - [x] [043 Implement design duplication endpoint producing new design with copied assets/metadata.](./tasks/043-implement-design-duplication-endpoint-producing-new-design-with-copied-assets-me.md)
 - [x] [044 Implement AI suggestion request endpoint queuing jobs and returning suggestion IDs.](./tasks/044-implement-ai-suggestion-request-endpoint-queuing-jobs-and-returning-suggestion-i.md)
 - [x] [045 Implement AI suggestion listing/detail retrieval from job store.](./tasks/045-implement-ai-suggestion-listing-detail-retrieval-from-job-store.md)
-- [ ] [046 Implement accept/reject endpoints mutating suggestion status and updating design state.](./tasks/046-implement-accept-reject-endpoints-mutating-suggestion-status-and-updating-design.md)
+- [x] [046 Implement accept/reject endpoints mutating suggestion status and updating design state.](./tasks/046-implement-accept-reject-endpoints-mutating-suggestion-status-and-updating-design.md)
 - [ ] [047 Implement registrability-check endpoint integrating external service and caching results.](./tasks/047-implement-registrability-check-endpoint-integrating-external-service-and-caching.md)
 
 ### 5.3 Name Mapping

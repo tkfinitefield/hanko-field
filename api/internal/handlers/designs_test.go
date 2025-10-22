@@ -578,6 +578,118 @@ func TestDesignHandlers_GetAISuggestion_Success(t *testing.T) {
 	}
 }
 
+func TestDesignHandlers_AcceptAISuggestion_Success(t *testing.T) {
+	var captured services.AISuggestionStatusCommand
+	stub := &stubDesignService{
+		updateAISuggestionStatusFn: func(ctx context.Context, cmd services.AISuggestionStatusCommand) (services.AISuggestion, error) {
+			captured = cmd
+			return services.AISuggestion{
+				ID:       "as_1",
+				DesignID: "dsg_1",
+				Status:   "accepted",
+				Payload: map[string]any{
+					"acceptedAt": "2025-01-01T00:00:00Z",
+				},
+			}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_1/ai-suggestions/as_1:accept", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	routeCtx.URLParams.Add("suggestionID", "as_1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.acceptAISuggestion(rec, req)
+
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
+	}
+	if captured.Action != "accept" || captured.ActorID != "user-1" || captured.DesignID != "dsg_1" || captured.SuggestionID != "as_1" {
+		t.Fatalf("unexpected command captured %#v", captured)
+	}
+	if captured.Reason != nil {
+		t.Fatalf("expected nil reason for accept")
+	}
+
+	var payload aiSuggestionPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.SuggestionID != "as_1" || payload.Status != "accepted" {
+		t.Fatalf("unexpected payload %#v", payload)
+	}
+}
+
+func TestDesignHandlers_RejectAISuggestion_WithReason(t *testing.T) {
+	var captured services.AISuggestionStatusCommand
+	stub := &stubDesignService{
+		updateAISuggestionStatusFn: func(ctx context.Context, cmd services.AISuggestionStatusCommand) (services.AISuggestion, error) {
+			captured = cmd
+			return services.AISuggestion{
+				ID:       "as_reject",
+				DesignID: "dsg_1",
+				Status:   "rejected",
+				Payload: map[string]any{
+					"rejectionReason": "worse_quality",
+				},
+			}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_1/ai-suggestions/as_reject:reject", strings.NewReader(`{"reason":"WORSE_QUALITY"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	routeCtx.URLParams.Add("suggestionID", "as_reject")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.rejectAISuggestion(rec, req)
+
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
+	}
+	if captured.Action != "reject" || captured.ActorID != "user-1" || captured.DesignID != "dsg_1" || captured.SuggestionID != "as_reject" {
+		t.Fatalf("unexpected command %#v", captured)
+	}
+	if captured.Reason == nil || *captured.Reason != "worse_quality" {
+		t.Fatalf("expected normalized reason worse_quality, got %v", captured.Reason)
+	}
+
+	var payload aiSuggestionPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Status != "rejected" || payload.RejectionReason != "worse_quality" {
+		t.Fatalf("unexpected payload %#v", payload)
+	}
+}
+
+func TestDesignHandlers_RejectAISuggestion_InvalidJSON(t *testing.T) {
+	stub := &stubDesignService{}
+	handler := NewDesignHandlers(nil, stub)
+
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_1/ai-suggestions/as_1:reject", strings.NewReader(`{"reason":123}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_1")
+	routeCtx.URLParams.Add("suggestionID", "as_1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.rejectAISuggestion(rec, req)
+
+	if rec.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400 for invalid JSON, got %d", rec.Result().StatusCode)
+	}
+}
+
 func TestDesignHandlers_ListDesigns_Success(t *testing.T) {
 	var captured services.DesignListFilter
 	now := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
@@ -1118,17 +1230,18 @@ func TestDesignHandlers_DeleteDesign_NotOwner(t *testing.T) {
 }
 
 type stubDesignService struct {
-	createFn            func(context.Context, services.CreateDesignCommand) (services.Design, error)
-	getFn               func(context.Context, string, services.DesignReadOptions) (services.Design, error)
-	listFn              func(context.Context, services.DesignListFilter) (domain.CursorPage[services.Design], error)
-	listVersionsFn      func(context.Context, string, services.DesignVersionListFilter) (domain.CursorPage[services.DesignVersion], error)
-	getVersionFn        func(context.Context, string, string, services.DesignVersionReadOptions) (services.DesignVersion, error)
-	updateFn            func(context.Context, services.UpdateDesignCommand) (services.Design, error)
-	deleteFn            func(context.Context, services.DeleteDesignCommand) error
-	duplicateFn         func(context.Context, services.DuplicateDesignCommand) (services.Design, error)
-	aiRequestFn         func(context.Context, services.AISuggestionRequest) (services.AISuggestion, error)
-	listAISuggestionsFn func(context.Context, string, services.AISuggestionFilter) (domain.CursorPage[services.AISuggestion], error)
-	getAISuggestionFn   func(context.Context, string, string) (services.AISuggestion, error)
+	createFn                   func(context.Context, services.CreateDesignCommand) (services.Design, error)
+	getFn                      func(context.Context, string, services.DesignReadOptions) (services.Design, error)
+	listFn                     func(context.Context, services.DesignListFilter) (domain.CursorPage[services.Design], error)
+	listVersionsFn             func(context.Context, string, services.DesignVersionListFilter) (domain.CursorPage[services.DesignVersion], error)
+	getVersionFn               func(context.Context, string, string, services.DesignVersionReadOptions) (services.DesignVersion, error)
+	updateFn                   func(context.Context, services.UpdateDesignCommand) (services.Design, error)
+	deleteFn                   func(context.Context, services.DeleteDesignCommand) error
+	duplicateFn                func(context.Context, services.DuplicateDesignCommand) (services.Design, error)
+	aiRequestFn                func(context.Context, services.AISuggestionRequest) (services.AISuggestion, error)
+	listAISuggestionsFn        func(context.Context, string, services.AISuggestionFilter) (domain.CursorPage[services.AISuggestion], error)
+	getAISuggestionFn          func(context.Context, string, string) (services.AISuggestion, error)
+	updateAISuggestionStatusFn func(context.Context, services.AISuggestionStatusCommand) (services.AISuggestion, error)
 }
 
 func (s *stubDesignService) CreateDesign(ctx context.Context, cmd services.CreateDesignCommand) (services.Design, error) {
@@ -1208,7 +1321,10 @@ func (s *stubDesignService) GetAISuggestion(ctx context.Context, designID, sugge
 	return services.AISuggestion{}, nil
 }
 
-func (s *stubDesignService) UpdateAISuggestionStatus(context.Context, services.AISuggestionStatusCommand) (services.AISuggestion, error) {
+func (s *stubDesignService) UpdateAISuggestionStatus(ctx context.Context, cmd services.AISuggestionStatusCommand) (services.AISuggestion, error) {
+	if s.updateAISuggestionStatusFn != nil {
+		return s.updateAISuggestionStatusFn(ctx, cmd)
+	}
 	return services.AISuggestion{}, nil
 }
 

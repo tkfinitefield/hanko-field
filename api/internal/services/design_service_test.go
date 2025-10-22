@@ -1539,6 +1539,427 @@ func TestDesignService_GetAISuggestion(t *testing.T) {
 	}
 }
 
+func TestDesignService_UpdateAISuggestionStatus_Accept(t *testing.T) {
+	now := time.Date(2025, 1, 4, 15, 30, 0, 0, time.UTC)
+	designRepo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_accept": {
+				ID:               "dsg_accept",
+				OwnerID:          "user_accept",
+				Status:           domain.DesignStatusDraft,
+				Version:          2,
+				CurrentVersionID: "ver_old",
+				Assets: domain.DesignAssets{
+					PreviewPath: "designs/dsg_accept/previews/ver_old.png",
+					PreviewURL:  "https://old-preview",
+				},
+				ThumbnailURL: "https://old-thumb",
+				Snapshot: map[string]any{
+					"status":  "draft",
+					"version": 2,
+					"assets": map[string]any{
+						"previewPath":  "designs/dsg_accept/previews/ver_old.png",
+						"previewUrl":   "https://old-preview",
+						"thumbnailUrl": "https://old-thumb",
+					},
+				},
+			},
+		},
+	}
+	suggestionRepo := &stubSuggestionRepository{
+		store: map[string]map[string]domain.AISuggestion{
+			"dsg_accept": {
+				"as_accept": {
+					ID:       "as_accept",
+					DesignID: "dsg_accept",
+					Status:   "proposed",
+					Payload: map[string]any{
+						"result": map[string]any{
+							"preview": map[string]any{
+								"previewUrl":   "https://new-preview",
+								"thumbnailUrl": "https://new-thumb",
+								"objectPath":   "designs/dsg_accept/previews/ver_new.png",
+							},
+						},
+					},
+					CreatedAt: now.Add(-2 * time.Minute),
+					UpdatedAt: now.Add(-2 * time.Minute),
+				},
+			},
+		},
+	}
+	versionRepo := &stubDesignVersionRepository{}
+	idCalls := 0
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      designRepo,
+		Versions:     versionRepo,
+		Suggestions:  suggestionRepo,
+		Jobs:         &stubJobDispatcher{},
+		AssetsBucket: "bucket",
+		Clock:        func() time.Time { return now },
+		IDGenerator: func() string {
+			idCalls++
+			return "ver_next"
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	result, err := svc.UpdateAISuggestionStatus(context.Background(), AISuggestionStatusCommand{
+		DesignID:     "dsg_accept",
+		SuggestionID: "as_accept",
+		Action:       "accept",
+		ActorID:      "user_accept",
+	})
+	if err != nil {
+		t.Fatalf("UpdateAISuggestionStatus error: %v", err)
+	}
+	if idCalls == 0 {
+		t.Fatalf("expected ID generator to be invoked")
+	}
+	if result.Status != "accepted" {
+		t.Fatalf("expected suggestion status accepted, got %s", result.Status)
+	}
+	payload := result.Payload
+	if payload == nil {
+		t.Fatalf("expected payload in suggestion result")
+	}
+	if status := stringFromAny(payload["status"]); status != "accepted" {
+		t.Fatalf("expected payload status accepted, got %s", status)
+	}
+	if stringFromAny(payload["acceptedBy"]) != "user_accept" {
+		t.Fatalf("expected acceptedBy user_accept")
+	}
+	if stringFromAny(payload["acceptedAt"]) == "" {
+		t.Fatalf("expected acceptedAt timestamp")
+	}
+	if _, exists := payload["rejectionReason"]; exists {
+		t.Fatalf("expected rejectionReason removed after accept")
+	}
+	if resultMap := mapFromAny(payload["result"]); len(resultMap) == 0 {
+		t.Fatalf("expected result metadata present")
+	} else {
+		if ver := resultMap["newVersion"]; ver != float64(3) && ver != 3 {
+			t.Fatalf("expected newVersion 3, got %#v", ver)
+		}
+		if verID := stringFromAny(resultMap["designVersionId"]); verID != "ver_ver_next" {
+			t.Fatalf("expected designVersionId ver_ver_next, got %s", verID)
+		}
+	}
+
+	if len(designRepo.updated) != 1 {
+		t.Fatalf("expected design updated once, got %d", len(designRepo.updated))
+	}
+	updatedDesign := designRepo.updated[0]
+	if updatedDesign.Status != DesignStatusReady {
+		t.Fatalf("expected design status ready, got %s", updatedDesign.Status)
+	}
+	if updatedDesign.Version != 3 {
+		t.Fatalf("expected design version 3, got %d", updatedDesign.Version)
+	}
+	if updatedDesign.CurrentVersionID != "ver_ver_next" {
+		t.Fatalf("expected current version id ver_ver_next, got %s", updatedDesign.CurrentVersionID)
+	}
+	if updatedDesign.Assets.PreviewPath != "designs/dsg_accept/previews/ver_new.png" {
+		t.Fatalf("unexpected preview path %s", updatedDesign.Assets.PreviewPath)
+	}
+	if updatedDesign.Assets.PreviewURL != "https://new-preview" {
+		t.Fatalf("unexpected preview url %s", updatedDesign.Assets.PreviewURL)
+	}
+	if updatedDesign.ThumbnailURL != "https://new-thumb" {
+		t.Fatalf("unexpected thumbnail %s", updatedDesign.ThumbnailURL)
+	}
+	if updatedDesign.UpdatedAt != now {
+		t.Fatalf("expected UpdatedAt %v, got %v", now, updatedDesign.UpdatedAt)
+	}
+
+	if len(versionRepo.appended) != 1 {
+		t.Fatalf("expected version appended once, got %d", len(versionRepo.appended))
+	}
+	appended := versionRepo.appended[0]
+	if appended.Version != 3 {
+		t.Fatalf("expected appended version 3, got %d", appended.Version)
+	}
+	if appended.CreatedBy != "user_accept" {
+		t.Fatalf("expected version created by user_accept, got %s", appended.CreatedBy)
+	}
+	if snap := mapFromAny(appended.Snapshot); len(snap) == 0 || stringFromAny(snap["status"]) != "ready" {
+		t.Fatalf("expected snapshot status ready")
+	}
+}
+
+func TestDesignService_UpdateAISuggestionStatus_Reject(t *testing.T) {
+	now := time.Date(2025, 1, 5, 8, 0, 0, 0, time.UTC)
+	designRepo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_reject": {
+				ID:      "dsg_reject",
+				OwnerID: "user_reject",
+				Status:  domain.DesignStatusReady,
+				Version: 4,
+				Snapshot: map[string]any{
+					"status": "ready",
+				},
+			},
+		},
+	}
+	suggestionRepo := &stubSuggestionRepository{
+		store: map[string]map[string]domain.AISuggestion{
+			"dsg_reject": {
+				"as_reject": {
+					ID:        "as_reject",
+					DesignID:  "dsg_reject",
+					Status:    "proposed",
+					Payload:   map[string]any{},
+					CreatedAt: now.Add(-time.Minute),
+					UpdatedAt: now.Add(-time.Minute),
+				},
+			},
+		},
+	}
+	versionRepo := &stubDesignVersionRepository{}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      designRepo,
+		Versions:     versionRepo,
+		Suggestions:  suggestionRepo,
+		Jobs:         &stubJobDispatcher{},
+		AssetsBucket: "bucket",
+		Clock:        func() time.Time { return now },
+		IDGenerator:  func() string { return "unused" },
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	reason := "worse_quality"
+	result, err := svc.UpdateAISuggestionStatus(context.Background(), AISuggestionStatusCommand{
+		DesignID:     "dsg_reject",
+		SuggestionID: "as_reject",
+		Action:       "reject",
+		ActorID:      "user_reject",
+		Reason:       &reason,
+	})
+	if err != nil {
+		t.Fatalf("UpdateAISuggestionStatus reject error: %v", err)
+	}
+	if result.Status != "rejected" {
+		t.Fatalf("expected suggestion status rejected, got %s", result.Status)
+	}
+	if len(designRepo.updated) != 0 {
+		t.Fatalf("expected no design update on rejection")
+	}
+	if len(versionRepo.appended) != 0 {
+		t.Fatalf("expected no version appended on rejection")
+	}
+	payload := result.Payload
+	if payload == nil {
+		t.Fatalf("expected payload on rejection")
+	}
+	if stringFromAny(payload["rejectionReason"]) != "worse_quality" {
+		t.Fatalf("expected rejection reason worse_quality")
+	}
+	if stringFromAny(payload["rejectedBy"]) != "user_reject" {
+		t.Fatalf("expected rejectedBy user_reject")
+	}
+	if stringFromAny(payload["rejectedAt"]) == "" {
+		t.Fatalf("expected rejectedAt timestamp present")
+	}
+	if _, exists := payload["acceptedAt"]; exists {
+		t.Fatalf("expected accepted fields cleared on rejection")
+	}
+}
+
+func TestDesignService_UpdateAISuggestionStatus_InvalidStatus(t *testing.T) {
+	now := time.Date(2025, 1, 6, 10, 0, 0, 0, time.UTC)
+	designRepo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_invalid": {
+				ID:      "dsg_invalid",
+				OwnerID: "user_invalid",
+				Status:  domain.DesignStatusDraft,
+			},
+		},
+	}
+	suggestionRepo := &stubSuggestionRepository{
+		store: map[string]map[string]domain.AISuggestion{
+			"dsg_invalid": {
+				"as_invalid": {
+					ID:       "as_invalid",
+					DesignID: "dsg_invalid",
+					Status:   "queued",
+				},
+			},
+		},
+	}
+	versionRepo := &stubDesignVersionRepository{}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      designRepo,
+		Versions:     versionRepo,
+		Suggestions:  suggestionRepo,
+		Jobs:         &stubJobDispatcher{},
+		AssetsBucket: "bucket",
+		Clock:        func() time.Time { return now },
+		IDGenerator:  func() string { return "irrelevant" },
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	_, err = svc.UpdateAISuggestionStatus(context.Background(), AISuggestionStatusCommand{
+		DesignID:     "dsg_invalid",
+		SuggestionID: "as_invalid",
+		Action:       "accept",
+		ActorID:      "user_invalid",
+	})
+	if !errors.Is(err, ErrDesignInvalidInput) {
+		t.Fatalf("expected invalid input error, got %v", err)
+	}
+}
+
+func TestDesignService_UpdateAISuggestionStatus_Conflict(t *testing.T) {
+	now := time.Date(2025, 1, 7, 11, 0, 0, 0, time.UTC)
+	designRepo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_conflict": {
+				ID:      "dsg_conflict",
+				OwnerID: "user_conflict",
+				Status:  domain.DesignStatusReady,
+			},
+		},
+	}
+	suggestionRepo := &stubSuggestionRepository{
+		store: map[string]map[string]domain.AISuggestion{
+			"dsg_conflict": {
+				"as_conflict": {
+					ID:       "as_conflict",
+					DesignID: "dsg_conflict",
+					Status:   "accepted",
+				},
+			},
+		},
+	}
+	versionRepo := &stubDesignVersionRepository{}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      designRepo,
+		Versions:     versionRepo,
+		Suggestions:  suggestionRepo,
+		Jobs:         &stubJobDispatcher{},
+		AssetsBucket: "bucket",
+		Clock:        func() time.Time { return now },
+		IDGenerator:  func() string { return "irrelevant" },
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	_, err = svc.UpdateAISuggestionStatus(context.Background(), AISuggestionStatusCommand{
+		DesignID:     "dsg_conflict",
+		SuggestionID: "as_conflict",
+		Action:       "accept",
+		ActorID:      "user_conflict",
+	})
+	if !errors.Is(err, ErrDesignConflict) {
+		t.Fatalf("expected conflict error, got %v", err)
+	}
+}
+
+func TestDesignService_UpdateAISuggestionStatus_Unauthorized(t *testing.T) {
+	designRepo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_owner": {
+				ID:      "dsg_owner",
+				OwnerID: "user_owner",
+				Status:  domain.DesignStatusDraft,
+			},
+		},
+	}
+	suggestionRepo := &stubSuggestionRepository{
+		store: map[string]map[string]domain.AISuggestion{
+			"dsg_owner": {
+				"as_owner": {
+					ID:       "as_owner",
+					DesignID: "dsg_owner",
+					Status:   "proposed",
+				},
+			},
+		},
+	}
+	versionRepo := &stubDesignVersionRepository{}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      designRepo,
+		Versions:     versionRepo,
+		Suggestions:  suggestionRepo,
+		Jobs:         &stubJobDispatcher{},
+		AssetsBucket: "bucket",
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	_, err = svc.UpdateAISuggestionStatus(context.Background(), AISuggestionStatusCommand{
+		DesignID:     "dsg_owner",
+		SuggestionID: "as_owner",
+		Action:       "reject",
+		ActorID:      "other_user",
+	})
+	if !errors.Is(err, ErrDesignNotFound) {
+		t.Fatalf("expected not found error for non-owner, got %v", err)
+	}
+}
+
+func TestDesignService_UpdateAISuggestionStatus_InvalidReason(t *testing.T) {
+	designRepo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_reason": {
+				ID:      "dsg_reason",
+				OwnerID: "user_reason",
+				Status:  domain.DesignStatusReady,
+			},
+		},
+	}
+	suggestionRepo := &stubSuggestionRepository{
+		store: map[string]map[string]domain.AISuggestion{
+			"dsg_reason": {
+				"as_reason": {
+					ID:       "as_reason",
+					DesignID: "dsg_reason",
+					Status:   "proposed",
+				},
+			},
+		},
+	}
+	versionRepo := &stubDesignVersionRepository{}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:      designRepo,
+		Versions:     versionRepo,
+		Suggestions:  suggestionRepo,
+		Jobs:         &stubJobDispatcher{},
+		AssetsBucket: "bucket",
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	badReason := "not-supported"
+	_, err = svc.UpdateAISuggestionStatus(context.Background(), AISuggestionStatusCommand{
+		DesignID:     "dsg_reason",
+		SuggestionID: "as_reason",
+		Action:       "reject",
+		ActorID:      "user_reason",
+		Reason:       &badReason,
+	})
+	if !errors.Is(err, ErrDesignInvalidInput) {
+		t.Fatalf("expected invalid input error for bad reason, got %v", err)
+	}
+}
+
 func cloneTestDesign(design domain.Design) domain.Design {
 	copy := design
 	if design.Snapshot != nil {

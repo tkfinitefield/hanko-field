@@ -398,6 +398,7 @@ type AISuggestionStatusCommand struct {
 	SuggestionID string
 	Action       string
 	ActorID      string
+	Reason       *string
 }
 
 type RegistrabilityCheckCommand struct {
