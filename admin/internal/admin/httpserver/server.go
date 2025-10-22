@@ -30,6 +30,7 @@ type Config struct {
 	CSRFCookiePath   string
 	CSRFCookieSecure bool
 	CSRFHeaderName   string
+	Environment      string
 }
 
 // SessionConfig represents optional overrides for the admin session manager.
@@ -75,6 +76,8 @@ func New(cfg Config) *http.Server {
 		sessionStore = mustBuildSessionStore(cfg.Session, basePath)
 	}
 
+	environment := strings.TrimSpace(cfg.Environment)
+
 	csrfCfg := custommw.CSRFConfig{
 		CookieName: cfg.CSRFCookieName,
 		CookiePath: firstNonEmpty(cfg.CSRFCookiePath, basePath),
@@ -92,6 +95,7 @@ func New(cfg Config) *http.Server {
 		LoginPath:     loginPath,
 		CSRF:          csrfCfg,
 		UI:            uiHandlers,
+		Environment:   environment,
 	})
 
 	return &http.Server{
@@ -109,6 +113,7 @@ type routeOptions struct {
 	LoginPath     string
 	CSRF          custommw.CSRFConfig
 	UI            *ui.Handlers
+	Environment   string
 }
 
 func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
@@ -118,7 +123,7 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 	if opts.SessionStore != nil {
 		shared = append(shared, custommw.Session(opts.SessionStore))
 	}
-	shared = append(shared, custommw.HTMX(), custommw.NoStore())
+	shared = append(shared, custommw.HTMX(), custommw.NoStore(), custommw.Environment(opts.Environment))
 
 	loginChain := router.With(shared...)
 	loginChain = loginChain.With(custommw.CSRF(opts.CSRF))

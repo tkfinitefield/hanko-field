@@ -14,7 +14,7 @@ templ Index(data PageData) {
 }
 
 templ pageBody(data PageData) {
-	<main class="space-y-8">
+	<div class="space-y-8">
 		<header class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
 			<div class="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
 				<div>
@@ -78,9 +78,7 @@ templ pageBody(data PageData) {
 				<li>不審なセッションがある場合はすべてのセッションを失効し、MFA を再設定してください。</li>
 			</ul>
 		</section>
-
-		<div id="modal-root"></div>
-	</main>
+	</div>
 }
 
 templ flashMessage(message string) {

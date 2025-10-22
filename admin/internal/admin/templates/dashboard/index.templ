@@ -7,7 +7,7 @@ import (
 )
 
 templ dashboardBody() {
-    <main class="space-y-6">
+    <div class="space-y-6">
         <header>
             <h1 class="text-2xl font-semibold text-slate-900">{ helpers.I18N("admin.dashboard.title") }</h1>
             <p class="mt-2 text-slate-600">{ helpers.I18N("admin.dashboard.subtitle") }</p>
@@ -24,7 +24,7 @@ templ dashboardBody() {
             </div>
             @components.Table(orderHeaders(), orderRowsComponents(sampleOrders()))
         </section>
-    </main>
+    </div>
 }
 
 templ Index() {

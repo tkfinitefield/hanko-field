@@ -26,6 +26,7 @@ func main() {
 		BasePath:       getEnv("ADMIN_BASE_PATH", "/admin"),
 		Authenticator:  buildAuthenticator(rootCtx),
 		ProfileService: buildProfileService(),
+		Environment:    getEnv("ADMIN_ENVIRONMENT", "Development"),
 		Session: httpserver.SessionConfig{
 			CookieName:       getEnv("ADMIN_SESSION_COOKIE_NAME", ""),
 			CookieDomain:     os.Getenv("ADMIN_SESSION_COOKIE_DOMAIN"),

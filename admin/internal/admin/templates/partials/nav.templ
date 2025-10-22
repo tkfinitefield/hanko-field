@@ -11,9 +11,12 @@ type NavItem struct {
 }
 
 templ Sidebar(items []NavItem) {
-	<nav class="w-64 border-r border-slate-200 bg-white">
-		<div class="px-4 py-6 text-lg font-semibold text-slate-900">Hanko Admin</div>
-		<ul class="space-y-1 px-2">
+	<nav class="flex h-full w-full flex-col bg-white" aria-label="メインナビゲーション">
+		<div class="px-4 pb-5 pt-2">
+			<p class="text-lg font-semibold text-slate-900">Hanko Admin</p>
+			<p class="mt-1 text-xs font-medium uppercase tracking-wide text-slate-400">Control Center</p>
+		</div>
+		<ul class="flex-1 space-y-1 px-2 pb-6">
 			for _, item := range items {
 				if helpers.HasCapability(ctx, item.Capability) {
 					<li>

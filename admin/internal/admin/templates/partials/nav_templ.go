@@ -39,7 +39,7 @@ func Sidebar(items []NavItem) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<nav class=\"w-64 border-r border-slate-200 bg-white\"><div class=\"px-4 py-6 text-lg font-semibold text-slate-900\">Hanko Admin</div><ul class=\"space-y-1 px-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<nav class=\"flex h-full w-full flex-col bg-white\" aria-label=\"メインナビゲーション\"><div class=\"px-4 pb-5 pt-2\"><p class=\"text-lg font-semibold text-slate-900\">Hanko Admin</p><p class=\"mt-1 text-xs font-medium uppercase tracking-wide text-slate-400\">Control Center</p></div><ul class=\"flex-1 space-y-1 px-2 pb-6\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -61,7 +61,7 @@ func Sidebar(items []NavItem) templ.Component {
 				var templ_7745c5c3_Var3 templ.SafeURL
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(item.Href)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `partials/nav.templ`, Line: 20, Col: 25}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `partials/nav.templ`, Line: 23, Col: 25}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 				if templ_7745c5c3_Err != nil {
@@ -92,7 +92,7 @@ func Sidebar(items []NavItem) templ.Component {
 					var templ_7745c5c3_Var5 string
 					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(item.Icon)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `partials/nav.templ`, Line: 22, Col: 48}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `partials/nav.templ`, Line: 25, Col: 48}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 					if templ_7745c5c3_Err != nil {
@@ -110,7 +110,7 @@ func Sidebar(items []NavItem) templ.Component {
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(item.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `partials/nav.templ`, Line: 24, Col: 25}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `partials/nav.templ`, Line: 27, Col: 25}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
