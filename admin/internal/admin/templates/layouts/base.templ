@@ -14,17 +14,20 @@ templ Base(title string, navItems []partials.NavItem, crumbs []partials.Breadcru
 			<title>{ title } | Hanko Admin</title>
 			<link rel="stylesheet" href="/public/static/app.css" />
 			<meta name="csrf-token" content={ middleware.CSRFTokenFromContext(ctx) } />
-			<script>
-				(function () {
-					var token = document.querySelector('meta[name="csrf-token"]');
-					document.addEventListener("htmx:configRequest", function (event) {
-						if (!token || !event || !event.detail || !event.detail.headers) {
-							return;
-						}
-						event.detail.headers["X-CSRF-Token"] = token.content;
-					});
-				})();
-			</script>
+				<script>
+					(function () {
+						document.addEventListener("htmx:configRequest", function (event) {
+							if (!event || !event.detail || !event.detail.headers) {
+								return;
+							}
+							var tokenEl = document.querySelector('meta[name="csrf-token"]');
+							if (!tokenEl || !tokenEl.content) {
+								return;
+							}
+							event.detail.headers["X-CSRF-Token"] = tokenEl.content;
+						});
+					})();
+				</script>
 		</head>
 		<body class="app-shell min-h-full bg-slate-100 text-slate-900">
 			<a href="#content" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:shadow focus:outline-none focus:ring-2 focus:ring-brand-500">

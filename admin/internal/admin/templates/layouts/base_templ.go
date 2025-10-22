@@ -60,7 +60,7 @@ func Base(title string, navItems []partials.NavItem, crumbs []partials.Breadcrum
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\"><script>\n\t\t\t\t(function () {\n\t\t\t\t\tvar token = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\tdocument.addEventListener(\"htmx:configRequest\", function (event) {\n\t\t\t\t\t\tif (!token || !event || !event.detail || !event.detail.headers) {\n\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tevent.detail.headers[\"X-CSRF-Token\"] = token.content;\n\t\t\t\t\t});\n\t\t\t\t})();\n\t\t\t</script></head><body class=\"app-shell min-h-full bg-slate-100 text-slate-900\"><a href=\"#content\" class=\"sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:shadow focus:outline-none focus:ring-2 focus:ring-brand-500\">メインコンテンツへスキップ</a><div id=\"mobile-sidebar\" class=\"fixed inset-0 z-40 hidden\" data-sidebar aria-hidden=\"true\" role=\"dialog\" aria-modal=\"true\"><div class=\"absolute inset-0 bg-slate-900/60 backdrop-blur-sm\" data-sidebar-dismiss></div><div class=\"absolute inset-y-0 left-0 flex w-72 max-w-[80vw] flex-col bg-white shadow-xl ring-1 ring-slate-900/10\"><div class=\"flex items-center justify-between border-b border-slate-200 px-4 py-4\"><span class=\"text-sm font-semibold text-slate-900\">メニュー</span> <button type=\"button\" class=\"rounded-md p-2 text-slate-500 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500\" data-sidebar-dismiss><span class=\"sr-only\">メニューを閉じる</span> <svg viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\" class=\"h-5 w-5\"><path d=\"M6 18L18 6M6 6l12 12\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"></path></svg></button></div><div class=\"flex-1 overflow-y-auto py-6\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\"><script>\n\t\t\t\t\t(function () {\n\t\t\t\t\t\tdocument.addEventListener(\"htmx:configRequest\", function (event) {\n\t\t\t\t\t\t\tif (!event || !event.detail || !event.detail.headers) {\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tvar tokenEl = document.querySelector('meta[name=\"csrf-token\"]');\n\t\t\t\t\t\t\tif (!tokenEl || !tokenEl.content) {\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tevent.detail.headers[\"X-CSRF-Token\"] = tokenEl.content;\n\t\t\t\t\t\t});\n\t\t\t\t\t})();\n\t\t\t\t</script></head><body class=\"app-shell min-h-full bg-slate-100 text-slate-900\"><a href=\"#content\" class=\"sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:shadow focus:outline-none focus:ring-2 focus:ring-brand-500\">メインコンテンツへスキップ</a><div id=\"mobile-sidebar\" class=\"fixed inset-0 z-40 hidden\" data-sidebar aria-hidden=\"true\" role=\"dialog\" aria-modal=\"true\"><div class=\"absolute inset-0 bg-slate-900/60 backdrop-blur-sm\" data-sidebar-dismiss></div><div class=\"absolute inset-y-0 left-0 flex w-72 max-w-[80vw] flex-col bg-white shadow-xl ring-1 ring-slate-900/10\"><div class=\"flex items-center justify-between border-b border-slate-200 px-4 py-4\"><span class=\"text-sm font-semibold text-slate-900\">メニュー</span> <button type=\"button\" class=\"rounded-md p-2 text-slate-500 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500\" data-sidebar-dismiss><span class=\"sr-only\">メニューを閉じる</span> <svg viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\" class=\"h-5 w-5\"><path d=\"M6 18L18 6M6 6l12 12\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"></path></svg></button></div><div class=\"flex-1 overflow-y-auto py-6\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -83,7 +83,7 @@ func Base(title string, navItems []partials.NavItem, crumbs []partials.Breadcrum
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layouts/base.templ`, Line: 81, Col: 69}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layouts/base.templ`, Line: 84, Col: 69}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -101,7 +101,7 @@ func Base(title string, navItems []partials.NavItem, crumbs []partials.Breadcrum
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(env)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `layouts/base.templ`, Line: 86, Col: 69}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `layouts/base.templ`, Line: 89, Col: 69}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {

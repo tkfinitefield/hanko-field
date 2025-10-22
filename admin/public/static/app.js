@@ -61,13 +61,23 @@ window.hankoAdmin = window.hankoAdmin || {
     });
 
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        const root = modalRoot();
-        if (root && root.firstChild) {
-          root.innerHTML = "";
-        }
-        if (!event.defaultPrevented) {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      let handled = false;
+      const root = modalRoot();
+      if (root && root.firstChild) {
+        root.innerHTML = "";
+        handled = true;
+      }
+
+      if (!handled) {
+        const sidebar = sidebarRoot();
+        const isSidebarOpen = sidebar && !sidebar.classList.contains("hidden");
+        if (isSidebarOpen) {
           closeSidebar();
+          handled = true;
         }
       }
     });
