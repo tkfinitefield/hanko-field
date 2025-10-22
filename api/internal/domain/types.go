@@ -501,9 +501,13 @@ type PromotionPublic struct {
 // RegistrabilityCheckResult stores outcomes from external name seal registrability checks.
 type RegistrabilityCheckResult struct {
 	DesignID    string
+	Status      string
 	Passed      bool
+	Score       *float64
 	Reasons     []string
 	RequestedAt time.Time
+	ExpiresAt   *time.Time
+	Metadata    map[string]any
 }
 
 // Address represents postal address structures shared by user and order layers.

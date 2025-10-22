@@ -407,6 +407,34 @@ type RegistrabilityCheckCommand struct {
 	Locale   string
 }
 
+// RegistrabilityCheckPayload captures the design attributes sent to the external
+// registrability service for evaluation.
+type RegistrabilityCheckPayload struct {
+	DesignID   string
+	Name       string
+	TextLines  []string
+	Type       DesignType
+	Locale     string
+	MaterialID string
+	TemplateID string
+	Metadata   map[string]any
+}
+
+// RegistrabilityAssessment represents the outcome returned by the external registrability service.
+type RegistrabilityAssessment struct {
+	Status    string
+	Passed    bool
+	Score     *float64
+	Reasons   []string
+	ExpiresAt *time.Time
+	Metadata  map[string]any
+}
+
+// RegistrabilityEvaluator defines the contract for external registrability checks.
+type RegistrabilityEvaluator interface {
+	Check(ctx context.Context, payload RegistrabilityCheckPayload) (RegistrabilityAssessment, error)
+}
+
 type UpsertCartItemCommand struct {
 	UserID        string
 	ItemID        *string

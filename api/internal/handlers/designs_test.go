@@ -1229,6 +1229,87 @@ func TestDesignHandlers_DeleteDesign_NotOwner(t *testing.T) {
 	}
 }
 
+func TestDesignHandlers_CheckRegistrability_Success(t *testing.T) {
+	now := time.Date(2025, time.January, 3, 9, 0, 0, 0, time.UTC)
+	expires := now.Add(2 * time.Hour)
+	score := 0.82
+
+	stub := &stubDesignService{
+		registrabilityFn: func(ctx context.Context, cmd services.RegistrabilityCheckCommand) (services.RegistrabilityCheckResult, error) {
+			if cmd.DesignID != "dsg_123" {
+				t.Fatalf("unexpected design id: %s", cmd.DesignID)
+			}
+			if cmd.UserID != "user-1" {
+				t.Fatalf("unexpected user id: %s", cmd.UserID)
+			}
+			if cmd.Locale != "en" {
+				t.Fatalf("unexpected locale: %s", cmd.Locale)
+			}
+			return services.RegistrabilityCheckResult{
+				DesignID:    "dsg_123",
+				Status:      "pass",
+				Passed:      true,
+				Score:       &score,
+				Reasons:     []string{"all checks passed"},
+				RequestedAt: now,
+				ExpiresAt:   &expires,
+			}, nil
+		},
+	}
+
+	handler := NewDesignHandlers(nil, stub)
+	handler.registrabilityLimiter = nil
+
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_123:registrability-check?locale=en", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_123")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.checkRegistrability(rec, req)
+
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
+	}
+
+	var payload registrabilityCheckResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if !payload.Registrable || payload.Status != "pass" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+	if payload.Score == nil || *payload.Score != score {
+		t.Fatalf("expected score %.2f, got %+v", score, payload.Score)
+	}
+	if len(payload.Diagnostics) != 1 || payload.Diagnostics[0] != "all checks passed" {
+		t.Fatalf("unexpected diagnostics: %+v", payload.Diagnostics)
+	}
+	if payload.RequestedAt == "" || payload.ExpiresAt == "" {
+		t.Fatalf("expected timestamps in payload: %+v", payload)
+	}
+}
+
+func TestDesignHandlers_CheckRegistrability_RateLimited(t *testing.T) {
+	stub := &stubDesignService{}
+	handler := NewDesignHandlers(nil, stub)
+	handler.registrabilityLimiter = rateLimiterFunc(func(string) bool { return false })
+
+	req := httptest.NewRequest(http.MethodPost, "/designs/dsg_456:registrability-check", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-9"}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("designID", "dsg_456")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+
+	rec := httptest.NewRecorder()
+	handler.checkRegistrability(rec, req)
+
+	if rec.Result().StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("expected status 429, got %d", rec.Result().StatusCode)
+	}
+}
+
 type stubDesignService struct {
 	createFn                   func(context.Context, services.CreateDesignCommand) (services.Design, error)
 	getFn                      func(context.Context, string, services.DesignReadOptions) (services.Design, error)
@@ -1242,6 +1323,7 @@ type stubDesignService struct {
 	listAISuggestionsFn        func(context.Context, string, services.AISuggestionFilter) (domain.CursorPage[services.AISuggestion], error)
 	getAISuggestionFn          func(context.Context, string, string) (services.AISuggestion, error)
 	updateAISuggestionStatusFn func(context.Context, services.AISuggestionStatusCommand) (services.AISuggestion, error)
+	registrabilityFn           func(context.Context, services.RegistrabilityCheckCommand) (services.RegistrabilityCheckResult, error)
 }
 
 func (s *stubDesignService) CreateDesign(ctx context.Context, cmd services.CreateDesignCommand) (services.Design, error) {
@@ -1328,6 +1410,15 @@ func (s *stubDesignService) UpdateAISuggestionStatus(ctx context.Context, cmd se
 	return services.AISuggestion{}, nil
 }
 
-func (s *stubDesignService) RequestRegistrabilityCheck(context.Context, services.RegistrabilityCheckCommand) (services.RegistrabilityCheckResult, error) {
+func (s *stubDesignService) RequestRegistrabilityCheck(ctx context.Context, cmd services.RegistrabilityCheckCommand) (services.RegistrabilityCheckResult, error) {
+	if s.registrabilityFn != nil {
+		return s.registrabilityFn(ctx, cmd)
+	}
 	return services.RegistrabilityCheckResult{}, nil
+}
+
+type rateLimiterFunc func(string) bool
+
+func (f rateLimiterFunc) Allow(key string) bool {
+	return f(key)
 }

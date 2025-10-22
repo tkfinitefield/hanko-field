@@ -32,9 +32,10 @@ const (
 
 // DesignHandlers exposes design creation endpoints for authenticated users.
 type DesignHandlers struct {
-	authn             *auth.Authenticator
-	designs           services.DesignService
-	resolveStorageURL StorageURLResolver
+	authn                 *auth.Authenticator
+	designs               services.DesignService
+	resolveStorageURL     StorageURLResolver
+	registrabilityLimiter rateLimiter
 }
 
 // StorageURLResolver resolves a bucket/object pair to a fully qualified URL.
@@ -48,9 +49,10 @@ const defaultStorageBaseURL = "https://storage.googleapis.com"
 // NewDesignHandlers constructs a new DesignHandlers instance.
 func NewDesignHandlers(authn *auth.Authenticator, designs services.DesignService, opts ...DesignHandlerOption) *DesignHandlers {
 	handler := &DesignHandlers{
-		authn:             authn,
-		designs:           designs,
-		resolveStorageURL: defaultStorageURLResolver,
+		authn:                 authn,
+		designs:               designs,
+		resolveStorageURL:     defaultStorageURLResolver,
+		registrabilityLimiter: newSimpleRateLimiter(5, time.Minute, nil),
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -66,6 +68,20 @@ func WithStorageURLResolver(resolver StorageURLResolver) DesignHandlerOption {
 		if resolver != nil {
 			h.resolveStorageURL = resolver
 		}
+	}
+}
+
+// WithRegistrabilityRateLimit overrides the per-user registrability check rate limit.
+func WithRegistrabilityRateLimit(limit int, window time.Duration) DesignHandlerOption {
+	return func(h *DesignHandlers) {
+		if h == nil {
+			return
+		}
+		if limit <= 0 || window <= 0 {
+			h.registrabilityLimiter = nil
+			return
+		}
+		h.registrabilityLimiter = newSimpleRateLimiter(limit, window, nil)
 	}
 }
 
@@ -85,6 +101,7 @@ func (h *DesignHandlers) Routes(r chi.Router) {
 	r.Post("/{designID}/ai-suggestions/{suggestionID}:accept", h.acceptAISuggestion)
 	r.Post("/{designID}/ai-suggestions/{suggestionID}:reject", h.rejectAISuggestion)
 	r.Get("/{designID}/ai-suggestions/{suggestionID}", h.getAISuggestion)
+	r.Post("/{designID}:registrability-check", h.checkRegistrability)
 	r.Get("/{designID}/versions", h.listDesignVersions)
 	r.Get("/{designID}/versions/{versionID}", h.getDesignVersion)
 	r.Get("/{designID}", h.getDesign)
@@ -911,6 +928,66 @@ func (h *DesignHandlers) requestAISuggestion(w http.ResponseWriter, r *http.Requ
 	writeJSONResponse(w, http.StatusAccepted, response)
 }
 
+func (h *DesignHandlers) checkRegistrability(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.designs == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "design service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	designID := strings.TrimSpace(chi.URLParam(r, "designID"))
+	if designID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "design id is required", http.StatusBadRequest))
+		return
+	}
+
+	userID := strings.TrimSpace(identity.UID)
+	if userID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	if h.registrabilityLimiter != nil && !h.registrabilityLimiter.Allow(userID) {
+		httpx.WriteError(ctx, w, httpx.NewError("rate_limited", "registrability checks throttled", http.StatusTooManyRequests))
+		return
+	}
+
+	cmd := services.RegistrabilityCheckCommand{
+		DesignID: designID,
+		UserID:   userID,
+		Locale:   strings.TrimSpace(r.URL.Query().Get("locale")),
+	}
+
+	result, err := h.designs.RequestRegistrabilityCheck(ctx, cmd)
+	if err != nil {
+		h.writeDesignError(ctx, w, err)
+		return
+	}
+
+	response := registrabilityCheckResponse{
+		Status:      strings.TrimSpace(result.Status),
+		Registrable: result.Passed,
+		Diagnostics: cloneStrings(result.Reasons),
+	}
+	if result.Score != nil {
+		response.Score = result.Score
+	}
+	if !result.RequestedAt.IsZero() {
+		response.RequestedAt = formatTime(result.RequestedAt)
+	}
+	if result.ExpiresAt != nil && !result.ExpiresAt.IsZero() {
+		response.ExpiresAt = formatTime(*result.ExpiresAt)
+	}
+
+	writeJSONResponse(w, http.StatusOK, response)
+}
+
 func (h *DesignHandlers) createDesign(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.designs == nil {
@@ -989,6 +1066,15 @@ type aiSuggestionResponse struct {
 	SuggestionID string `json:"suggestionId"`
 	Status       string `json:"status"`
 	PollingURL   string `json:"pollingUrl"`
+}
+
+type registrabilityCheckResponse struct {
+	Status      string   `json:"status"`
+	Registrable bool     `json:"registrable"`
+	Score       *float64 `json:"score,omitempty"`
+	Diagnostics []string `json:"diagnostics,omitempty"`
+	RequestedAt string   `json:"requested_at,omitempty"`
+	ExpiresAt   string   `json:"expires_at,omitempty"`
 }
 
 type aiSuggestionDecisionRequest struct {

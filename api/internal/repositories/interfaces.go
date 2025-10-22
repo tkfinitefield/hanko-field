@@ -13,6 +13,7 @@ type Registry interface {
 
 	Designs() DesignRepository
 	DesignVersions() DesignVersionRepository
+	Registrability() RegistrabilityRepository
 	AISuggestions() AISuggestionRepository
 	AIJobs() AIJobRepository
 	Carts() CartRepository
@@ -64,6 +65,12 @@ type DesignVersionRepository interface {
 	Append(ctx context.Context, version domain.DesignVersion) error
 	ListByDesign(ctx context.Context, designID string, pager domain.Pagination) (domain.CursorPage[domain.DesignVersion], error)
 	FindByID(ctx context.Context, designID string, versionID string) (domain.DesignVersion, error)
+}
+
+// RegistrabilityRepository persists registrability assessment results for designs.
+type RegistrabilityRepository interface {
+	Get(ctx context.Context, designID string) (domain.RegistrabilityCheckResult, error)
+	Save(ctx context.Context, result domain.RegistrabilityCheckResult) error
 }
 
 // AISuggestionRepository stores AI suggestion records and status transitions.

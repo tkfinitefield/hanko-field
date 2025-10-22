@@ -265,6 +265,81 @@ func (s *stubJobDispatcher) EnqueueStockCleanup(context.Context, StockCleanupPay
 	return errors.New("not implemented")
 }
 
+type stubRegistrabilityEvaluator struct {
+	mu      sync.Mutex
+	calls   []RegistrabilityCheckPayload
+	checkFn func(context.Context, RegistrabilityCheckPayload) (RegistrabilityAssessment, error)
+}
+
+func (s *stubRegistrabilityEvaluator) Check(ctx context.Context, payload RegistrabilityCheckPayload) (RegistrabilityAssessment, error) {
+	s.mu.Lock()
+	s.calls = append(s.calls, payload)
+	s.mu.Unlock()
+	if s.checkFn != nil {
+		return s.checkFn(ctx, payload)
+	}
+	return RegistrabilityAssessment{}, errors.New("not implemented")
+}
+
+type stubRegistrabilityCache struct {
+	mu     sync.Mutex
+	store  map[string]RegistrabilityCheckResult
+	getFn  func(context.Context, string) (RegistrabilityCheckResult, error)
+	saveFn func(context.Context, RegistrabilityCheckResult) error
+	saved  []RegistrabilityCheckResult
+}
+
+func (s *stubRegistrabilityCache) Get(ctx context.Context, designID string) (RegistrabilityCheckResult, error) {
+	if s.getFn != nil {
+		return s.getFn(ctx, designID)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.store == nil {
+		return RegistrabilityCheckResult{}, repoNotFoundError{}
+	}
+	record, ok := s.store[designID]
+	if !ok {
+		return RegistrabilityCheckResult{}, repoNotFoundError{}
+	}
+	return cloneRegistrabilityResult(record), nil
+}
+
+func (s *stubRegistrabilityCache) Save(ctx context.Context, result RegistrabilityCheckResult) error {
+	if s.saveFn != nil {
+		return s.saveFn(ctx, result)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.store == nil {
+		s.store = make(map[string]RegistrabilityCheckResult)
+	}
+	clone := cloneRegistrabilityResult(result)
+	s.store[result.DesignID] = clone
+	s.saved = append(s.saved, clone)
+	return nil
+}
+
+type repoNotFoundError struct{}
+
+func (repoNotFoundError) Error() string       { return "not found" }
+func (repoNotFoundError) IsNotFound() bool    { return true }
+func (repoNotFoundError) IsConflict() bool    { return false }
+func (repoNotFoundError) IsUnavailable() bool { return false }
+
+func cloneRegistrabilityResult(result RegistrabilityCheckResult) RegistrabilityCheckResult {
+	copy := result
+	copy.Reasons = cloneStrings(result.Reasons)
+	if result.Metadata != nil {
+		copy.Metadata = maps.Clone(result.Metadata)
+	}
+	if result.ExpiresAt != nil {
+		expires := result.ExpiresAt.UTC()
+		copy.ExpiresAt = &expires
+	}
+	return copy
+}
+
 type assetCopyCall struct {
 	SourceBucket string
 	SourceObject string
@@ -2022,6 +2097,258 @@ func cloneTestDesign(design domain.Design) domain.Design {
 		}
 	}
 	return copy
+}
+
+func TestDesignService_RequestRegistrabilityCheck_UsesCache(t *testing.T) {
+	now := time.Date(2025, time.January, 2, 10, 0, 0, 0, time.UTC)
+	expiry := now.Add(2 * time.Hour)
+
+	repo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_001": {
+				ID:        "dsg_001",
+				OwnerID:   "user_123",
+				Type:      domain.DesignTypeTyped,
+				Status:    domain.DesignStatusDraft,
+				TextLines: []string{"Yamada"},
+				Source: domain.DesignSource{
+					Type:      domain.DesignTypeTyped,
+					RawName:   "Yamada",
+					TextLines: []string{"Yamada"},
+				},
+				Locale: "ja-JP",
+				Shape:  "round",
+				SizeMM: 15,
+			},
+		},
+	}
+
+	cached := RegistrabilityCheckResult{
+		DesignID:    "dsg_001",
+		Status:      "pass",
+		Passed:      true,
+		Reasons:     []string{"ok"},
+		RequestedAt: now.Add(-30 * time.Minute),
+		ExpiresAt:   &expiry,
+	}
+
+	cache := &stubRegistrabilityCache{
+		getFn: func(context.Context, string) (RegistrabilityCheckResult, error) {
+			return cached, nil
+		},
+	}
+
+	evaluator := &stubRegistrabilityEvaluator{
+		checkFn: func(context.Context, RegistrabilityCheckPayload) (RegistrabilityAssessment, error) {
+			t.Fatalf("expected cached result to be used")
+			return RegistrabilityAssessment{}, nil
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:             repo,
+		Versions:            &stubDesignVersionRepository{},
+		AssetsBucket:        "bucket",
+		Clock:               func() time.Time { return now },
+		Registrability:      evaluator,
+		RegistrabilityCache: cache,
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	result, err := svc.RequestRegistrabilityCheck(context.Background(), RegistrabilityCheckCommand{
+		DesignID: "dsg_001",
+		UserID:   "user_123",
+	})
+	if err != nil {
+		t.Fatalf("RequestRegistrabilityCheck error: %v", err)
+	}
+
+	if !result.Passed || result.Status != "pass" {
+		t.Fatalf("unexpected cached result: %+v", result)
+	}
+	if len(evaluator.calls) != 0 {
+		t.Fatalf("expected evaluator not to be called, was called %d times", len(evaluator.calls))
+	}
+}
+
+func TestDesignService_RequestRegistrabilityCheck_EvaluatesAndCaches(t *testing.T) {
+	now := time.Date(2025, time.January, 2, 11, 0, 0, 0, time.UTC)
+
+	repo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_002": {
+				ID:        "dsg_002",
+				OwnerID:   "user_456",
+				Type:      domain.DesignTypeTyped,
+				Status:    domain.DesignStatusDraft,
+				TextLines: []string{"Suzuki"},
+				Source: domain.DesignSource{
+					Type:      domain.DesignTypeTyped,
+					RawName:   "Suzuki",
+					TextLines: []string{"Suzuki"},
+				},
+				Locale: "ja-JP",
+				Shape:  "square",
+				SizeMM: 18,
+			},
+		},
+	}
+
+	cache := &stubRegistrabilityCache{}
+
+	evaluator := &stubRegistrabilityEvaluator{
+		checkFn: func(_ context.Context, payload RegistrabilityCheckPayload) (RegistrabilityAssessment, error) {
+			if payload.DesignID != "dsg_002" {
+				t.Fatalf("unexpected payload design id: %s", payload.DesignID)
+			}
+			if payload.Name != "Suzuki" {
+				t.Fatalf("unexpected payload name: %s", payload.Name)
+			}
+			return RegistrabilityAssessment{
+				Status:  "fail",
+				Passed:  false,
+				Reasons: []string{"conflict"},
+			}, nil
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:             repo,
+		Versions:            &stubDesignVersionRepository{},
+		AssetsBucket:        "bucket",
+		Clock:               func() time.Time { return now },
+		Registrability:      evaluator,
+		RegistrabilityCache: cache,
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	result, err := svc.RequestRegistrabilityCheck(context.Background(), RegistrabilityCheckCommand{
+		DesignID: "dsg_002",
+		UserID:   "user_456",
+	})
+	if err != nil {
+		t.Fatalf("RequestRegistrabilityCheck error: %v", err)
+	}
+
+	if result.Passed || result.Status != "fail" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if len(result.Reasons) != 1 || result.Reasons[0] != "conflict" {
+		t.Fatalf("unexpected reasons: %+v", result.Reasons)
+	}
+	if len(evaluator.calls) != 1 {
+		t.Fatalf("expected evaluator to be called once, called %d times", len(evaluator.calls))
+	}
+	if len(cache.saved) != 1 {
+		t.Fatalf("expected cache save, got %d", len(cache.saved))
+	}
+	saved := cache.saved[0]
+	if saved.Status != "fail" || saved.Passed {
+		t.Fatalf("unexpected cached value: %+v", saved)
+	}
+	if saved.ExpiresAt == nil {
+		t.Fatalf("expected cached value to have expiry")
+	}
+	expectedExpiry := now.Add(defaultRegistrabilityCacheTTL)
+	if saved.ExpiresAt.Sub(expectedExpiry) > time.Second || saved.ExpiresAt.Sub(expectedExpiry) < -time.Second {
+		t.Fatalf("unexpected expiry: %v", saved.ExpiresAt)
+	}
+}
+
+func TestDesignService_RequestRegistrabilityCheck_ExternalUnavailable(t *testing.T) {
+	now := time.Date(2025, time.January, 2, 12, 0, 0, 0, time.UTC)
+
+	repo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_003": {
+				ID:        "dsg_003",
+				OwnerID:   "user_789",
+				Type:      domain.DesignTypeTyped,
+				Status:    domain.DesignStatusDraft,
+				TextLines: []string{"Tanaka"},
+				Source: domain.DesignSource{
+					Type:      domain.DesignTypeTyped,
+					RawName:   "Tanaka",
+					TextLines: []string{"Tanaka"},
+				},
+				Locale: "ja-JP",
+				Shape:  "round",
+				SizeMM: 16,
+			},
+		},
+	}
+
+	evaluator := &stubRegistrabilityEvaluator{
+		checkFn: func(context.Context, RegistrabilityCheckPayload) (RegistrabilityAssessment, error) {
+			return RegistrabilityAssessment{}, ErrRegistrabilityUnavailable
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:             repo,
+		Versions:            &stubDesignVersionRepository{},
+		AssetsBucket:        "bucket",
+		Clock:               func() time.Time { return now },
+		Registrability:      evaluator,
+		RegistrabilityCache: &stubRegistrabilityCache{},
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	_, err = svc.RequestRegistrabilityCheck(context.Background(), RegistrabilityCheckCommand{
+		DesignID: "dsg_003",
+		UserID:   "user_789",
+	})
+	if !errors.Is(err, ErrDesignRepositoryUnavailable) {
+		t.Fatalf("expected ErrDesignRepositoryUnavailable, got %v", err)
+	}
+}
+
+func TestDesignService_RequestRegistrabilityCheck_MissingName(t *testing.T) {
+	now := time.Date(2025, time.January, 2, 13, 0, 0, 0, time.UTC)
+
+	repo := &stubDesignRepository{
+		store: map[string]domain.Design{
+			"dsg_004": {
+				ID:      "dsg_004",
+				OwnerID: "user_999",
+				Type:    domain.DesignTypeTyped,
+				Status:  domain.DesignStatusDraft,
+			},
+		},
+	}
+
+	evaluator := &stubRegistrabilityEvaluator{
+		checkFn: func(context.Context, RegistrabilityCheckPayload) (RegistrabilityAssessment, error) {
+			t.Fatalf("evaluator should not be called")
+			return RegistrabilityAssessment{}, nil
+		},
+	}
+
+	svc, err := NewDesignService(DesignServiceDeps{
+		Designs:             repo,
+		Versions:            &stubDesignVersionRepository{},
+		AssetsBucket:        "bucket",
+		Clock:               func() time.Time { return now },
+		Registrability:      evaluator,
+		RegistrabilityCache: &stubRegistrabilityCache{},
+	})
+	if err != nil {
+		t.Fatalf("NewDesignService error: %v", err)
+	}
+
+	_, err = svc.RequestRegistrabilityCheck(context.Background(), RegistrabilityCheckCommand{
+		DesignID: "dsg_004",
+		UserID:   "user_999",
+	})
+	if !errors.Is(err, ErrDesignInvalidInput) {
+		t.Fatalf("expected ErrDesignInvalidInput, got %v", err)
+	}
 }
 
 func cloneSuggestionRecord(s domain.AISuggestion) domain.AISuggestion {

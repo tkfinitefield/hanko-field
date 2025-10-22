@@ -60,7 +60,7 @@
 - [x] [044 Implement AI suggestion request endpoint queuing jobs and returning suggestion IDs.](./tasks/044-implement-ai-suggestion-request-endpoint-queuing-jobs-and-returning-suggestion-i.md)
 - [x] [045 Implement AI suggestion listing/detail retrieval from job store.](./tasks/045-implement-ai-suggestion-listing-detail-retrieval-from-job-store.md)
 - [x] [046 Implement accept/reject endpoints mutating suggestion status and updating design state.](./tasks/046-implement-accept-reject-endpoints-mutating-suggestion-status-and-updating-design.md)
-- [ ] [047 Implement registrability-check endpoint integrating external service and caching results.](./tasks/047-implement-registrability-check-endpoint-integrating-external-service-and-caching.md)
+- [x] [047 Implement registrability-check endpoint integrating external service and caching results.](./tasks/047-implement-registrability-check-endpoint-integrating-external-service-and-caching.md)
 
 ### 5.3 Name Mapping
 - [ ] [048 Implement name conversion endpoint invoking transliteration service and returning ranked candidates.](./tasks/048-implement-name-conversion-endpoint-invoking-transliteration-service-and-returnin.md)

@@ -36,19 +36,20 @@ var (
 )
 
 const (
-	designIDPrefix     = "dsg_"
-	versionIDPrefix    = "ver_"
-	defaultLocale      = "ja-JP"
-	defaultShape       = "round"
-	minDesignSizeMM    = 6.0
-	maxDesignSizeMM    = 30.0
-	defaultDesignSize  = 15.0
-	maxDesignTextLines = 4
-	maxDesignLineChars = 32
-	maxDesignLabelLen  = 120
-	maxUploadSizeBytes = int64(20 * 1024 * 1024)
-	previewFileName    = "preview.png"
-	vectorFileName     = "design.svg"
+	designIDPrefix                = "dsg_"
+	versionIDPrefix               = "ver_"
+	defaultLocale                 = "ja-JP"
+	defaultShape                  = "round"
+	defaultRegistrabilityCacheTTL = 24 * time.Hour
+	minDesignSizeMM               = 6.0
+	maxDesignSizeMM               = 30.0
+	defaultDesignSize             = 15.0
+	maxDesignTextLines            = 4
+	maxDesignLineChars            = 32
+	maxDesignLabelLen             = 120
+	maxUploadSizeBytes            = int64(20 * 1024 * 1024)
+	previewFileName               = "preview.png"
+	vectorFileName                = "design.svg"
 )
 
 var (
@@ -124,33 +125,39 @@ type RenderDesignResult struct {
 
 // DesignServiceDeps wires dependencies for the design service implementation.
 type DesignServiceDeps struct {
-	Designs      repositories.DesignRepository
-	Versions     repositories.DesignVersionRepository
-	Audit        AuditLogService
-	Renderer     DesignRenderer
-	AssetCopier  AssetCopier
-	Suggestions  repositories.AISuggestionRepository
-	Jobs         BackgroundJobDispatcher
-	UnitOfWork   repositories.UnitOfWork
-	Clock        func() time.Time
-	IDGenerator  func() string
-	AssetsBucket string
-	Logger       func(context.Context, string, map[string]any)
+	Designs             repositories.DesignRepository
+	Versions            repositories.DesignVersionRepository
+	Audit               AuditLogService
+	Renderer            DesignRenderer
+	AssetCopier         AssetCopier
+	Suggestions         repositories.AISuggestionRepository
+	Jobs                BackgroundJobDispatcher
+	UnitOfWork          repositories.UnitOfWork
+	Clock               func() time.Time
+	IDGenerator         func() string
+	AssetsBucket        string
+	Logger              func(context.Context, string, map[string]any)
+	Registrability      RegistrabilityEvaluator
+	RegistrabilityCache repositories.RegistrabilityRepository
+	RegistrabilityTTL   time.Duration
 }
 
 type designService struct {
-	designs      repositories.DesignRepository
-	versions     repositories.DesignVersionRepository
-	audit        AuditLogService
-	renderer     DesignRenderer
-	assetCopier  AssetCopier
-	suggestions  repositories.AISuggestionRepository
-	jobs         BackgroundJobDispatcher
-	unitOfWork   repositories.UnitOfWork
-	clock        func() time.Time
-	newID        func() string
-	assetsBucket string
-	logger       func(context.Context, string, map[string]any)
+	designs        repositories.DesignRepository
+	versions       repositories.DesignVersionRepository
+	audit          AuditLogService
+	renderer       DesignRenderer
+	assetCopier    AssetCopier
+	suggestions    repositories.AISuggestionRepository
+	jobs           BackgroundJobDispatcher
+	unitOfWork     repositories.UnitOfWork
+	clock          func() time.Time
+	newID          func() string
+	assetsBucket   string
+	logger         func(context.Context, string, map[string]any)
+	registrability RegistrabilityEvaluator
+	regCache       repositories.RegistrabilityRepository
+	regTTL         time.Duration
 }
 
 // NewDesignService constructs a DesignService backed by the provided dependencies.
@@ -181,19 +188,27 @@ func NewDesignService(deps DesignServiceDeps) (DesignService, error) {
 		logger = func(context.Context, string, map[string]any) {}
 	}
 
+	regTTL := deps.RegistrabilityTTL
+	if regTTL <= 0 {
+		regTTL = defaultRegistrabilityCacheTTL
+	}
+
 	return &designService{
-		designs:      deps.Designs,
-		versions:     deps.Versions,
-		audit:        deps.Audit,
-		renderer:     deps.Renderer,
-		assetCopier:  deps.AssetCopier,
-		suggestions:  deps.Suggestions,
-		jobs:         deps.Jobs,
-		unitOfWork:   deps.UnitOfWork,
-		clock:        func() time.Time { return clock().UTC() },
-		newID:        idGen,
-		assetsBucket: bucket,
-		logger:       logger,
+		designs:        deps.Designs,
+		versions:       deps.Versions,
+		audit:          deps.Audit,
+		renderer:       deps.Renderer,
+		assetCopier:    deps.AssetCopier,
+		suggestions:    deps.Suggestions,
+		jobs:           deps.Jobs,
+		unitOfWork:     deps.UnitOfWork,
+		clock:          func() time.Time { return clock().UTC() },
+		newID:          idGen,
+		assetsBucket:   bucket,
+		logger:         logger,
+		registrability: deps.Registrability,
+		regCache:       deps.RegistrabilityCache,
+		regTTL:         regTTL,
 	}, nil
 }
 
@@ -1453,8 +1468,205 @@ func (s *designService) UpdateAISuggestionStatus(ctx context.Context, cmd AISugg
 	return suggestion, nil
 }
 
-func (s *designService) RequestRegistrabilityCheck(context.Context, RegistrabilityCheckCommand) (RegistrabilityCheckResult, error) {
-	return RegistrabilityCheckResult{}, ErrDesignNotImplemented
+func (s *designService) RequestRegistrabilityCheck(ctx context.Context, cmd RegistrabilityCheckCommand) (RegistrabilityCheckResult, error) {
+	if s.designs == nil {
+		return RegistrabilityCheckResult{}, ErrDesignRepositoryUnavailable
+	}
+
+	designID := strings.TrimSpace(cmd.DesignID)
+	if designID == "" {
+		return RegistrabilityCheckResult{}, fmt.Errorf("%w: design_id is required", ErrDesignInvalidInput)
+	}
+	userID := strings.TrimSpace(cmd.UserID)
+	if userID == "" {
+		return RegistrabilityCheckResult{}, fmt.Errorf("%w: user_id is required", ErrDesignInvalidInput)
+	}
+
+	design, err := s.designs.FindByID(ctx, designID)
+	if err != nil {
+		return RegistrabilityCheckResult{}, s.mapRepositoryError(err)
+	}
+
+	ownerID := strings.TrimSpace(design.OwnerID)
+	if ownerID == "" || !strings.EqualFold(ownerID, userID) {
+		return RegistrabilityCheckResult{}, ErrDesignNotFound
+	}
+
+	if design.Status == DesignStatusDeleted {
+		return RegistrabilityCheckResult{}, fmt.Errorf("%w: design status %q cannot be evaluated", ErrDesignInvalidInput, design.Status)
+	}
+
+	if result, ok := s.cachedRegistrability(ctx, designID); ok {
+		return result, nil
+	}
+
+	if s.registrability == nil {
+		return RegistrabilityCheckResult{}, ErrDesignNotImplemented
+	}
+
+	payload, err := s.buildRegistrabilityPayload(cmd, design)
+	if err != nil {
+		return RegistrabilityCheckResult{}, err
+	}
+
+	assessment, err := s.registrability.Check(ctx, payload)
+	if err != nil {
+		return RegistrabilityCheckResult{}, s.mapRegistrabilityError(err)
+	}
+
+	now := s.now()
+	result := RegistrabilityCheckResult{
+		DesignID:    designID,
+		Status:      strings.TrimSpace(assessment.Status),
+		Passed:      assessment.Passed,
+		Score:       assessment.Score,
+		Reasons:     cloneStrings(assessment.Reasons),
+		RequestedAt: now,
+		Metadata:    cloneSnapshot(assessment.Metadata),
+	}
+	if assessment.ExpiresAt != nil && !assessment.ExpiresAt.IsZero() {
+		expiry := assessment.ExpiresAt.UTC()
+		result.ExpiresAt = &expiry
+	} else if s.regTTL > 0 {
+		expiry := now.Add(s.regTTL)
+		result.ExpiresAt = &expiry
+	}
+
+	s.cacheRegistrability(ctx, result)
+
+	return result, nil
+}
+
+func (s *designService) cachedRegistrability(ctx context.Context, designID string) (RegistrabilityCheckResult, bool) {
+	if s.regCache == nil {
+		return RegistrabilityCheckResult{}, false
+	}
+	result, err := s.regCache.Get(ctx, designID)
+	if err != nil {
+		if !isRepoNotFound(err) && err != context.Canceled && err != context.DeadlineExceeded {
+			s.logger(ctx, "design.registrability.cache_read_failed", map[string]any{
+				"designId": designID,
+				"error":    err.Error(),
+			})
+		}
+		return RegistrabilityCheckResult{}, false
+	}
+	result = normalizeRegistrabilityResult(result)
+	now := s.now()
+	if !s.registrabilityResultFresh(result, now) {
+		return RegistrabilityCheckResult{}, false
+	}
+	return result, true
+}
+
+func (s *designService) cacheRegistrability(ctx context.Context, result RegistrabilityCheckResult) {
+	if s.regCache == nil {
+		return
+	}
+	result = normalizeRegistrabilityResult(result)
+	if err := s.regCache.Save(ctx, result); err != nil && err != context.Canceled && err != context.DeadlineExceeded {
+		s.logger(ctx, "design.registrability.cache_write_failed", map[string]any{
+			"designId": result.DesignID,
+			"error":    err.Error(),
+		})
+	}
+}
+
+func (s *designService) buildRegistrabilityPayload(cmd RegistrabilityCheckCommand, design Design) (RegistrabilityCheckPayload, error) {
+	textLines := cloneStrings(design.Source.TextLines)
+	if len(textLines) == 0 {
+		textLines = cloneStrings(design.TextLines)
+	}
+
+	name := strings.TrimSpace(design.Source.RawName)
+	if name == "" && len(textLines) > 0 {
+		name = strings.Join(textLines, "")
+	}
+	if name == "" {
+		return RegistrabilityCheckPayload{}, fmt.Errorf("%w: design metadata missing name", ErrDesignInvalidInput)
+	}
+
+	designType := firstNonEmptyDesignType(design.Source.Type, design.Type)
+	if strings.TrimSpace(string(designType)) == "" {
+		return RegistrabilityCheckPayload{}, fmt.Errorf("%w: design type is required", ErrDesignInvalidInput)
+	}
+
+	locale := strings.TrimSpace(cmd.Locale)
+	if locale == "" {
+		locale = strings.TrimSpace(design.Locale)
+		if locale == "" {
+			locale = defaultLocale
+		}
+	}
+
+	metadata := make(map[string]any)
+	if trimmed := strings.TrimSpace(design.Shape); trimmed != "" {
+		metadata["shape"] = trimmed
+	}
+	if design.SizeMM > 0 {
+		metadata["sizeMm"] = design.SizeMM
+	}
+
+	return RegistrabilityCheckPayload{
+		DesignID:   design.ID,
+		Name:       name,
+		TextLines:  textLines,
+		Type:       designType,
+		Locale:     locale,
+		MaterialID: strings.TrimSpace(design.MaterialID),
+		TemplateID: strings.TrimSpace(design.Template),
+		Metadata:   metadata,
+	}, nil
+}
+
+func (s *designService) registrabilityResultFresh(result RegistrabilityCheckResult, now time.Time) bool {
+	if strings.TrimSpace(result.DesignID) == "" {
+		return false
+	}
+
+	if result.ExpiresAt != nil && !result.ExpiresAt.IsZero() {
+		if now.After(result.ExpiresAt.UTC()) {
+			return false
+		}
+		return true
+	}
+
+	if s.regTTL <= 0 {
+		return true
+	}
+
+	ref := result.RequestedAt
+	if ref.IsZero() {
+		ref = now
+	}
+	return now.Before(ref.Add(s.regTTL))
+}
+
+func (s *designService) mapRegistrabilityError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, ErrRegistrabilityInvalidInput):
+		return fmt.Errorf("%w: %v", ErrDesignInvalidInput, err)
+	case errors.Is(err, ErrRegistrabilityUnavailable), errors.Is(err, ErrRegistrabilityRateLimited):
+		return fmt.Errorf("%w: %v", ErrDesignRepositoryUnavailable, err)
+	default:
+		return fmt.Errorf("%w: %v", ErrDesignRepositoryUnavailable, err)
+	}
+}
+
+func normalizeRegistrabilityResult(result RegistrabilityCheckResult) RegistrabilityCheckResult {
+	result.Status = strings.TrimSpace(result.Status)
+	result.Reasons = cloneStrings(result.Reasons)
+	if len(result.Metadata) > 0 {
+		result.Metadata = cloneSnapshot(result.Metadata)
+	}
+	if result.ExpiresAt != nil && !result.ExpiresAt.IsZero() {
+		expiry := result.ExpiresAt.UTC()
+		result.ExpiresAt = &expiry
+	}
+	return result
 }
 
 func (s *designService) runInTx(ctx context.Context, fn func(context.Context) error) error {
