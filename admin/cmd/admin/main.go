@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,14 +16,16 @@ import (
 
 	"finitefield.org/hanko-admin/internal/admin/httpserver"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
+	"finitefield.org/hanko-admin/internal/admin/profile"
 )
 
 func main() {
 	rootCtx := context.Background()
 	cfg := httpserver.Config{
-		Address:       getEnv("ADMIN_HTTP_ADDR", ":8080"),
-		BasePath:      getEnv("ADMIN_BASE_PATH", "/admin"),
-		Authenticator: buildAuthenticator(rootCtx),
+		Address:        getEnv("ADMIN_HTTP_ADDR", ":8080"),
+		BasePath:       getEnv("ADMIN_BASE_PATH", "/admin"),
+		Authenticator:  buildAuthenticator(rootCtx),
+		ProfileService: buildProfileService(),
 		Session: httpserver.SessionConfig{
 			CookieName:       getEnv("ADMIN_SESSION_COOKIE_NAME", ""),
 			CookieDomain:     os.Getenv("ADMIN_SESSION_COOKIE_DOMAIN"),
@@ -147,4 +150,19 @@ func buildAuthenticator(ctx context.Context) middleware.Authenticator {
 
 	log.Printf("Firebase authenticator enabled (project=%s)", projectID)
 	return middleware.NewFirebaseAuthenticator(client)
+}
+
+func buildProfileService() profile.Service {
+	baseURL := strings.TrimSpace(os.Getenv("ADMIN_SECURITY_API_BASE_URL"))
+	if baseURL == "" {
+		log.Printf("admin: ADMIN_SECURITY_API_BASE_URL not set; using static profile service placeholder")
+		return profile.NewStaticService(nil)
+	}
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	service, err := profile.NewHTTPService(baseURL, httpClient)
+	if err != nil {
+		log.Fatalf("admin: failed to initialise profile service: %v", err)
+	}
+	return service
 }

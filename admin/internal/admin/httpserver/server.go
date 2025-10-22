@@ -12,6 +12,7 @@ import (
 
 	custommw "finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/ui"
+	"finitefield.org/hanko-admin/internal/admin/profile"
 	appsession "finitefield.org/hanko-admin/internal/admin/session"
 	"finitefield.org/hanko-admin/public"
 )
@@ -22,6 +23,7 @@ type Config struct {
 	BasePath         string
 	LoginPath        string
 	Authenticator    custommw.Authenticator
+	ProfileService   profile.Service
 	Session          SessionConfig
 	SessionStore     custommw.SessionStore
 	CSRFCookieName   string
@@ -80,11 +82,16 @@ func New(cfg Config) *http.Server {
 		Secure:     cfg.CSRFCookieSecure,
 	}
 
+	uiHandlers := ui.NewHandlers(ui.Dependencies{
+		ProfileService: cfg.ProfileService,
+	})
+
 	mountAdminRoutes(router, basePath, routeOptions{
 		SessionStore:  sessionStore,
 		Authenticator: authenticator,
 		LoginPath:     loginPath,
 		CSRF:          csrfCfg,
+		UI:            uiHandlers,
 	})
 
 	return &http.Server{
@@ -101,6 +108,7 @@ type routeOptions struct {
 	Authenticator custommw.Authenticator
 	LoginPath     string
 	CSRF          custommw.CSRFConfig
+	UI            *ui.Handlers
 }
 
 func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
@@ -117,6 +125,11 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 	loginChain.Get(authHandlers.loginPath, authHandlers.LoginForm)
 	loginChain.Post(authHandlers.loginPath, authHandlers.LoginSubmit)
 
+	uiHandlers := opts.UI
+	if uiHandlers == nil {
+		uiHandlers = ui.NewHandlers(ui.Dependencies{})
+	}
+
 	router.Route(base, func(r chi.Router) {
 		for _, mw := range shared {
 			r.Use(mw)
@@ -126,7 +139,18 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 			protected.Use(custommw.Auth(opts.Authenticator, opts.LoginPath))
 			protected.Use(custommw.CSRF(opts.CSRF))
 
-			protected.Get("/", ui.DashboardHandler)
+			protected.Get("/", uiHandlers.Dashboard)
+			protected.Route("/profile", func(pr chi.Router) {
+				pr.Get("/", uiHandlers.ProfilePage)
+				pr.Get("/mfa/totp", uiHandlers.MFATOTPStart)
+				pr.Post("/mfa/totp", uiHandlers.MFATOTPConfirm)
+				pr.Post("/mfa/email", uiHandlers.EmailMFAEnable)
+				pr.Post("/mfa/disable", uiHandlers.DisableMFA)
+				pr.Get("/api-keys/new", uiHandlers.NewAPIKeyForm)
+				pr.Post("/api-keys", uiHandlers.CreateAPIKey)
+				pr.Post("/api-keys/{keyID}/revoke", uiHandlers.RevokeAPIKey)
+				pr.Post("/sessions/{sessionID}/revoke", uiHandlers.RevokeSession)
+			})
 			protected.Get("/logout", authHandlers.Logout)
 			protected.Post("/logout", authHandlers.Logout)
 			// Future admin routes will be registered here.

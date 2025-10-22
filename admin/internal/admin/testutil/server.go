@@ -6,6 +6,7 @@ import (
 
 	"finitefield.org/hanko-admin/internal/admin/httpserver"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
+	"finitefield.org/hanko-admin/internal/admin/profile"
 )
 
 // ServerOption customises the HTTP server configuration for tests.
@@ -25,6 +26,13 @@ func WithBasePath(path string) ServerOption {
 	}
 }
 
+// WithProfileService wires a custom profile service implementation.
+func WithProfileService(service profile.Service) ServerOption {
+	return func(cfg *httpserver.Config) {
+		cfg.ProfileService = service
+	}
+}
+
 // NewServer constructs an httptest server running the admin HTTP stack with sensible defaults.
 func NewServer(t testing.TB, opts ...ServerOption) *httptest.Server {
 	t.Helper()
@@ -36,6 +44,7 @@ func NewServer(t testing.TB, opts ...ServerOption) *httptest.Server {
 		CSRFCookieName: "csrf_token",
 		CSRFHeaderName: "X-CSRF-Token",
 		Authenticator:  middleware.DefaultAuthenticator(),
+		ProfileService: profile.NewStaticService(nil),
 	}
 
 	for _, opt := range opts {

@@ -18,7 +18,7 @@
 - [x] [Build session middleware storing user info, CSRF tokens, and feature flags; add remember-me support if required.](doc/admin/tasks/011-build-session-middleware-storing-user-info-csrf-tokens-and-feature-flags-add-remember-me-s.md)
 - [x] [Implement RBAC guard utilities for template rendering (sidebar filtering, action visibility).](doc/admin/tasks/012-implement-rbac-guard-utilities-for-template-rendering-sidebar-filtering-action-visibility.md)
 - [x] [Create login/logout flows (`/admin/login`, `/admin/logout`) with error states and redirect logic.](doc/admin/tasks/013-create-login-logout-flows-admin-login-admin-logout-with-error-states-and-redirect-logic.md)
-- [ ] [Add MFA/API-key management UI under `/admin/profile`, integrating with backend secrets service.](doc/admin/tasks/014-add-mfa-api-key-management-ui-under-admin-profile-integrating-with-backend-secrets-service.md)
+- [x] [Add MFA/API-key management UI under `/admin/profile`, integrating with backend secrets service.](doc/admin/tasks/014-add-mfa-api-key-management-ui-under-admin-profile-integrating-with-backend-secrets-service.md)
 
 ## 3. Layout, Navigation, and Shared UX
 - [ ] [Implement global layout template (`/admin/_layout.html`) with sidebar, top bar, breadcrumbs, and responsive behaviour.](doc/admin/tasks/015-implement-global-layout-template-admin-layout-html-with-sidebar-top-bar-breadcrumbs-and-re.md)

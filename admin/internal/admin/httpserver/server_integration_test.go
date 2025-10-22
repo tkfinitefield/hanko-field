@@ -1,15 +1,18 @@
 package httpserver_test
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
+	"finitefield.org/hanko-admin/internal/admin/profile"
 	"finitefield.org/hanko-admin/internal/admin/testutil"
 )
 
@@ -59,6 +62,42 @@ func TestDashboardRendersForAuthenticatedUser(t *testing.T) {
 	require.Equal(t, "ダッシュボード | Hanko Admin", doc.Find("title").First().Text())
 	require.Equal(t, "admin.dashboard.title", doc.Find("h1").First().Text())
 	require.Greater(t, doc.Find("table").Length(), 0, "dashboard should render metrics table")
+}
+
+func TestProfilePageRenders(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "secure-token"}
+	service := &profileStub{
+		state: &profile.SecurityState{
+			UserEmail: "staff@example.com",
+			MFA:       profile.MFAState{Enabled: true},
+			APIKeys: []profile.APIKey{
+				{ID: "key-1", Label: "Automation", Status: profile.APIKeyStatusActive, CreatedAt: time.Now()},
+			},
+			Sessions: []profile.Session{
+				{ID: "sess-1", UserAgent: "Chrome", IPAddress: "127.0.0.1", CreatedAt: time.Now(), LastSeenAt: time.Now(), Current: true},
+			},
+		},
+	}
+
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth), testutil.WithProfileService(service))
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/profile", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+auth.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	doc := testutil.ParseHTML(t, body)
+	require.Contains(t, doc.Find("title").First().Text(), "admin.profile.title")
+	require.Contains(t, doc.Find("body").Text(), "API キー")
 }
 
 func TestLoginSuccessFlow(t *testing.T) {
@@ -199,6 +238,50 @@ func TestLoginRejectsExternalNextParameter(t *testing.T) {
 	resp.Body.Close()
 	require.Equal(t, http.StatusSeeOther, resp.StatusCode)
 	require.Equal(t, "/admin", resp.Header.Get("Location"))
+}
+
+type profileStub struct {
+	state      *profile.SecurityState
+	enrollment *profile.TOTPEnrollment
+	secret     *profile.APIKeySecret
+}
+
+func (s *profileStub) SecurityOverview(ctx context.Context, token string) (*profile.SecurityState, error) {
+	return s.state, nil
+}
+
+func (s *profileStub) StartTOTPEnrollment(ctx context.Context, token string) (*profile.TOTPEnrollment, error) {
+	if s.enrollment != nil {
+		return s.enrollment, nil
+	}
+	return &profile.TOTPEnrollment{Secret: "SECRET"}, nil
+}
+
+func (s *profileStub) ConfirmTOTPEnrollment(ctx context.Context, token, code string) (*profile.SecurityState, error) {
+	return s.state, nil
+}
+
+func (s *profileStub) EnableEmailMFA(ctx context.Context, token string) (*profile.SecurityState, error) {
+	return s.state, nil
+}
+
+func (s *profileStub) DisableMFA(ctx context.Context, token string) (*profile.SecurityState, error) {
+	return s.state, nil
+}
+
+func (s *profileStub) CreateAPIKey(ctx context.Context, token string, req profile.CreateAPIKeyRequest) (*profile.APIKeySecret, error) {
+	if s.secret != nil {
+		return s.secret, nil
+	}
+	return &profile.APIKeySecret{ID: "key-2", Label: req.Label, Secret: "secret"}, nil
+}
+
+func (s *profileStub) RevokeAPIKey(ctx context.Context, token, keyID string) (*profile.SecurityState, error) {
+	return s.state, nil
+}
+
+func (s *profileStub) RevokeSession(ctx context.Context, token, sessionID string) (*profile.SecurityState, error) {
+	return s.state, nil
 }
 
 type tokenAuthenticator struct {

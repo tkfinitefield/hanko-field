@@ -10,7 +10,29 @@ if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").m
 // Expose a hook for future htmx/alpine wiring without blocking initial scaffold.
 window.hankoAdmin = window.hankoAdmin || {
   init() {
-    // no-op placeholder; real hooks populate here.
+    const modalRoot = () => document.getElementById("modal-root");
+
+    document.addEventListener("click", (event) => {
+      const trigger = event.target instanceof Element ? event.target.closest("[data-modal-close]") : null;
+      if (!trigger) {
+        return;
+      }
+      event.preventDefault();
+      const root = modalRoot();
+      if (root) {
+        root.innerHTML = "";
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      const root = modalRoot();
+      if (root && root.firstChild) {
+        root.innerHTML = "";
+      }
+    });
   },
 };
 

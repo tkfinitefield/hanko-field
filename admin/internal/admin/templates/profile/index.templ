@@ -1,0 +1,493 @@
+package profile
+
+import (
+	"time"
+
+	profilemodel "finitefield.org/hanko-admin/internal/admin/profile"
+	"finitefield.org/hanko-admin/internal/admin/templates/components"
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+	"finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
+
+templ Index(data PageData) {
+	@layouts.Base(helpers.I18N("admin.profile.title"), navigationItems(), breadcrumbItems(), pageBody(data))
+}
+
+templ pageBody(data PageData) {
+	<main class="space-y-8">
+		<header class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+			<div class="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+				<div>
+					<h1 class="text-2xl font-semibold text-slate-900">プロフィール</h1>
+					<p class="mt-2 text-sm text-slate-600">自分の多要素認証や API キー、アクティブセッションを管理できます。</p>
+					<dl class="mt-6 grid grid-cols-1 gap-4 text-sm text-slate-600 sm:grid-cols-3">
+						<div>
+							<dt class="font-medium text-slate-500">メールアドレス</dt>
+							<dd class="mt-1 font-semibold text-slate-900">
+								if data.UserEmail != "" {
+									{ data.UserEmail }
+								} else {
+									<span class="text-slate-500">未登録</span>
+								}
+							</dd>
+						</div>
+						<div>
+							<dt class="font-medium text-slate-500">UID</dt>
+							<dd class="mt-1 text-slate-900">{ data.UserName }</dd>
+						</div>
+						if data.Security != nil && data.Security.Phone != "" {
+							<div>
+								<dt class="font-medium text-slate-500">電話番号</dt>
+								<dd class="mt-1 text-slate-900">{ data.Security.Phone }</dd>
+							</div>
+						}
+					</dl>
+				</div>
+			</div>
+		</header>
+
+		<div id="profile-flash">
+			if data.Flash != "" {
+				@flashMessage(data.Flash)
+			}
+		</div>
+
+		<section class="grid gap-4 md:grid-cols-2">
+			for _, alert := range securityAlerts() {
+				@alertCard(alert)
+			}
+		</section>
+
+		<section id="mfa-card">
+			@mfaCard(data.Security, data.CSRFToken)
+		</section>
+
+		<section id="api-keys-card">
+			@apiKeysCard(data.Security, data.CSRFToken)
+		</section>
+
+		<section id="sessions-card">
+			@sessionsCard(data.Security, data.CSRFToken)
+		</section>
+
+		<section class="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5 text-sm text-amber-900">
+			<h2 class="text-base font-semibold">運用上の注意</h2>
+			<ul class="mt-3 list-disc space-y-2 pl-5">
+				<li>復旧コードはオフラインで保管し、共有しないでください。</li>
+				<li>API キーは必要最小限の権限で発行し、ローテーション計画を立ててください。</li>
+				<li>不審なセッションがある場合はすべてのセッションを失効し、MFA を再設定してください。</li>
+			</ul>
+		</section>
+
+		<div id="modal-root"></div>
+	</main>
+}
+
+templ flashMessage(message string) {
+	<div class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 shadow-sm">
+		{ message }
+	</div>
+}
+
+templ alertCard(alert AlertContent) {
+	<div class="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+		<h2 class="text-base font-semibold text-slate-900">{ alert.Title }</h2>
+		<p class="mt-2 text-sm text-slate-600">{ alert.Body }</p>
+		if alert.LinkHref != "" && alert.LinkText != "" {
+			<a
+				href={ alert.LinkHref }
+				target="_blank"
+				rel="noreferrer"
+				class="mt-3 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+			>
+				{ alert.LinkText } →
+			</a>
+		}
+	</div>
+}
+
+templ mfaCard(state *profilemodel.SecurityState, csrf string) {
+	@components.Card("多要素認証 (MFA)", mfaCardBody(state, csrf))
+}
+
+templ mfaCardBody(state *profilemodel.SecurityState, csrf string) {
+	if state == nil {
+		<p class="text-sm text-slate-500">MFA 情報を取得できませんでした。</p>
+		return
+	}
+	<section class="space-y-5">
+		<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+			<div class="flex items-center gap-3">
+				if state.MFA.Enabled {
+					@components.Badge("有効", "success")
+				} else {
+					@components.Badge("無効", "muted")
+				}
+				if state.MFA.LastConfirmed != nil {
+					<span class="text-sm text-slate-600">最終確認: { formatTimestamp(*state.MFA.LastConfirmed) }</span>
+				}
+			</div>
+			@components.ButtonWith("Authenticator を追加", components.ButtonOptions{
+				Variant: "primary",
+				Attrs: templ.Attributes{
+					"hx-get":   "/admin/profile/mfa/totp",
+					"hx-target": "#modal-root",
+					"hx-swap": "innerHTML",
+				},
+			})
+		</div>
+
+		<div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+			<h3 class="text-sm font-semibold text-slate-800">登録済み要素</h3>
+			if len(state.MFA.Methods) == 0 {
+				<p class="mt-2 text-sm text-slate-600">まだ MFA 要素が登録されていません。Authenticator アプリかメール認証を設定してください。</p>
+			} else {
+				<ul class="mt-3 space-y-3">
+					for _, method := range state.MFA.Methods {
+						<li class="flex flex-col gap-1 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 md:flex-row md:items-center md:justify-between">
+							<div>
+								<span class="font-semibold text-slate-900">{ method.Label }</span>
+								<span class="ml-2 text-xs uppercase text-slate-500">{ string(method.Kind) }</span>
+								if method.Default {
+									@components.Badge("Primary", "info")
+								}
+							</div>
+							<div class="text-xs text-slate-500 md:text-right">
+								<p>登録: { formatTimestamp(method.CreatedAt) }</p>
+								if method.LastUsedAt != nil {
+									<p>最終利用: { formatTimestamp(*method.LastUsedAt) }</p>
+								}
+							</div>
+						</li>
+					}
+				</ul>
+			}
+			if len(state.MFA.RecoveryCodes) > 0 {
+				<p class="mt-3 text-xs text-slate-500">復旧コード: { len(state.MFA.RecoveryCodes) } 件</p>
+			}
+		</div>
+
+		<div class="flex flex-wrap gap-3">
+			if !hasMFAMethod(state, profilemodel.MFAMethodEmail) {
+				<form
+					hx-post="/admin/profile/mfa/email"
+					hx-target="#mfa-card"
+					hx-swap="outerHTML"
+				>
+					<input type="hidden" name="csrf_token" value={ csrf } />
+					@components.ButtonWith("メールコードを有効化", components.ButtonOptions{
+						Type:    "submit",
+						Variant: "secondary",
+					})
+				</form>
+			}
+			if state.MFA.Enabled {
+				<form
+					hx-post="/admin/profile/mfa/disable"
+					hx-target="#mfa-card"
+					hx-swap="outerHTML"
+					class="inline"
+				>
+					<input type="hidden" name="csrf_token" value={ csrf } />
+					@components.ButtonWith("MFA を無効化", components.ButtonOptions{
+						Type:    "submit",
+						Variant: "danger",
+					})
+				</form>
+			}
+		</div>
+	</section>
+}
+
+templ apiKeysCard(state *profilemodel.SecurityState, csrf string) {
+	@components.Card("API キー", apiKeysBody(state, csrf))
+}
+
+templ apiKeysBody(state *profilemodel.SecurityState, csrf string) {
+	<div class="space-y-4">
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<p class="text-sm text-slate-600">バックエンド連携や自動化のためのキー。シークレットは発行直後のみ表示されます。</p>
+			@components.ButtonWith("新しいキーを発行", components.ButtonOptions{
+				Variant: "primary",
+				Attrs: templ.Attributes{
+					"hx-get":   "/admin/profile/api-keys/new",
+					"hx-target": "#modal-root",
+					"hx-swap": "innerHTML",
+				},
+			})
+		</div>
+
+		if state == nil || len(state.APIKeys) == 0 {
+			<p class="rounded-lg border border-dashed border-slate-300 px-4 py-4 text-sm text-slate-500">API キーはまだ発行されていません。</p>
+		} else {
+			<div class="overflow-hidden rounded-xl border border-slate-200">
+				<table class="min-w-full divide-y divide-slate-200 text-sm">
+					<thead class="bg-slate-50 text-xs uppercase text-slate-500">
+						<tr>
+							<th class="px-4 py-3 text-left font-medium">ラベル</th>
+							<th class="px-4 py-3 text-left font-medium">状態</th>
+							<th class="px-4 py-3 text-left font-medium">最終利用</th>
+							<th class="px-4 py-3 text-left font-medium">操作</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-slate-200 bg-white">
+						for _, key := range state.APIKeys {
+							<tr>
+								<td class="px-4 py-3">
+									<div class="font-semibold text-slate-900">{ key.Label }</div>
+									<div class="text-xs text-slate-500">作成: { formatTimestamp(key.CreatedAt) }</div>
+									if key.ExpiresAt != nil {
+										<div class="text-xs text-amber-600">期限: { formatTimestamp(*key.ExpiresAt) }</div>
+									}
+								</td>
+								<td class="px-4 py-3">
+									if key.Status == profilemodel.APIKeyStatusActive {
+										@components.Badge("有効", "success")
+									} else if key.Status == profilemodel.APIKeyStatusExpired {
+										@components.Badge("期限切れ", "warning")
+									} else {
+										@components.Badge("失効", "muted")
+									}
+								</td>
+								<td class="px-4 py-3 text-slate-600">{ formatOptionalTime(key.LastUsed) }</td>
+								<td class="px-4 py-3">
+									if key.Status == profilemodel.APIKeyStatusActive {
+										<form
+											hx-post={ "/admin/profile/api-keys/" + key.ID + "/revoke" }
+											hx-target="#api-keys-card"
+											hx-swap="outerHTML"
+											class="inline-flex"
+										>
+											<input type="hidden" name="csrf_token" value={ csrf } />
+											@components.ButtonWith("失効", components.ButtonOptions{
+												Type:    "submit",
+												Variant: "danger",
+												Size:    "sm",
+											})
+										</form>
+									} else {
+										<span class="text-xs text-slate-400">操作なし</span>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}
+
+templ sessionsCard(state *profilemodel.SecurityState, csrf string) {
+	@components.Card("アクティブセッション", sessionsBody(state, csrf))
+}
+
+templ sessionsBody(state *profilemodel.SecurityState, csrf string) {
+	<div class="space-y-4">
+		<p class="text-sm text-slate-600">現在ログイン中のブラウザとデバイス。見覚えのないセッションは直ちに失効してください。</p>
+		if state == nil || len(state.Sessions) == 0 {
+			<p class="rounded-lg border border-dashed border-slate-300 px-4 py-4 text-sm text-slate-500">アクティブなセッションはありません。</p>
+		} else {
+			<div class="overflow-hidden rounded-xl border border-slate-200">
+				<table class="min-w-full divide-y divide-slate-200 text-sm">
+					<thead class="bg-slate-50 text-xs uppercase text-slate-500">
+						<tr>
+							<th class="px-4 py-3 text-left font-medium">デバイス</th>
+							<th class="px-4 py-3 text-left font-medium">IP / 場所</th>
+							<th class="px-4 py-3 text-left font-medium">更新</th>
+							<th class="px-4 py-3 text-left font-medium">操作</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-slate-200 bg-white">
+						for _, session := range state.Sessions {
+							<tr>
+								<td class="px-4 py-3">
+									<div class="font-semibold text-slate-900">{ session.UserAgent }</div>
+									<div class="text-xs text-slate-500">開始: { formatTimestamp(session.CreatedAt) }</div>
+									if session.Current {
+										@components.Badge("現在", "info")
+									}
+								</td>
+								<td class="px-4 py-3 text-slate-600">
+									<p>{ session.IPAddress }</p>
+									if session.Location != "" {
+										<p class="text-xs text-slate-500">{ session.Location }</p>
+									}
+								</td>
+								<td class="px-4 py-3 text-slate-600">{ formatTimestamp(session.LastSeenAt) }</td>
+								<td class="px-4 py-3">
+									if !session.Current {
+										<form
+											hx-post={ "/admin/profile/sessions/" + session.ID + "/revoke" }
+											hx-target="#sessions-card"
+											hx-swap="outerHTML"
+											class="inline-flex"
+										>
+											<input type="hidden" name="csrf_token" value={ csrf } />
+											@components.ButtonWith("失効", components.ButtonOptions{
+												Type:    "submit",
+												Variant: "danger",
+												Size:    "sm",
+											})
+										</form>
+									} else {
+										<span class="text-xs text-slate-400">現在のセッション</span>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}
+
+templ TOTPModal(data TOTPModalData) {
+	@layouts.Modal("Authenticator を設定", totpModalBody(data))
+}
+
+templ totpModalBody(data TOTPModalData) {
+	if data.Enrollment == nil {
+		<p class="text-sm text-slate-600">MFA 登録情報を取得できませんでした。しばらくしてから再試行してください。</p>
+		return
+	}
+	<div class="space-y-4 text-sm text-slate-700">
+		<p>Authenticator アプリ (Google Authenticator、1Password など) で QR コードを読み取り、表示された 6 桁コードを入力してください。</p>
+		if data.Enrollment.QRCodePNG != "" {
+			<img src={ data.Enrollment.QRCodePNG } alt="QRコード" class="mx-auto h-44 w-44 rounded-lg border border-slate-200" />
+		}
+		<div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm">
+			{ data.Enrollment.Secret }
+		</div>
+		<form
+			hx-post="/admin/profile/mfa/totp"
+			hx-target="#modal-root"
+			hx-swap="innerHTML"
+			class="space-y-3"
+		>
+			<input type="hidden" name="csrf_token" value={ data.CSRFToken } />
+			@components.TextInput(components.TextInputProps{
+				ID:        "code",
+				Name:      "code",
+				Label:     "6 桁コード",
+				Placeholder: "123456",
+				Required:  true,
+				AutoFocus: true,
+			})
+			if data.Error != "" {
+				<p class="text-sm text-rose-600">{ data.Error }</p>
+			}
+			@components.ButtonWith("有効化する", components.ButtonOptions{Type: "submit", FullWidth: true})
+		</form>
+		<p class="text-xs text-slate-500">復旧コードを安全な場所に保管し、デバイス喪失時に備えてください。</p>
+	</div>
+}
+
+templ APIKeyFormModal(data APIKeyFormData) {
+	@layouts.Modal("API キーを発行", apiKeyFormBody(data))
+}
+
+templ apiKeyFormBody(data APIKeyFormData) {
+	<form
+		hx-post="/admin/profile/api-keys"
+		hx-target="#modal-root"
+		hx-swap="innerHTML"
+		class="space-y-4"
+	>
+		<input type="hidden" name="csrf_token" value={ data.CSRFToken } />
+		@components.TextInput(components.TextInputProps{
+			ID:        "label",
+			Name:      "label",
+			Label:     "ラベル",
+			Placeholder: "例: Zapier Integration",
+			Required:  true,
+			Value:     data.Label,
+		})
+		if data.Error != "" {
+			<p class="text-sm text-rose-600">{ data.Error }</p>
+		}
+		@components.ButtonWith("キーを発行", components.ButtonOptions{
+			Type:     "submit",
+			FullWidth: true,
+		})
+	</form>
+	<p class="mt-3 text-xs text-slate-500">※ キーは暗号化して保存されるため、シークレットはこの画面でのみ表示されます。</p>
+}
+
+templ APIKeySecretModal(secret *profilemodel.APIKeySecret, message string) {
+	if secret == nil {
+		return
+	}
+	@layouts.Modal("API キー発行", apiKeySecretBody(secret, message))
+}
+
+templ apiKeySecretBody(secret *profilemodel.APIKeySecret, message string) {
+	<div class="space-y-4 text-sm text-slate-700">
+		if message != "" {
+			<p class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sky-900">{ message }</p>
+		}
+		<div>
+			<h3 class="text-sm font-semibold text-slate-800">シークレット</h3>
+			<p class="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm">{ secret.Secret }</p>
+		</div>
+		<p class="text-xs text-slate-500">シークレットはコピーして安全な場所に保管してください。</p>
+		<button
+			type="button"
+			class="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-100"
+			data-modal-close
+		>閉じる</button>
+	</div>
+}
+
+templ MFAUpdate(data MFAUpdateData) {
+	if data.Security != nil {
+		<div id="mfa-card" hx-swap-oob="true">
+			@mfaCard(data.Security, data.CSRFToken)
+		</div>
+	}
+	<div id="modal-root" hx-swap-oob="true"></div>
+	if data.Message != "" {
+		<div id="profile-flash" hx-swap-oob="true">
+			@flashMessage(data.Message)
+		</div>
+	}
+}
+
+templ APIKeyUpdate(data APIKeyUpdateData) {
+	if data.Security != nil {
+		<div id="api-keys-card" hx-swap-oob="true">
+			@apiKeysCard(data.Security, data.CSRFToken)
+		</div>
+	}
+	if data.Secret != nil {
+		<div id="modal-root" hx-swap-oob="true">
+			@APIKeySecretModal(data.Secret, data.Message)
+		</div>
+	} else {
+		<div id="modal-root" hx-swap-oob="true"></div>
+	}
+	if data.Message != "" {
+		<div id="profile-flash" hx-swap-oob="true">
+			@flashMessage(data.Message)
+		</div>
+	}
+}
+
+templ SessionUpdate(data SessionUpdateData) {
+	if data.Security != nil {
+		<div id="sessions-card" hx-swap-oob="true">
+			@sessionsCard(data.Security, data.CSRFToken)
+		</div>
+	}
+	<div id="profile-flash" hx-swap-oob="true">
+		@flashMessage(data.Message)
+	</div>
+}
+
+func formatOptionalTime(t *time.Time) string {
+	if t == nil {
+		return "-"
+	}
+	return formatTimestamp(*t)
+}
