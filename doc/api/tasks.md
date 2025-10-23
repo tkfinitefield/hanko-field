@@ -76,7 +76,7 @@
 - [x] [056 Implement checkout confirm endpoint recording client-side completion and triggering post-checkout workflow.](./tasks/056-implement-checkout-confirm-endpoint-recording-client-side-completion-and-trigger.md)
 
 ### 5.5 Orders / Payments / Shipments
-- [ ] [057 Implement order list/detail endpoints with pagination and user scoping.](./tasks/057-implement-order-list-detail-endpoints-with-pagination-and-user-scoping.md)
+- [x] [057 Implement order list/detail endpoints with pagination and user scoping.](./tasks/057-implement-order-list-detail-endpoints-with-pagination-and-user-scoping.md)
 - [ ] [058 Implement order cancel endpoint enforcing status rules and triggering stock release.](./tasks/058-implement-order-cancel-endpoint-enforcing-status-rules-and-triggering-stock-rele.md)
 - [ ] [059 Implement order invoice request endpoint producing task to generate PDF.](./tasks/059-implement-order-invoice-request-endpoint-producing-task-to-generate-pdf.md)
 - [ ] [060 Implement order payment history retrieval.](./tasks/060-implement-order-payment-history-retrieval.md)

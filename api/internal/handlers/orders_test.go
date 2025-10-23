@@ -1,0 +1,545 @@
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	domain "github.com/hanko-field/api/internal/domain"
+	"github.com/hanko-field/api/internal/platform/auth"
+	"github.com/hanko-field/api/internal/services"
+)
+
+type stubOrderService struct {
+	createFn     func(context.Context, services.CreateOrderFromCartCommand) (services.Order, error)
+	listFn       func(context.Context, services.OrderListFilter) (domain.CursorPage[services.Order], error)
+	getFn        func(context.Context, string, services.OrderReadOptions) (services.Order, error)
+	transitionFn func(context.Context, services.OrderStatusTransitionCommand) (services.Order, error)
+	cancelFn     func(context.Context, services.CancelOrderCommand) (services.Order, error)
+	appendFn     func(context.Context, services.AppendProductionEventCommand) (services.OrderProductionEvent, error)
+	invoiceFn    func(context.Context, services.RequestInvoiceCommand) (services.Order, error)
+	reorderFn    func(context.Context, services.CloneForReorderCommand) (services.Order, error)
+}
+
+func (s *stubOrderService) CreateFromCart(ctx context.Context, cmd services.CreateOrderFromCartCommand) (services.Order, error) {
+	if s.createFn != nil {
+		return s.createFn(ctx, cmd)
+	}
+	return services.Order{}, errors.New("not implemented")
+}
+
+func (s *stubOrderService) ListOrders(ctx context.Context, filter services.OrderListFilter) (domain.CursorPage[services.Order], error) {
+	if s.listFn != nil {
+		return s.listFn(ctx, filter)
+	}
+	return domain.CursorPage[services.Order]{}, nil
+}
+
+func (s *stubOrderService) GetOrder(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+	if s.getFn != nil {
+		return s.getFn(ctx, orderID, opts)
+	}
+	return services.Order{}, errors.New("not implemented")
+}
+
+func (s *stubOrderService) TransitionStatus(ctx context.Context, cmd services.OrderStatusTransitionCommand) (services.Order, error) {
+	if s.transitionFn != nil {
+		return s.transitionFn(ctx, cmd)
+	}
+	return services.Order{}, errors.New("not implemented")
+}
+
+func (s *stubOrderService) Cancel(ctx context.Context, cmd services.CancelOrderCommand) (services.Order, error) {
+	if s.cancelFn != nil {
+		return s.cancelFn(ctx, cmd)
+	}
+	return services.Order{}, errors.New("not implemented")
+}
+
+func (s *stubOrderService) AppendProductionEvent(ctx context.Context, cmd services.AppendProductionEventCommand) (services.OrderProductionEvent, error) {
+	if s.appendFn != nil {
+		return s.appendFn(ctx, cmd)
+	}
+	return services.OrderProductionEvent{}, errors.New("not implemented")
+}
+
+func (s *stubOrderService) RequestInvoice(ctx context.Context, cmd services.RequestInvoiceCommand) (services.Order, error) {
+	if s.invoiceFn != nil {
+		return s.invoiceFn(ctx, cmd)
+	}
+	return services.Order{}, errors.New("not implemented")
+}
+
+func (s *stubOrderService) CloneForReorder(ctx context.Context, cmd services.CloneForReorderCommand) (services.Order, error) {
+	if s.reorderFn != nil {
+		return s.reorderFn(ctx, cmd)
+	}
+	return services.Order{}, errors.New("not implemented")
+}
+
+func TestOrderHandlersListOrdersSuccess(t *testing.T) {
+	now := time.Date(2024, 3, 15, 9, 30, 0, 0, time.UTC)
+	fromExpected := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)
+	toExpected := time.Date(2024, 4, 1, 0, 0, 0, 0, time.UTC)
+
+	var capturedFilter services.OrderListFilter
+	service := &stubOrderService{
+		listFn: func(ctx context.Context, filter services.OrderListFilter) (domain.CursorPage[services.Order], error) {
+			capturedFilter = filter
+			return domain.CursorPage[services.Order]{
+				Items: []services.Order{
+					{
+						ID:          "ord_123",
+						OrderNumber: "HF-2024-000123",
+						UserID:      "user-1",
+						Status:      domain.OrderStatusPaid,
+						Currency:    "jpy",
+						Totals: services.OrderTotals{
+							Subtotal: 1000,
+							Tax:      100,
+							Shipping: 200,
+							Total:    1300,
+						},
+						CreatedAt: now,
+					},
+				},
+				NextPageToken: "tok-next",
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders?status=paid,status=shipped&page_size=10&page_token=tok123&created_after=2024-03-01T00:00:00Z&created_before=2024-04-01T00:00:00Z", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	if capturedFilter.UserID != "user-1" {
+		t.Fatalf("expected filter user user-1, got %s", capturedFilter.UserID)
+	}
+	if capturedFilter.Pagination.PageSize != 10 {
+		t.Fatalf("expected page size 10, got %d", capturedFilter.Pagination.PageSize)
+	}
+	if capturedFilter.Pagination.PageToken != "tok123" {
+		t.Fatalf("expected page token tok123, got %s", capturedFilter.Pagination.PageToken)
+	}
+	if capturedFilter.DateRange.From == nil || !capturedFilter.DateRange.From.Equal(fromExpected) {
+		t.Fatalf("expected date range from %s, got %#v", fromExpected.Format(time.RFC3339Nano), capturedFilter.DateRange.From)
+	}
+	if capturedFilter.DateRange.To == nil || !capturedFilter.DateRange.To.Equal(toExpected) {
+		t.Fatalf("expected date range to %s, got %#v", toExpected.Format(time.RFC3339Nano), capturedFilter.DateRange.To)
+	}
+	if len(capturedFilter.Status) != 2 {
+		t.Fatalf("expected 2 status filters, got %d", len(capturedFilter.Status))
+	}
+
+	var resp orderListResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	if len(resp.Items) != 1 {
+		t.Fatalf("expected 1 order, got %d", len(resp.Items))
+	}
+	order := resp.Items[0]
+	if order.ID != "ord_123" || order.OrderNumber != "HF-2024-000123" {
+		t.Fatalf("unexpected order summary: %#v", order)
+	}
+	if order.Currency != "JPY" {
+		t.Fatalf("expected currency uppercased, got %s", order.Currency)
+	}
+	if order.Total != 1300 {
+		t.Fatalf("expected total 1300, got %d", order.Total)
+	}
+	if resp.NextPageToken != "tok-next" {
+		t.Fatalf("expected next page token tok-next, got %s", resp.NextPageToken)
+	}
+
+	if capturedFilter.DateRange.To != nil && !capturedFilter.DateRange.To.After(*capturedFilter.DateRange.From) {
+		t.Fatalf("expected range to be valid")
+	}
+}
+
+func TestOrderHandlersListOrdersInvalidPageSize(t *testing.T) {
+	handler := NewOrderHandlers(nil, &stubOrderService{})
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders?page_size=abc", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersListOrdersInvalidDate(t *testing.T) {
+	handler := NewOrderHandlers(nil, &stubOrderService{})
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders?created_after=not-a-date", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersListOrdersUnauthenticated(t *testing.T) {
+	handler := NewOrderHandlers(nil, &stubOrderService{})
+	req := httptest.NewRequest(http.MethodGet, "/orders", nil)
+	rr := httptest.NewRecorder()
+	handler.listOrders(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersListOrdersServiceUnavailable(t *testing.T) {
+	handler := NewOrderHandlers(nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/orders", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	rr := httptest.NewRecorder()
+
+	handler.listOrders(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersGetOrderSuccess(t *testing.T) {
+	now := time.Date(2024, 5, 12, 10, 0, 0, 0, time.UTC)
+	placedAt := now.Add(-2 * time.Hour)
+	paidAt := now.Add(-90 * time.Minute)
+	shippedAt := now.Add(24 * time.Hour)
+	deliveredAt := now.Add(72 * time.Hour)
+	completedAt := now.Add(96 * time.Hour)
+	canceledAt := now.Add(120 * time.Hour)
+	capturedAt := now.Add(-30 * time.Minute)
+	lastEventAt := now.Add(-15 * time.Minute)
+	requestedAt := now.Add(-3 * time.Hour)
+	shipDate := now.Add(24 * time.Hour)
+	deliveryDate := now.Add(72 * time.Hour)
+	cancelReason := "customer request"
+	cartRef := "cart-123"
+	queueRef := "queue-a"
+	station := "station-7"
+	operator := "op-55"
+	createdBy := "system"
+	updatedBy := "admin"
+
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			if orderID != "ord_123" {
+				t.Fatalf("unexpected order id %s", orderID)
+			}
+			if !opts.IncludePayments || !opts.IncludeShipments {
+				t.Fatalf("expected handler to request payments and shipments")
+			}
+			return services.Order{
+				ID:          "ord_123",
+				OrderNumber: "HF-2024-000123",
+				UserID:      "user-1",
+				CartRef:     &cartRef,
+				Status:      domain.OrderStatusShipped,
+				Currency:    "jpy",
+				Totals: services.OrderTotals{
+					Subtotal: 1000,
+					Discount: 50,
+					Shipping: 200,
+					Tax:      100,
+					Fees:     0,
+					Total:    1250,
+				},
+				Promotion: &services.CartPromotion{
+					Code:           "SPRING",
+					DiscountAmount: 50,
+					Applied:        true,
+				},
+				Items: []services.OrderLineItem{
+					{
+						ProductRef: "prod-1",
+						SKU:        "SKU-1",
+						Name:       "Personal Seal",
+						Options: map[string]any{
+							"color": "red",
+						},
+						Quantity:  1,
+						UnitPrice: 1250,
+						Total:     1250,
+						Metadata: map[string]any{
+							"gift_wrap": true,
+						},
+					},
+				},
+				ShippingAddress: &services.Address{
+					ID:         "addr-ship",
+					Recipient:  "Hanako",
+					Line1:      "1-2-3 Marunouchi",
+					City:       "Tokyo",
+					PostalCode: "100-0001",
+					Country:    "JP",
+					CreatedAt:  now,
+					UpdatedAt:  now,
+				},
+				BillingAddress: &services.Address{
+					ID:         "addr-bill",
+					Recipient:  "Hanako",
+					Line1:      "1-2-3 Marunouchi",
+					City:       "Tokyo",
+					PostalCode: "100-0001",
+					Country:    "JP",
+					CreatedAt:  now,
+					UpdatedAt:  now,
+				},
+				Contact: &services.OrderContact{
+					Email: "hanako@example.com",
+					Phone: "+81-3-1234-5678",
+				},
+				Fulfillment: services.OrderFulfillment{
+					RequestedAt:           &requestedAt,
+					EstimatedShipDate:     &shipDate,
+					EstimatedDeliveryDate: &deliveryDate,
+				},
+				Production: services.OrderProduction{
+					QueueRef:        &queueRef,
+					AssignedStation: &station,
+					OperatorRef:     &operator,
+					LastEventType:   "engraving",
+					LastEventAt:     &lastEventAt,
+					OnHold:          false,
+				},
+				Notes: map[string]any{
+					"note": "gift message",
+				},
+				Flags: services.OrderFlags{
+					Gift: true,
+				},
+				Audit: services.OrderAudit{
+					CreatedBy: &createdBy,
+					UpdatedBy: &updatedBy,
+				},
+				Metadata: map[string]any{
+					"channel": "app",
+				},
+				CreatedAt:    now,
+				UpdatedAt:    now,
+				PlacedAt:     &placedAt,
+				PaidAt:       &paidAt,
+				ShippedAt:    &shippedAt,
+				DeliveredAt:  &deliveredAt,
+				CompletedAt:  &completedAt,
+				CanceledAt:   &canceledAt,
+				CancelReason: &cancelReason,
+				Payments: []services.Payment{
+					{
+						ID:         "pay_1",
+						OrderID:    "ord_123",
+						Provider:   "stripe",
+						Status:     "succeeded",
+						Amount:     1250,
+						Currency:   "jpy",
+						Captured:   true,
+						CapturedAt: &capturedAt,
+						CreatedAt:  now,
+						UpdatedAt:  now,
+					},
+				},
+				Shipments: []services.Shipment{
+					{
+						ID:           "shp_1",
+						OrderID:      "ord_123",
+						Carrier:      "yamato",
+						TrackingCode: "TRK123",
+						Status:       "in_transit",
+						Events: []services.ShipmentEvent{
+							{
+								Status:     "picked_up",
+								OccurredAt: now,
+								Details: map[string]any{
+									"location": "Tokyo DC",
+								},
+							},
+						},
+						CreatedAt: now,
+						UpdatedAt: now,
+					},
+				},
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_123", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var resp orderResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	payload := resp.Order
+	if payload.ID != "ord_123" {
+		t.Fatalf("expected order id ord_123, got %s", payload.ID)
+	}
+	if payload.UserID != "user-1" {
+		t.Fatalf("expected user id user-1, got %s", payload.UserID)
+	}
+	if payload.Currency != "JPY" {
+		t.Fatalf("expected currency uppercase, got %s", payload.Currency)
+	}
+	if payload.Totals.Total != 1250 || payload.Totals.Discount != 50 {
+		t.Fatalf("unexpected totals %#v", payload.Totals)
+	}
+	if payload.Promotion == nil || payload.Promotion.Code != "SPRING" {
+		t.Fatalf("expected promotion payload, got %#v", payload.Promotion)
+	}
+	if len(payload.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(payload.Items))
+	}
+	if payload.Items[0].Metadata["gift_wrap"] != true {
+		t.Fatalf("expected item metadata preserved")
+	}
+	if payload.ShippingAddress == nil || payload.ShippingAddress.ID != "addr-ship" {
+		t.Fatalf("expected shipping address, got %#v", payload.ShippingAddress)
+	}
+	if payload.Contact == nil || payload.Contact.Email != "hanako@example.com" {
+		t.Fatalf("expected contact info, got %#v", payload.Contact)
+	}
+	if payload.Fulfillment == nil || payload.Fulfillment.EstimatedShipDate == "" {
+		t.Fatalf("expected fulfillment payload, got %#v", payload.Fulfillment)
+	}
+	if payload.Production == nil || payload.Production.QueueRef == nil || *payload.Production.QueueRef != "queue-a" {
+		t.Fatalf("expected production payload, got %#v", payload.Production)
+	}
+	if payload.Flags.Gift != true {
+		t.Fatalf("expected gift flag true")
+	}
+	if payload.Audit == nil || payload.Audit.CreatedBy == nil || *payload.Audit.CreatedBy != "system" {
+		t.Fatalf("expected audit payload, got %#v", payload.Audit)
+	}
+	if len(payload.Payments) != 1 || payload.Payments[0].ID != "pay_1" {
+		t.Fatalf("expected payment payload, got %#v", payload.Payments)
+	}
+	if len(payload.Shipments) != 1 || payload.Shipments[0].ID != "shp_1" {
+		t.Fatalf("expected shipment payload, got %#v", payload.Shipments)
+	}
+	if len(payload.Shipments[0].Events) != 1 || payload.Shipments[0].Events[0].Status != "picked_up" {
+		t.Fatalf("expected shipment events, got %#v", payload.Shipments[0].Events)
+	}
+	if payload.CancelReason == nil || *payload.CancelReason != cancelReason {
+		t.Fatalf("expected cancel reason %s, got %#v", cancelReason, payload.CancelReason)
+	}
+	if payload.CartRef != cartRef {
+		t.Fatalf("expected cart ref %s, got %s", cartRef, payload.CartRef)
+	}
+	if payload.PlacedAt == "" || payload.PaidAt == "" || payload.ShippedAt == "" ||
+		payload.DeliveredAt == "" || payload.CompletedAt == "" || payload.CanceledAt == "" {
+		t.Fatalf("expected lifecycle timestamps to be populated")
+	}
+}
+
+func TestOrderHandlersGetOrderEnforcesOwnership(t *testing.T) {
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     "ord_456",
+				UserID: "other-user",
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_456", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersGetOrderNotFound(t *testing.T) {
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{}, services.ErrOrderNotFound
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_missing", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	rr := httptest.NewRecorder()
+
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersGetOrderInvalidRequest(t *testing.T) {
+	handler := NewOrderHandlers(nil, &stubOrderService{})
+	req := httptest.NewRequest(http.MethodGet, "/orders/", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	handler.getOrder(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersGetOrderServiceUnavailable(t *testing.T) {
+	handler := NewOrderHandlers(nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_1", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	handler.getOrder(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d", rr.Code)
+	}
+}
