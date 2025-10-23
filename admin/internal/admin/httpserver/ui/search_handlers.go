@@ -3,6 +3,7 @@ package ui
 import (
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -58,15 +59,18 @@ func (h *Handlers) SearchTable(w http.ResponseWriter, r *http.Request) {
 
 	table := searchtpl.TablePayload(params.state, result, errMsg)
 	component := searchtpl.Table(table)
-	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
+
+	if canonical := canonicalSearchURL(custommw.BasePathFromContext(ctx), params); canonical != "" {
+		w.Header().Set("HX-Push-Url", canonical)
 	}
+
 	templ.Handler(component).ServeHTTP(w, r)
 }
 
 type searchRequest struct {
-	query adminsearch.Query
-	state searchtpl.QueryState
+	query         adminsearch.Query
+	state         searchtpl.QueryState
+	limitExplicit bool
 }
 
 func buildSearchRequest(r *http.Request) searchRequest {
@@ -96,10 +100,15 @@ func buildSearchRequest(r *http.Request) searchRequest {
 		}
 	}
 
-	limit := 20
+	const defaultLimit = 20
+	limit := defaultLimit
+	limitExplicit := false
 	if rawLimit != "" {
 		if parsed, err := strconv.Atoi(rawLimit); err == nil && parsed > 0 {
 			limit = parsed
+			if parsed != defaultLimit {
+				limitExplicit = true
+			}
 		}
 	}
 
@@ -121,8 +130,9 @@ func buildSearchRequest(r *http.Request) searchRequest {
 	}
 
 	return searchRequest{
-		query: query,
-		state: state,
+		query:         query,
+		state:         state,
+		limitExplicit: limitExplicit || rawLimit != "",
 	}
 }
 
@@ -184,4 +194,44 @@ func normalizeDateInput(value string) string {
 		return t.Format("2006-01-02")
 	}
 	return ""
+}
+
+func canonicalSearchURL(basePath string, req searchRequest) string {
+	base := strings.TrimSpace(basePath)
+	if base == "" || base == "/" {
+		base = ""
+	} else {
+		if !strings.HasPrefix(base, "/") {
+			base = "/" + base
+		}
+		base = strings.TrimRight(base, "/")
+	}
+
+	path := base + "/search"
+	values := url.Values{}
+
+	if term := strings.TrimSpace(req.state.Term); term != "" {
+		values.Set("q", term)
+	}
+	if scope := strings.TrimSpace(req.state.Scope); scope != "" && scope != "all" {
+		values.Set("scope", scope)
+	}
+	if start := strings.TrimSpace(req.state.StartDate); start != "" {
+		values.Set("start", start)
+	}
+	if end := strings.TrimSpace(req.state.EndDate); end != "" {
+		values.Set("end", end)
+	}
+	if persona := strings.TrimSpace(req.state.Persona); persona != "" {
+		values.Set("persona", persona)
+	}
+	if req.limitExplicit && req.query.Limit > 0 {
+		values.Set("limit", strconv.Itoa(req.query.Limit))
+	}
+
+	if encoded := values.Encode(); encoded != "" {
+		return path + "?" + encoded
+	}
+
+	return path
 }
