@@ -41,6 +41,7 @@ func (h *CheckoutHandlers) Routes(r chi.Router) {
 		group = group.With(h.authn.RequireFirebaseAuth())
 	}
 	group.Post("/checkout/session", h.createSession)
+	group.Post("/checkout/confirm", h.confirmCheckout)
 }
 
 type checkoutSessionRequest struct {
@@ -56,6 +57,17 @@ type checkoutSessionResponse struct {
 	URL          string `json:"url"`
 	ClientSecret string `json:"clientSecret,omitempty"`
 	ExpiresAt    string `json:"expiresAt,omitempty"`
+}
+
+type checkoutConfirmRequest struct {
+	SessionID       string `json:"sessionId"`
+	PaymentIntentID string `json:"paymentIntentId"`
+	OrderID         string `json:"orderId"`
+}
+
+type checkoutConfirmResponse struct {
+	Status  string `json:"status"`
+	OrderID string `json:"orderId,omitempty"`
 }
 
 func (h *CheckoutHandlers) createSession(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +146,64 @@ func (h *CheckoutHandlers) createSession(w http.ResponseWriter, r *http.Request)
 	writeJSONResponse(w, http.StatusOK, payload)
 }
 
+func (h *CheckoutHandlers) confirmCheckout(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.checkout == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("checkout_unavailable", "checkout service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	body, err := readLimitedBody(r, maxCheckoutRequestBody)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, errBodyTooLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), status))
+		return
+	}
+
+	var req checkoutConfirmRequest
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &req); err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "request body must be valid JSON", http.StatusBadRequest))
+			return
+		}
+	}
+
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "sessionId is required", http.StatusBadRequest))
+		return
+	}
+
+	cmd := services.ConfirmCheckoutCommand{
+		UserID:          identity.UID,
+		SessionID:       sessionID,
+		PaymentIntentID: strings.TrimSpace(req.PaymentIntentID),
+		OrderID:         strings.TrimSpace(req.OrderID),
+	}
+
+	result, err := h.checkout.ConfirmClientCompletion(ctx, cmd)
+	if err != nil {
+		h.writeCheckoutError(ctx, w, err)
+		return
+	}
+
+	resp := checkoutConfirmResponse{
+		Status:  strings.TrimSpace(result.Status),
+		OrderID: strings.TrimSpace(result.OrderID),
+	}
+
+	writeJSONResponse(w, http.StatusOK, resp)
+}
+
 func (h *CheckoutHandlers) writeCheckoutError(ctx context.Context, w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, services.ErrCheckoutInvalidInput):
@@ -145,10 +215,10 @@ func (h *CheckoutHandlers) writeCheckoutError(ctx context.Context, w http.Respon
 	case errors.Is(err, services.ErrCheckoutConflict):
 		httpx.WriteError(ctx, w, httpx.NewError("checkout_conflict", "cart has changed; refresh and retry", http.StatusConflict))
 	case errors.Is(err, services.ErrCheckoutPaymentFailed):
-		httpx.WriteError(ctx, w, httpx.NewError("payment_session_failed", "failed to create payment session", http.StatusBadGateway))
+		httpx.WriteError(ctx, w, httpx.NewError("payment_failed", "payment could not be completed", http.StatusBadGateway))
 	case errors.Is(err, services.ErrCheckoutUnavailable):
 		httpx.WriteError(ctx, w, httpx.NewError("checkout_unavailable", "checkout service unavailable", http.StatusServiceUnavailable))
 	default:
-		httpx.WriteError(ctx, w, httpx.NewError("checkout_error", "failed to start checkout session", http.StatusInternalServerError))
+		httpx.WriteError(ctx, w, httpx.NewError("checkout_error", "failed to process checkout request", http.StatusInternalServerError))
 	}
 }

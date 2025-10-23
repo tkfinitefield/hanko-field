@@ -134,7 +134,7 @@ type CartService interface {
 // CheckoutService coordinates PSP session creation and client confirmations.
 type CheckoutService interface {
 	CreateCheckoutSession(ctx context.Context, cmd CreateCheckoutSessionCommand) (CheckoutSession, error)
-	ConfirmClientCompletion(ctx context.Context, cmd ConfirmCheckoutCommand) error
+	ConfirmClientCompletion(ctx context.Context, cmd ConfirmCheckoutCommand) (ConfirmCheckoutResult, error)
 }
 
 // FavoriteDesign enriches favorite records with resolved design metadata.
@@ -519,9 +519,15 @@ type CreateCheckoutSessionCommand struct {
 }
 
 type ConfirmCheckoutCommand struct {
-	UserID    string
-	OrderID   string
-	SessionID string
+	UserID          string
+	OrderID         string
+	SessionID       string
+	PaymentIntentID string
+}
+
+type ConfirmCheckoutResult struct {
+	Status  string
+	OrderID string
 }
 
 type OrderListFilter = repositories.OrderListFilter

@@ -110,9 +110,102 @@ func TestCheckoutHandlersCreateSessionMapsServiceErrors(t *testing.T) {
 	}
 }
 
+func TestCheckoutHandlersConfirmSuccess(t *testing.T) {
+	router := chi.NewRouter()
+	var captured services.ConfirmCheckoutCommand
+	handler := NewCheckoutHandlers(nil, &stubCheckoutService{
+		confirmFunc: func(ctx context.Context, cmd services.ConfirmCheckoutCommand) (services.ConfirmCheckoutResult, error) {
+			captured = cmd
+			if cmd.UserID != "user-1" {
+				t.Fatalf("unexpected user id %s", cmd.UserID)
+			}
+			if cmd.PaymentIntentID != "pi_123" {
+				t.Fatalf("unexpected payment intent %s", cmd.PaymentIntentID)
+			}
+			return services.ConfirmCheckoutResult{
+				Status:  "pending_capture",
+				OrderID: "ord_123",
+			}, nil
+		},
+	})
+	handler.Routes(router)
+
+	payload := `{"sessionId":"sess_123","paymentIntentId":"pi_123","orderId":"ord_123"}`
+	req := httptest.NewRequest(http.MethodPost, "/checkout/confirm", bytes.NewBufferString(payload))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	if captured.SessionID != "sess_123" {
+		t.Fatalf("expected session passed to service, got %s", captured.SessionID)
+	}
+	var resp checkoutConfirmResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp.Status != "pending_capture" {
+		t.Fatalf("expected status pending_capture, got %s", resp.Status)
+	}
+	if resp.OrderID != "ord_123" {
+		t.Fatalf("expected orderId ord_123, got %s", resp.OrderID)
+	}
+}
+
+func TestCheckoutHandlersConfirmValidatesSession(t *testing.T) {
+	router := chi.NewRouter()
+	handler := NewCheckoutHandlers(nil, &stubCheckoutService{
+		confirmFunc: func(context.Context, services.ConfirmCheckoutCommand) (services.ConfirmCheckoutResult, error) {
+			return services.ConfirmCheckoutResult{}, nil
+		},
+	})
+	handler.Routes(router)
+
+	req := httptest.NewRequest(http.MethodPost, "/checkout/confirm", bytes.NewBufferString(`{"paymentIntentId":"pi_123"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
+func TestCheckoutHandlersConfirmMapsServiceErrors(t *testing.T) {
+	router := chi.NewRouter()
+	handler := NewCheckoutHandlers(nil, &stubCheckoutService{
+		confirmFunc: func(context.Context, services.ConfirmCheckoutCommand) (services.ConfirmCheckoutResult, error) {
+			return services.ConfirmCheckoutResult{}, services.ErrCheckoutPaymentFailed
+		},
+	})
+	handler.Routes(router)
+
+	req := httptest.NewRequest(http.MethodPost, "/checkout/confirm", bytes.NewBufferString(`{"sessionId":"sess_fail"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("expected status 502, got %d", rr.Code)
+	}
+	var errResp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errResp["error"] != "payment_failed" {
+		t.Fatalf("expected error code payment_failed, got %#v", errResp["error"])
+	}
+}
+
 type stubCheckoutService struct {
 	createFunc  func(ctx context.Context, cmd services.CreateCheckoutSessionCommand) (services.CheckoutSession, error)
-	confirmFunc func(ctx context.Context, cmd services.ConfirmCheckoutCommand) error
+	confirmFunc func(ctx context.Context, cmd services.ConfirmCheckoutCommand) (services.ConfirmCheckoutResult, error)
 }
 
 func (s *stubCheckoutService) CreateCheckoutSession(ctx context.Context, cmd services.CreateCheckoutSessionCommand) (services.CheckoutSession, error) {
@@ -122,9 +215,9 @@ func (s *stubCheckoutService) CreateCheckoutSession(ctx context.Context, cmd ser
 	return services.CheckoutSession{}, errors.New("not implemented")
 }
 
-func (s *stubCheckoutService) ConfirmClientCompletion(ctx context.Context, cmd services.ConfirmCheckoutCommand) error {
+func (s *stubCheckoutService) ConfirmClientCompletion(ctx context.Context, cmd services.ConfirmCheckoutCommand) (services.ConfirmCheckoutResult, error) {
 	if s.confirmFunc != nil {
 		return s.confirmFunc(ctx, cmd)
 	}
-	return errors.New("not implemented")
+	return services.ConfirmCheckoutResult{}, errors.New("not implemented")
 }

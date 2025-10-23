@@ -20,6 +20,10 @@ const (
 	checkoutReleaseReasonPaymentFail  = "checkout_payment_failed"
 	checkoutReleaseReasonPersistError = "checkout_persist_failed"
 	defaultCheckoutReservationTTL     = 15 * time.Minute
+	checkoutStatusPending             = "pending"
+	checkoutStatusPendingCapture      = "pending_capture"
+	checkoutStatusConfirmed           = "confirmed"
+	checkoutStatusFailed              = "failed"
 )
 
 var (
@@ -40,6 +44,23 @@ var (
 // checkoutSessionManager abstracts payments.Manager for easier testing.
 type checkoutSessionManager interface {
 	CreateCheckoutSession(ctx context.Context, paymentCtx payments.PaymentContext, req payments.CheckoutSessionRequest) (payments.CheckoutSession, error)
+	LookupPayment(ctx context.Context, paymentCtx payments.PaymentContext, req payments.LookupRequest) (payments.PaymentDetails, error)
+}
+
+// CheckoutWorkflowDispatcher enqueues post-checkout workflows for order finalisation.
+type CheckoutWorkflowDispatcher interface {
+	DispatchCheckoutWorkflow(ctx context.Context, payload CheckoutWorkflowPayload) (string, error)
+}
+
+// CheckoutWorkflowPayload captures the contextual data required by post-checkout workers.
+type CheckoutWorkflowPayload struct {
+	UserID          string
+	CartID          string
+	SessionID       string
+	PaymentIntentID string
+	ReservationID   string
+	OrderID         string
+	Status          string
 }
 
 // CheckoutServiceDeps wires the dependencies required by the checkout service.
@@ -47,6 +68,7 @@ type CheckoutServiceDeps struct {
 	Carts          repositories.CartRepository
 	Inventory      InventoryService
 	Payments       checkoutSessionManager
+	Workflow       CheckoutWorkflowDispatcher
 	Clock          func() time.Time
 	Logger         func(ctx context.Context, event string, fields map[string]any)
 	ReservationTTL time.Duration
@@ -56,6 +78,7 @@ type checkoutService struct {
 	carts          repositories.CartRepository
 	inventory      InventoryService
 	payments       checkoutSessionManager
+	workflow       CheckoutWorkflowDispatcher
 	now            func() time.Time
 	logger         func(ctx context.Context, event string, fields map[string]any)
 	reservationTTL time.Duration
@@ -90,6 +113,7 @@ func NewCheckoutService(deps CheckoutServiceDeps) (CheckoutService, error) {
 		carts:     deps.Carts,
 		inventory: deps.Inventory,
 		payments:  deps.Payments,
+		workflow:  deps.Workflow,
 		now: func() time.Time {
 			return clock().UTC()
 		},
@@ -159,9 +183,182 @@ func (s *checkoutService) CreateCheckoutSession(ctx context.Context, cmd CreateC
 	}, nil
 }
 
-// ConfirmClientCompletion is a placeholder until the confirmation flow is implemented.
-func (s *checkoutService) ConfirmClientCompletion(context.Context, ConfirmCheckoutCommand) error {
-	return ErrCheckoutUnavailable
+// ConfirmClientCompletion verifies the PSP status after client-side completion and triggers order workflows.
+func (s *checkoutService) ConfirmClientCompletion(ctx context.Context, cmd ConfirmCheckoutCommand) (ConfirmCheckoutResult, error) {
+	if s == nil || s.carts == nil || s.payments == nil {
+		return ConfirmCheckoutResult{}, ErrCheckoutUnavailable
+	}
+
+	userID := strings.TrimSpace(cmd.UserID)
+	sessionID := strings.TrimSpace(cmd.SessionID)
+	if userID == "" || sessionID == "" {
+		return ConfirmCheckoutResult{}, ErrCheckoutInvalidInput
+	}
+
+	cart, err := s.carts.GetCart(ctx, userID)
+	if err != nil {
+		return ConfirmCheckoutResult{}, s.translateCartError(err)
+	}
+	cart = normaliseCheckoutCart(cart, userID)
+	originalUpdated := cart.UpdatedAt
+
+	metadata := cloneAnyMap(cart.Metadata)
+	if metadata == nil {
+		return ConfirmCheckoutResult{}, ErrCheckoutInvalidInput
+	}
+	rawCheckout, _ := metadata["checkout"].(map[string]any)
+	checkoutMeta := cloneAnyMap(rawCheckout)
+	if len(checkoutMeta) == 0 {
+		return ConfirmCheckoutResult{}, ErrCheckoutInvalidInput
+	}
+	metadata["checkout"] = checkoutMeta
+
+	storedSessionID := checkoutString(checkoutMeta, "sessionId")
+	if storedSessionID == "" || !strings.EqualFold(storedSessionID, sessionID) {
+		return ConfirmCheckoutResult{}, ErrCheckoutInvalidInput
+	}
+
+	intentID := checkoutString(checkoutMeta, "intentId")
+	providedIntentID := strings.TrimSpace(cmd.PaymentIntentID)
+	if providedIntentID != "" {
+		if intentID == "" {
+			intentID = providedIntentID
+		} else if !strings.EqualFold(intentID, providedIntentID) {
+			return ConfirmCheckoutResult{}, ErrCheckoutInvalidInput
+		}
+	}
+	if intentID == "" {
+		return ConfirmCheckoutResult{}, ErrCheckoutInvalidInput
+	}
+
+	provider := checkoutString(checkoutMeta, "provider")
+	if provider == "" {
+		return ConfirmCheckoutResult{}, ErrCheckoutUnavailable
+	}
+
+	candidateOrderID := strings.TrimSpace(cmd.OrderID)
+	existingOrderID := checkoutString(checkoutMeta, "orderId")
+	orderUpdated := false
+	if existingOrderID == "" && candidateOrderID != "" {
+		checkoutMeta["orderId"] = candidateOrderID
+		existingOrderID = candidateOrderID
+		orderUpdated = true
+	}
+
+	status := checkoutString(checkoutMeta, "status")
+	if status == checkoutStatusPendingCapture || status == checkoutStatusConfirmed {
+		if orderUpdated {
+			now := s.now()
+			metadata["checkout"] = checkoutMeta
+			cart.Metadata = metadata
+			cart.UpdatedAt = now
+			if _, err := s.carts.UpsertCart(ctx, cart, &originalUpdated); err != nil {
+				return ConfirmCheckoutResult{}, s.translateCartError(err)
+			}
+		}
+		return ConfirmCheckoutResult{
+			Status:  status,
+			OrderID: existingOrderID,
+		}, nil
+	}
+	if status == checkoutStatusFailed {
+		return ConfirmCheckoutResult{
+			Status:  checkoutStatusFailed,
+			OrderID: existingOrderID,
+		}, ErrCheckoutPaymentFailed
+	}
+
+	paymentCtx := payments.PaymentContext{
+		PreferredProvider: provider,
+		Currency:          cart.Currency,
+	}
+
+	details, err := s.payments.LookupPayment(ctx, paymentCtx, payments.LookupRequest{
+		IntentID: intentID,
+	})
+	if err != nil {
+		s.logger(ctx, "checkout.payment_lookup_failed", map[string]any{
+			"userID":   userID,
+			"cartID":   cart.ID,
+			"intentId": intentID,
+			"error":    err.Error(),
+		})
+		return ConfirmCheckoutResult{}, ErrCheckoutUnavailable
+	}
+
+	now := s.now()
+	checkoutMeta["lastAttemptAt"] = now
+	checkoutMeta["clientConfirmedAt"] = now
+	checkoutMeta["paymentStatus"] = string(details.Status)
+
+	reservationID := checkoutString(checkoutMeta, "reservationId")
+
+	switch details.Status {
+	case payments.StatusFailed, payments.StatusRefunded:
+		checkoutMeta["status"] = checkoutStatusFailed
+		metadata["checkout"] = checkoutMeta
+		cart.Metadata = metadata
+		cart.UpdatedAt = now
+		if reservationID != "" {
+			s.releaseReservation(ctx, reservationID, checkoutReleaseReasonPaymentFail)
+		}
+		if _, err := s.carts.UpsertCart(ctx, cart, &originalUpdated); err != nil {
+			return ConfirmCheckoutResult{}, s.translateCartError(err)
+		}
+		return ConfirmCheckoutResult{
+			Status:  checkoutStatusFailed,
+			OrderID: existingOrderID,
+		}, ErrCheckoutPaymentFailed
+	case payments.StatusPending, payments.StatusSucceeded:
+		checkoutMeta["status"] = checkoutStatusPendingCapture
+	default:
+		s.logger(ctx, "checkout.payment_status_unhandled", map[string]any{
+			"userID": userID,
+			"cartID": cart.ID,
+			"status": details.Status,
+		})
+		return ConfirmCheckoutResult{}, ErrCheckoutUnavailable
+	}
+
+	workflowID := checkoutString(checkoutMeta, "workflowId")
+	if workflowID == "" && s.workflow != nil {
+		payload := CheckoutWorkflowPayload{
+			UserID:          userID,
+			CartID:          cart.ID,
+			SessionID:       storedSessionID,
+			PaymentIntentID: intentID,
+			ReservationID:   reservationID,
+			OrderID:         existingOrderID,
+			Status:          checkoutStatusPendingCapture,
+		}
+		id, dispatchErr := s.workflow.DispatchCheckoutWorkflow(ctx, payload)
+		if dispatchErr != nil {
+			s.logger(ctx, "checkout.workflow_dispatch_failed", map[string]any{
+				"userID": userID,
+				"cartID": cart.ID,
+				"error":  dispatchErr.Error(),
+			})
+			return ConfirmCheckoutResult{}, ErrCheckoutUnavailable
+		}
+		if id = strings.TrimSpace(id); id != "" {
+			checkoutMeta["workflowId"] = id
+			workflowID = id
+		}
+		checkoutMeta["workflowDispatchedAt"] = now
+	}
+
+	metadata["checkout"] = checkoutMeta
+	cart.Metadata = metadata
+	cart.UpdatedAt = now
+
+	if _, err := s.carts.UpsertCart(ctx, cart, &originalUpdated); err != nil {
+		return ConfirmCheckoutResult{}, s.translateCartError(err)
+	}
+
+	return ConfirmCheckoutResult{
+		Status:  checkoutStatusPendingCapture,
+		OrderID: existingOrderID,
+	}, nil
 }
 
 func (s *checkoutService) reserveStockIfNeeded(ctx context.Context, cart domain.Cart, userID string, idempotencyKey string) (InventoryReservation, bool, error) {
@@ -245,6 +442,7 @@ func (s *checkoutService) persistCheckoutMetadata(ctx context.Context, cart doma
 	if metadata == nil {
 		metadata = make(map[string]any)
 	}
+	now := s.now()
 	checkoutMeta := map[string]any{
 		"sessionId":      session.ID,
 		"provider":       session.Provider,
@@ -253,7 +451,9 @@ func (s *checkoutService) persistCheckoutMetadata(ctx context.Context, cart doma
 		"intentId":       session.IntentID,
 		"expiresAt":      session.ExpiresAt.UTC(),
 		"idempotencyKey": idempotencyKey,
-		"updatedAt":      s.now(),
+		"updatedAt":      now,
+		"status":         checkoutStatusPending,
+		"lastAttemptAt":  now,
 	}
 	if reservation.ID != "" {
 		checkoutMeta["reservationId"] = reservation.ID
@@ -268,7 +468,7 @@ func (s *checkoutService) persistCheckoutMetadata(ctx context.Context, cart doma
 	}
 	metadata["checkout"] = checkoutMeta
 	cart.Metadata = metadata
-	cart.UpdatedAt = s.now()
+	cart.UpdatedAt = now
 
 	if _, err := s.carts.UpsertCart(ctx, cart, &originalUpdated); err != nil {
 		return s.translateCartError(err)
@@ -474,6 +674,31 @@ func (s *checkoutService) buildPaymentMetadata(cmdMeta map[string]string, cart d
 		meta[k] = v
 	}
 	return meta
+}
+
+func checkoutString(meta map[string]any, key string) string {
+	if len(meta) == 0 {
+		return ""
+	}
+	value, ok := meta[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case *string:
+		if v == nil {
+			return ""
+		}
+		return strings.TrimSpace(*v)
+	case fmt.Stringer:
+		return strings.TrimSpace(v.String())
+	case []byte:
+		return strings.TrimSpace(string(v))
+	default:
+		return ""
+	}
 }
 
 func metadataValue(meta map[string]string, key string) string {

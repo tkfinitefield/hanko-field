@@ -413,6 +413,334 @@ func TestCheckoutServiceCreatesSessionReleasesReservationOnPaymentFailure(t *tes
 	}
 }
 
+func TestCheckoutServiceConfirmSuccess(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2025, 3, 1, 9, 0, 0, 0, time.UTC)
+
+	original := domain.Cart{
+		ID:        "cart-user-1",
+		UserID:    "user-1",
+		Currency:  "JPY",
+		CreatedAt: now.Add(-2 * time.Hour),
+		UpdatedAt: now.Add(-10 * time.Minute),
+		Metadata: map[string]any{
+			"checkout": map[string]any{
+				"sessionId":     "sess_123",
+				"provider":      "stripe",
+				"intentId":      "pi_123",
+				"status":        checkoutStatusPending,
+				"reservationId": "sr_123",
+			},
+		},
+	}
+
+	var saved domain.Cart
+	cartRepo := &stubCartRepository{
+		getFunc: func(context.Context, string) (domain.Cart, error) {
+			return original, nil
+		},
+		upsertFunc: func(ctx context.Context, cart domain.Cart, expected *time.Time) (domain.Cart, error) {
+			if expected == nil || !expected.Equal(original.UpdatedAt) {
+				t.Fatalf("expected optimistic concurrency check %v, got %v", original.UpdatedAt, expected)
+			}
+			saved = cart
+			return cart, nil
+		},
+	}
+
+	lookupCalls := 0
+	paymentMgr := &stubCheckoutPayments{
+		lookupFunc: func(ctx context.Context, paymentCtx payments.PaymentContext, req payments.LookupRequest) (payments.PaymentDetails, error) {
+			lookupCalls++
+			if !strings.EqualFold(paymentCtx.PreferredProvider, "stripe") {
+				t.Fatalf("unexpected provider %s", paymentCtx.PreferredProvider)
+			}
+			if req.IntentID != "pi_123" {
+				t.Fatalf("expected intent id pi_123, got %s", req.IntentID)
+			}
+			return payments.PaymentDetails{
+				Status:   payments.StatusSucceeded,
+				Amount:   3300,
+				Currency: "JPY",
+			}, nil
+		},
+	}
+
+	dispatchCalls := 0
+	var dispatched CheckoutWorkflowPayload
+	workflow := &stubCheckoutWorkflow{
+		dispatchFunc: func(ctx context.Context, payload CheckoutWorkflowPayload) (string, error) {
+			dispatchCalls++
+			dispatched = payload
+			return "wf_123", nil
+		},
+	}
+
+	service, err := NewCheckoutService(CheckoutServiceDeps{
+		Carts:     cartRepo,
+		Inventory: &stubCheckoutInventory{},
+		Payments:  paymentMgr,
+		Workflow:  workflow,
+		Clock:     func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("unexpected error creating service: %v", err)
+	}
+
+	result, err := service.ConfirmClientCompletion(ctx, ConfirmCheckoutCommand{
+		UserID:          "user-1",
+		SessionID:       "sess_123",
+		PaymentIntentID: "pi_123",
+		OrderID:         "ord_123",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error confirming checkout: %v", err)
+	}
+	if result.Status != checkoutStatusPendingCapture {
+		t.Fatalf("expected status pending_capture, got %s", result.Status)
+	}
+	if result.OrderID != "ord_123" {
+		t.Fatalf("expected order id ord_123, got %s", result.OrderID)
+	}
+	if lookupCalls != 1 {
+		t.Fatalf("expected lookup called once, got %d", lookupCalls)
+	}
+	if dispatchCalls != 1 {
+		t.Fatalf("expected workflow dispatched once, got %d", dispatchCalls)
+	}
+	if dispatched.SessionID != "sess_123" || dispatched.PaymentIntentID != "pi_123" {
+		t.Fatalf("unexpected dispatched payload %#v", dispatched)
+	}
+	if dispatched.ReservationID != "sr_123" {
+		t.Fatalf("expected reservation passed to workflow, got %s", dispatched.ReservationID)
+	}
+	if dispatched.OrderID != "ord_123" {
+		t.Fatalf("expected workflow order id ord_123, got %s", dispatched.OrderID)
+	}
+	if saved.ID == "" {
+		t.Fatalf("expected cart saved")
+	}
+	checkoutMeta, ok := saved.Metadata["checkout"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected checkout metadata in saved cart")
+	}
+	if status := checkoutMeta["status"]; status != checkoutStatusPendingCapture {
+		t.Fatalf("expected saved status pending_capture, got %#v", status)
+	}
+	if orderID := checkoutMeta["orderId"]; orderID != "ord_123" {
+		t.Fatalf("expected orderId stored ord_123, got %#v", orderID)
+	}
+	if wf := checkoutMeta["workflowId"]; wf != "wf_123" {
+		t.Fatalf("expected workflow id stored wf_123, got %#v", wf)
+	}
+	if ps := checkoutMeta["paymentStatus"]; ps != string(payments.StatusSucceeded) {
+		t.Fatalf("expected payment status succeeded, got %#v", ps)
+	}
+	if _, ok := checkoutMeta["clientConfirmedAt"].(time.Time); !ok {
+		t.Fatalf("expected clientConfirmedAt recorded, got %#v", checkoutMeta["clientConfirmedAt"])
+	}
+	if _, ok := checkoutMeta["workflowDispatchedAt"].(time.Time); !ok {
+		t.Fatalf("expected workflowDispatchedAt recorded")
+	}
+	if !saved.UpdatedAt.Equal(now) {
+		t.Fatalf("expected saved updated at now, got %v", saved.UpdatedAt)
+	}
+}
+
+func TestCheckoutServiceConfirmDoubleSubmission(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2025, 3, 1, 10, 0, 0, 0, time.UTC)
+
+	cart := domain.Cart{
+		ID:        "cart-user-1",
+		UserID:    "user-1",
+		Currency:  "JPY",
+		UpdatedAt: now.Add(-5 * time.Minute),
+		Metadata: map[string]any{
+			"checkout": map[string]any{
+				"sessionId":  "sess_123",
+				"provider":   "stripe",
+				"intentId":   "pi_123",
+				"status":     checkoutStatusPendingCapture,
+				"workflowId": "wf_123",
+			},
+		},
+	}
+
+	cartRepo := &stubCartRepository{
+		getFunc: func(context.Context, string) (domain.Cart, error) {
+			return cart, nil
+		},
+		upsertFunc: func(context.Context, domain.Cart, *time.Time) (domain.Cart, error) {
+			t.Fatalf("did not expect cart to be persisted on double submission")
+			return domain.Cart{}, nil
+		},
+	}
+
+	paymentMgr := &stubCheckoutPayments{
+		lookupFunc: func(context.Context, payments.PaymentContext, payments.LookupRequest) (payments.PaymentDetails, error) {
+			t.Fatalf("did not expect payment lookup on idempotent confirm")
+			return payments.PaymentDetails{}, nil
+		},
+	}
+
+	service, err := NewCheckoutService(CheckoutServiceDeps{
+		Carts:     cartRepo,
+		Inventory: &stubCheckoutInventory{},
+		Payments:  paymentMgr,
+		Clock:     func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("unexpected error creating service: %v", err)
+	}
+
+	result, err := service.ConfirmClientCompletion(ctx, ConfirmCheckoutCommand{
+		UserID:    "user-1",
+		SessionID: "sess_123",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Status != checkoutStatusPendingCapture {
+		t.Fatalf("expected status pending_capture, got %s", result.Status)
+	}
+}
+
+func TestCheckoutServiceConfirmPaymentFailure(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2025, 3, 1, 11, 0, 0, 0, time.UTC)
+	cart := domain.Cart{
+		ID:        "cart-user-1",
+		UserID:    "user-1",
+		Currency:  "JPY",
+		UpdatedAt: now.Add(-4 * time.Minute),
+		Metadata: map[string]any{
+			"checkout": map[string]any{
+				"sessionId":     "sess_123",
+				"provider":      "stripe",
+				"intentId":      "pi_123",
+				"status":        checkoutStatusPending,
+				"reservationId": "sr_123",
+			},
+		},
+	}
+
+	var saved domain.Cart
+	cartRepo := &stubCartRepository{
+		getFunc: func(context.Context, string) (domain.Cart, error) {
+			return cart, nil
+		},
+		upsertFunc: func(ctx context.Context, c domain.Cart, expected *time.Time) (domain.Cart, error) {
+			saved = c
+			return c, nil
+		},
+	}
+
+	released := ""
+	inventory := &stubCheckoutInventory{
+		releaseFunc: func(ctx context.Context, cmd InventoryReleaseCommand) (InventoryReservation, error) {
+			released = cmd.ReservationID
+			if cmd.Reason != checkoutReleaseReasonPaymentFail {
+				t.Fatalf("expected release reason %s, got %s", checkoutReleaseReasonPaymentFail, cmd.Reason)
+			}
+			return InventoryReservation{}, nil
+		},
+	}
+
+	paymentMgr := &stubCheckoutPayments{
+		lookupFunc: func(context.Context, payments.PaymentContext, payments.LookupRequest) (payments.PaymentDetails, error) {
+			return payments.PaymentDetails{
+				Status: payments.StatusFailed,
+			}, nil
+		},
+	}
+
+	service, err := NewCheckoutService(CheckoutServiceDeps{
+		Carts:     cartRepo,
+		Inventory: inventory,
+		Payments:  paymentMgr,
+		Clock:     func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("unexpected error creating service: %v", err)
+	}
+
+	result, err := service.ConfirmClientCompletion(ctx, ConfirmCheckoutCommand{
+		UserID:    "user-1",
+		SessionID: "sess_123",
+	})
+	if !errors.Is(err, ErrCheckoutPaymentFailed) {
+		t.Fatalf("expected payment failed error, got %v", err)
+	}
+	if result.Status != checkoutStatusFailed {
+		t.Fatalf("expected result status failed, got %s", result.Status)
+	}
+	if released != "sr_123" {
+		t.Fatalf("expected reservation sr_123 released, got %s", released)
+	}
+	meta, _ := saved.Metadata["checkout"].(map[string]any)
+	if status := meta["status"]; status != checkoutStatusFailed {
+		t.Fatalf("expected metadata status failed, got %#v", status)
+	}
+	if ps := meta["paymentStatus"]; ps != string(payments.StatusFailed) {
+		t.Fatalf("expected payment status failed, got %#v", ps)
+	}
+}
+
+func TestCheckoutServiceConfirmSessionMismatch(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	cart := domain.Cart{
+		ID:        "cart-user-1",
+		UserID:    "user-1",
+		Currency:  "JPY",
+		UpdatedAt: now,
+		Metadata: map[string]any{
+			"checkout": map[string]any{
+				"sessionId": "sess_123",
+				"provider":  "stripe",
+				"intentId":  "pi_123",
+				"status":    checkoutStatusPending,
+			},
+		},
+	}
+
+	cartRepo := &stubCartRepository{
+		getFunc: func(context.Context, string) (domain.Cart, error) {
+			return cart, nil
+		},
+		upsertFunc: func(context.Context, domain.Cart, *time.Time) (domain.Cart, error) {
+			t.Fatalf("did not expect upsert on mismatch")
+			return domain.Cart{}, nil
+		},
+	}
+
+	paymentMgr := &stubCheckoutPayments{
+		lookupFunc: func(context.Context, payments.PaymentContext, payments.LookupRequest) (payments.PaymentDetails, error) {
+			t.Fatalf("did not expect lookup on mismatch")
+			return payments.PaymentDetails{}, nil
+		},
+	}
+
+	service, err := NewCheckoutService(CheckoutServiceDeps{
+		Carts:     cartRepo,
+		Inventory: &stubCheckoutInventory{},
+		Payments:  paymentMgr,
+		Clock:     time.Now,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error creating service: %v", err)
+	}
+
+	_, err = service.ConfirmClientCompletion(ctx, ConfirmCheckoutCommand{
+		UserID:    "user-1",
+		SessionID: "sess_other",
+	})
+	if !errors.Is(err, ErrCheckoutInvalidInput) {
+		t.Fatalf("expected invalid input error, got %v", err)
+	}
+}
+
 type stubCheckoutInventory struct {
 	reserveFunc func(ctx context.Context, cmd InventoryReserveCommand) (InventoryReservation, error)
 	releaseFunc func(ctx context.Context, cmd InventoryReleaseCommand) (InventoryReservation, error)
@@ -442,6 +770,7 @@ func (s *stubCheckoutInventory) ListLowStock(context.Context, InventoryLowStockF
 
 type stubCheckoutPayments struct {
 	createFunc func(ctx context.Context, paymentCtx payments.PaymentContext, req payments.CheckoutSessionRequest) (payments.CheckoutSession, error)
+	lookupFunc func(ctx context.Context, paymentCtx payments.PaymentContext, req payments.LookupRequest) (payments.PaymentDetails, error)
 }
 
 func (s *stubCheckoutPayments) CreateCheckoutSession(ctx context.Context, paymentCtx payments.PaymentContext, req payments.CheckoutSessionRequest) (payments.CheckoutSession, error) {
@@ -449,4 +778,22 @@ func (s *stubCheckoutPayments) CreateCheckoutSession(ctx context.Context, paymen
 		return s.createFunc(ctx, paymentCtx, req)
 	}
 	return payments.CheckoutSession{}, errors.New("not implemented")
+}
+
+func (s *stubCheckoutPayments) LookupPayment(ctx context.Context, paymentCtx payments.PaymentContext, req payments.LookupRequest) (payments.PaymentDetails, error) {
+	if s.lookupFunc != nil {
+		return s.lookupFunc(ctx, paymentCtx, req)
+	}
+	return payments.PaymentDetails{}, errors.New("not implemented")
+}
+
+type stubCheckoutWorkflow struct {
+	dispatchFunc func(ctx context.Context, payload CheckoutWorkflowPayload) (string, error)
+}
+
+func (s *stubCheckoutWorkflow) DispatchCheckoutWorkflow(ctx context.Context, payload CheckoutWorkflowPayload) (string, error) {
+	if s.dispatchFunc != nil {
+		return s.dispatchFunc(ctx, payload)
+	}
+	return "", nil
 }

@@ -73,7 +73,7 @@
 - [x] [053 Implement cart estimate endpoint calculating totals, promotions, tax, and shipping.](./tasks/053-implement-cart-estimate-endpoint-calculating-totals-promotions-tax-and-shipping.md)
 - [x] [054 Implement apply/remove promo endpoints interacting with promotion service and idempotency.](./tasks/054-implement-apply-remove-promo-endpoints-interacting-with-promotion-service-and-id.md)
 - [x] [055 Implement checkout session creation endpoint integrating PSP session API and reserving stock when required.](./tasks/055-implement-checkout-session-creation-endpoint-integrating-psp-session-api-and-res.md)
-- [ ] [056 Implement checkout confirm endpoint recording client-side completion and triggering post-checkout workflow.](./tasks/056-implement-checkout-confirm-endpoint-recording-client-side-completion-and-trigger.md)
+- [x] [056 Implement checkout confirm endpoint recording client-side completion and triggering post-checkout workflow.](./tasks/056-implement-checkout-confirm-endpoint-recording-client-side-completion-and-trigger.md)
 
 ### 5.5 Orders / Payments / Shipments
 - [ ] [057 Implement order list/detail endpoints with pagination and user scoping.](./tasks/057-implement-order-list-detail-endpoints-with-pagination-and-user-scoping.md)
