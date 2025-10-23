@@ -335,6 +335,10 @@
     @apply mt-3 flex items-center gap-2;
   }
 
+  .toast-close {
+    @apply ml-3 inline-flex h-7 w-7 flex-none items-center justify-center rounded-full text-slate-500 transition hover:bg-white/60 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1;
+  }
+
   .toast-success {
     @apply border-emerald-200 bg-emerald-50 text-emerald-900;
   }

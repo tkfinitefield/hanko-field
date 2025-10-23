@@ -102,7 +102,7 @@ templ Base(title string, crumbs []partials.Breadcrumb, body templ.Component) {
 			</div>
 		</div>
 
-		<div id="toast-stack" class="pointer-events-none fixed bottom-4 right-4 z-40 flex w-full max-w-sm flex-col gap-3"></div>
+		<div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
 		<div id="modal" class="modal hidden" hx-target="this" hx-swap="innerHTML" aria-hidden="true" data-modal-state="closed" data-modal-open="false"></div>
 
 		<script src="/public/static/app.js" defer></script>

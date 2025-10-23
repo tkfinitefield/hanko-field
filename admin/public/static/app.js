@@ -550,6 +550,309 @@ const initHXTriggerHandlers = () => {
   bus.addEventListener("refresh:targets", handler("refresh"));
 };
 
+const toastToneClass = (tone) => {
+  const key = typeof tone === "string" ? tone.toLowerCase() : "";
+  switch (key) {
+    case "success":
+      return "toast-success";
+    case "danger":
+    case "error":
+      return "toast-danger";
+    case "warning":
+      return "toast-warning";
+    case "info":
+    default:
+      return "toast-info";
+  }
+};
+
+const normaliseToastDetail = (detail) => {
+  if (detail == null) {
+    return null;
+  }
+  if (typeof detail === "string") {
+    const message = detail.trim();
+    if (message === "") {
+      return null;
+    }
+    return {
+      title: "",
+      message,
+      tone: "info",
+      duration: 6000,
+      dismissible: true,
+    };
+  }
+  if (typeof detail !== "object") {
+    return null;
+  }
+
+  const readString = (...candidates) => {
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim() !== "") {
+        return candidate.trim();
+      }
+    }
+    return "";
+  };
+
+  const tone = readString(detail.tone, detail.type, detail.level, "info");
+  const title = readString(detail.title, detail.heading);
+  const message = readString(detail.message, detail.body, detail.description);
+
+  const readNumber = (...candidates) => {
+    for (const candidate of candidates) {
+      if (typeof candidate === "number" && Number.isFinite(candidate)) {
+        return candidate;
+      }
+      if (typeof candidate === "string" && candidate.trim() !== "") {
+        const parsed = Number.parseInt(candidate.trim(), 10);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+    }
+    return null;
+  };
+
+  const durationCandidate = readNumber(detail.duration, detail.timeout, detail.delay, detail.autoHideAfter);
+  const defaultDuration = 6000;
+  let duration = defaultDuration;
+  if (durationCandidate !== null) {
+    duration = durationCandidate;
+  }
+
+  let autoHide = true;
+  if (detail.autoHide === false || detail.sticky === true) {
+    autoHide = false;
+  } else if (detail.autoHide === true) {
+    autoHide = true;
+  }
+
+  if (!autoHide) {
+    duration = 0;
+  } else if (!Number.isFinite(duration) || duration <= 0) {
+    duration = defaultDuration;
+  }
+
+  const dismissible = detail.dismissible !== false;
+  const id = readString(detail.id);
+  if (title === "" && message === "") {
+    return null;
+  }
+
+  return {
+    id,
+    tone,
+    title,
+    message,
+    duration,
+    dismissible,
+  };
+};
+
+const initToastStack = () => {
+  const root = document.getElementById("toast-stack");
+  if (!(root instanceof HTMLElement)) {
+    return {
+      root: null,
+      show: () => {},
+      clear: () => {},
+      hide: () => {},
+      remove: () => {},
+    };
+  }
+
+  const timers = new WeakMap();
+  const maxToasts = 4;
+
+  const clearTimer = (toast) => {
+    const timerId = timers.get(toast);
+    if (typeof timerId === "number") {
+      window.clearTimeout(timerId);
+    }
+    timers.delete(toast);
+  };
+
+  const finishRemoval = (toast) => {
+    clearTimer(toast);
+    if (toast instanceof HTMLElement) {
+      toast.remove();
+    }
+  };
+
+  const hideToast = (toast, { immediate = false } = {}) => {
+    if (!(toast instanceof HTMLElement)) {
+      return;
+    }
+    if (toast.dataset.toastState === "closing") {
+      return;
+    }
+    toast.dataset.toastState = "closing";
+    clearTimer(toast);
+    const remove = () => {
+      toast.removeEventListener("animationend", remove);
+      finishRemoval(toast);
+      toast.dataset.toastState = "";
+    };
+    if (immediate) {
+      remove();
+      return;
+    }
+    toast.classList.remove("animate-toast-in");
+    toast.classList.add("animate-toast-out");
+    toast.addEventListener("animationend", remove, { once: true });
+    window.setTimeout(remove, 240);
+  };
+
+  const scheduleRemoval = (toast, duration) => {
+    clearTimer(toast);
+    if (!(toast instanceof HTMLElement) || !Number.isFinite(duration) || duration <= 0) {
+      return;
+    }
+    const timerId = window.setTimeout(() => hideToast(toast), duration);
+    timers.set(toast, timerId);
+  };
+
+  const createCloseButton = (onClose) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-close";
+    button.setAttribute("aria-label", "通知を閉じる");
+    button.innerHTML =
+      '<span class="sr-only">閉じる</span><svg viewBox="0 0 20 20" fill="none" aria-hidden="true" class="h-4 w-4"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    });
+    return button;
+  };
+
+  const renderToast = (config) => {
+    const toneClass = toastToneClass(config.tone);
+    const toast = document.createElement("div");
+    toast.className = ["toast", toneClass, "animate-toast-in"].filter(Boolean).join(" ");
+    toast.setAttribute("role", "status");
+    toast.setAttribute("aria-live", "polite");
+    if (config.id) {
+      try {
+        toast.id = config.id;
+      } catch (error) {
+        // ignore invalid IDs (e.g., containing spaces)
+      }
+    }
+    if (config.duration > 0) {
+      toast.dataset.autohide = "true";
+    }
+
+    const body = document.createElement("div");
+    body.className = "flex-1 space-y-1";
+
+    if (config.title) {
+      const heading = document.createElement("p");
+      heading.className = "toast-title";
+      heading.textContent = config.title;
+      body.appendChild(heading);
+    }
+
+    if (config.message) {
+      const message = document.createElement("p");
+      message.className = config.title ? "toast-body" : "toast-body";
+      message.textContent = config.message;
+      body.appendChild(message);
+    }
+
+    toast.appendChild(body);
+
+    if (config.dismissible) {
+      toast.appendChild(
+        createCloseButton(() => {
+          hideToast(toast);
+        }),
+      );
+    }
+
+    toast.addEventListener("mouseenter", () => {
+      clearTimer(toast);
+    });
+
+    toast.addEventListener("mouseleave", () => {
+      scheduleRemoval(toast, config.duration);
+    });
+
+    toast.addEventListener("focusin", () => {
+      clearTimer(toast);
+    });
+
+    toast.addEventListener("focusout", () => {
+      scheduleRemoval(toast, config.duration);
+    });
+
+    return toast;
+  };
+
+  const show = (detail) => {
+    const config = normaliseToastDetail(detail);
+    if (!config) {
+      return null;
+    }
+
+    while (root.childElementCount >= maxToasts) {
+      const last = root.lastElementChild;
+      if (last instanceof HTMLElement) {
+        hideToast(last, { immediate: true });
+      } else if (last) {
+        root.removeChild(last);
+      } else {
+        break;
+      }
+    }
+
+    const toast = renderToast(config);
+    root.prepend(toast);
+    requestAnimationFrame(() => {
+      toast.classList.add("animate-toast-in");
+    });
+    scheduleRemoval(toast, config.duration);
+    return toast;
+  };
+
+  const clear = () => {
+    Array.from(root.children).forEach((child) => hideToast(child, { immediate: true }));
+  };
+
+  const removeById = (id) => {
+    if (typeof id !== "string" || id.trim() === "") {
+      return;
+    }
+    const safeId = window.CSS && typeof window.CSS.escape === "function" ? window.CSS.escape(id) : id.replace(/[^a-zA-Z0-9_-]/g, "");
+    const toast = root.querySelector(`#${safeId}`);
+    if (toast instanceof HTMLElement) {
+      hideToast(toast);
+    }
+  };
+
+  const eventNames = ["toast", "showToast", "toast:show"];
+  const handleEvent = (event) => {
+    if (!(event instanceof CustomEvent)) {
+      return;
+    }
+    show(event.detail);
+  };
+  eventNames.forEach((name) => {
+    document.body.addEventListener(name, handleEvent);
+  });
+
+  return {
+    root,
+    show,
+    clear,
+    hide: (toast) => hideToast(toast),
+    remove: removeById,
+  };
+};
+
 const initSearchShortcut = (getModalRoot) => {
   const trigger = document.querySelector("[data-topbar-search-trigger]");
   if (!trigger) {
@@ -768,9 +1071,11 @@ window.hankoAdmin = window.hankoAdmin || {
     initSearchShortcut(modalRoot);
     initNotificationsBadge();
     initHXTriggerHandlers();
+    const toast = initToastStack();
     initUserMenu();
 
     window.hankoAdmin.modal = modal;
+    window.hankoAdmin.toast = toast;
   },
 };
 
