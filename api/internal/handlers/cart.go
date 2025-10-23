@@ -126,9 +126,11 @@ func (h *CartHandlers) patchCart(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			expected = &parsed
+			updateReq.versionFromHeader = true
 		}
 	}
 	cmd.ExpectedUpdatedAt = expected
+	cmd.ExpectedFromHeader = updateReq.versionFromHeader
 
 	updated, err := h.carts.UpdateCart(ctx, cmd)
 	if err != nil {
@@ -343,6 +345,7 @@ type updateCartRequest struct {
 	promotionHint     *string
 	promotionSet      bool
 	updatedAt         *time.Time
+	versionFromHeader bool
 }
 
 func parseUpdateCartRequest(body []byte) (updateCartRequest, error) {

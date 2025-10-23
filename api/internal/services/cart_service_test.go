@@ -351,6 +351,54 @@ func TestCartServiceUpdateCartConflictingTimestamp(t *testing.T) {
 	}
 }
 
+func TestCartServiceUpdateCartHeaderPrecision(t *testing.T) {
+	now := time.Date(2024, 6, 3, 10, 0, 0, 900_000_000, time.UTC)
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{
+				ID:        "cart-precision",
+				UserID:    userID,
+				Currency:  "JPY",
+				UpdatedAt: now,
+			}, nil
+		},
+		upsertFunc: func(ctx context.Context, cart domain.Cart, expected *time.Time) (domain.Cart, error) {
+			if expected == nil {
+				t.Fatalf("expected optimistic lock timestamp")
+			}
+			if !expected.Equal(now.UTC()) {
+				t.Fatalf("expected expected timestamp %v got %v", now, *expected)
+			}
+			cart.UpdatedAt = now.Add(time.Second)
+			return cart, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository: repo,
+		Clock:      func() time.Time { return now.Add(time.Second) },
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	truncated := now.Truncate(time.Second)
+	cmd := UpdateCartCommand{
+		UserID:             "user-1",
+		Currency:           strPtr("usd"),
+		ExpectedUpdatedAt:  &truncated,
+		ExpectedFromHeader: true,
+	}
+
+	updated, err := service.UpdateCart(context.Background(), cmd)
+	if err != nil {
+		t.Fatalf("unexpected error updating cart: %v", err)
+	}
+	if updated.Currency != "USD" {
+		t.Fatalf("expected currency USD got %s", updated.Currency)
+	}
+}
+
 type stubCartRepository struct {
 	getFunc     func(ctx context.Context, userID string) (domain.Cart, error)
 	upsertFunc  func(ctx context.Context, cart domain.Cart, expected *time.Time) (domain.Cart, error)

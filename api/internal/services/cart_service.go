@@ -166,15 +166,20 @@ func (s *cartService) UpdateCart(ctx context.Context, cmd UpdateCartCommand) (Ca
 	cart = s.normaliseCart(cart, userID)
 	previousUpdatedAt := cart.UpdatedAt
 
-	if exists {
-		if cmd.ExpectedUpdatedAt == nil || cmd.ExpectedUpdatedAt.IsZero() {
-			return Cart{}, ErrCartConflict
-		}
-		expected := cmd.ExpectedUpdatedAt.UTC()
-		if previousUpdatedAt.IsZero() || !previousUpdatedAt.Equal(expected) {
-			return Cart{}, ErrCartConflict
-		}
-	}
+    if exists {
+        if cmd.ExpectedUpdatedAt == nil || cmd.ExpectedUpdatedAt.IsZero() {
+            return Cart{}, ErrCartConflict
+        }
+        expected := cmd.ExpectedUpdatedAt.UTC()
+        previous := previousUpdatedAt.UTC()
+        if cmd.ExpectedFromHeader {
+            expected = expected.Truncate(time.Second)
+            previous = previous.Truncate(time.Second)
+        }
+        if previous.IsZero() || !previous.Equal(expected) {
+            return Cart{}, ErrCartConflict
+        }
+    }
 
 	var (
 		addressBook     map[string]Address

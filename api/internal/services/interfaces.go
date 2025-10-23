@@ -462,13 +462,14 @@ type UpsertCartItemCommand struct {
 }
 
 type UpdateCartCommand struct {
-	UserID            string
-	Currency          *string
-	ShippingAddressID *string
-	BillingAddressID  *string
-	Notes             *string
-	PromotionHint     *string
-	ExpectedUpdatedAt *time.Time
+	UserID             string
+	Currency           *string
+	ShippingAddressID  *string
+	BillingAddressID   *string
+	Notes              *string
+	PromotionHint      *string
+	ExpectedUpdatedAt  *time.Time
+	ExpectedFromHeader bool
 }
 
 type RemoveCartItemCommand struct {
