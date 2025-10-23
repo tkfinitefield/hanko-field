@@ -1,32 +1,258 @@
 package dashboard
 
 import (
+    "strconv"
+
     "finitefield.org/hanko-admin/internal/admin/templates/components"
     "finitefield.org/hanko-admin/internal/admin/templates/helpers"
     "finitefield.org/hanko-admin/internal/admin/templates/layouts"
 )
 
-templ dashboardBody() {
-    <div class="space-y-6">
-        <header>
-            <h1 class="text-2xl font-semibold text-slate-900">{ helpers.I18N("admin.dashboard.title") }</h1>
-            <p class="mt-2 text-slate-600">{ helpers.I18N("admin.dashboard.subtitle") }</p>
-        </header>
-        <section class="grid grid-cols-1 gap-4 md:grid-cols-3">
-            @components.Card(helpers.I18N("admin.dashboard.metric.revenue"), components.Text(helpers.Currency(3420000, "JPY")))
-            @components.Card(helpers.I18N("admin.dashboard.metric.orders"), components.Text("128"))
-            @components.Card(helpers.I18N("admin.dashboard.metric.csat"), components.Text("4.8 / 5"))
-        </section>
-        <section class="space-y-3">
-            <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold text-slate-900">{ helpers.I18N("admin.dashboard.recent_orders") }</h2>
-                @components.Button(helpers.I18N("admin.dashboard.view_orders"))
+templ dashboardBody(data PageData) {
+    <div class="flex flex-col gap-6 xl:flex-row">
+        <div class="flex-1 space-y-6">
+            <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-900/5">
+                <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h1 class="text-2xl font-semibold text-slate-900">{ helpers.I18N("admin.dashboard.title") }</h1>
+                        <p class="mt-2 max-w-xl text-sm text-slate-600">{ helpers.I18N("admin.dashboard.subtitle") }</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            class={ helpers.ButtonClass("secondary", "sm", false, false) }
+                            data-dashboard-refresh="true"
+                            data-dashboard-targets="#dashboard-kpi,#dashboard-alerts"
+                        >
+                            <span aria-hidden="true">⟳</span>
+                            <span class="ml-2">{ helpers.I18N("admin.dashboard.refresh") }</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section
+                id="dashboard-kpi"
+                class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-900/5"
+                hx-get={ data.KPIEndpoint }
+                hx-target="this"
+                hx-trigger={ "load, refresh, every " + strconv.Itoa(data.PollIntervalSecond) + "s" }
+                hx-swap="innerHTML"
+                data-fragment="dashboard-kpi"
+            >
+                @KPIFragment(data.KPIFragment)
+            </section>
+
+            <section
+                id="dashboard-alerts"
+                class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-900/5"
+                hx-get={ data.AlertsEndpoint }
+                hx-target="this"
+                hx-trigger={ "load, refresh, every " + strconv.Itoa(data.PollIntervalSecond*2) + "s" }
+                hx-swap="innerHTML"
+                data-fragment="dashboard-alerts"
+            >
+                @AlertsFragment(data.AlertsFragment)
+            </section>
+        </div>
+
+        <aside class="xl:w-80 xl:shrink-0">
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-900/5">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{ helpers.I18N("admin.dashboard.activity.title") }</h2>
+                    <span class="text-xs text-slate-400">{ helpers.I18N("admin.dashboard.activity.recent") }</span>
+                </div>
+                @ActivityFeed(data.Activity)
             </div>
-            @components.Table(orderHeaders(), orderRowsComponents(sampleOrders()))
-        </section>
+        </aside>
     </div>
 }
 
-templ Index() {
-    @layouts.Base("ダッシュボード", breadcrumbItems(), dashboardBody())
+templ KPIFragment(data KPIFragmentData) {
+    if data.Error != "" {
+        <div class="mb-4">
+            @InlineNotice("danger", data.Error)
+        </div>
+        if len(data.KPIs) == 0 {
+            return
+        }
+    }
+
+    if len(data.KPIs) == 0 {
+        @InlineNotice("info", helpers.I18N("admin.dashboard.kpi.empty"))
+        return
+    }
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+        for _, card := range data.KPIs {
+            <article class="flex flex-col justify-between rounded-lg border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-4 shadow-sm">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{ card.Label }</p>
+                        <p class="mt-2 text-2xl font-semibold text-slate-900">{ card.Value }</p>
+                    </div>
+                    if !card.UpdatedAt.IsZero() {
+                        <span class="text-xs text-slate-400">{ helpers.Relative(card.UpdatedAt) }</span>
+                    }
+                </div>
+                <div class="mt-4 flex items-center justify-between">
+                    <span class={ "text-sm font-medium " + kpiTrendClass(card.Trend) }>{ card.DeltaText }</span>
+                    <span aria-hidden="true" class={ "inline-flex h-6 w-6 items-center justify-center rounded-full text-sm " + trendBadgeClass(card.Trend) }>
+                        { kpiTrendGlyph(card.Trend) }
+                    </span>
+                </div>
+                if len(card.Sparkline) > 0 {
+                    <div class="mt-4 h-16">
+                        <svg viewBox="0 0 100 100" role="presentation" aria-hidden="true" class="h-full w-full text-brand-500">
+                            <polyline
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="3"
+                                points={ sparklinePoints(card.Sparkline) }
+                            />
+                        </svg>
+                    </div>
+                }
+            </article>
+        }
+    </div>
+}
+
+templ AlertsFragment(data AlertsFragmentData) {
+    <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-slate-900">{ helpers.I18N("admin.dashboard.alerts.title") }</h2>
+        <span class="text-xs text-slate-500">{ helpers.I18N("admin.dashboard.alerts.subtitle") }</span>
+    </div>
+
+    if data.Error != "" {
+        <div class="mt-4">
+            @InlineNotice("danger", data.Error)
+        </div>
+        if len(data.Alerts) == 0 {
+            return
+        }
+    }
+
+    if len(data.Alerts) == 0 {
+        <div class="mt-4">
+            @InlineNotice("success", helpers.I18N("admin.dashboard.alerts.empty"))
+        </div>
+        return
+    }
+
+    <ul class="mt-4 space-y-4">
+        for _, alert := range data.Alerts {
+            <li class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-semibold text-slate-900">{ alert.Title }</p>
+                        <p class="mt-1 text-sm text-slate-600">{ alert.Message }</p>
+                        <div class="mt-3 flex items-center gap-2 text-xs text-slate-400">
+                            <span class={ helpers.BadgeClass(alert.Severity) }>{ helpers.I18N("admin.dashboard.alerts.badge."+alert.Severity) }</span>
+                            if !alert.CreatedAt.IsZero() {
+                                <span>{ helpers.Relative(alert.CreatedAt) }</span>
+                            }
+                        </div>
+                    </div>
+                    if alert.ActionURL != "" && alert.Action != "" {
+                        @components.ButtonWith(alert.Action, components.ButtonOptions{
+                            Variant: "primary",
+                            Size:    "sm",
+                            Href:    alert.ActionURL,
+                        })
+                    }
+                </div>
+            </li>
+        }
+    </ul>
+}
+
+templ ActivityFeed(items []ActivityItem) {
+    if len(items) == 0 {
+        <div class="mt-4">
+            @InlineNotice("info", helpers.I18N("admin.dashboard.activity.empty"))
+        </div>
+        return
+    }
+
+    <ol class="mt-4 space-y-4">
+        for _, item := range items {
+            <li class="flex gap-3">
+                <div class="mt-1 text-xl">{ item.Icon }</div>
+                <div class="flex-1">
+                    <p class="text-sm font-semibold text-slate-900">{ item.Title }</p>
+                    if item.Detail != "" {
+                        <p class="mt-1 text-sm text-slate-600">{ item.Detail }</p>
+                    }
+                    <div class="mt-1 flex items-center gap-2 text-xs text-slate-400">
+                        if !item.Occurred.IsZero() {
+                            <span>{ helpers.Relative(item.Occurred) }</span>
+                        }
+                        if item.LinkURL != "" {
+                            <a href={ item.LinkURL } class="font-medium text-brand-600 hover:text-brand-500">{ helpers.I18N("admin.dashboard.activity.view") }</a>
+                        }
+                    </div>
+                </div>
+            </li>
+        }
+    </ol>
+}
+
+templ InlineNotice(tone string, message string) {
+    <div class={ inlineNoticeClass(tone) }>
+        <span>{ message }</span>
+    </div>
+}
+
+func inlineNoticeClass(tone string) string {
+    base := "flex items-center gap-2 rounded-md border px-4 py-3 text-sm"
+    switch tone {
+    case "success":
+        return base + " border-emerald-200 bg-emerald-50 text-emerald-700"
+    case "danger":
+        return base + " border-rose-200 bg-rose-50 text-rose-700"
+    case "warning":
+        return base + " border-amber-200 bg-amber-50 text-amber-700"
+    default:
+        return base + " border-slate-200 bg-slate-50 text-slate-600"
+    }
+}
+
+func kpiTrendClass(trend string) string {
+    switch trend {
+    case "up":
+        return "text-emerald-600"
+    case "down":
+        return "text-rose-600"
+    default:
+        return "text-slate-500"
+    }
+}
+
+func trendBadgeClass(trend string) string {
+    switch trend {
+    case "up":
+        return "bg-emerald-100 text-emerald-600"
+    case "down":
+        return "bg-rose-100 text-rose-600"
+    default:
+        return "bg-slate-100 text-slate-500"
+    }
+}
+
+func kpiTrendGlyph(trend string) string {
+    switch trend {
+    case "up":
+        return "↑"
+    case "down":
+        return "↓"
+    default:
+        return "→"
+    }
+}
+
+templ Index(data PageData) {
+    @layouts.Base(data.Title, breadcrumbItems(), dashboardBody(data))
 }

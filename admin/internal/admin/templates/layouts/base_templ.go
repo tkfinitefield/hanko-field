@@ -42,7 +42,7 @@ func Base(title string, crumbs []partials.Breadcrumb, body templ.Component) temp
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layouts/base.templ`, Line: 15, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/layouts/base.templ`, Line: 15, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -55,7 +55,7 @@ func Base(title string, crumbs []partials.Breadcrumb, body templ.Component) temp
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(middleware.CSRFTokenFromContext(ctx))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layouts/base.templ`, Line: 17, Col: 73}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/layouts/base.templ`, Line: 17, Col: 73}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -84,7 +84,7 @@ func Base(title string, crumbs []partials.Breadcrumb, body templ.Component) temp
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layouts/base.templ`, Line: 85, Col: 69}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/layouts/base.templ`, Line: 85, Col: 69}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -114,7 +114,7 @@ func Base(title string, crumbs []partials.Breadcrumb, body templ.Component) temp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div></main></div></div><div id=\"toast-stack\" class=\"pointer-events-none fixed bottom-4 right-4 z-40 flex w-full max-w-sm flex-col gap-3\"></div><div id=\"modal\" class=\"modal hidden\" hx-target=\"this\" hx-swap=\"innerHTML\" aria-hidden=\"true\" data-modal-state=\"closed\" data-modal-open=\"false\"></div><script src=\"/public/static/app.js\" defer></script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div></main></div></div><div id=\"toast-stack\" class=\"toast-stack\" aria-live=\"polite\" aria-atomic=\"false\"></div><div id=\"modal\" class=\"modal hidden\" hx-target=\"this\" hx-swap=\"innerHTML\" aria-hidden=\"true\" data-modal-state=\"closed\" data-modal-open=\"false\"></div><script src=\"/public/static/app.js\" defer></script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

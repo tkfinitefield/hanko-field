@@ -125,6 +125,77 @@ const initNotificationsBadge = () => {
   }
 };
 
+const initDashboardRefresh = () => {
+  const parseTargets = (value) => {
+    if (typeof value !== "string" || value.trim() === "") {
+      return [];
+    }
+    return value
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  };
+
+  document.addEventListener("click", (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-dashboard-refresh]") : null;
+    if (!trigger) {
+      return;
+    }
+    if (!window.htmx) {
+      return;
+    }
+    event.preventDefault();
+    const selectors = parseTargets(trigger.getAttribute("data-dashboard-targets"));
+    if (selectors.length === 0) {
+      return;
+    }
+    trigger.dataset.loading = "true";
+    trigger.dataset.dashboardPending = selectors.join(",");
+    trigger.classList.add("btn-loading");
+    trigger.setAttribute("aria-busy", "true");
+    selectors.forEach((selector) => {
+      window.htmx.trigger(selector, "refresh");
+    });
+  });
+
+  if (!window.htmx) {
+    return;
+  }
+
+  document.body.addEventListener("htmx:afterSettle", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    document.querySelectorAll("[data-dashboard-refresh][data-loading]").forEach((button) => {
+      const pending = button.dataset.dashboardPending || "";
+      if (!pending) {
+        delete button.dataset.loading;
+        button.classList.remove("btn-loading");
+        button.removeAttribute("aria-busy");
+        return;
+      }
+      const selectors = parseTargets(pending);
+      const matches = selectors.some((selector) => {
+        if (selector === "") {
+          return false;
+        }
+        if (target.matches(selector)) {
+          return true;
+        }
+        return target.closest(selector) !== null;
+      });
+      if (matches) {
+        delete button.dataset.loading;
+        delete button.dataset.dashboardPending;
+        button.classList.remove("btn-loading");
+        button.removeAttribute("aria-busy");
+      }
+    });
+  });
+};
+
 const createModalController = () => {
   const getRoot = () => {
     const element = document.getElementById("modal");
@@ -1070,6 +1141,7 @@ window.hankoAdmin = window.hankoAdmin || {
 
     initSearchShortcut(modalRoot);
     initNotificationsBadge();
+    initDashboardRefresh();
     initHXTriggerHandlers();
     const toast = initToastStack();
     initUserMenu();

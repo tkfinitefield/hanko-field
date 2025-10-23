@@ -2,6 +2,7 @@ package httpserver_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	admindashboard "finitefield.org/hanko-admin/internal/admin/dashboard"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	"finitefield.org/hanko-admin/internal/admin/profile"
 	"finitefield.org/hanko-admin/internal/admin/testutil"
@@ -42,7 +44,20 @@ func TestDashboardRendersForAuthenticatedUser(t *testing.T) {
 	t.Parallel()
 
 	auth := &tokenAuthenticator{Token: "test-token"}
-	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth))
+	now := time.Now()
+	stub := &dashboardStub{
+		kpis: []admindashboard.KPI{
+			{ID: "revenue", Label: "日次売上", Value: "¥123,000", DeltaText: "+12%", Trend: admindashboard.TrendUp, Sparkline: []float64{120, 135, 140}, UpdatedAt: now},
+		},
+		alerts: []admindashboard.Alert{
+			{ID: "inventory", Severity: "warning", Title: "在庫警告", Message: "SKU在庫が閾値を下回りました", ActionURL: "/admin/catalog/products", Action: "確認", CreatedAt: now.Add(-30 * time.Minute)},
+		},
+		activity: []admindashboard.ActivityItem{
+			{ID: "order", Icon: "📦", Title: "注文 #1001 を出荷しました", Detail: "山田様", Occurred: now.Add(-10 * time.Minute)},
+		},
+	}
+
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth), testutil.WithDashboardService(stub))
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL+"/admin", nil)
 	require.NoError(t, err)
@@ -61,7 +76,114 @@ func TestDashboardRendersForAuthenticatedUser(t *testing.T) {
 
 	require.Equal(t, "ダッシュボード | Hanko Admin", doc.Find("title").First().Text())
 	require.Equal(t, "admin.dashboard.title", doc.Find("h1").First().Text())
-	require.Greater(t, doc.Find("table").Length(), 0, "dashboard should render metrics table")
+	require.Greater(t, doc.Find("#dashboard-kpi article").Length(), 0, "dashboard should render KPI cards")
+	require.Greater(t, doc.Find("#dashboard-alerts li").Length(), 0, "dashboard should render alerts list")
+	require.Equal(t, 1, doc.Find("[data-dashboard-refresh]").Length(), "refresh control should be present")
+	require.Contains(t, doc.Find("aside").Text(), "注文 #1001")
+}
+
+func TestDashboardKPIFragmentProvidesCards(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "kpi-token"}
+	now := time.Now()
+	stub := &dashboardStub{
+		kpis: []admindashboard.KPI{
+			{ID: "orders", Label: "注文数", Value: "128", DeltaText: "+8件", Trend: admindashboard.TrendUp, Sparkline: []float64{10, 12, 15}, UpdatedAt: now},
+		},
+	}
+
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth), testutil.WithDashboardService(stub))
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/fragments/kpi?limit=1", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+auth.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	doc := testutil.ParseHTML(t, body)
+	require.Equal(t, 1, doc.Find("article").Length())
+	require.Contains(t, doc.Text(), "注文数")
+}
+
+func TestDashboardKPIsHandlesServiceError(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "kpi-error"}
+	stub := &dashboardStub{kpiErr: errors.New("backend down")}
+
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth), testutil.WithDashboardService(stub))
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/fragments/kpi", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+auth.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	require.Contains(t, string(body), "KPIの取得に失敗しました")
+}
+
+func TestDashboardAlertsFragmentProvidesList(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "alert-token"}
+	now := time.Now()
+	stub := &dashboardStub{
+		alerts: []admindashboard.Alert{
+			{ID: "delay", Severity: "danger", Title: "配送遅延", Message: "2件が遅延中", ActionURL: "/admin/shipments/tracking", Action: "確認", CreatedAt: now},
+		},
+	}
+
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth), testutil.WithDashboardService(stub))
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/fragments/alerts", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+auth.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	doc := testutil.ParseHTML(t, body)
+	require.GreaterOrEqual(t, doc.Find("li").Length(), 1)
+	require.Contains(t, doc.Text(), "配送遅延")
+}
+
+func TestDashboardAlertsHandlesServiceError(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "alert-error"}
+	stub := &dashboardStub{alertsErr: errors.New("timeout")}
+
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth), testutil.WithDashboardService(stub))
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/fragments/alerts", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+auth.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), "アラートの取得に失敗しました")
 }
 
 func TestProfilePageRenders(t *testing.T) {
@@ -238,6 +360,53 @@ func TestLoginRejectsExternalNextParameter(t *testing.T) {
 	resp.Body.Close()
 	require.Equal(t, http.StatusSeeOther, resp.StatusCode)
 	require.Equal(t, "/admin", resp.Header.Get("Location"))
+}
+
+type dashboardStub struct {
+	kpis        []admindashboard.KPI
+	alerts      []admindashboard.Alert
+	activity    []admindashboard.ActivityItem
+	kpiErr      error
+	alertsErr   error
+	activityErr error
+}
+
+func (s *dashboardStub) FetchKPIs(ctx context.Context, token string, since *time.Time) ([]admindashboard.KPI, error) {
+	if s.kpiErr != nil {
+		return nil, s.kpiErr
+	}
+	if since != nil {
+		filtered := make([]admindashboard.KPI, 0, len(s.kpis))
+		for _, k := range s.kpis {
+			if k.UpdatedAt.After(*since) || k.UpdatedAt.Equal(*since) {
+				filtered = append(filtered, k)
+			}
+		}
+		return append([]admindashboard.KPI(nil), filtered...), nil
+	}
+	return append([]admindashboard.KPI(nil), s.kpis...), nil
+}
+
+func (s *dashboardStub) FetchAlerts(ctx context.Context, token string, limit int) ([]admindashboard.Alert, error) {
+	if s.alertsErr != nil {
+		return nil, s.alertsErr
+	}
+	alerts := append([]admindashboard.Alert(nil), s.alerts...)
+	if limit > 0 && len(alerts) > limit {
+		alerts = alerts[:limit]
+	}
+	return alerts, nil
+}
+
+func (s *dashboardStub) FetchActivity(ctx context.Context, token string, limit int) ([]admindashboard.ActivityItem, error) {
+	if s.activityErr != nil {
+		return nil, s.activityErr
+	}
+	items := append([]admindashboard.ActivityItem(nil), s.activity...)
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
 }
 
 type profileStub struct {

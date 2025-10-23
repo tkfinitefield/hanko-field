@@ -4,6 +4,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"finitefield.org/hanko-admin/internal/admin/dashboard"
 	"finitefield.org/hanko-admin/internal/admin/httpserver"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	"finitefield.org/hanko-admin/internal/admin/profile"
@@ -33,18 +34,26 @@ func WithProfileService(service profile.Service) ServerOption {
 	}
 }
 
+// WithDashboardService wires a custom dashboard service implementation.
+func WithDashboardService(service dashboard.Service) ServerOption {
+	return func(cfg *httpserver.Config) {
+		cfg.DashboardService = service
+	}
+}
+
 // NewServer constructs an httptest server running the admin HTTP stack with sensible defaults.
 func NewServer(t testing.TB, opts ...ServerOption) *httptest.Server {
 	t.Helper()
 
 	cfg := httpserver.Config{
-		Address:        ":0",
-		BasePath:       "/admin",
-		LoginPath:      "",
-		CSRFCookieName: "csrf_token",
-		CSRFHeaderName: "X-CSRF-Token",
-		Authenticator:  middleware.DefaultAuthenticator(),
-		ProfileService: profile.NewStaticService(nil),
+		Address:          ":0",
+		BasePath:         "/admin",
+		LoginPath:        "",
+		CSRFCookieName:   "csrf_token",
+		CSRFHeaderName:   "X-CSRF-Token",
+		Authenticator:    middleware.DefaultAuthenticator(),
+		DashboardService: dashboard.NewStaticService(),
+		ProfileService:   profile.NewStaticService(nil),
 	}
 
 	for _, opt := range opts {

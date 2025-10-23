@@ -29,7 +29,7 @@
 - [x] [Implement toast/alert system triggered by htmx response headers.](doc/admin/tasks/020-implement-toast-alert-system-triggered-by-htmx-response-headers.md)
 
 ## 4. Shared Utilities & System Pages
-- [ ] [Build dashboard page (`/admin`) with KPI fragment endpoints (`/admin/fragments/kpi`, `/admin/fragments/alerts`).](doc/admin/tasks/021-build-dashboard-page-admin-with-kpi-fragment-endpoints-admin-fragments-kpi-admin-fragments.md)
+- [x] [Build dashboard page (`/admin`) with KPI fragment endpoints (`/admin/fragments/kpi`, `/admin/fragments/alerts`).](doc/admin/tasks/021-build-dashboard-page-admin-with-kpi-fragment-endpoints-admin-fragments-kpi-admin-fragments.md)
 - [ ] [Implement global search page (`/admin/search`) and result fragment (`/admin/search/table`) with filtering and keyboard shortcuts.](doc/admin/tasks/022-implement-global-search-page-admin-search-and-result-fragment-admin-search-table-with-filt.md)
 - [ ] [Create notifications page (`/admin/notifications`) and table fragment for failed jobs, stock alerts, and shipping exceptions.](doc/admin/tasks/023-create-notifications-page-admin-notifications-and-table-fragment-for-failed-jobs-stock-ale.md)
 - [ ] [Implement profile/account page (`/admin/profile`) with 2FA setup, password/API key management, and session history.](doc/admin/tasks/024-implement-profile-account-page-admin-profile-with-2fa-setup-password-api-key-management-an.md)

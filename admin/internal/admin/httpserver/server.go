@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 
+	"finitefield.org/hanko-admin/internal/admin/dashboard"
 	custommw "finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/ui"
 	"finitefield.org/hanko-admin/internal/admin/profile"
@@ -23,6 +24,7 @@ type Config struct {
 	BasePath         string
 	LoginPath        string
 	Authenticator    custommw.Authenticator
+	DashboardService dashboard.Service
 	ProfileService   profile.Service
 	Session          SessionConfig
 	SessionStore     custommw.SessionStore
@@ -86,7 +88,8 @@ func New(cfg Config) *http.Server {
 	}
 
 	uiHandlers := ui.NewHandlers(ui.Dependencies{
-		ProfileService: cfg.ProfileService,
+		DashboardService: cfg.DashboardService,
+		ProfileService:   cfg.ProfileService,
 	})
 
 	mountAdminRoutes(router, basePath, routeOptions{
@@ -150,6 +153,8 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 			protected.Use(custommw.CSRF(opts.CSRF))
 
 			protected.Get("/", uiHandlers.Dashboard)
+			protected.Get("/fragments/kpi", uiHandlers.DashboardKPIs)
+			protected.Get("/fragments/alerts", uiHandlers.DashboardAlerts)
 			protected.Route("/profile", func(pr chi.Router) {
 				pr.Get("/", uiHandlers.ProfilePage)
 				pr.Get("/mfa/totp", uiHandlers.MFATOTPStart)
