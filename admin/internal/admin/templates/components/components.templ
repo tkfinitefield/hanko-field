@@ -185,15 +185,17 @@ templ SortableHeader(props SortHeaderProps) {
 		<a
 			class={ sortHeaderClass(sortCurrentDirectionFromProps(props)) }
 			href={ sortHref(props) }
-			hx-get={ sortHxHref(props) }
-			if props.HxTarget != "" {
-				hx-target={ props.HxTarget }
-			}
-			if props.HxSwap != "" {
-				hx-swap={ props.HxSwap }
-			}
-			if props.HxPushURL {
-				hx-push-url="true"
+			if sortHasHTMX(props) {
+				hx-get={ sortHxHref(props) }
+				if props.HxTarget != "" {
+					hx-target={ props.HxTarget }
+				}
+				if props.HxSwap != "" {
+					hx-swap={ props.HxSwap }
+				}
+				if props.HxPushURL {
+					hx-push-url="true"
+				}
 			}
 			role="button"
 			aria-pressed?={ sortCurrentDirectionFromProps(props) != SortDirectionNone }
@@ -279,15 +281,17 @@ templ Pagination(props PaginationProps) {
 				<a
 					class="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
 					href={ paginationPrevURL(props) }
-					hx-get={ paginationPrevHxURL(props) }
-					if props.HxTarget != "" {
-						hx-target={ props.HxTarget }
-					}
-					if props.HxSwap != "" {
-						hx-swap={ props.HxSwap }
-					}
-					if props.HxPushURL {
-						hx-push-url="true"
+					if paginationHasHTMX(props) {
+						hx-get={ paginationPrevHxURL(props) }
+						if props.HxTarget != "" {
+							hx-target={ props.HxTarget }
+						}
+						if props.HxSwap != "" {
+							hx-swap={ props.HxSwap }
+						}
+						if props.HxPushURL {
+							hx-push-url="true"
+						}
 					}
 					aria-label="Previous page"
 				>
@@ -311,15 +315,17 @@ templ Pagination(props PaginationProps) {
 				<a
 					class="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
 					href={ paginationNextURL(props) }
-					hx-get={ paginationNextHxURL(props) }
-					if props.HxTarget != "" {
-						hx-target={ props.HxTarget }
-					}
-					if props.HxSwap != "" {
-						hx-swap={ props.HxSwap }
-					}
-					if props.HxPushURL {
-						hx-push-url="true"
+					if paginationHasHTMX(props) {
+						hx-get={ paginationNextHxURL(props) }
+						if props.HxTarget != "" {
+							hx-target={ props.HxTarget }
+						}
+						if props.HxSwap != "" {
+							hx-swap={ props.HxSwap }
+						}
+						if props.HxPushURL {
+							hx-push-url="true"
+						}
 					}
 					aria-label="Next page"
 				>
@@ -881,8 +887,12 @@ func sortNextDirectionAttr(props SortHeaderProps) string {
 	dir := sortNextDirectionFromProps(props)
 	if dir == SortDirectionNone {
 		return "none"
-}
+	}
 	return string(dir)
+}
+
+func sortHasHTMX(props SortHeaderProps) bool {
+	return props.HxTarget != "" || props.HxSwap != "" || props.HxPushURL
 }
 
 func sortSrLabelFromProps(props SortHeaderProps) string {
@@ -994,6 +1004,10 @@ func paginationFragmentQuery(props PaginationProps) string {
 		query = helpers.SetRawQuery(query, paginationSizeParam(props), strconv.Itoa(size))
 	}
 	return query
+}
+
+func paginationHasHTMX(props PaginationProps) bool {
+	return props.HxTarget != "" || props.HxSwap != "" || props.HxPushURL
 }
 
 func paginationPrevURL(props PaginationProps) string {
