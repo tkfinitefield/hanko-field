@@ -198,16 +198,21 @@ type AIJob struct {
 
 // Cart aggregates the mutable shopping cart state for a user.
 type Cart struct {
-	ID              string
-	UserID          string
-	Currency        string
-	BillingAddress  *Address
-	ShippingAddress *Address
-	Promotion       *CartPromotion
-	Items           []CartItem
-	Estimate        *CartEstimate
-	Metadata        map[string]any
-	UpdatedAt       time.Time
+	ID                string
+	UserID            string
+	Currency          string
+	BillingAddressID  string
+	ShippingAddressID string
+	BillingAddress    *Address
+	ShippingAddress   *Address
+	Promotion         *CartPromotion
+	Items             []CartItem
+	Estimate          *CartEstimate
+	Notes             string
+	PromotionHint     string
+	Metadata          map[string]any
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // CartPromotion captures the applied promotion snapshot.

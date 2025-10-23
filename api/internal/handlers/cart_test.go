@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -152,8 +153,116 @@ func TestCartHandlersGetCartInvalidInput(t *testing.T) {
 	}
 }
 
+func TestCartHandlersPatchCartSuccess(t *testing.T) {
+	updatedAt := time.Date(2024, 6, 10, 12, 0, 0, 0, time.UTC)
+	service := &stubCartService{
+		updateFunc: func(ctx context.Context, cmd services.UpdateCartCommand) (services.Cart, error) {
+			if cmd.UserID != "user-22" {
+				t.Fatalf("unexpected user id %q", cmd.UserID)
+			}
+			if cmd.Currency == nil || *cmd.Currency != "usd" {
+				t.Fatalf("expected currency pointer usd, got %#v", cmd.Currency)
+			}
+			if cmd.ShippingAddressID == nil || *cmd.ShippingAddressID != "addr-1" {
+				t.Fatalf("expected shipping address id addr-1, got %#v", cmd.ShippingAddressID)
+			}
+			if cmd.BillingAddressID == nil || *cmd.BillingAddressID != "" {
+				t.Fatalf("expected billing address cleared, got %#v", cmd.BillingAddressID)
+			}
+			if cmd.Notes == nil || *cmd.Notes != "  gift " {
+				t.Fatalf("expected notes pointer, got %#v", cmd.Notes)
+			}
+			if cmd.PromotionHint == nil || *cmd.PromotionHint != "vip" {
+				t.Fatalf("expected promotion hint vip, got %#v", cmd.PromotionHint)
+			}
+			if cmd.ExpectedUpdatedAt == nil || !cmd.ExpectedUpdatedAt.Equal(updatedAt) {
+				t.Fatalf("expected updated_at %v, got %#v", updatedAt, cmd.ExpectedUpdatedAt)
+			}
+			return services.Cart{
+				ID:            "cart-22",
+				UserID:        cmd.UserID,
+				Currency:      "USD",
+				Notes:         "gift",
+				PromotionHint: "vip",
+				UpdatedAt:     updatedAt.Add(time.Minute),
+			}, nil
+		},
+	}
+
+	handler := NewCartHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/cart", handler.Routes)
+
+	body := fmt.Sprintf(`{"currency":"usd","shipping_address_id":"addr-1","billing_address_id":null,"notes":"  gift ","promotion_hint":"vip","updated_at":"%s"}`, updatedAt.Format(time.RFC3339))
+	req := httptest.NewRequest(http.MethodPatch, "/cart", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-22"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var resp cartResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp.Cart.Currency != "USD" {
+		t.Fatalf("expected currency USD, got %s", resp.Cart.Currency)
+	}
+	if resp.Cart.Notes != "gift" {
+		t.Fatalf("expected notes gift, got %q", resp.Cart.Notes)
+	}
+	if resp.Cart.PromotionHint != "vip" {
+		t.Fatalf("expected promotion hint vip, got %q", resp.Cart.PromotionHint)
+	}
+}
+
+func TestCartHandlersPatchCartInvalidBody(t *testing.T) {
+	handler := NewCartHandlers(nil, &stubCartService{})
+	router := chi.NewRouter()
+	router.Route("/cart", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPatch, "/cart", strings.NewReader(`{"updated_at":"2024-01-01T00:00:00Z"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
+func TestCartHandlersPatchCartConflict(t *testing.T) {
+	service := &stubCartService{
+		updateFunc: func(ctx context.Context, cmd services.UpdateCartCommand) (services.Cart, error) {
+			return services.Cart{}, services.ErrCartConflict
+		},
+	}
+
+	handler := NewCartHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/cart", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPatch, "/cart", strings.NewReader(`{"currency":"usd","updated_at":"2024-01-01T00:00:00Z"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-9"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rr.Code)
+	}
+}
+
 type stubCartService struct {
 	getOrCreateFunc func(ctx context.Context, userID string) (services.Cart, error)
+	updateFunc      func(ctx context.Context, cmd services.UpdateCartCommand) (services.Cart, error)
 }
 
 func (s *stubCartService) GetOrCreateCart(ctx context.Context, userID string) (services.Cart, error) {
@@ -161,6 +270,13 @@ func (s *stubCartService) GetOrCreateCart(ctx context.Context, userID string) (s
 		return s.getOrCreateFunc(ctx, userID)
 	}
 	return services.Cart{}, services.ErrCartUnavailable
+}
+
+func (s *stubCartService) UpdateCart(ctx context.Context, cmd services.UpdateCartCommand) (services.Cart, error) {
+	if s.updateFunc != nil {
+		return s.updateFunc(ctx, cmd)
+	}
+	return services.Cart{}, errors.New("not implemented")
 }
 
 func (s *stubCartService) AddOrUpdateItem(ctx context.Context, cmd services.UpsertCartItemCommand) (services.Cart, error) {

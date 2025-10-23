@@ -122,6 +122,7 @@ type DesignService interface {
 // CartService manages mutable cart state and estimates while enforcing inventory rules.
 type CartService interface {
 	GetOrCreateCart(ctx context.Context, userID string) (Cart, error)
+	UpdateCart(ctx context.Context, cmd UpdateCartCommand) (Cart, error)
 	AddOrUpdateItem(ctx context.Context, cmd UpsertCartItemCommand) (Cart, error)
 	RemoveItem(ctx context.Context, cmd RemoveCartItemCommand) (Cart, error)
 	Estimate(ctx context.Context, userID string) (CartEstimate, error)
@@ -458,6 +459,16 @@ type UpsertCartItemCommand struct {
 	Quantity      int
 	Customization map[string]any
 	DesignID      *string
+}
+
+type UpdateCartCommand struct {
+	UserID            string
+	Currency          *string
+	ShippingAddressID *string
+	BillingAddressID  *string
+	Notes             *string
+	PromotionHint     *string
+	ExpectedUpdatedAt *time.Time
 }
 
 type RemoveCartItemCommand struct {

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/firestore"
+
 	domain "github.com/hanko-field/api/internal/domain"
 	pfirestore "github.com/hanko-field/api/internal/platform/firestore"
 	"github.com/hanko-field/api/internal/repositories"
@@ -34,7 +36,7 @@ func NewCartRepository(provider *pfirestore.Provider) (*CartRepository, error) {
 }
 
 // UpsertCart persists the cart header document using the user ID as document identifier.
-func (r *CartRepository) UpsertCart(ctx context.Context, cart domain.Cart) (domain.Cart, error) {
+func (r *CartRepository) UpsertCart(ctx context.Context, cart domain.Cart, expectedUpdate *time.Time) (domain.Cart, error) {
 	if r == nil || r.base == nil {
 		return domain.Cart{}, errors.New("cart repository not initialised")
 	}
@@ -48,13 +50,24 @@ func (r *CartRepository) UpsertCart(ctx context.Context, cart domain.Cart) (doma
 	if !cart.UpdatedAt.IsZero() {
 		now = cart.UpdatedAt.UTC()
 	}
+	createdAt := cart.CreatedAt.UTC()
+	if createdAt.IsZero() {
+		createdAt = now
+	}
+
+	shippingAddressID := strings.TrimSpace(cart.ShippingAddressID)
+	billingAddressID := strings.TrimSpace(cart.BillingAddressID)
 
 	doc := cartDocument{
-		Currency:   strings.ToUpper(strings.TrimSpace(cart.Currency)),
-		Metadata:   cloneAnyMap(cart.Metadata),
-		ItemsCount: len(cart.Items),
-		UpdatedAt:  now,
-		CreatedAt:  now,
+		Currency:          strings.ToUpper(strings.TrimSpace(cart.Currency)),
+		ShippingAddressID: shippingAddressID,
+		BillingAddressID:  billingAddressID,
+		Notes:             strings.TrimSpace(cart.Notes),
+		PromotionHint:     strings.TrimSpace(cart.PromotionHint),
+		Metadata:          cloneAnyMap(cart.Metadata),
+		ItemsCount:        len(cart.Items),
+		UpdatedAt:         now,
+		CreatedAt:         createdAt,
 	}
 
 	if cart.Promotion != nil {
@@ -74,7 +87,64 @@ func (r *CartRepository) UpsertCart(ctx context.Context, cart domain.Cart) (doma
 		}
 	}
 
-	result, err := r.base.Set(ctx, cartID, doc)
+	if expectedUpdate == nil || expectedUpdate.IsZero() {
+		result, err := r.base.Set(ctx, cartID, doc)
+		if err != nil {
+			return domain.Cart{}, err
+		}
+
+		saved := cloneCart(cart)
+		saved.ID = cartID
+		saved.UserID = cartID
+		saved.Currency = doc.Currency
+		saved.ShippingAddressID = shippingAddressID
+		saved.BillingAddressID = billingAddressID
+		saved.Notes = doc.Notes
+		saved.PromotionHint = doc.PromotionHint
+		saved.Metadata = cloneAnyMap(cart.Metadata)
+		saved.CreatedAt = doc.CreatedAt
+		saved.UpdatedAt = result.UpdateTime
+		return saved, nil
+	}
+
+	updates := []firestore.Update{
+		{Path: "currency", Value: doc.Currency},
+		{Path: "itemsCount", Value: doc.ItemsCount},
+		{Path: "updatedAt", Value: doc.UpdatedAt},
+	}
+
+	appendStringUpdate := func(path string, value string) {
+		if strings.TrimSpace(value) == "" {
+			updates = append(updates, firestore.Update{Path: path, Value: firestore.Delete})
+		} else {
+			updates = append(updates, firestore.Update{Path: path, Value: value})
+		}
+	}
+
+	appendStringUpdate("shippingAddressId", shippingAddressID)
+	appendStringUpdate("billingAddressId", billingAddressID)
+	appendStringUpdate("notes", doc.Notes)
+	appendStringUpdate("promotionHint", doc.PromotionHint)
+
+	if len(doc.Metadata) == 0 {
+		updates = append(updates, firestore.Update{Path: "metadata", Value: firestore.Delete})
+	} else {
+		updates = append(updates, firestore.Update{Path: "metadata", Value: doc.Metadata})
+	}
+
+	if doc.Promotion == nil {
+		updates = append(updates, firestore.Update{Path: "promo", Value: firestore.Delete})
+	} else {
+		updates = append(updates, firestore.Update{Path: "promo", Value: doc.Promotion})
+	}
+
+	if doc.Estimates == nil {
+		updates = append(updates, firestore.Update{Path: "estimates", Value: firestore.Delete})
+	} else {
+		updates = append(updates, firestore.Update{Path: "estimates", Value: doc.Estimates})
+	}
+
+	result, err := r.base.Update(ctx, cartID, updates, firestore.LastUpdateTime(expectedUpdate.UTC()))
 	if err != nil {
 		return domain.Cart{}, err
 	}
@@ -83,7 +153,12 @@ func (r *CartRepository) UpsertCart(ctx context.Context, cart domain.Cart) (doma
 	saved.ID = cartID
 	saved.UserID = cartID
 	saved.Currency = doc.Currency
+	saved.ShippingAddressID = shippingAddressID
+	saved.BillingAddressID = billingAddressID
+	saved.Notes = doc.Notes
+	saved.PromotionHint = doc.PromotionHint
 	saved.Metadata = cloneAnyMap(cart.Metadata)
+	saved.CreatedAt = cart.CreatedAt
 	saved.UpdatedAt = result.UpdateTime
 	return saved, nil
 }
@@ -104,16 +179,26 @@ func (r *CartRepository) GetCart(ctx context.Context, userID string) (domain.Car
 	}
 
 	cart := domain.Cart{
-		ID:       doc.ID,
-		UserID:   doc.ID,
-		Currency: strings.ToUpper(strings.TrimSpace(doc.Data.Currency)),
-		Items:    []domain.CartItem{},
-		Metadata: cloneAnyMap(doc.Data.Metadata),
+		ID:                doc.ID,
+		UserID:            doc.ID,
+		Currency:          strings.ToUpper(strings.TrimSpace(doc.Data.Currency)),
+		ShippingAddressID: strings.TrimSpace(doc.Data.ShippingAddressID),
+		BillingAddressID:  strings.TrimSpace(doc.Data.BillingAddressID),
+		Items:             []domain.CartItem{},
+		Notes:             strings.TrimSpace(doc.Data.Notes),
+		PromotionHint:     strings.TrimSpace(doc.Data.PromotionHint),
+		Metadata:          cloneAnyMap(doc.Data.Metadata),
 		UpdatedAt: func() time.Time {
 			if !doc.UpdateTime.IsZero() {
 				return doc.UpdateTime
 			}
 			return doc.Data.UpdatedAt
+		}(),
+		CreatedAt: func() time.Time {
+			if !doc.Data.CreatedAt.IsZero() {
+				return doc.Data.CreatedAt
+			}
+			return doc.UpdateTime
 		}(),
 	}
 
@@ -173,13 +258,17 @@ func cloneAnyMap(values map[string]any) map[string]any {
 }
 
 type cartDocument struct {
-	Currency   string                 `firestore:"currency"`
-	Promotion  *cartPromotionDocument `firestore:"promo,omitempty"`
-	Estimates  *cartEstimateDocument  `firestore:"estimates,omitempty"`
-	Metadata   map[string]any         `firestore:"metadata,omitempty"`
-	ItemsCount int                    `firestore:"itemsCount"`
-	CreatedAt  time.Time              `firestore:"createdAt"`
-	UpdatedAt  time.Time              `firestore:"updatedAt"`
+	Currency          string                 `firestore:"currency"`
+	ShippingAddressID string                 `firestore:"shippingAddressId,omitempty"`
+	BillingAddressID  string                 `firestore:"billingAddressId,omitempty"`
+	Notes             string                 `firestore:"notes,omitempty"`
+	PromotionHint     string                 `firestore:"promotionHint,omitempty"`
+	Promotion         *cartPromotionDocument `firestore:"promo,omitempty"`
+	Estimates         *cartEstimateDocument  `firestore:"estimates,omitempty"`
+	Metadata          map[string]any         `firestore:"metadata,omitempty"`
+	ItemsCount        int                    `firestore:"itemsCount"`
+	CreatedAt         time.Time              `firestore:"createdAt"`
+	UpdatedAt         time.Time              `firestore:"updatedAt"`
 }
 
 type cartPromotionDocument struct {

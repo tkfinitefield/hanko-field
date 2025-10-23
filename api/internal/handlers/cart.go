@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -21,6 +23,8 @@ type CartHandlers struct {
 	authn *auth.Authenticator
 	carts services.CartService
 }
+
+const maxCartBodySize = 16 * 1024
 
 // NewCartHandlers constructs handlers enforcing Firebase authentication before invoking the cart service.
 func NewCartHandlers(authn *auth.Authenticator, carts services.CartService) *CartHandlers {
@@ -39,6 +43,7 @@ func (h *CartHandlers) Routes(r chi.Router) {
 		r.Use(h.authn.RequireFirebaseAuth())
 	}
 	r.Get("/", h.getCart)
+	r.Patch("/", h.patchCart)
 }
 
 func (h *CartHandlers) getCart(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +67,77 @@ func (h *CartHandlers) getCart(w http.ResponseWriter, r *http.Request) {
 
 	payload := cartResponse{Cart: buildCartPayload(cart)}
 	setCartResponseHeaders(w, cart)
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *CartHandlers) patchCart(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.carts == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("cart_service_unavailable", "cart service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	body, err := readLimitedBody(r, maxCartBodySize)
+	if err != nil {
+		switch {
+		case errors.Is(err, errBodyTooLarge):
+			httpx.WriteError(ctx, w, httpx.NewError("payload_too_large", "request body exceeds allowed size", http.StatusRequestEntityTooLarge))
+		default:
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		}
+		return
+	}
+
+	updateReq, err := parseUpdateCartRequest(body)
+	if err != nil {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	cmd := services.UpdateCartCommand{UserID: identity.UID}
+	if updateReq.currency != nil {
+		cmd.Currency = updateReq.currency
+	}
+	if updateReq.shippingSet {
+		cmd.ShippingAddressID = updateReq.shippingAddressID
+	}
+	if updateReq.billingSet {
+		cmd.BillingAddressID = updateReq.billingAddressID
+	}
+	if updateReq.notesSet {
+		cmd.Notes = updateReq.notes
+	}
+	if updateReq.promotionSet {
+		cmd.PromotionHint = updateReq.promotionHint
+	}
+
+	expected := updateReq.updatedAt
+	if expected == nil {
+		if ifUnmodified := strings.TrimSpace(r.Header.Get("If-Unmodified-Since")); ifUnmodified != "" {
+			parsed, parseErr := time.Parse(http.TimeFormat, ifUnmodified)
+			if parseErr != nil {
+				httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "If-Unmodified-Since must be a valid HTTP-date", http.StatusBadRequest))
+				return
+			}
+			expected = &parsed
+		}
+	}
+	cmd.ExpectedUpdatedAt = expected
+
+	updated, err := h.carts.UpdateCart(ctx, cmd)
+	if err != nil {
+		h.writeCartError(ctx, w, err)
+		return
+	}
+
+	payload := cartResponse{Cart: buildCartPayload(updated)}
+	setCartResponseHeaders(w, updated)
 	writeJSONResponse(w, http.StatusOK, payload)
 }
 
@@ -105,6 +181,13 @@ func buildCartPayload(cart services.Cart) cartPayload {
 		ItemsCount: len(cart.Items),
 		Items:      buildCartItems(cart.Items),
 		Metadata:   cloneMap(cart.Metadata),
+	}
+
+	if note := strings.TrimSpace(cart.Notes); note != "" {
+		payload.Notes = note
+	}
+	if hint := strings.TrimSpace(cart.PromotionHint); hint != "" {
+		payload.PromotionHint = hint
 	}
 
 	if cart.Promotion != nil {
@@ -211,6 +294,8 @@ type cartPayload struct {
 	Estimate        *cartEstimatePayload  `json:"estimate,omitempty"`
 	ShippingAddress *addressPayload       `json:"shipping_address,omitempty"`
 	BillingAddress  *addressPayload       `json:"billing_address,omitempty"`
+	Notes           string                `json:"notes,omitempty"`
+	PromotionHint   string                `json:"promotion_hint,omitempty"`
 	Metadata        map[string]any        `json:"metadata,omitempty"`
 	UpdatedAt       string                `json:"updated_at,omitempty"`
 }
@@ -245,4 +330,119 @@ type cartItemPayload struct {
 	Estimates        map[string]int64 `json:"estimates,omitempty"`
 	AddedAt          string           `json:"added_at,omitempty"`
 	UpdatedAt        string           `json:"updated_at,omitempty"`
+}
+
+type updateCartRequest struct {
+	currency          *string
+	shippingAddressID *string
+	shippingSet       bool
+	billingAddressID  *string
+	billingSet        bool
+	notes             *string
+	notesSet          bool
+	promotionHint     *string
+	promotionSet      bool
+	updatedAt         *time.Time
+}
+
+func parseUpdateCartRequest(body []byte) (updateCartRequest, error) {
+	var req updateCartRequest
+	if len(strings.TrimSpace(string(body))) == 0 {
+		return req, errEmptyBody
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return req, errors.New("invalid JSON payload")
+	}
+
+	for key, value := range raw {
+		switch key {
+		case "currency":
+			if isJSONNull(value) {
+				return req, errors.New("currency must be a string")
+			}
+			var currency string
+			if err := json.Unmarshal(value, &currency); err != nil {
+				return req, errors.New("currency must be a string")
+			}
+			currency = strings.TrimSpace(currency)
+			if currency == "" {
+				return req, errors.New("currency must not be empty")
+			}
+			req.currency = &currency
+		case "shipping_address_id":
+			req.shippingSet = true
+			if isJSONNull(value) {
+				empty := ""
+				req.shippingAddressID = &empty
+				continue
+			}
+			var id string
+			if err := json.Unmarshal(value, &id); err != nil {
+				return req, errors.New("shipping_address_id must be a string or null")
+			}
+			trimmed := strings.TrimSpace(id)
+			req.shippingAddressID = &trimmed
+		case "billing_address_id":
+			req.billingSet = true
+			if isJSONNull(value) {
+				empty := ""
+				req.billingAddressID = &empty
+				continue
+			}
+			var id string
+			if err := json.Unmarshal(value, &id); err != nil {
+				return req, errors.New("billing_address_id must be a string or null")
+			}
+			trimmed := strings.TrimSpace(id)
+			req.billingAddressID = &trimmed
+		case "notes":
+			req.notesSet = true
+			if isJSONNull(value) {
+				empty := ""
+				req.notes = &empty
+				continue
+			}
+			var note string
+			if err := json.Unmarshal(value, &note); err != nil {
+				return req, errors.New("notes must be a string or null")
+			}
+			req.notes = &note
+		case "promotion_hint":
+			req.promotionSet = true
+			if isJSONNull(value) {
+				empty := ""
+				req.promotionHint = &empty
+				continue
+			}
+			var hint string
+			if err := json.Unmarshal(value, &hint); err != nil {
+				return req, errors.New("promotion_hint must be a string or null")
+			}
+			req.promotionHint = &hint
+		case "updated_at":
+			if isJSONNull(value) {
+				req.updatedAt = nil
+				continue
+			}
+			var ts string
+			if err := json.Unmarshal(value, &ts); err != nil {
+				return req, errors.New("updated_at must be a string")
+			}
+			parsed, err := parseRFC3339(strings.TrimSpace(ts))
+			if err != nil {
+				return req, fmt.Errorf("updated_at must be RFC3339 timestamp: %w", err)
+			}
+			req.updatedAt = &parsed
+		default:
+			return req, fmt.Errorf("field %q is not editable", key)
+		}
+	}
+
+	if req.currency == nil && !req.shippingSet && !req.billingSet && !req.notesSet && !req.promotionSet {
+		return req, errNoEditableFields
+	}
+
+	return req, nil
 }

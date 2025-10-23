@@ -16,6 +16,15 @@ var (
 	errCartClockRequired      = errors.New("cart service: clock is required")
 )
 
+const (
+	maxCartNotesLength     = 2000
+	maxPromotionHintLength = 120
+)
+
+type addressProvider interface {
+	ListAddresses(ctx context.Context, userID string) ([]Address, error)
+}
+
 // ErrCartInvalidInput indicates the caller supplied invalid input.
 var ErrCartInvalidInput = errors.New("cart service: invalid input")
 
@@ -37,17 +46,19 @@ type CartPricer interface {
 type CartServiceDeps struct {
 	Repository      repositories.CartRepository
 	Pricer          CartPricer
+	Addresses       addressProvider
 	Clock           func() time.Time
 	DefaultCurrency string
 	Logger          func(context.Context, string, map[string]any)
 }
 
 type cartService struct {
-	repo     repositories.CartRepository
-	pricer   CartPricer
-	now      func() time.Time
-	currency string
-	logger   func(context.Context, string, map[string]any)
+	repo      repositories.CartRepository
+	pricer    CartPricer
+	addresses addressProvider
+	now       func() time.Time
+	currency  string
+	logger    func(context.Context, string, map[string]any)
 }
 
 // NewCartService constructs a CartService enforcing dependency validation.
@@ -70,11 +81,12 @@ func NewCartService(deps CartServiceDeps) (CartService, error) {
 	}
 
 	service := &cartService{
-		repo:     deps.Repository,
-		pricer:   deps.Pricer,
-		now:      func() time.Time { return deps.Clock().UTC() },
-		currency: defaultCurrency,
-		logger:   logger,
+		repo:      deps.Repository,
+		pricer:    deps.Pricer,
+		addresses: deps.Addresses,
+		now:       func() time.Time { return deps.Clock().UTC() },
+		currency:  defaultCurrency,
+		logger:    logger,
 	}
 	return service, nil
 }
@@ -94,7 +106,7 @@ func (s *cartService) GetOrCreateCart(ctx context.Context, userID string) (Cart,
 	if err != nil {
 		if isRepoNotFound(err) {
 			defaultCart := s.newCart(uid)
-			saved, err := s.repo.UpsertCart(ctx, defaultCart)
+			saved, err := s.repo.UpsertCart(ctx, defaultCart, nil)
 			if err != nil {
 				return Cart{}, s.translateRepoError(err)
 			}
@@ -105,6 +117,7 @@ func (s *cartService) GetOrCreateCart(ctx context.Context, userID string) (Cart,
 	}
 
 	normalised := s.normaliseCart(cart, uid)
+	_ = s.hydrateCartAddresses(ctx, &normalised, false)
 
 	if s.pricer != nil {
 		result, err := s.pricer.Calculate(ctx, PriceCartCommand{Cart: normalised})
@@ -125,14 +138,217 @@ func (s *cartService) GetOrCreateCart(ctx context.Context, userID string) (Cart,
 	return normalised, nil
 }
 
+func (s *cartService) UpdateCart(ctx context.Context, cmd UpdateCartCommand) (Cart, error) {
+	if s == nil || s.repo == nil {
+		return Cart{}, ErrCartUnavailable
+	}
+
+	userID := strings.TrimSpace(cmd.UserID)
+	if userID == "" {
+		return Cart{}, ErrCartInvalidInput
+	}
+
+	if cmd.Currency == nil && cmd.ShippingAddressID == nil && cmd.BillingAddressID == nil && cmd.Notes == nil && cmd.PromotionHint == nil {
+		return Cart{}, ErrCartInvalidInput
+	}
+
+	cart, err := s.repo.GetCart(ctx, userID)
+	exists := true
+	if err != nil {
+		if isRepoNotFound(err) {
+			cart = s.newCart(userID)
+			exists = false
+		} else {
+			return Cart{}, s.translateRepoError(err)
+		}
+	}
+
+	cart = s.normaliseCart(cart, userID)
+	previousUpdatedAt := cart.UpdatedAt
+
+	if exists {
+		if cmd.ExpectedUpdatedAt == nil || cmd.ExpectedUpdatedAt.IsZero() {
+			return Cart{}, ErrCartConflict
+		}
+		expected := cmd.ExpectedUpdatedAt.UTC()
+		if previousUpdatedAt.IsZero() || !previousUpdatedAt.Equal(expected) {
+			return Cart{}, ErrCartConflict
+		}
+	}
+
+	var (
+		addressBook     map[string]Address
+		addressBookErr  error
+		addressBookOnce bool
+	)
+
+	loadAddress := func(id string) (*Address, error) {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			return nil, nil
+		}
+		if !addressBookOnce {
+			addressBookOnce = true
+			addressBook, addressBookErr = s.loadAddressBook(ctx, userID)
+		}
+		if addressBookErr != nil {
+			return nil, addressBookErr
+		}
+		addr, ok := addressBook[trimmed]
+		if !ok {
+			return nil, ErrCartInvalidInput
+		}
+		dup := addr
+		return &dup, nil
+	}
+
+	if cmd.ShippingAddressID == nil && strings.TrimSpace(cart.ShippingAddressID) != "" {
+		addr, err := loadAddress(cart.ShippingAddressID)
+		if err != nil {
+			return Cart{}, err
+		}
+		cart.ShippingAddress = cloneCartAddress(addr)
+	}
+
+	if cmd.BillingAddressID == nil && strings.TrimSpace(cart.BillingAddressID) != "" {
+		addr, err := loadAddress(cart.BillingAddressID)
+		if err != nil {
+			return Cart{}, err
+		}
+		cart.BillingAddress = cloneCartAddress(addr)
+	}
+
+	if cmd.ShippingAddressID != nil {
+		input := strings.TrimSpace(*cmd.ShippingAddressID)
+		if input == "" {
+			cart.ShippingAddressID = ""
+			cart.ShippingAddress = nil
+		} else {
+			addr, err := loadAddress(input)
+			if err != nil {
+				return Cart{}, err
+			}
+			cart.ShippingAddressID = strings.TrimSpace(addr.ID)
+			cart.ShippingAddress = cloneCartAddress(addr)
+		}
+	}
+
+	if cmd.BillingAddressID != nil {
+		input := strings.TrimSpace(*cmd.BillingAddressID)
+		if input == "" {
+			cart.BillingAddressID = ""
+			cart.BillingAddress = nil
+		} else {
+			addr, err := loadAddress(input)
+			if err != nil {
+				return Cart{}, err
+			}
+			cart.BillingAddressID = strings.TrimSpace(addr.ID)
+			cart.BillingAddress = cloneCartAddress(addr)
+		}
+	}
+
+	if cmd.Currency != nil {
+		currency := strings.ToUpper(strings.TrimSpace(*cmd.Currency))
+		if err := validateCurrencyCode(currency); err != nil {
+			return Cart{}, err
+		}
+		cart.Currency = currency
+	}
+
+	if cmd.Notes != nil {
+		note := strings.TrimSpace(*cmd.Notes)
+		if len(note) > maxCartNotesLength {
+			return Cart{}, fmt.Errorf("%w: notes must be %d characters or fewer", ErrCartInvalidInput, maxCartNotesLength)
+		}
+		cart.Notes = note
+	}
+
+	if cmd.PromotionHint != nil {
+		hint := strings.TrimSpace(*cmd.PromotionHint)
+		if len(hint) > maxPromotionHintLength {
+			return Cart{}, fmt.Errorf("%w: promotion_hint must be %d characters or fewer", ErrCartInvalidInput, maxPromotionHintLength)
+		}
+		cart.PromotionHint = hint
+	}
+
+	cart.UpdatedAt = s.now()
+	if cart.CreatedAt.IsZero() {
+		cart.CreatedAt = cart.UpdatedAt
+	}
+
+	if s.pricer != nil {
+		result, err := s.pricer.Calculate(ctx, PriceCartCommand{Cart: cart})
+		if err != nil {
+			s.logger(ctx, "cart.pricing_failed", map[string]any{
+				"userID": userID,
+				"error":  err.Error(),
+			})
+			return Cart{}, translatePricingError(err)
+		}
+		estimateCopy := result.Estimate
+		cart.Estimate = &estimateCopy
+	} else if cart.Estimate == nil {
+		estimate := naiveCartEstimate(cart.Items)
+		cart.Estimate = &estimate
+	}
+
+	var expected *time.Time
+	if exists {
+		if previousUpdatedAt.IsZero() {
+			return Cart{}, ErrCartConflict
+		}
+		ts := previousUpdatedAt.UTC()
+		expected = &ts
+	}
+
+	saved, err := s.repo.UpsertCart(ctx, cart, expected)
+	if err != nil {
+		return Cart{}, s.translateRepoError(err)
+	}
+
+	saved = s.normaliseCart(saved, userID)
+
+	if strings.TrimSpace(saved.ShippingAddressID) != "" {
+		addr, addrErr := loadAddress(saved.ShippingAddressID)
+		if addrErr != nil {
+			if errors.Is(addrErr, ErrCartInvalidInput) {
+				saved.ShippingAddressID = ""
+				saved.ShippingAddress = nil
+			} else {
+				return Cart{}, addrErr
+			}
+		} else {
+			saved.ShippingAddress = cloneCartAddress(addr)
+		}
+	}
+
+	if strings.TrimSpace(saved.BillingAddressID) != "" {
+		addr, addrErr := loadAddress(saved.BillingAddressID)
+		if addrErr != nil {
+			if errors.Is(addrErr, ErrCartInvalidInput) {
+				saved.BillingAddressID = ""
+				saved.BillingAddress = nil
+			} else {
+				return Cart{}, addrErr
+			}
+		} else {
+			saved.BillingAddress = cloneCartAddress(addr)
+		}
+	}
+
+	return saved, nil
+}
+
 func (s *cartService) newCart(userID string) domain.Cart {
 	now := s.now()
 	return domain.Cart{
-		ID:       userID,
-		UserID:   userID,
-		Currency: s.currency,
-		Items:    []domain.CartItem{},
-		Metadata: map[string]any{},
+		ID:        userID,
+		UserID:    userID,
+		Currency:  s.currency,
+		Items:     []domain.CartItem{},
+		Metadata:  map[string]any{},
+		CreatedAt: now,
 		UpdatedAt: func() time.Time {
 			if now.IsZero() {
 				return time.Now().UTC()
@@ -154,14 +370,122 @@ func (s *cartService) normaliseCart(cart domain.Cart, userID string) domain.Cart
 	if cart.Metadata == nil {
 		cart.Metadata = map[string]any{}
 	}
+	cart.Notes = strings.TrimSpace(cart.Notes)
+	cart.PromotionHint = strings.TrimSpace(cart.PromotionHint)
+	cart.ShippingAddressID = strings.TrimSpace(cart.ShippingAddressID)
+	cart.BillingAddressID = strings.TrimSpace(cart.BillingAddressID)
+	if cart.ShippingAddressID == "" {
+		cart.ShippingAddress = nil
+	}
+	if cart.BillingAddressID == "" {
+		cart.BillingAddress = nil
+	}
 	if cart.Estimate != nil && cart.Estimate.Total == 0 && cart.Estimate.Subtotal == 0 && len(cart.Items) > 0 {
 		estimate := naiveCartEstimate(cart.Items)
 		cart.Estimate = &estimate
+	}
+	if cart.CreatedAt.IsZero() {
+		cart.CreatedAt = s.now()
 	}
 	if cart.UpdatedAt.IsZero() {
 		cart.UpdatedAt = s.now()
 	}
 	return cart
+}
+
+func (s *cartService) hydrateCartAddresses(ctx context.Context, cart *domain.Cart, strict bool) error {
+	if cart == nil {
+		return nil
+	}
+	needShipping := strings.TrimSpace(cart.ShippingAddressID) != ""
+	needBilling := strings.TrimSpace(cart.BillingAddressID) != ""
+	if !needShipping && !needBilling {
+		cart.ShippingAddress = nil
+		cart.BillingAddress = nil
+		return nil
+	}
+
+	book, err := s.loadAddressBook(ctx, cart.UserID)
+	if err != nil {
+		if strict {
+			return err
+		}
+		s.logger(ctx, "cart.address_lookup_failed", map[string]any{
+			"userID": cart.UserID,
+			"error":  err.Error(),
+		})
+		return nil
+	}
+
+	if needShipping {
+		addr, ok := book[strings.TrimSpace(cart.ShippingAddressID)]
+		if !ok {
+			if strict {
+				return ErrCartInvalidInput
+			}
+			cart.ShippingAddressID = ""
+			cart.ShippingAddress = nil
+		} else {
+			cart.ShippingAddress = cloneCartAddress(&addr)
+		}
+	}
+
+	if needBilling {
+		addr, ok := book[strings.TrimSpace(cart.BillingAddressID)]
+		if !ok {
+			if strict {
+				return ErrCartInvalidInput
+			}
+			cart.BillingAddressID = ""
+			cart.BillingAddress = nil
+		} else {
+			cart.BillingAddress = cloneCartAddress(&addr)
+		}
+	}
+
+	return nil
+}
+
+func (s *cartService) loadAddressBook(ctx context.Context, userID string) (map[string]Address, error) {
+	if s.addresses == nil {
+		return nil, ErrCartUnavailable
+	}
+	addresses, err := s.addresses.ListAddresses(ctx, userID)
+	if err != nil {
+		if errors.Is(err, errUserIDRequired) {
+			return nil, ErrCartInvalidInput
+		}
+		return nil, ErrCartUnavailable
+	}
+
+	book := make(map[string]Address, len(addresses))
+	for _, addr := range addresses {
+		id := strings.TrimSpace(addr.ID)
+		if id != "" {
+			book[id] = addr
+		}
+	}
+	return book, nil
+}
+
+func cloneCartAddress(addr *Address) *Address {
+	if addr == nil {
+		return nil
+	}
+	dup := *addr
+	return &dup
+}
+
+func validateCurrencyCode(code string) error {
+	if len(code) != 3 {
+		return fmt.Errorf("%w: currency must be a 3-letter ISO code", ErrCartInvalidInput)
+	}
+	for _, r := range code {
+		if r < 'A' || r > 'Z' {
+			return fmt.Errorf("%w: currency must be a 3-letter ISO code", ErrCartInvalidInput)
+		}
+	}
+	return nil
 }
 
 func (s *cartService) translateRepoError(err error) error {

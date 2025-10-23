@@ -9,6 +9,10 @@ import (
 	domain "github.com/hanko-field/api/internal/domain"
 )
 
+func strPtr(v string) *string {
+	return &v
+}
+
 func TestCartServiceGetOrCreateCartReturnsExisting(t *testing.T) {
 	now := time.Date(2024, 5, 10, 12, 0, 0, 0, time.UTC)
 	estimate := CartEstimate{Subtotal: 2000, Total: 2000}
@@ -78,7 +82,7 @@ func TestCartServiceGetOrCreateCartLazyCreates(t *testing.T) {
 		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
 			return domain.Cart{}, &repositoryErrorStub{notFound: true}
 		},
-		upsertFunc: func(ctx context.Context, cart domain.Cart) (domain.Cart, error) {
+		upsertFunc: func(ctx context.Context, cart domain.Cart, expected *time.Time) (domain.Cart, error) {
 			upserted = cart
 			return cart, nil
 		},
@@ -172,9 +176,184 @@ func TestCartServiceGetOrCreateCartPricingError(t *testing.T) {
 	}
 }
 
+func TestCartServiceUpdateCartCurrencyAndNotes(t *testing.T) {
+	now := time.Date(2024, 6, 1, 8, 0, 0, 0, time.UTC)
+	existingUpdated := now.Add(-time.Minute * 5)
+	createdAt := now.Add(-time.Hour)
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{
+				ID:        "cart-1",
+				UserID:    "user-1",
+				Currency:  "JPY",
+				Notes:     "old",
+				Items:     []domain.CartItem{{ID: "item-1", ProductID: "prod-1", SKU: "SKU-1", Quantity: 1, UnitPrice: 500}},
+				Estimate:  &domain.CartEstimate{Subtotal: 500, Total: 500},
+				CreatedAt: createdAt,
+				UpdatedAt: existingUpdated,
+			}, nil
+		},
+		upsertFunc: func(ctx context.Context, cart domain.Cart, expected *time.Time) (domain.Cart, error) {
+			if expected == nil {
+				t.Fatalf("expected optimistic lock timestamp")
+			}
+			if !expected.Equal(existingUpdated.UTC()) {
+				t.Fatalf("unexpected expected timestamp %v", expected)
+			}
+			if cart.Currency != "USD" {
+				t.Fatalf("expected currency USD got %s", cart.Currency)
+			}
+			if cart.Notes != "gift" {
+				t.Fatalf("expected notes trimmed to gift got %q", cart.Notes)
+			}
+			if cart.PromotionHint != "welcome" {
+				t.Fatalf("expected promotion hint welcome got %q", cart.PromotionHint)
+			}
+			cart.UpdatedAt = now
+			return cart, nil
+		},
+	}
+
+	pricer := &stubCartPricer{
+		calculateFunc: func(ctx context.Context, cmd PriceCartCommand) (PriceCartResult, error) {
+			if cmd.Cart.Currency != "USD" {
+				t.Fatalf("expected pricing with updated currency, got %s", cmd.Cart.Currency)
+			}
+			return PriceCartResult{Estimate: CartEstimate{Subtotal: 500, Total: 500}}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Pricer:          pricer,
+		Clock:           func() time.Time { return now },
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	cmd := UpdateCartCommand{
+		UserID:            "user-1",
+		Currency:          strPtr("usd"),
+		Notes:             strPtr("  gift "),
+		PromotionHint:     strPtr(" welcome "),
+		ExpectedUpdatedAt: &existingUpdated,
+	}
+
+	updated, err := service.UpdateCart(context.Background(), cmd)
+	if err != nil {
+		t.Fatalf("unexpected error updating cart: %v", err)
+	}
+	if updated.Currency != "USD" {
+		t.Fatalf("expected currency USD got %s", updated.Currency)
+	}
+	if updated.Notes != "gift" {
+		t.Fatalf("expected trimmed notes gift got %q", updated.Notes)
+	}
+	if updated.PromotionHint != "welcome" {
+		t.Fatalf("expected promotion hint welcome got %q", updated.PromotionHint)
+	}
+	if updated.UpdatedAt != now {
+		t.Fatalf("expected updated at %v got %v", now, updated.UpdatedAt)
+	}
+}
+
+func TestCartServiceUpdateCartAddresses(t *testing.T) {
+	now := time.Date(2024, 6, 2, 9, 0, 0, 0, time.UTC)
+	existingUpdated := now.Add(-time.Minute * 2)
+	address := Address{ID: "addr-1", Recipient: "Foo", Line1: "1-2-3", City: "Tokyo", PostalCode: "100-0001", Country: "JP"}
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{
+				ID:        "cart-1",
+				UserID:    "user-1",
+				Currency:  "JPY",
+				CreatedAt: now.Add(-time.Hour),
+				UpdatedAt: existingUpdated,
+			}, nil
+		},
+		upsertFunc: func(ctx context.Context, cart domain.Cart, expected *time.Time) (domain.Cart, error) {
+			cart.UpdatedAt = now
+			return cart, nil
+		},
+	}
+	addresses := &stubAddressProvider{
+		listFunc: func(ctx context.Context, userID string) ([]Address, error) {
+			if userID != "user-1" {
+				t.Fatalf("unexpected user id %s", userID)
+			}
+			return []Address{address}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Clock:           func() time.Time { return now },
+		DefaultCurrency: "JPY",
+		Addresses:       addresses,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	cmd := UpdateCartCommand{
+		UserID:            "user-1",
+		ShippingAddressID: strPtr("addr-1"),
+		ExpectedUpdatedAt: &existingUpdated,
+	}
+
+	updated, err := service.UpdateCart(context.Background(), cmd)
+	if err != nil {
+		t.Fatalf("unexpected error updating cart: %v", err)
+	}
+	if updated.ShippingAddress == nil || updated.ShippingAddress.ID != "addr-1" {
+		t.Fatalf("expected shipping address assigned, got %#v", updated.ShippingAddress)
+	}
+
+	cmdInvalid := UpdateCartCommand{
+		UserID:            "user-1",
+		ShippingAddressID: strPtr("missing"),
+		ExpectedUpdatedAt: &existingUpdated,
+	}
+
+	_, err = service.UpdateCart(context.Background(), cmdInvalid)
+	if !errors.Is(err, ErrCartInvalidInput) {
+		t.Fatalf("expected ErrCartInvalidInput got %v", err)
+	}
+}
+
+func TestCartServiceUpdateCartConflictingTimestamp(t *testing.T) {
+	now := time.Now().UTC()
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{
+				ID:        "cart",
+				UserID:    userID,
+				Currency:  "JPY",
+				UpdatedAt: now,
+			}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository: repo,
+		Clock:      time.Now,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	cmd := UpdateCartCommand{UserID: "user-1", Currency: strPtr("eur")}
+	_, err = service.UpdateCart(context.Background(), cmd)
+	if !errors.Is(err, ErrCartConflict) {
+		t.Fatalf("expected ErrCartConflict got %v", err)
+	}
+}
+
 type stubCartRepository struct {
 	getFunc     func(ctx context.Context, userID string) (domain.Cart, error)
-	upsertFunc  func(ctx context.Context, cart domain.Cart) (domain.Cart, error)
+	upsertFunc  func(ctx context.Context, cart domain.Cart, expected *time.Time) (domain.Cart, error)
 	replaceFunc func(ctx context.Context, userID string, items []domain.CartItem) (domain.Cart, error)
 }
 
@@ -185,9 +364,9 @@ func (s *stubCartRepository) GetCart(ctx context.Context, userID string) (domain
 	return domain.Cart{}, errors.New("not implemented")
 }
 
-func (s *stubCartRepository) UpsertCart(ctx context.Context, cart domain.Cart) (domain.Cart, error) {
+func (s *stubCartRepository) UpsertCart(ctx context.Context, cart domain.Cart, expected *time.Time) (domain.Cart, error) {
 	if s.upsertFunc != nil {
-		return s.upsertFunc(ctx, cart)
+		return s.upsertFunc(ctx, cart, expected)
 	}
 	return cart, nil
 }
@@ -230,4 +409,15 @@ func (e *repositoryErrorStub) IsConflict() bool {
 
 func (e *repositoryErrorStub) IsUnavailable() bool {
 	return e.unavailable
+}
+
+type stubAddressProvider struct {
+	listFunc func(ctx context.Context, userID string) ([]Address, error)
+}
+
+func (s *stubAddressProvider) ListAddresses(ctx context.Context, userID string) ([]Address, error) {
+	if s.listFunc != nil {
+		return s.listFunc(ctx, userID)
+	}
+	return nil, nil
 }

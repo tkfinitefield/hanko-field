@@ -105,7 +105,7 @@ type AIJobStatusUpdate struct {
 
 // CartRepository owns cart header + items persistence with optimistic locking guarantees.
 type CartRepository interface {
-	UpsertCart(ctx context.Context, cart domain.Cart) (domain.Cart, error)
+	UpsertCart(ctx context.Context, cart domain.Cart, expectedUpdate *time.Time) (domain.Cart, error)
 	GetCart(ctx context.Context, userID string) (domain.Cart, error)
 	ReplaceItems(ctx context.Context, userID string, items []domain.CartItem) (domain.Cart, error)
 }
