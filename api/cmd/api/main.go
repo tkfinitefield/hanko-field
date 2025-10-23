@@ -176,6 +176,10 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to initialise cart repository", zap.Error(err))
 	}
+	inventoryRepo, err := firestoreRepo.NewInventoryRepository(firestoreProvider)
+	if err != nil {
+		logger.Fatal("failed to initialise inventory repository", zap.Error(err))
+	}
 	nameMappingRepo, err := firestoreRepo.NewNameMappingRepository(firestoreProvider)
 	if err != nil {
 		logger.Fatal("failed to initialise name mapping repository", zap.Error(err))
@@ -208,6 +212,38 @@ func main() {
 		logger.Fatal("failed to initialise stripe payment verifier", zap.Error(err))
 	}
 	paymentVerifier := &providerPaymentVerifier{stripe: stripeVerifier}
+
+	inventoryService, err := services.NewInventoryService(services.InventoryServiceDeps{
+		Inventory: inventoryRepo,
+		Clock:     time.Now,
+	})
+	if err != nil {
+		logger.Fatal("failed to initialise inventory service", zap.Error(err))
+	}
+
+	paymentsLogger := logger.Named("payments")
+	stripeProvider, err := payments.NewStripeProvider(payments.StripeProviderConfig{
+		APIKey: cfg.PSP.StripeAPIKey,
+		Logger: func(ctx context.Context, event string, fields map[string]any) {
+			zFields := make([]zap.Field, 0, len(fields)+1)
+			zFields = append(zFields, zap.String("event", event))
+			for k, v := range fields {
+				zFields = append(zFields, zap.Any(k, v))
+			}
+			paymentsLogger.Debug("stripe log", zFields...)
+		},
+		Clock: time.Now,
+	})
+	if err != nil {
+		logger.Fatal("failed to initialise stripe payment provider", zap.Error(err))
+	}
+
+	paymentManager, err := payments.NewManager(map[string]payments.Provider{
+		"stripe": stripeProvider,
+	})
+	if err != nil {
+		logger.Fatal("failed to initialise payment manager", zap.Error(err))
+	}
 
 	userService, err := services.NewUserService(services.UserServiceDeps{
 		Users:           userRepo,
@@ -243,6 +279,26 @@ func main() {
 		logger.Fatal("failed to initialise cart service", zap.Error(err))
 	}
 	cartHandlers := handlers.NewCartHandlers(authenticator, cartService)
+
+	checkoutLogger := logger.Named("checkout")
+	checkoutService, err := services.NewCheckoutService(services.CheckoutServiceDeps{
+		Carts:     cartRepo,
+		Inventory: inventoryService,
+		Payments:  paymentManager,
+		Clock:     time.Now,
+		Logger: func(ctx context.Context, event string, fields map[string]any) {
+			zFields := make([]zap.Field, 0, len(fields)+1)
+			zFields = append(zFields, zap.String("event", event))
+			for k, v := range fields {
+				zFields = append(zFields, zap.Any(k, v))
+			}
+			checkoutLogger.Debug("checkout log", zFields...)
+		},
+	})
+	if err != nil {
+		logger.Fatal("failed to initialise checkout service", zap.Error(err))
+	}
+	checkoutHandlers := handlers.NewCheckoutHandlers(authenticator, checkoutService)
 
 	nameMappingLogger := logger.Named("name_mapping")
 	nameMappingService, err := services.NewNameMappingService(services.NameMappingServiceDeps{
@@ -301,6 +357,7 @@ func main() {
 	opts = append(opts, handlers.WithNameMappingRoutes(nameMappingHandlers.Routes))
 	opts = append(opts, handlers.WithCartRoutes(cartHandlers.Routes))
 	opts = append(opts, handlers.WithAdditionalRoutes(cartHandlers.RegisterStandaloneRoutes))
+	opts = append(opts, handlers.WithAdditionalRoutes(checkoutHandlers.Routes))
 	publicHandlers := handlers.NewPublicHandlers()
 	opts = append(opts, handlers.WithPublicRoutes(publicHandlers.Routes))
 	if oidcMiddleware != nil {
