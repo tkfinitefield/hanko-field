@@ -1247,12 +1247,21 @@ func (s *cartService) ApplyPromotion(ctx context.Context, cmd CartPromotionComma
 
 	result, err := s.promotions.ValidatePromotion(ctx, validateCmd)
 	if err != nil {
-		s.logger(ctx, "cart.apply_promotion_validation_failed", map[string]any{
-			"userID": userID,
-			"code":   code,
-			"error":  err.Error(),
-		})
-		return Cart{}, ErrCartUnavailable
+		switch {
+		case errors.Is(err, ErrPromotionInvalidCode):
+			return Cart{}, fmt.Errorf("%w: promotion code invalid", ErrCartInvalidInput)
+		case errors.Is(err, ErrPromotionNotFound):
+			return Cart{}, fmt.Errorf("%w: promotion code not found", ErrCartInvalidInput)
+		case errors.Is(err, ErrPromotionUnavailable):
+			return Cart{}, fmt.Errorf("%w: promotion unavailable", ErrCartInvalidInput)
+		default:
+			s.logger(ctx, "cart.apply_promotion_validation_failed", map[string]any{
+				"userID": userID,
+				"code":   code,
+				"error":  err.Error(),
+			})
+			return Cart{}, ErrCartUnavailable
+		}
 	}
 	if trimmed := strings.ToUpper(strings.TrimSpace(result.Code)); trimmed != "" {
 		code = trimmed

@@ -991,6 +991,36 @@ func TestCartServiceApplyPromotionUnavailable(t *testing.T) {
 	}
 }
 
+func TestCartServiceApplyPromotionInvalidCode(t *testing.T) {
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{ID: userID, UserID: userID, Currency: "JPY", UpdatedAt: time.Now()}, nil
+		},
+	}
+	promotions := &stubPromotionService{
+		validateFunc: func(ctx context.Context, cmd ValidatePromotionCommand) (PromotionValidationResult, error) {
+			return PromotionValidationResult{}, ErrPromotionInvalidCode
+		},
+	}
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Promotions:      promotions,
+		Clock:           time.Now,
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	_, err = service.ApplyPromotion(context.Background(), CartPromotionCommand{UserID: "user-1", Code: "bad"})
+	if err == nil || !errors.Is(err, ErrCartInvalidInput) {
+		t.Fatalf("expected ErrCartInvalidInput, got %v", err)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "invalid") {
+		t.Fatalf("expected invalid message, got %v", err)
+	}
+}
+
 func TestCartServiceRemovePromotionSuccess(t *testing.T) {
 	now := time.Date(2024, 7, 20, 14, 0, 0, 0, time.UTC)
 	repo := &stubCartRepository{
