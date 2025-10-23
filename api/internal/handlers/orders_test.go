@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -541,5 +543,203 @@ func TestOrderHandlersGetOrderServiceUnavailable(t *testing.T) {
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected status 503, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersCancelSuccess(t *testing.T) {
+	now := time.Date(2024, 6, 10, 12, 0, 0, 0, time.UTC)
+	reason := "changed mind"
+
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			if orderID != "ord_123" {
+				t.Fatalf("unexpected order id %s", orderID)
+			}
+			return services.Order{
+				ID:       "ord_123",
+				UserID:   "user-1",
+				Status:   domain.OrderStatusPaid,
+				Metadata: map[string]any{"reservationId": "res-123"},
+			}, nil
+		},
+		cancelFn: func(ctx context.Context, cmd services.CancelOrderCommand) (services.Order, error) {
+			if cmd.OrderID != "ord_123" {
+				t.Fatalf("unexpected cancel order id %s", cmd.OrderID)
+			}
+			if cmd.ActorID != "user-1" {
+				t.Fatalf("expected actor user-1 got %s", cmd.ActorID)
+			}
+			if cmd.ReservationID != "res-123" {
+				t.Fatalf("expected reservation res-123 got %s", cmd.ReservationID)
+			}
+			if cmd.Reason != reason {
+				t.Fatalf("expected reason %s got %s", reason, cmd.Reason)
+			}
+			if cmd.ExpectedStatus == nil || *cmd.ExpectedStatus != services.OrderStatus(domain.OrderStatusPaid) {
+				t.Fatalf("expected status pointer paid, got %#v", cmd.ExpectedStatus)
+			}
+			if cmd.Metadata == nil || cmd.Metadata["channel"] != "app" {
+				t.Fatalf("expected metadata channel app, got %#v", cmd.Metadata)
+			}
+			return services.Order{
+				ID:           "ord_123",
+				UserID:       "user-1",
+				Status:       domain.OrderStatusCanceled,
+				Metadata:     map[string]any{"reservationId": "res-123"},
+				CancelReason: &reason,
+				CanceledAt:   &now,
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	body := `{"reason":"changed mind","metadata":{"channel":"app"}}`
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_123:cancel", bytes.NewBufferString(body))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var resp orderResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	payload := resp.Order
+	if payload.Status != string(domain.OrderStatusCanceled) {
+		t.Fatalf("expected status canceled, got %s", payload.Status)
+	}
+	if payload.CancelReason == nil || *payload.CancelReason != reason {
+		t.Fatalf("expected cancel reason %s got %#v", reason, payload.CancelReason)
+	}
+	if payload.Metadata["reservationId"] != "res-123" {
+		t.Fatalf("expected reservation metadata, got %#v", payload.Metadata)
+	}
+}
+
+func TestOrderHandlersCancelRequiresOwnership(t *testing.T) {
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "other-user",
+				Status: domain.OrderStatusPendingPayment,
+			}, nil
+		},
+		cancelFn: func(ctx context.Context, cmd services.CancelOrderCommand) (services.Order, error) {
+			t.Fatalf("cancel should not be called")
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_987:cancel", bytes.NewBufferString(`{"reason":"change"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersCancelRejectsStatus(t *testing.T) {
+	var cancelCalled bool
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusInProduction,
+			}, nil
+		},
+		cancelFn: func(ctx context.Context, cmd services.CancelOrderCommand) (services.Order, error) {
+			cancelCalled = true
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_555:cancel", bytes.NewBufferString(`{}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if cancelCalled {
+		t.Fatalf("cancel should not be invoked")
+	}
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersCancelInvalidJSON(t *testing.T) {
+	var getCalled bool
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			getCalled = true
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_111:cancel", bytes.NewBufferString(`{"reason":`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if getCalled {
+		t.Fatalf("expected to reject before fetching order")
+	}
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersCancelPropagatesServiceError(t *testing.T) {
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusPaid,
+			}, nil
+		},
+		cancelFn: func(ctx context.Context, cmd services.CancelOrderCommand) (services.Order, error) {
+			return services.Order{}, services.ErrOrderConflict
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_222:cancel", strings.NewReader(`{"reason":"dup"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rr.Code)
 	}
 }

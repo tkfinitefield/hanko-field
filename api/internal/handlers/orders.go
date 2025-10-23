@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,9 +19,33 @@ import (
 )
 
 const (
-	defaultOrderPageSize = 20
-	maxOrderPageSize     = 100
+	defaultOrderPageSize   = 20
+	maxOrderPageSize       = 100
+	maxOrderCancelBodySize = 4 * 1024
 )
+
+var userCancellableStatuses = map[domain.OrderStatus]struct{}{
+	domain.OrderStatusPendingPayment: {},
+	domain.OrderStatusPaid:           {},
+}
+
+var validOrderStatuses = map[domain.OrderStatus]struct{}{
+	domain.OrderStatusDraft:          {},
+	domain.OrderStatusPendingPayment: {},
+	domain.OrderStatusPaid:           {},
+	domain.OrderStatusInProduction:   {},
+	domain.OrderStatusReadyToShip:    {},
+	domain.OrderStatusShipped:        {},
+	domain.OrderStatusDelivered:      {},
+	domain.OrderStatusCompleted:      {},
+	domain.OrderStatusCanceled:       {},
+}
+
+type cancelOrderRequest struct {
+	Reason         string         `json:"reason"`
+	Metadata       map[string]any `json:"metadata"`
+	ExpectedStatus string         `json:"expected_status"`
+}
 
 // OrderHandlers exposes order read-only endpoints for authenticated users.
 type OrderHandlers struct {
@@ -45,6 +71,7 @@ func (h *OrderHandlers) Routes(r chi.Router) {
 	}
 	r.Get("/", h.listOrders)
 	r.Get("/{orderID}", h.getOrder)
+	r.Post("/{orderID}:cancel", h.cancelOrder)
 }
 
 func (h *OrderHandlers) listOrders(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +193,93 @@ func (h *OrderHandlers) getOrder(w http.ResponseWriter, r *http.Request) {
 
 	payload := orderResponse{
 		Order: buildOrderPayload(order),
+	}
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *OrderHandlers) cancelOrder(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.orders == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("order_service_unavailable", "order service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "order id is required", http.StatusBadRequest))
+		return
+	}
+
+	var req cancelOrderRequest
+	body, err := readLimitedBody(r, maxOrderCancelBodySize)
+	if err != nil {
+		switch {
+		case errors.Is(err, errBodyTooLarge):
+			httpx.WriteError(ctx, w, httpx.NewError("payload_too_large", "request body exceeds allowed size", http.StatusRequestEntityTooLarge))
+		default:
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		}
+		return
+	}
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &req); err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "invalid JSON body", http.StatusBadRequest))
+			return
+		}
+	}
+
+	order, err := h.orders.GetOrder(ctx, orderID, services.OrderReadOptions{})
+	if err != nil {
+		writeOrderError(ctx, w, err)
+		return
+	}
+
+	if !strings.EqualFold(strings.TrimSpace(order.UserID), strings.TrimSpace(identity.UID)) {
+		httpx.WriteError(ctx, w, httpx.NewError("order_not_found", "order not found", http.StatusNotFound))
+		return
+	}
+
+	if !isUserCancellableStatus(order.Status) {
+		httpx.WriteError(ctx, w, httpx.NewError("order_invalid_state", "order cannot be canceled in its current status", http.StatusConflict))
+		return
+	}
+
+	reason := strings.TrimSpace(req.Reason)
+	reservationID := extractReservationID(order.Metadata)
+
+	expectedStatus := services.OrderStatus(order.Status)
+	if raw := strings.TrimSpace(req.ExpectedStatus); raw != "" {
+		parsed, ok := parseOrderStatus(raw)
+		if !ok {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "expected_status must be a valid order status", http.StatusBadRequest))
+			return
+		}
+		expectedStatus = parsed
+	}
+
+	cmd := services.CancelOrderCommand{
+		OrderID:        orderID,
+		ActorID:        strings.TrimSpace(identity.UID),
+		Reason:         reason,
+		ReservationID:  reservationID,
+		ExpectedStatus: &expectedStatus,
+		Metadata:       cloneMap(req.Metadata),
+	}
+
+	canceled, err := h.orders.Cancel(ctx, cmd)
+	if err != nil {
+		writeOrderError(ctx, w, err)
+		return
+	}
+
+	payload := orderResponse{
+		Order: buildOrderPayload(canceled),
 	}
 	writeJSONResponse(w, http.StatusOK, payload)
 }
@@ -508,4 +622,47 @@ func writeOrderError(ctx context.Context, w http.ResponseWriter, err error) {
 	default:
 		httpx.WriteError(ctx, w, httpx.NewError("order_error", "failed to process order request", http.StatusInternalServerError))
 	}
+}
+
+func extractReservationID(metadata map[string]any) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	if value, ok := metadata["reservationId"]; ok {
+		if str := stringify(value); str != "" {
+			return str
+		}
+	}
+	if value, ok := metadata["reservationID"]; ok {
+		if str := stringify(value); str != "" {
+			return str
+		}
+	}
+	return ""
+}
+
+func stringify(value any) string {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case fmt.Stringer:
+		return strings.TrimSpace(v.String())
+	case []byte:
+		return strings.TrimSpace(string(v))
+	default:
+		return ""
+	}
+}
+
+func isUserCancellableStatus(status domain.OrderStatus) bool {
+	_, ok := userCancellableStatuses[domain.OrderStatus(strings.TrimSpace(string(status)))]
+	return ok
+}
+
+func parseOrderStatus(raw string) (services.OrderStatus, bool) {
+	status := domain.OrderStatus(strings.TrimSpace(strings.ToLower(raw)))
+	if _, ok := validOrderStatuses[status]; !ok {
+		return "", false
+	}
+	return services.OrderStatus(status), true
 }
