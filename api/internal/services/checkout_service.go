@@ -52,6 +52,17 @@ type CheckoutWorkflowDispatcher interface {
 	DispatchCheckoutWorkflow(ctx context.Context, payload CheckoutWorkflowPayload) (string, error)
 }
 
+// CheckoutWorkflowDispatcherFunc adapts a function into a CheckoutWorkflowDispatcher.
+type CheckoutWorkflowDispatcherFunc func(ctx context.Context, payload CheckoutWorkflowPayload) (string, error)
+
+// DispatchCheckoutWorkflow invokes the wrapped function.
+func (f CheckoutWorkflowDispatcherFunc) DispatchCheckoutWorkflow(ctx context.Context, payload CheckoutWorkflowPayload) (string, error) {
+	if f == nil {
+		return "", errors.New("checkout workflow dispatcher: nil function")
+	}
+	return f(ctx, payload)
+}
+
 // CheckoutWorkflowPayload captures the contextual data required by post-checkout workers.
 type CheckoutWorkflowPayload struct {
 	UserID          string

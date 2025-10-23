@@ -33,6 +33,8 @@ import (
 	"github.com/hanko-field/api/internal/repositories"
 	firestoreRepo "github.com/hanko-field/api/internal/repositories/firestore"
 	"github.com/hanko-field/api/internal/services"
+
+	"github.com/oklog/ulid/v2"
 )
 
 func main() {
@@ -281,10 +283,26 @@ func main() {
 	cartHandlers := handlers.NewCartHandlers(authenticator, cartService)
 
 	checkoutLogger := logger.Named("checkout")
+	checkoutWorkflowDispatcher := services.CheckoutWorkflowDispatcherFunc(func(ctx context.Context, payload services.CheckoutWorkflowPayload) (string, error) {
+		workflowID := ulid.Make().String()
+		fields := map[string]any{
+			"workflowId":  workflowID,
+			"userId":      strings.TrimSpace(payload.UserID),
+			"cartId":      strings.TrimSpace(payload.CartID),
+			"sessionId":   strings.TrimSpace(payload.SessionID),
+			"intentId":    strings.TrimSpace(payload.PaymentIntentID),
+			"orderId":     strings.TrimSpace(payload.OrderID),
+			"status":      strings.TrimSpace(payload.Status),
+			"reservation": strings.TrimSpace(payload.ReservationID),
+		}
+		checkoutLogger.Debug("checkout workflow dispatched", zap.Any("payload", fields))
+		return workflowID, nil
+	})
 	checkoutService, err := services.NewCheckoutService(services.CheckoutServiceDeps{
 		Carts:     cartRepo,
 		Inventory: inventoryService,
 		Payments:  paymentManager,
+		Workflow:  checkoutWorkflowDispatcher,
 		Clock:     time.Now,
 		Logger: func(ctx context.Context, event string, fields map[string]any) {
 			zFields := make([]zap.Field, 0, len(fields)+1)
