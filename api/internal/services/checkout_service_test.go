@@ -93,8 +93,11 @@ func TestCheckoutServiceCreateSessionSuccess(t *testing.T) {
 			if len(req.Items) != 1 {
 				t.Fatalf("expected 1 line item, got %d", len(req.Items))
 			}
-			if req.Items[0].Amount != 1500 {
-				t.Fatalf("expected unit price 1500, got %d", req.Items[0].Amount)
+			if req.Items[0].Amount != 3300 {
+				t.Fatalf("expected line item amount 3300, got %d", req.Items[0].Amount)
+			}
+			if req.Items[0].Name != "Order" {
+				t.Fatalf("expected aggregated line item name Order, got %s", req.Items[0].Name)
 			}
 			return payments.CheckoutSession{
 				ID:           "sess_123",
@@ -163,6 +166,100 @@ func TestCheckoutServiceCreateSessionSuccess(t *testing.T) {
 	}
 }
 
+func TestCheckoutServiceCreateSessionUsesLineItemsWhenTotalsMatch(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2025, 2, 11, 9, 0, 0, 0, time.UTC)
+	cart := domain.Cart{
+		ID:                "cart-user-2",
+		UserID:            "user-2",
+		Currency:          "JPY",
+		ShippingAddressID: "addr-2",
+		Items: []domain.CartItem{
+			{
+				ID:               "item-1",
+				ProductID:        "prod-1",
+				SKU:              "SKU-1",
+				Quantity:         2,
+				UnitPrice:        1500,
+				Currency:         "JPY",
+				RequiresShipping: true,
+				Metadata:         map[string]any{"name": "Ribbon"},
+			},
+		},
+		Estimate: &domain.CartEstimate{
+			Subtotal: 3000,
+			Discount: 0,
+			Tax:      0,
+			Shipping: 0,
+			Total:    3000,
+		},
+		UpdatedAt: now.Add(-time.Minute),
+		Metadata:  map[string]any{},
+	}
+
+	cartRepo := &stubCartRepository{
+		getFunc: func(context.Context, string) (domain.Cart, error) {
+			return cart, nil
+		},
+		upsertFunc: func(ctx context.Context, c domain.Cart, expected *time.Time) (domain.Cart, error) {
+			return c, nil
+		},
+	}
+
+	inventory := &stubCheckoutInventory{
+		reserveFunc: func(context.Context, InventoryReserveCommand) (InventoryReservation, error) {
+			return InventoryReservation{ID: "sr_match"}, nil
+		},
+	}
+
+	var paymentReq payments.CheckoutSessionRequest
+	paymentMgr := &stubCheckoutPayments{
+		createFunc: func(_ context.Context, _ payments.PaymentContext, req payments.CheckoutSessionRequest) (payments.CheckoutSession, error) {
+			paymentReq = req
+			return payments.CheckoutSession{
+				ID:        "sess_match",
+				Provider:  "stripe",
+				ExpiresAt: now.Add(30 * time.Minute),
+			}, nil
+		},
+	}
+
+	service, err := NewCheckoutService(CheckoutServiceDeps{
+		Carts:          cartRepo,
+		Inventory:      inventory,
+		Payments:       paymentMgr,
+		Clock:          func() time.Time { return now },
+		ReservationTTL: 20 * time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error creating service: %v", err)
+	}
+
+	_, err = service.CreateCheckoutSession(ctx, CreateCheckoutSessionCommand{
+		UserID:     "user-2",
+		CartID:     "cart-user-2",
+		SuccessURL: "https://example.com/success",
+		CancelURL:  "https://example.com/cancel",
+		PSP:        "stripe",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(paymentReq.Items) != 1 {
+		t.Fatalf("expected detailed line items, got %d", len(paymentReq.Items))
+	}
+	item := paymentReq.Items[0]
+	if item.Amount != 1500 {
+		t.Fatalf("expected unit amount 1500, got %d", item.Amount)
+	}
+	if item.Quantity != 2 {
+		t.Fatalf("expected quantity 2, got %d", item.Quantity)
+	}
+	if item.Name != "Ribbon" {
+		t.Fatalf("expected item name Ribbon, got %s", item.Name)
+	}
+}
 func TestCheckoutServiceCreateSessionCartNotReady(t *testing.T) {
 	cartRepo := &stubCartRepository{
 		getFunc: func(context.Context, string) (domain.Cart, error) {

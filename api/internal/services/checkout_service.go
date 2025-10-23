@@ -215,7 +215,7 @@ func (s *checkoutService) createPSPSession(ctx context.Context, cmd CreateChecko
 		CancelURL:      cancelURL,
 		Metadata:       metadata,
 		IdempotencyKey: idempotencyKey,
-		Items:          buildCheckoutLineItems(cart),
+		Items:          buildCheckoutLineItems(cart, amount),
 		AllowPromotion: cart.Promotion != nil && cart.Promotion.Applied,
 	}
 
@@ -408,8 +408,9 @@ func extractInventoryLines(items []domain.CartItem) []InventoryLine {
 	return lines
 }
 
-func buildCheckoutLineItems(cart domain.Cart) []payments.CheckoutLineItem {
+func buildCheckoutLineItems(cart domain.Cart, total int64) []payments.CheckoutLineItem {
 	items := make([]payments.CheckoutLineItem, 0, len(cart.Items))
+	var itemTotal int64
 	for _, item := range cart.Items {
 		if item.Quantity <= 0 || item.UnitPrice <= 0 {
 			continue
@@ -441,8 +442,20 @@ func buildCheckoutLineItems(cart domain.Cart) []payments.CheckoutLineItem {
 			Amount:      item.UnitPrice,
 			Currency:    strings.ToUpper(strings.TrimSpace(firstNonEmpty(item.Currency, cart.Currency))),
 		})
+		itemTotal += item.UnitPrice * int64(item.Quantity)
 	}
-	return items
+
+	if total > 0 && itemTotal == total && len(items) > 0 {
+		return items
+	}
+	return []payments.CheckoutLineItem{
+		{
+			Name:     "Order",
+			Quantity: 1,
+			Amount:   total,
+			Currency: strings.ToUpper(strings.TrimSpace(firstNonEmpty(cart.Currency))),
+		},
+	}
 }
 
 func (s *checkoutService) buildPaymentMetadata(cmdMeta map[string]string, cart domain.Cart, reservation InventoryReservation, idempotencyKey string) map[string]string {
