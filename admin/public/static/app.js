@@ -136,6 +136,13 @@ const initDashboardRefresh = () => {
       .filter((entry) => entry.length > 0);
   };
 
+  const clearRefreshState = (button) => {
+    delete button.dataset.loading;
+    delete button.dataset.dashboardPending;
+    button.classList.remove("btn-loading");
+    button.removeAttribute("aria-busy");
+  };
+
   document.addEventListener("click", (event) => {
     const trigger = event.target instanceof Element ? event.target.closest("[data-dashboard-refresh]") : null;
     if (!trigger) {
@@ -171,27 +178,32 @@ const initDashboardRefresh = () => {
     document.querySelectorAll("[data-dashboard-refresh][data-loading]").forEach((button) => {
       const pending = button.dataset.dashboardPending || "";
       if (!pending) {
-        delete button.dataset.loading;
-        button.classList.remove("btn-loading");
-        button.removeAttribute("aria-busy");
+        clearRefreshState(button);
         return;
       }
       const selectors = parseTargets(pending);
-      const matches = selectors.some((selector) => {
+      if (selectors.length === 0) {
+        clearRefreshState(button);
+        return;
+      }
+      const remaining = selectors.filter((selector) => {
         if (selector === "") {
           return false;
         }
-        if (target.matches(selector)) {
-          return true;
+        if (target.matches(selector) || target.closest(selector) !== null) {
+          return false;
         }
-        return target.closest(selector) !== null;
+        return true;
       });
-      if (matches) {
-        delete button.dataset.loading;
-        delete button.dataset.dashboardPending;
-        button.classList.remove("btn-loading");
-        button.removeAttribute("aria-busy");
+      if (remaining.length === selectors.length) {
+        return;
       }
+      if (remaining.length === 0) {
+        delete button.dataset.dashboardPending;
+        clearRefreshState(button);
+        return;
+      }
+      button.dataset.dashboardPending = remaining.join(",");
     });
   });
 };
