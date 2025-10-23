@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
+
+	"github.com/oklog/ulid/v2"
 
 	domain "github.com/hanko-field/api/internal/domain"
 	"github.com/hanko-field/api/internal/repositories"
@@ -23,6 +26,10 @@ const (
 
 type addressProvider interface {
 	ListAddresses(ctx context.Context, userID string) ([]Address, error)
+}
+
+type designFinder interface {
+	FindByID(ctx context.Context, designID string) (domain.Design, error)
 }
 
 // ErrCartInvalidInput indicates the caller supplied invalid input.
@@ -47,15 +54,21 @@ type CartServiceDeps struct {
 	Repository      repositories.CartRepository
 	Pricer          CartPricer
 	Addresses       addressProvider
+	Designs         designFinder
+	Availability    InventoryAvailabilityService
 	Clock           func() time.Time
 	DefaultCurrency string
 	Logger          func(context.Context, string, map[string]any)
+	IDGenerator     func() string
 }
 
 type cartService struct {
 	repo      repositories.CartRepository
 	pricer    CartPricer
 	addresses addressProvider
+	designs   designFinder
+	inventory InventoryAvailabilityService
+	newID     func() string
 	now       func() time.Time
 	currency  string
 	logger    func(context.Context, string, map[string]any)
@@ -80,10 +93,18 @@ func NewCartService(deps CartServiceDeps) (CartService, error) {
 		logger = func(context.Context, string, map[string]any) {}
 	}
 
+	idGen := deps.IDGenerator
+	if idGen == nil {
+		idGen = func() string { return ulid.Make().String() }
+	}
+
 	service := &cartService{
 		repo:      deps.Repository,
 		pricer:    deps.Pricer,
 		addresses: deps.Addresses,
+		designs:   deps.Designs,
+		inventory: deps.Availability,
+		newID:     idGen,
 		now:       func() time.Time { return deps.Clock().UTC() },
 		currency:  defaultCurrency,
 		logger:    logger,
@@ -166,20 +187,20 @@ func (s *cartService) UpdateCart(ctx context.Context, cmd UpdateCartCommand) (Ca
 	cart = s.normaliseCart(cart, userID)
 	previousUpdatedAt := cart.UpdatedAt
 
-    if exists {
-        if cmd.ExpectedUpdatedAt == nil || cmd.ExpectedUpdatedAt.IsZero() {
-            return Cart{}, ErrCartConflict
-        }
-        expected := cmd.ExpectedUpdatedAt.UTC()
-        previous := previousUpdatedAt.UTC()
-        if cmd.ExpectedFromHeader {
-            expected = expected.Truncate(time.Second)
-            previous = previous.Truncate(time.Second)
-        }
-        if previous.IsZero() || !previous.Equal(expected) {
-            return Cart{}, ErrCartConflict
-        }
-    }
+	if exists {
+		if cmd.ExpectedUpdatedAt == nil || cmd.ExpectedUpdatedAt.IsZero() {
+			return Cart{}, ErrCartConflict
+		}
+		expected := cmd.ExpectedUpdatedAt.UTC()
+		previous := previousUpdatedAt.UTC()
+		if cmd.ExpectedFromHeader {
+			expected = expected.Truncate(time.Second)
+			previous = previous.Truncate(time.Second)
+		}
+		if previous.IsZero() || !previous.Equal(expected) {
+			return Cart{}, ErrCartConflict
+		}
+	}
 
 	var (
 		addressBook     map[string]Address
@@ -557,14 +578,369 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-// AddOrUpdateItem is not yet implemented.
-func (s *cartService) AddOrUpdateItem(ctx context.Context, cmd UpsertCartItemCommand) (Cart, error) {
-	return Cart{}, fmt.Errorf("cart service: add or update item not implemented")
+func cloneCartItems(items []domain.CartItem) []domain.CartItem {
+	if len(items) == 0 {
+		return []domain.CartItem{}
+	}
+	dup := make([]domain.CartItem, len(items))
+	copy(dup, items)
+	for i := range dup {
+		dup[i].Customization = cloneAnyMap(dup[i].Customization)
+		dup[i].Metadata = cloneAnyMap(dup[i].Metadata)
+		dup[i].Estimates = cloneInt64Map(dup[i].Estimates)
+		if dup[i].UpdatedAt != nil {
+			ts := dup[i].UpdatedAt.UTC()
+			dup[i].UpdatedAt = &ts
+		}
+	}
+	return dup
 }
 
-// RemoveItem is not yet implemented.
+func cloneAnyMap(values map[string]any) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(values))
+	for k, v := range values {
+		out[k] = v
+	}
+	return out
+}
+
+func cloneInt64Map(values map[string]int64) map[string]int64 {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]int64, len(values))
+	for k, v := range values {
+		out[k] = v
+	}
+	return out
+}
+
+func cloneStringPointer(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	dup := *value
+	return &dup
+}
+
+func designRefFromID(designID string) *string {
+	trimmed := strings.TrimSpace(designID)
+	if trimmed == "" {
+		return nil
+	}
+	for strings.HasPrefix(trimmed, "/") {
+		trimmed = strings.TrimPrefix(trimmed, "/")
+	}
+	if !strings.HasPrefix(trimmed, "designs/") {
+		trimmed = "designs/" + trimmed
+	}
+	ref := "/" + trimmed
+	return &ref
+}
+
+func equalDesignRef(a *string, b *string) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return strings.TrimSpace(*a) == strings.TrimSpace(*b)
+}
+
+func customizationEqual(a, b map[string]any) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+func sanitizeCustomization(values map[string]any) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+	sanitized := make(map[string]any, len(values))
+	for k, v := range values {
+		key := strings.TrimSpace(k)
+		if key == "" {
+			continue
+		}
+		sanitized[key] = v
+	}
+	if len(sanitized) == 0 {
+		return nil
+	}
+	return sanitized
+}
+
+func indexOfCartItem(items []domain.CartItem, itemID string) int {
+	target := strings.TrimSpace(itemID)
+	if target == "" {
+		return -1
+	}
+	for i, item := range items {
+		if strings.EqualFold(strings.TrimSpace(item.ID), target) {
+			return i
+		}
+	}
+	return -1
+}
+
+func (s *cartService) AddOrUpdateItem(ctx context.Context, cmd UpsertCartItemCommand) (Cart, error) {
+	if s == nil || s.repo == nil {
+		return Cart{}, ErrCartUnavailable
+	}
+
+	userID := strings.TrimSpace(cmd.UserID)
+	if userID == "" {
+		return Cart{}, ErrCartInvalidInput
+	}
+
+	productID := strings.TrimSpace(cmd.ProductID)
+	if productID == "" {
+		return Cart{}, fmt.Errorf("%w: product_id is required", ErrCartInvalidInput)
+	}
+
+	sku := strings.TrimSpace(cmd.SKU)
+	if sku == "" {
+		return Cart{}, fmt.Errorf("%w: sku is required", ErrCartInvalidInput)
+	}
+
+	if cmd.Quantity <= 0 {
+		return Cart{}, fmt.Errorf("%w: quantity must be greater than zero", ErrCartInvalidInput)
+	}
+
+	if cmd.UnitPrice < 0 {
+		return Cart{}, fmt.Errorf("%w: unit_price must be non-negative", ErrCartInvalidInput)
+	}
+
+	currency := strings.ToUpper(strings.TrimSpace(cmd.Currency))
+	if currency == "" {
+		currency = s.currency
+	}
+	if err := validateCurrencyCode(currency); err != nil {
+		return Cart{}, err
+	}
+
+	var designRef *string
+	if cmd.DesignID != nil {
+		designID := strings.TrimSpace(*cmd.DesignID)
+		if designID != "" {
+			if s.designs == nil {
+				return Cart{}, ErrCartUnavailable
+			}
+			design, err := s.designs.FindByID(ctx, designID)
+			if err != nil {
+				if isRepoNotFound(err) {
+					return Cart{}, fmt.Errorf("%w: design not found", ErrCartInvalidInput)
+				}
+				return Cart{}, ErrCartUnavailable
+			}
+			if strings.TrimSpace(design.OwnerID) != userID {
+				return Cart{}, fmt.Errorf("%w: design does not belong to user", ErrCartInvalidInput)
+			}
+			designRef = designRefFromID(design.ID)
+		}
+	}
+
+	cart, err := s.repo.GetCart(ctx, userID)
+	if err != nil {
+		if isRepoNotFound(err) {
+			cart = s.newCart(userID)
+		} else {
+			return Cart{}, s.translateRepoError(err)
+		}
+	}
+	cart = s.normaliseCart(cart, userID)
+
+	if !strings.EqualFold(cart.Currency, currency) {
+		return Cart{}, fmt.Errorf("%w: item currency must match cart currency", ErrCartInvalidInput)
+	}
+
+	items := cloneCartItems(cart.Items)
+	customization := sanitizeCustomization(cmd.Customization)
+	now := s.now()
+
+	itemID := ""
+	if cmd.ItemID != nil {
+		itemID = strings.TrimSpace(*cmd.ItemID)
+	}
+
+	var target *domain.CartItem
+
+	if itemID != "" {
+		idx := indexOfCartItem(items, itemID)
+		if idx < 0 {
+			return Cart{}, ErrCartNotFound
+		}
+		items[idx].Quantity = cmd.Quantity
+		items[idx].UnitPrice = cmd.UnitPrice
+		items[idx].Currency = currency
+		items[idx].Customization = cloneAnyMap(customization)
+		items[idx].DesignRef = cloneStringPointer(designRef)
+		ts := now
+		items[idx].UpdatedAt = &ts
+		target = &items[idx]
+	} else {
+		matchIdx := -1
+		for i := range items {
+			candidate := items[i]
+			if !strings.EqualFold(strings.TrimSpace(candidate.ProductID), productID) {
+				continue
+			}
+			if !strings.EqualFold(strings.TrimSpace(candidate.SKU), sku) {
+				continue
+			}
+			if !equalDesignRef(candidate.DesignRef, designRef) {
+				continue
+			}
+			if !customizationEqual(candidate.Customization, customization) {
+				continue
+			}
+			matchIdx = i
+			break
+		}
+
+		if matchIdx >= 0 {
+			items[matchIdx].Quantity += cmd.Quantity
+			if items[matchIdx].Quantity <= 0 {
+				return Cart{}, fmt.Errorf("%w: resulting quantity must be greater than zero", ErrCartInvalidInput)
+			}
+			items[matchIdx].UnitPrice = cmd.UnitPrice
+			items[matchIdx].Currency = currency
+			items[matchIdx].Customization = cloneAnyMap(customization)
+			ts := now
+			items[matchIdx].UpdatedAt = &ts
+			target = &items[matchIdx]
+		} else {
+			newID := strings.TrimSpace(s.newID())
+			if newID == "" {
+				newID = fmt.Sprintf("item-%d", now.UnixNano())
+			}
+			newItem := domain.CartItem{
+				ID:               newID,
+				ProductID:        productID,
+				SKU:              sku,
+				Quantity:         cmd.Quantity,
+				UnitPrice:        cmd.UnitPrice,
+				Currency:         currency,
+				RequiresShipping: true,
+				Customization:    cloneAnyMap(customization),
+				Metadata:         map[string]any{},
+				AddedAt:          now,
+			}
+			if designRef != nil {
+				newItem.DesignRef = cloneStringPointer(designRef)
+			}
+			items = append(items, newItem)
+			target = &items[len(items)-1]
+		}
+	}
+
+	if s.inventory != nil && target != nil {
+		line := InventoryLine{ProductID: productID, SKU: sku, Quantity: target.Quantity}
+		if err := s.inventory.ValidateAvailability(ctx, []InventoryLine{line}); err != nil {
+			s.logger(ctx, "cart.inventory_validation_failed", map[string]any{
+				"userID": userID,
+				"error":  err.Error(),
+			})
+			return Cart{}, ErrCartInvalidInput
+		}
+	}
+
+	cart.Items = items
+	cart.UpdatedAt = now
+	cart.Estimate = nil
+
+	saved, err := s.repo.ReplaceItems(ctx, userID, items)
+	if err != nil {
+		return Cart{}, s.translateRepoError(err)
+	}
+
+	saved = s.normaliseCart(saved, userID)
+
+	if s.pricer != nil {
+		result, err := s.pricer.Calculate(ctx, PriceCartCommand{Cart: saved})
+		if err != nil {
+			s.logger(ctx, "cart.pricing_failed", map[string]any{
+				"userID": userID,
+				"error":  err.Error(),
+			})
+			return Cart{}, translatePricingError(err)
+		}
+		estimateCopy := result.Estimate
+		saved.Estimate = &estimateCopy
+	} else {
+		estimate := naiveCartEstimate(saved.Items)
+		saved.Estimate = &estimate
+	}
+
+	return saved, nil
+}
+
 func (s *cartService) RemoveItem(ctx context.Context, cmd RemoveCartItemCommand) (Cart, error) {
-	return Cart{}, fmt.Errorf("cart service: remove item not implemented")
+	if s == nil || s.repo == nil {
+		return Cart{}, ErrCartUnavailable
+	}
+
+	userID := strings.TrimSpace(cmd.UserID)
+	if userID == "" {
+		return Cart{}, ErrCartInvalidInput
+	}
+
+	itemID := strings.TrimSpace(cmd.ItemID)
+	if itemID == "" {
+		return Cart{}, ErrCartInvalidInput
+	}
+
+	cart, err := s.repo.GetCart(ctx, userID)
+	if err != nil {
+		if isRepoNotFound(err) {
+			return Cart{}, ErrCartNotFound
+		}
+		return Cart{}, s.translateRepoError(err)
+	}
+	cart = s.normaliseCart(cart, userID)
+
+	items := cloneCartItems(cart.Items)
+	idx := indexOfCartItem(items, itemID)
+	if idx < 0 {
+		return Cart{}, ErrCartNotFound
+	}
+
+	items = append(items[:idx], items[idx+1:]...)
+	now := s.now()
+	cart.Items = items
+	cart.UpdatedAt = now
+	cart.Estimate = nil
+
+	saved, err := s.repo.ReplaceItems(ctx, userID, items)
+	if err != nil {
+		return Cart{}, s.translateRepoError(err)
+	}
+
+	saved = s.normaliseCart(saved, userID)
+
+	if s.pricer != nil {
+		result, err := s.pricer.Calculate(ctx, PriceCartCommand{Cart: saved})
+		if err != nil {
+			s.logger(ctx, "cart.pricing_failed", map[string]any{
+				"userID": userID,
+				"error":  err.Error(),
+			})
+			return Cart{}, translatePricingError(err)
+		}
+		estimateCopy := result.Estimate
+		saved.Estimate = &estimateCopy
+	} else {
+		estimate := naiveCartEstimate(saved.Items)
+		saved.Estimate = &estimate
+	}
+
+	return saved, nil
 }
 
 // Estimate is not yet implemented.

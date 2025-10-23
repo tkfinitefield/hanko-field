@@ -142,6 +142,226 @@ func TestCartServiceGetOrCreateCartInvalidUser(t *testing.T) {
 	}
 }
 
+func TestCartServiceAddOrUpdateItemCreatesNew(t *testing.T) {
+	now := time.Date(2024, 7, 5, 10, 0, 0, 0, time.UTC)
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{ID: userID, UserID: userID, Currency: "JPY", Items: []domain.CartItem{}, CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Minute)}, nil
+		},
+		replaceFunc: func(ctx context.Context, userID string, items []domain.CartItem) (domain.Cart, error) {
+			if userID != "user-new" {
+				t.Fatalf("unexpected user id %q", userID)
+			}
+			if len(items) != 1 {
+				t.Fatalf("expected 1 item, got %d", len(items))
+			}
+			if items[0].Quantity != 2 {
+				t.Fatalf("expected quantity 2, got %d", items[0].Quantity)
+			}
+			if items[0].Customization["color"] != "red" {
+				t.Fatalf("expected customization color red, got %#v", items[0].Customization)
+			}
+			return domain.Cart{ID: userID, UserID: userID, Currency: "JPY", Items: items, UpdatedAt: now.Add(time.Minute)}, nil
+		},
+	}
+
+	invCalled := false
+	inventory := &stubInventoryAvailability{
+		validateFunc: func(ctx context.Context, lines []InventoryLine) error {
+			invCalled = true
+			if len(lines) != 1 {
+				t.Fatalf("expected 1 inventory line, got %d", len(lines))
+			}
+			if lines[0].Quantity != 2 {
+				t.Fatalf("expected quantity 2, got %d", lines[0].Quantity)
+			}
+			if lines[0].ProductID != "prod-1" {
+				t.Fatalf("expected product prod-1, got %s", lines[0].ProductID)
+			}
+			return nil
+		},
+	}
+
+	pricer := &stubCartPricer{
+		calculateFunc: func(ctx context.Context, cmd PriceCartCommand) (PriceCartResult, error) {
+			if len(cmd.Cart.Items) != 1 {
+				t.Fatalf("expected 1 item, got %d", len(cmd.Cart.Items))
+			}
+			return PriceCartResult{Estimate: CartEstimate{Subtotal: 1000, Total: 1000}}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Pricer:          pricer,
+		Availability:    inventory,
+		Clock:           func() time.Time { return now },
+		DefaultCurrency: "JPY",
+		IDGenerator:     func() string { return "item-generated" },
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	cart, err := service.AddOrUpdateItem(context.Background(), UpsertCartItemCommand{
+		UserID:        "user-new",
+		ProductID:     "prod-1",
+		SKU:           "SKU-1",
+		Quantity:      2,
+		UnitPrice:     500,
+		Currency:      "JPY",
+		Customization: map[string]any{"color": "red"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !invCalled {
+		t.Fatalf("expected inventory validation to be invoked")
+	}
+	if len(cart.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(cart.Items))
+	}
+	if cart.Items[0].ID != "item-generated" {
+		t.Fatalf("expected generated item id, got %s", cart.Items[0].ID)
+	}
+	if cart.Estimate == nil || cart.Estimate.Total != 1000 {
+		t.Fatalf("expected estimate total 1000, got %#v", cart.Estimate)
+	}
+}
+
+func TestCartServiceAddOrUpdateItemMerges(t *testing.T) {
+	now := time.Date(2024, 7, 6, 9, 0, 0, 0, time.UTC)
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{
+				ID:       userID,
+				UserID:   userID,
+				Currency: "JPY",
+				Items: []domain.CartItem{{
+					ID:               "item-1",
+					ProductID:        "prod-merge",
+					SKU:              "SKU-M",
+					Quantity:         1,
+					UnitPrice:        500,
+					Currency:         "JPY",
+					RequiresShipping: true,
+					Customization:    map[string]any{"size": "M"},
+				}},
+				UpdatedAt: now.Add(-time.Hour),
+			}, nil
+		},
+		replaceFunc: func(ctx context.Context, userID string, items []domain.CartItem) (domain.Cart, error) {
+			if len(items) != 1 {
+				t.Fatalf("expected 1 item, got %d", len(items))
+			}
+			if items[0].Quantity != 4 {
+				t.Fatalf("expected merged quantity 4, got %d", items[0].Quantity)
+			}
+			return domain.Cart{ID: userID, UserID: userID, Currency: "JPY", Items: items, UpdatedAt: now.Add(time.Minute)}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Clock:           func() time.Time { return now },
+		DefaultCurrency: "JPY",
+		IDGenerator:     func() string { return "unused" },
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	cart, err := service.AddOrUpdateItem(context.Background(), UpsertCartItemCommand{
+		UserID:        "user-merge",
+		ProductID:     "prod-merge",
+		SKU:           "SKU-M",
+		Quantity:      3,
+		UnitPrice:     500,
+		Currency:      "JPY",
+		Customization: map[string]any{"size": "M"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cart.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(cart.Items))
+	}
+	if cart.Items[0].Quantity != 4 {
+		t.Fatalf("expected merged quantity 4, got %d", cart.Items[0].Quantity)
+	}
+}
+
+func TestCartServiceAddOrUpdateItemDesignOwnership(t *testing.T) {
+	now := time.Date(2024, 7, 7, 12, 0, 0, 0, time.UTC)
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{ID: userID, UserID: userID, Currency: "JPY", Items: []domain.CartItem{}}, nil
+		},
+	}
+
+	designs := &stubDesignFinder{
+		findFunc: func(ctx context.Context, designID string) (domain.Design, error) {
+			return domain.Design{ID: designID, OwnerID: "other-user"}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Designs:         designs,
+		Clock:           func() time.Time { return now },
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	_, err = service.AddOrUpdateItem(context.Background(), UpsertCartItemCommand{
+		UserID:    "user-owner",
+		ProductID: "prod",
+		SKU:       "SKU",
+		Quantity:  1,
+		UnitPrice: 500,
+		Currency:  "JPY",
+		DesignID:  strPtr("design-1"),
+	})
+	if err == nil || !errors.Is(err, ErrCartInvalidInput) {
+		t.Fatalf("expected ErrCartInvalidInput, got %v", err)
+	}
+}
+
+func TestCartServiceRemoveItem(t *testing.T) {
+	now := time.Date(2024, 7, 8, 8, 0, 0, 0, time.UTC)
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{ID: userID, UserID: userID, Currency: "JPY", Items: []domain.CartItem{{ID: "item-1", ProductID: "prod", SKU: "SKU", Quantity: 1, UnitPrice: 500, Currency: "JPY"}}}, nil
+		},
+		replaceFunc: func(ctx context.Context, userID string, items []domain.CartItem) (domain.Cart, error) {
+			if len(items) != 0 {
+				t.Fatalf("expected items cleared, got %d", len(items))
+			}
+			return domain.Cart{ID: userID, UserID: userID, Currency: "JPY", Items: []domain.CartItem{}}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Clock:           func() time.Time { return now },
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	cart, err := service.RemoveItem(context.Background(), RemoveCartItemCommand{UserID: "user-rm", ItemID: "item-1"})
+	if err != nil {
+		t.Fatalf("unexpected error removing item: %v", err)
+	}
+	if len(cart.Items) != 0 {
+		t.Fatalf("expected cart to be empty, got %d", len(cart.Items))
+	}
+}
+
 func TestCartServiceGetOrCreateCartPricingError(t *testing.T) {
 	repo := &stubCartRepository{
 		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
@@ -468,4 +688,26 @@ func (s *stubAddressProvider) ListAddresses(ctx context.Context, userID string) 
 		return s.listFunc(ctx, userID)
 	}
 	return nil, nil
+}
+
+type stubDesignFinder struct {
+	findFunc func(ctx context.Context, designID string) (domain.Design, error)
+}
+
+func (s *stubDesignFinder) FindByID(ctx context.Context, designID string) (domain.Design, error) {
+	if s.findFunc != nil {
+		return s.findFunc(ctx, designID)
+	}
+	return domain.Design{}, errors.New("not implemented")
+}
+
+type stubInventoryAvailability struct {
+	validateFunc func(ctx context.Context, lines []InventoryLine) error
+}
+
+func (s *stubInventoryAvailability) ValidateAvailability(ctx context.Context, lines []InventoryLine) error {
+	if s.validateFunc != nil {
+		return s.validateFunc(ctx, lines)
+	}
+	return nil
 }

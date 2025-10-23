@@ -457,6 +457,8 @@ type UpsertCartItemCommand struct {
 	ProductID     string
 	SKU           string
 	Quantity      int
+	UnitPrice     int64
+	Currency      string
 	Customization map[string]any
 	DesignID      *string
 }

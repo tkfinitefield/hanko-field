@@ -260,9 +260,141 @@ func TestCartHandlersPatchCartConflict(t *testing.T) {
 	}
 }
 
+func TestCartHandlersListItemsSuccess(t *testing.T) {
+	service := &stubCartService{
+		getOrCreateFunc: func(ctx context.Context, userID string) (services.Cart, error) {
+			return services.Cart{
+				ID:       "cart-1",
+				UserID:   userID,
+				Currency: "JPY",
+				Items: []services.CartItem{
+					{ID: "item-1", ProductID: "prod-1", SKU: "SKU-1", Quantity: 1, UnitPrice: 500, Currency: "JPY"},
+					{ID: "item-2", ProductID: "prod-2", SKU: "SKU-2", Quantity: 2, UnitPrice: 800, Currency: "JPY"},
+				},
+			}, nil
+		},
+	}
+
+	handler := NewCartHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/cart", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/cart/items", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.Code)
+	}
+
+	var payload cartItemsResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(payload.Items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(payload.Items))
+	}
+}
+
+func TestCartHandlersCreateItemSuccess(t *testing.T) {
+	var captured services.UpsertCartItemCommand
+	service := &stubCartService{
+		addOrUpdateFunc: func(ctx context.Context, cmd services.UpsertCartItemCommand) (services.Cart, error) {
+			captured = cmd
+			return services.Cart{
+				ID:       "cart-1",
+				UserID:   cmd.UserID,
+				Currency: "JPY",
+				Items:    []services.CartItem{{ID: "item-1", ProductID: cmd.ProductID, SKU: cmd.SKU, Quantity: cmd.Quantity, UnitPrice: cmd.UnitPrice, Currency: "JPY"}},
+			}, nil
+		},
+	}
+
+	handler := NewCartHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/cart", handler.Routes)
+
+	body := `{"product_id":"prod-1","sku":"SKU-1","quantity":2,"unit_price":500,"currency":"JPY","customization":{"color":"red"}}`
+	req := httptest.NewRequest(http.MethodPost, "/cart/items", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", resp.Code)
+	}
+	if captured.UserID != "user-1" || captured.ProductID != "prod-1" || captured.Quantity != 2 {
+		t.Fatalf("unexpected command captured %#v", captured)
+	}
+	if captured.Customization["color"] != "red" {
+		t.Fatalf("expected customization captured")
+	}
+}
+
+func TestCartHandlersUpdateItemSuccess(t *testing.T) {
+	var captured services.UpsertCartItemCommand
+	service := &stubCartService{
+		addOrUpdateFunc: func(ctx context.Context, cmd services.UpsertCartItemCommand) (services.Cart, error) {
+			captured = cmd
+			return services.Cart{ID: "cart-1", UserID: cmd.UserID, Currency: "JPY", Items: []services.CartItem{{ID: "item-9", ProductID: cmd.ProductID, SKU: cmd.SKU, Quantity: cmd.Quantity, UnitPrice: cmd.UnitPrice, Currency: "JPY"}}}, nil
+		},
+	}
+
+	handler := NewCartHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/cart", handler.Routes)
+
+	body := `{"product_id":"prod-9","sku":"SKU-9","quantity":5,"unit_price":900}`
+	req := httptest.NewRequest(http.MethodPut, "/cart/items/item-9", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-9"}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.Code)
+	}
+	if captured.ItemID == nil || *captured.ItemID != "item-9" {
+		t.Fatalf("expected item id captured, got %#v", captured.ItemID)
+	}
+	if captured.Quantity != 5 {
+		t.Fatalf("expected quantity 5, got %d", captured.Quantity)
+	}
+}
+
+func TestCartHandlersDeleteItemSuccess(t *testing.T) {
+	var captured services.RemoveCartItemCommand
+	service := &stubCartService{
+		removeFunc: func(ctx context.Context, cmd services.RemoveCartItemCommand) (services.Cart, error) {
+			captured = cmd
+			return services.Cart{ID: cmd.UserID, UserID: cmd.UserID, Currency: "JPY", Items: []services.CartItem{}}, nil
+		},
+	}
+
+	handler := NewCartHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/cart", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodDelete, "/cart/items/item-3", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-3"}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.Code)
+	}
+	if captured.ItemID != "item-3" {
+		t.Fatalf("expected captured item id item-3, got %s", captured.ItemID)
+	}
+}
+
 type stubCartService struct {
 	getOrCreateFunc func(ctx context.Context, userID string) (services.Cart, error)
 	updateFunc      func(ctx context.Context, cmd services.UpdateCartCommand) (services.Cart, error)
+	addOrUpdateFunc func(ctx context.Context, cmd services.UpsertCartItemCommand) (services.Cart, error)
+	removeFunc      func(ctx context.Context, cmd services.RemoveCartItemCommand) (services.Cart, error)
 }
 
 func (s *stubCartService) GetOrCreateCart(ctx context.Context, userID string) (services.Cart, error) {
@@ -280,10 +412,16 @@ func (s *stubCartService) UpdateCart(ctx context.Context, cmd services.UpdateCar
 }
 
 func (s *stubCartService) AddOrUpdateItem(ctx context.Context, cmd services.UpsertCartItemCommand) (services.Cart, error) {
+	if s.addOrUpdateFunc != nil {
+		return s.addOrUpdateFunc(ctx, cmd)
+	}
 	return services.Cart{}, errors.New("not implemented")
 }
 
 func (s *stubCartService) RemoveItem(ctx context.Context, cmd services.RemoveCartItemCommand) (services.Cart, error) {
+	if s.removeFunc != nil {
+		return s.removeFunc(ctx, cmd)
+	}
 	return services.Cart{}, errors.New("not implemented")
 }
 

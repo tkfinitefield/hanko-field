@@ -44,6 +44,10 @@ func (h *CartHandlers) Routes(r chi.Router) {
 	}
 	r.Get("/", h.getCart)
 	r.Patch("/", h.patchCart)
+	r.Get("/items", h.listItems)
+	r.Post("/items", h.createItem)
+	r.Put("/items/{itemId}", h.updateItem)
+	r.Delete("/items/{itemId}", h.deleteItem)
 }
 
 func (h *CartHandlers) getCart(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +144,148 @@ func (h *CartHandlers) patchCart(w http.ResponseWriter, r *http.Request) {
 
 	payload := cartResponse{Cart: buildCartPayload(updated)}
 	setCartResponseHeaders(w, updated)
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *CartHandlers) listItems(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.carts == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("cart_service_unavailable", "cart service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	cart, err := h.carts.GetOrCreateCart(ctx, identity.UID)
+	if err != nil {
+		h.writeCartError(ctx, w, err)
+		return
+	}
+
+	setCartResponseHeaders(w, cart)
+	payload := cartItemsResponse{Items: buildCartItems(cart.Items)}
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *CartHandlers) createItem(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.carts == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("cart_service_unavailable", "cart service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	body, err := readLimitedBody(r, maxCartBodySize)
+	if err != nil {
+		switch {
+		case errors.Is(err, errBodyTooLarge):
+			httpx.WriteError(ctx, w, httpx.NewError("payload_too_large", "request body exceeds allowed size", http.StatusRequestEntityTooLarge))
+		default:
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		}
+		return
+	}
+
+	cmd, err := parseCartItemCommand(identity.UID, "", body)
+	if err != nil {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	cart, err := h.carts.AddOrUpdateItem(ctx, cmd)
+	if err != nil {
+		h.writeCartError(ctx, w, err)
+		return
+	}
+
+	setCartResponseHeaders(w, cart)
+	payload := cartResponse{Cart: buildCartPayload(cart)}
+	writeJSONResponse(w, http.StatusCreated, payload)
+}
+
+func (h *CartHandlers) updateItem(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.carts == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("cart_service_unavailable", "cart service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	itemID := strings.TrimSpace(chi.URLParam(r, "itemId"))
+	if itemID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "item_id is required", http.StatusBadRequest))
+		return
+	}
+
+	body, err := readLimitedBody(r, maxCartBodySize)
+	if err != nil {
+		switch {
+		case errors.Is(err, errBodyTooLarge):
+			httpx.WriteError(ctx, w, httpx.NewError("payload_too_large", "request body exceeds allowed size", http.StatusRequestEntityTooLarge))
+		default:
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		}
+		return
+	}
+
+	cmd, err := parseCartItemCommand(identity.UID, itemID, body)
+	if err != nil {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	cart, err := h.carts.AddOrUpdateItem(ctx, cmd)
+	if err != nil {
+		h.writeCartError(ctx, w, err)
+		return
+	}
+
+	setCartResponseHeaders(w, cart)
+	payload := cartResponse{Cart: buildCartPayload(cart)}
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *CartHandlers) deleteItem(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.carts == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("cart_service_unavailable", "cart service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	itemID := strings.TrimSpace(chi.URLParam(r, "itemId"))
+	if itemID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "item_id is required", http.StatusBadRequest))
+		return
+	}
+
+	cart, err := h.carts.RemoveItem(ctx, services.RemoveCartItemCommand{UserID: identity.UID, ItemID: itemID})
+	if err != nil {
+		h.writeCartError(ctx, w, err)
+		return
+	}
+
+	setCartResponseHeaders(w, cart)
+	payload := cartResponse{Cart: buildCartPayload(cart)}
 	writeJSONResponse(w, http.StatusOK, payload)
 }
 
@@ -286,6 +432,10 @@ type cartResponse struct {
 	Cart cartPayload `json:"cart"`
 }
 
+type cartItemsResponse struct {
+	Items []cartItemPayload `json:"items"`
+}
+
 type cartPayload struct {
 	ID              string                `json:"id"`
 	UserID          string                `json:"user_id"`
@@ -346,6 +496,16 @@ type updateCartRequest struct {
 	promotionSet      bool
 	updatedAt         *time.Time
 	versionFromHeader bool
+}
+
+type cartItemRequest struct {
+	ProductID     string         `json:"product_id"`
+	SKU           string         `json:"sku"`
+	Quantity      *int           `json:"quantity"`
+	UnitPrice     *int64         `json:"unit_price"`
+	Currency      *string        `json:"currency"`
+	Customization map[string]any `json:"customization"`
+	DesignID      *string        `json:"design_id"`
 }
 
 func parseUpdateCartRequest(body []byte) (updateCartRequest, error) {
@@ -448,4 +608,60 @@ func parseUpdateCartRequest(body []byte) (updateCartRequest, error) {
 	}
 
 	return req, nil
+}
+
+func parseCartItemCommand(userID string, itemID string, body []byte) (services.UpsertCartItemCommand, error) {
+	if len(strings.TrimSpace(string(body))) == 0 {
+		return services.UpsertCartItemCommand{}, errEmptyBody
+	}
+
+	var req cartItemRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		return services.UpsertCartItemCommand{}, errors.New("invalid JSON payload")
+	}
+
+	productID := strings.TrimSpace(req.ProductID)
+	if productID == "" {
+		return services.UpsertCartItemCommand{}, errors.New("product_id is required")
+	}
+
+	sku := strings.TrimSpace(req.SKU)
+	if sku == "" {
+		return services.UpsertCartItemCommand{}, errors.New("sku is required")
+	}
+
+	if req.Quantity == nil {
+		return services.UpsertCartItemCommand{}, errors.New("quantity is required")
+	}
+
+	if req.UnitPrice == nil {
+		return services.UpsertCartItemCommand{}, errors.New("unit_price is required")
+	}
+
+	cmd := services.UpsertCartItemCommand{
+		UserID:        userID,
+		ProductID:     productID,
+		SKU:           sku,
+		Quantity:      *req.Quantity,
+		UnitPrice:     *req.UnitPrice,
+		Customization: req.Customization,
+	}
+
+	if req.Currency != nil {
+		cmd.Currency = strings.TrimSpace(*req.Currency)
+	}
+
+	if strings.TrimSpace(itemID) != "" {
+		id := strings.TrimSpace(itemID)
+		cmd.ItemID = &id
+	}
+
+	if req.DesignID != nil {
+		designID := strings.TrimSpace(*req.DesignID)
+		if designID != "" {
+			cmd.DesignID = &designID
+		}
+	}
+
+	return cmd, nil
 }
