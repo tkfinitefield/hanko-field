@@ -34,7 +34,14 @@ const isEditableTarget = (element) => {
 };
 
 const formatNotificationCount = (value) => {
-  const parsed = Number.parseInt(value, 10);
+  const raw = typeof value === "string" ? value.trim() : String(value ?? "").trim();
+  if (raw === "") {
+    return { display: "0", empty: true };
+  }
+  if (raw.includes("+")) {
+    return { display: raw, empty: false };
+  }
+  const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return { display: "0", empty: true };
   }
