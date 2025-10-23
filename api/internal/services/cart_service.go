@@ -569,6 +569,63 @@ func naiveCartEstimate(items []domain.CartItem) CartEstimate {
 	}
 }
 
+func buildNaiveBreakdown(items []domain.CartItem, currency string, estimate CartEstimate) PricingBreakdown {
+	cur := strings.ToUpper(strings.TrimSpace(currency))
+	breakdown := PricingBreakdown{
+		Currency: cur,
+		Subtotal: estimate.Subtotal,
+		Discount: estimate.Discount,
+		Tax:      estimate.Tax,
+		Shipping: estimate.Shipping,
+		Total:    estimate.Total,
+	}
+
+	if len(items) == 0 {
+		breakdown.Items = []ItemPricingBreakdown{}
+		return breakdown
+	}
+
+	breakdown.Items = make([]ItemPricingBreakdown, 0, len(items))
+	for _, item := range items {
+		qty := int64(item.Quantity)
+		if qty < 0 {
+			qty = 0
+		}
+		lineSubtotal := item.UnitPrice * qty
+		if lineSubtotal < 0 {
+			lineSubtotal = 0
+		}
+		entry := ItemPricingBreakdown{
+			ItemID:   strings.TrimSpace(item.ID),
+			Currency: cur,
+			Subtotal: lineSubtotal,
+			Total:    lineSubtotal,
+		}
+		breakdown.Items = append(breakdown.Items, entry)
+	}
+	return breakdown
+}
+
+func deriveEstimateWarnings(items []domain.CartItem, shipping *Address, promoRequested bool, promoApplied bool) []CartEstimateWarning {
+	warnings := make([]CartEstimateWarning, 0, 2)
+	if requiresShipping(items) && shipping == nil {
+		warnings = append(warnings, CartEstimateWarningMissingShippingAddress)
+	}
+	if promoRequested && !promoApplied {
+		warnings = append(warnings, CartEstimateWarningPromotionNotApplied)
+	}
+	return warnings
+}
+
+func requiresShipping(items []domain.CartItem) bool {
+	for _, item := range items {
+		if item.RequiresShipping {
+			return true
+		}
+	}
+	return false
+}
+
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
@@ -943,9 +1000,163 @@ func (s *cartService) RemoveItem(ctx context.Context, cmd RemoveCartItemCommand)
 	return saved, nil
 }
 
-// Estimate is not yet implemented.
-func (s *cartService) Estimate(ctx context.Context, userID string) (CartEstimate, error) {
-	return CartEstimate{}, fmt.Errorf("cart service: estimate not implemented")
+func (s *cartService) Estimate(ctx context.Context, cmd CartEstimateCommand) (CartEstimateResult, error) {
+	if s == nil || s.repo == nil {
+		return CartEstimateResult{}, ErrCartUnavailable
+	}
+
+	userID := strings.TrimSpace(cmd.UserID)
+	if userID == "" {
+		return CartEstimateResult{}, ErrCartInvalidInput
+	}
+
+	cart, err := s.repo.GetCart(ctx, userID)
+	if err != nil {
+		if isRepoNotFound(err) {
+			return CartEstimateResult{}, ErrCartNotFound
+		}
+		return CartEstimateResult{}, s.translateRepoError(err)
+	}
+
+	cart = s.normaliseCart(cart, userID)
+	_ = s.hydrateCartAddresses(ctx, &cart, false)
+
+	if len(cart.Items) == 0 {
+		return CartEstimateResult{}, fmt.Errorf("%w: cart has no items", ErrCartInvalidInput)
+	}
+
+	var shippingAddr *Address
+	if cart.ShippingAddress != nil {
+		shippingAddr = cloneCartAddress(cart.ShippingAddress)
+	}
+	var billingAddr *Address
+	if cart.BillingAddress != nil {
+		billingAddr = cloneCartAddress(cart.BillingAddress)
+	}
+
+	if cmd.ShippingAddressID != nil || cmd.BillingAddressID != nil {
+		book, err := s.loadAddressBook(ctx, userID)
+		if err != nil {
+			return CartEstimateResult{}, err
+		}
+		if cmd.ShippingAddressID != nil {
+			id := strings.TrimSpace(*cmd.ShippingAddressID)
+			if id == "" {
+				shippingAddr = nil
+			} else if addr, ok := book[id]; ok {
+				shippingAddr = cloneCartAddress(&addr)
+			} else {
+				return CartEstimateResult{}, ErrCartInvalidInput
+			}
+		}
+		if cmd.BillingAddressID != nil {
+			id := strings.TrimSpace(*cmd.BillingAddressID)
+			if id == "" {
+				billingAddr = nil
+			} else if addr, ok := book[id]; ok {
+				billingAddr = cloneCartAddress(&addr)
+			} else {
+				return CartEstimateResult{}, ErrCartInvalidInput
+			}
+		}
+	}
+
+	var promoCode *string
+	if cmd.PromotionCode != nil {
+		trimmed := strings.TrimSpace(*cmd.PromotionCode)
+		if trimmed != "" {
+			upper := strings.ToUpper(trimmed)
+			promoCode = cloneStringPointer(&upper)
+		}
+	} else if cart.Promotion != nil {
+		if trimmed := strings.TrimSpace(cart.Promotion.Code); trimmed != "" {
+			upper := strings.ToUpper(trimmed)
+			promoCode = cloneStringPointer(&upper)
+		}
+	}
+
+	cartCopy := cart
+	cartCopy.Items = cloneCartItems(cart.Items)
+	cartCopy.ShippingAddress = cloneCartAddress(shippingAddr)
+	cartCopy.BillingAddress = cloneCartAddress(billingAddr)
+
+	var breakdown PricingBreakdown
+	var estimate CartEstimate
+	if s.pricer != nil {
+		result, err := s.pricer.Calculate(ctx, PriceCartCommand{
+			Cart:                cartCopy,
+			PromotionCode:       promoCode,
+			ShippingAddress:     shippingAddr,
+			BillingAddress:      billingAddr,
+			BypassShippingCache: cmd.BypassShippingCache,
+		})
+		if err != nil {
+			s.logger(ctx, "cart.estimate_pricing_failed", map[string]any{
+				"userID": userID,
+				"error":  err.Error(),
+			})
+			return CartEstimateResult{}, translatePricingError(err)
+		}
+		breakdown = result.Breakdown
+		estimate = result.Estimate
+	} else {
+		estimate = naiveCartEstimate(cartCopy.Items)
+		breakdown = buildNaiveBreakdown(cartCopy.Items, cartCopy.Currency, estimate)
+	}
+
+	if strings.TrimSpace(breakdown.Currency) == "" {
+		breakdown.Currency = strings.ToUpper(strings.TrimSpace(firstNonEmpty(cartCopy.Currency, s.currency)))
+	}
+
+	var promotionCopy *CartPromotion
+	if cart.Promotion != nil {
+		dup := *cart.Promotion
+		promotionCopy = &dup
+		promotionCopy.Code = strings.ToUpper(strings.TrimSpace(promotionCopy.Code))
+	}
+
+	promoDiscount := int64(0)
+	promoApplied := false
+	for _, disc := range breakdown.Discounts {
+		if strings.EqualFold(strings.TrimSpace(disc.Type), "promotion") && disc.Amount > 0 {
+			promoApplied = true
+			if disc.Amount > promoDiscount {
+				promoDiscount = disc.Amount
+			}
+		}
+	}
+
+	if promotionCopy != nil {
+		promotionCopy.Applied = promoApplied
+		if promoDiscount > 0 {
+			promotionCopy.DiscountAmount = promoDiscount
+		}
+	}
+
+	if promotionCopy == nil && promoApplied && promoCode != nil {
+		code := strings.ToUpper(strings.TrimSpace(*promoCode))
+		promotionCopy = &CartPromotion{Code: code, DiscountAmount: promoDiscount, Applied: true}
+	}
+
+	promoRequested := false
+	if promoCode != nil && strings.TrimSpace(*promoCode) != "" {
+		promoRequested = true
+	}
+	if !promoRequested && cart.Promotion != nil && strings.TrimSpace(cart.Promotion.Code) != "" {
+		promoRequested = true
+	}
+
+	warnings := deriveEstimateWarnings(cartCopy.Items, shippingAddr, promoRequested, promoApplied)
+
+	currency := strings.ToUpper(strings.TrimSpace(firstNonEmpty(breakdown.Currency, cartCopy.Currency, s.currency)))
+
+	return CartEstimateResult{
+		Currency:  currency,
+		Estimate:  estimate,
+		Breakdown: breakdown,
+		Promotion: promotionCopy,
+		Warnings:  warnings,
+	}, nil
 }
 
 // ApplyPromotion is not yet implemented.

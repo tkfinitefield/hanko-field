@@ -28,6 +28,7 @@ type routerConfig struct {
 	admin    RouteRegistrar
 	webhooks RouteRegistrar
 	internal RouteRegistrar
+	extras   []RouteRegistrar
 
 	webhookMiddlewares  []func(http.Handler) http.Handler
 	internalMiddlewares []func(http.Handler) http.Handler
@@ -110,6 +111,12 @@ func NewRouter(opts ...Option) chi.Router {
 		mount("/admin", cfg.admin, "admin", nil)
 		mount("/webhooks", cfg.webhooks, "webhooks", cfg.webhookMiddlewares)
 		mount("/internal", cfg.internal, "internal", cfg.internalMiddlewares)
+
+		for _, extra := range cfg.extras {
+			if extra != nil {
+				extra(api)
+			}
+		}
 	})
 
 	return r
@@ -161,6 +168,15 @@ func WithNameMappingRoutes(reg RouteRegistrar) Option {
 func WithCartRoutes(reg RouteRegistrar) Option {
 	return func(cfg *routerConfig) {
 		cfg.cart = reg
+	}
+}
+
+// WithAdditionalRoutes registers extra routes under the API base path.
+func WithAdditionalRoutes(reg RouteRegistrar) Option {
+	return func(cfg *routerConfig) {
+		if reg != nil {
+			cfg.extras = append(cfg.extras, reg)
+		}
 	}
 }
 

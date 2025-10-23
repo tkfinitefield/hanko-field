@@ -50,6 +50,18 @@ func (h *CartHandlers) Routes(r chi.Router) {
 	r.Delete("/items/{itemId}", h.deleteItem)
 }
 
+// RegisterStandaloneRoutes mounts cart endpoints that are not nested under /cart.
+func (h *CartHandlers) RegisterStandaloneRoutes(r chi.Router) {
+	if r == nil {
+		return
+	}
+	group := r
+	if h.authn != nil {
+		group = group.With(h.authn.RequireFirebaseAuth())
+	}
+	group.Post("/cart:estimate", h.estimateCart)
+}
+
 func (h *CartHandlers) getCart(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.carts == nil {
@@ -144,6 +156,61 @@ func (h *CartHandlers) patchCart(w http.ResponseWriter, r *http.Request) {
 
 	payload := cartResponse{Cart: buildCartPayload(updated)}
 	setCartResponseHeaders(w, updated)
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *CartHandlers) estimateCart(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.carts == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("cart_service_unavailable", "cart service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	body, err := readLimitedBody(r, maxCartBodySize)
+	if err != nil {
+		switch {
+		case errors.Is(err, errBodyTooLarge):
+			httpx.WriteError(ctx, w, httpx.NewError("payload_too_large", "request body exceeds allowed size", http.StatusRequestEntityTooLarge))
+		default:
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		}
+		return
+	}
+
+	req, err := parseCartEstimateRequest(body)
+	if err != nil {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	cmd := services.CartEstimateCommand{UserID: identity.UID}
+	if req.shippingSet {
+		cmd.ShippingAddressID = req.shippingAddressID
+	}
+	if req.billingSet {
+		cmd.BillingAddressID = req.billingAddressID
+	}
+	if req.promotionSet {
+		cmd.PromotionCode = req.promotionCode
+	}
+	if req.bypassSet {
+		cmd.BypassShippingCache = req.bypassShippingCache
+	}
+
+	result, err := h.carts.Estimate(ctx, cmd)
+	if err != nil {
+		h.writeCartError(ctx, w, err)
+		return
+	}
+
+	setEstimateResponseHeaders(w)
+	payload := buildCartEstimatePayload(result)
 	writeJSONResponse(w, http.StatusOK, payload)
 }
 
@@ -321,6 +388,115 @@ func setCartResponseHeaders(w http.ResponseWriter, cart services.Cart) {
 	}
 }
 
+func setEstimateResponseHeaders(w http.ResponseWriter) {
+	cacheControl := "no-store, no-cache, max-age=0, must-revalidate"
+	w.Header().Set("Cache-Control", cacheControl)
+	w.Header().Set("Pragma", "no-cache")
+}
+
+func buildCartEstimatePayload(result services.CartEstimateResult) cartEstimateResultPayload {
+	payload := cartEstimateResultPayload{
+		Currency: strings.ToUpper(strings.TrimSpace(result.Currency)),
+		Subtotal: result.Estimate.Subtotal,
+		Discount: result.Estimate.Discount,
+		Tax:      result.Estimate.Tax,
+		Shipping: result.Estimate.Shipping,
+		Total:    result.Estimate.Total,
+	}
+
+	if result.Promotion != nil {
+		payload.Promotion = &cartPromotionPayload{
+			Code:           strings.ToUpper(strings.TrimSpace(result.Promotion.Code)),
+			DiscountAmount: result.Promotion.DiscountAmount,
+			Applied:        result.Promotion.Applied,
+		}
+	}
+
+	if len(result.Breakdown.Items) > 0 {
+		items := make([]cartEstimateItemPayload, 0, len(result.Breakdown.Items))
+		for _, item := range result.Breakdown.Items {
+			entry := cartEstimateItemPayload{
+				ItemID:   strings.TrimSpace(item.ItemID),
+				Currency: strings.ToUpper(strings.TrimSpace(firstNonEmpty(item.Currency, result.Currency))),
+				Subtotal: item.Subtotal,
+				Discount: item.Discount,
+				Tax:      item.Tax,
+				Shipping: item.Shipping,
+				Total:    item.Total,
+				Metadata: cloneMap(item.Metadata),
+			}
+			items = append(items, entry)
+		}
+		payload.Items = items
+	} else {
+		payload.Items = []cartEstimateItemPayload{}
+	}
+
+	if len(result.Breakdown.Discounts) > 0 {
+		discounts := make([]cartEstimateDiscountPayload, 0, len(result.Breakdown.Discounts))
+		for _, disc := range result.Breakdown.Discounts {
+			discounts = append(discounts, cartEstimateDiscountPayload{
+				Type:        strings.TrimSpace(disc.Type),
+				Code:        strings.TrimSpace(disc.Code),
+				Source:      strings.TrimSpace(disc.Source),
+				Description: strings.TrimSpace(disc.Description),
+				Amount:      disc.Amount,
+				Metadata:    cloneMap(disc.Metadata),
+			})
+		}
+		payload.Discounts = discounts
+	} else {
+		payload.Discounts = []cartEstimateDiscountPayload{}
+	}
+
+	if len(result.Breakdown.Taxes) > 0 {
+		taxes := make([]cartEstimateTaxPayload, 0, len(result.Breakdown.Taxes))
+		for _, tax := range result.Breakdown.Taxes {
+			taxes = append(taxes, cartEstimateTaxPayload{
+				Name:         strings.TrimSpace(tax.Name),
+				Jurisdiction: strings.TrimSpace(tax.Jurisdiction),
+				Rate:         tax.Rate,
+				Amount:       tax.Amount,
+				Metadata:     cloneMap(tax.Metadata),
+			})
+		}
+		payload.Taxes = taxes
+	} else {
+		payload.Taxes = []cartEstimateTaxPayload{}
+	}
+
+	if len(result.Breakdown.ShippingDetails) > 0 {
+		ship := make([]cartEstimateShippingPayload, 0, len(result.Breakdown.ShippingDetails))
+		for _, detail := range result.Breakdown.ShippingDetails {
+			ship = append(ship, cartEstimateShippingPayload{
+				ServiceLevel: strings.TrimSpace(detail.ServiceLevel),
+				Carrier:      strings.TrimSpace(detail.Carrier),
+				Amount:       detail.Amount,
+				Currency:     strings.ToUpper(strings.TrimSpace(firstNonEmpty(detail.Currency, result.Currency))),
+				EstimateDays: detail.EstimateDays,
+				Metadata:     cloneMap(detail.Metadata),
+			})
+		}
+		payload.ShippingDetails = ship
+	} else {
+		payload.ShippingDetails = []cartEstimateShippingPayload{}
+	}
+
+	if len(result.Warnings) > 0 {
+		warnings := make([]string, 0, len(result.Warnings))
+		for _, warning := range result.Warnings {
+			warnings = append(warnings, string(warning))
+		}
+		payload.Warnings = warnings
+	}
+
+	if meta := cloneMap(result.Breakdown.Metadata); meta != nil {
+		payload.Metadata = meta
+	}
+
+	return payload
+}
+
 func buildCartPayload(cart services.Cart) cartPayload {
 	payload := cartPayload{
 		ID:         strings.TrimSpace(cart.ID),
@@ -466,6 +642,59 @@ type cartEstimatePayload struct {
 	Total    int64 `json:"total"`
 }
 
+type cartEstimateResultPayload struct {
+	Currency        string                        `json:"currency"`
+	Subtotal        int64                         `json:"subtotal"`
+	Discount        int64                         `json:"discount"`
+	Tax             int64                         `json:"tax"`
+	Shipping        int64                         `json:"shipping"`
+	Total           int64                         `json:"total"`
+	Promotion       *cartPromotionPayload         `json:"promotion,omitempty"`
+	Items           []cartEstimateItemPayload     `json:"items,omitempty"`
+	Discounts       []cartEstimateDiscountPayload `json:"discounts,omitempty"`
+	Taxes           []cartEstimateTaxPayload      `json:"taxes,omitempty"`
+	ShippingDetails []cartEstimateShippingPayload `json:"shipping_details,omitempty"`
+	Warnings        []string                      `json:"warnings,omitempty"`
+	Metadata        map[string]any                `json:"metadata,omitempty"`
+}
+
+type cartEstimateItemPayload struct {
+	ItemID   string         `json:"item_id"`
+	Currency string         `json:"currency"`
+	Subtotal int64          `json:"subtotal"`
+	Discount int64          `json:"discount"`
+	Tax      int64          `json:"tax"`
+	Shipping int64          `json:"shipping"`
+	Total    int64          `json:"total"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+type cartEstimateDiscountPayload struct {
+	Type        string         `json:"type"`
+	Code        string         `json:"code,omitempty"`
+	Source      string         `json:"source,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Amount      int64          `json:"amount"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+type cartEstimateTaxPayload struct {
+	Name         string         `json:"name"`
+	Jurisdiction string         `json:"jurisdiction,omitempty"`
+	Rate         float64        `json:"rate,omitempty"`
+	Amount       int64          `json:"amount"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+}
+
+type cartEstimateShippingPayload struct {
+	ServiceLevel string         `json:"service_level,omitempty"`
+	Carrier      string         `json:"carrier,omitempty"`
+	Amount       int64          `json:"amount"`
+	Currency     string         `json:"currency,omitempty"`
+	EstimateDays *int           `json:"estimate_days,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+}
+
 type cartItemPayload struct {
 	ID               string           `json:"id"`
 	ProductID        string           `json:"product_id"`
@@ -496,6 +725,17 @@ type updateCartRequest struct {
 	promotionSet      bool
 	updatedAt         *time.Time
 	versionFromHeader bool
+}
+
+type cartEstimateRequest struct {
+	shippingAddressID   *string
+	shippingSet         bool
+	billingAddressID    *string
+	billingSet          bool
+	promotionCode       *string
+	promotionSet        bool
+	bypassShippingCache bool
+	bypassSet           bool
 }
 
 type cartItemRequest struct {
@@ -605,6 +845,77 @@ func parseUpdateCartRequest(body []byte) (updateCartRequest, error) {
 
 	if req.currency == nil && !req.shippingSet && !req.billingSet && !req.notesSet && !req.promotionSet {
 		return req, errNoEditableFields
+	}
+
+	return req, nil
+}
+
+func parseCartEstimateRequest(body []byte) (cartEstimateRequest, error) {
+	var req cartEstimateRequest
+	if len(body) == 0 || len(strings.TrimSpace(string(body))) == 0 {
+		return req, nil
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return req, errors.New("invalid JSON payload")
+	}
+
+	for key, value := range raw {
+		switch key {
+		case "shipping_address_id":
+			req.shippingSet = true
+			if isJSONNull(value) {
+				empty := ""
+				req.shippingAddressID = &empty
+				continue
+			}
+			var id string
+			if err := json.Unmarshal(value, &id); err != nil {
+				return req, errors.New("shipping_address_id must be a string or null")
+			}
+			trimmed := strings.TrimSpace(id)
+			copy := trimmed
+			req.shippingAddressID = &copy
+		case "billing_address_id":
+			req.billingSet = true
+			if isJSONNull(value) {
+				empty := ""
+				req.billingAddressID = &empty
+				continue
+			}
+			var id string
+			if err := json.Unmarshal(value, &id); err != nil {
+				return req, errors.New("billing_address_id must be a string or null")
+			}
+			trimmed := strings.TrimSpace(id)
+			copy := trimmed
+			req.billingAddressID = &copy
+		case "promotion_code":
+			req.promotionSet = true
+			if isJSONNull(value) {
+				empty := ""
+				req.promotionCode = &empty
+				continue
+			}
+			var code string
+			if err := json.Unmarshal(value, &code); err != nil {
+				return req, errors.New("promotion_code must be a string or null")
+			}
+			trimmed := strings.TrimSpace(code)
+			copy := trimmed
+			req.promotionCode = &copy
+		case "bypass_shipping_cache":
+			if isJSONNull(value) {
+				return req, errors.New("bypass_shipping_cache must be a boolean")
+			}
+			var flag bool
+			if err := json.Unmarshal(value, &flag); err != nil {
+				return req, errors.New("bypass_shipping_cache must be a boolean")
+			}
+			req.bypassSet = true
+			req.bypassShippingCache = flag
+		}
 	}
 
 	return req, nil

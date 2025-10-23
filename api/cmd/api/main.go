@@ -300,6 +300,7 @@ func main() {
 	opts = append(opts, handlers.WithDesignRoutes(designHandlers.Routes))
 	opts = append(opts, handlers.WithNameMappingRoutes(nameMappingHandlers.Routes))
 	opts = append(opts, handlers.WithCartRoutes(cartHandlers.Routes))
+	opts = append(opts, handlers.WithAdditionalRoutes(cartHandlers.RegisterStandaloneRoutes))
 	publicHandlers := handlers.NewPublicHandlers()
 	opts = append(opts, handlers.WithPublicRoutes(publicHandlers.Routes))
 	if oidcMiddleware != nil {

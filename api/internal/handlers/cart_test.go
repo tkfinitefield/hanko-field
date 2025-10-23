@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -192,6 +193,7 @@ func TestCartHandlersPatchCartSuccess(t *testing.T) {
 	handler := NewCartHandlers(nil, service)
 	router := chi.NewRouter()
 	router.Route("/cart", handler.Routes)
+	router.Post("/cart:estimate", handler.estimateCart)
 
 	body := fmt.Sprintf(`{"currency":"usd","shipping_address_id":"addr-1","billing_address_id":null,"notes":"  gift ","promotion_hint":"vip","updated_at":"%s"}`, updatedAt.Format(time.RFC3339))
 	req := httptest.NewRequest(http.MethodPatch, "/cart", strings.NewReader(body))
@@ -247,6 +249,7 @@ func TestCartHandlersPatchCartConflict(t *testing.T) {
 	handler := NewCartHandlers(nil, service)
 	router := chi.NewRouter()
 	router.Route("/cart", handler.Routes)
+	router.Post("/cart:estimate", handler.estimateCart)
 
 	req := httptest.NewRequest(http.MethodPatch, "/cart", strings.NewReader(`{"currency":"usd","updated_at":"2024-01-01T00:00:00Z"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -390,11 +393,110 @@ func TestCartHandlersDeleteItemSuccess(t *testing.T) {
 	}
 }
 
+func TestCartHandlersEstimateSuccess(t *testing.T) {
+	var captured services.CartEstimateCommand
+	service := &stubCartService{
+		estimateFunc: func(ctx context.Context, cmd services.CartEstimateCommand) (services.CartEstimateResult, error) {
+			captured = cmd
+			return services.CartEstimateResult{
+				Currency:  "JPY",
+				Estimate:  services.CartEstimate{Subtotal: 5000, Discount: 200, Tax: 300, Shipping: 400, Total: 5500},
+				Promotion: &services.CartPromotion{Code: "SAVE20", DiscountAmount: 200, Applied: true},
+				Breakdown: services.PricingBreakdown{
+					Currency: "JPY",
+					Subtotal: 5000,
+					Discount: 200,
+					Tax:      300,
+					Shipping: 400,
+					Total:    5500,
+					Items: []services.ItemPricingBreakdown{{
+						ItemID:   "item-1",
+						Currency: "JPY",
+						Subtotal: 5000,
+						Discount: 200,
+						Tax:      300,
+						Shipping: 400,
+						Total:    5500,
+					}},
+					Discounts: []services.DiscountBreakdown{{Type: "promotion", Amount: 200}},
+				},
+				Warnings: []services.CartEstimateWarning{services.CartEstimateWarningMissingShippingAddress},
+			}, nil
+		},
+	}
+
+	handler := NewCartHandlers(nil, service)
+	router := NewRouter(WithCartRoutes(handler.Routes), WithAdditionalRoutes(handler.RegisterStandaloneRoutes))
+
+	body := bytes.NewBufferString(`{"shipping_address_id":"addr-1","promotion_code":"save20","bypass_shipping_cache":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/cart:estimate", body)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-estimate"}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.Code)
+	}
+	if captured.UserID != "user-estimate" {
+		t.Fatalf("expected user id captured, got %s", captured.UserID)
+	}
+	if !captured.BypassShippingCache {
+		t.Fatalf("expected bypass shipping cache true")
+	}
+	if captured.ShippingAddressID == nil || *captured.ShippingAddressID != "addr-1" {
+		t.Fatalf("expected shipping address override, got %#v", captured.ShippingAddressID)
+	}
+	if captured.PromotionCode == nil || *captured.PromotionCode != "save20" {
+		t.Fatalf("expected promotion code captured, got %#v", captured.PromotionCode)
+	}
+
+	var payload cartEstimateResultPayload
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if payload.Currency != "JPY" {
+		t.Fatalf("expected currency JPY, got %s", payload.Currency)
+	}
+	if payload.Total != 5500 {
+		t.Fatalf("expected total 5500, got %d", payload.Total)
+	}
+	if payload.Promotion == nil || !payload.Promotion.Applied {
+		t.Fatalf("expected promotion applied in payload, got %#v", payload.Promotion)
+	}
+	if len(payload.Items) != 1 {
+		t.Fatalf("expected one item breakdown, got %d", len(payload.Items))
+	}
+	if len(payload.Warnings) != 1 || payload.Warnings[0] != string(services.CartEstimateWarningMissingShippingAddress) {
+		t.Fatalf("expected missing shipping warning, got %#v", payload.Warnings)
+	}
+}
+
+func TestCartHandlersEstimateServiceError(t *testing.T) {
+	service := &stubCartService{
+		estimateFunc: func(ctx context.Context, cmd services.CartEstimateCommand) (services.CartEstimateResult, error) {
+			return services.CartEstimateResult{}, services.ErrCartInvalidInput
+		},
+	}
+
+	handler := NewCartHandlers(nil, service)
+	router := NewRouter(WithCartRoutes(handler.Routes), WithAdditionalRoutes(handler.RegisterStandaloneRoutes))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/cart:estimate", bytes.NewBufferString(`{"promotion_code":"bad"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-estimate"}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", resp.Code)
+	}
+}
+
 type stubCartService struct {
 	getOrCreateFunc func(ctx context.Context, userID string) (services.Cart, error)
 	updateFunc      func(ctx context.Context, cmd services.UpdateCartCommand) (services.Cart, error)
 	addOrUpdateFunc func(ctx context.Context, cmd services.UpsertCartItemCommand) (services.Cart, error)
 	removeFunc      func(ctx context.Context, cmd services.RemoveCartItemCommand) (services.Cart, error)
+	estimateFunc    func(ctx context.Context, cmd services.CartEstimateCommand) (services.CartEstimateResult, error)
 }
 
 func (s *stubCartService) GetOrCreateCart(ctx context.Context, userID string) (services.Cart, error) {
@@ -425,8 +527,11 @@ func (s *stubCartService) RemoveItem(ctx context.Context, cmd services.RemoveCar
 	return services.Cart{}, errors.New("not implemented")
 }
 
-func (s *stubCartService) Estimate(ctx context.Context, userID string) (services.CartEstimate, error) {
-	return services.CartEstimate{}, errors.New("not implemented")
+func (s *stubCartService) Estimate(ctx context.Context, cmd services.CartEstimateCommand) (services.CartEstimateResult, error) {
+	if s.estimateFunc != nil {
+		return s.estimateFunc(ctx, cmd)
+	}
+	return services.CartEstimateResult{}, errors.New("not implemented")
 }
 
 func (s *stubCartService) ApplyPromotion(ctx context.Context, cmd services.CartPromotionCommand) (services.Cart, error) {

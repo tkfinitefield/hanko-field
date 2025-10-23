@@ -125,7 +125,7 @@ type CartService interface {
 	UpdateCart(ctx context.Context, cmd UpdateCartCommand) (Cart, error)
 	AddOrUpdateItem(ctx context.Context, cmd UpsertCartItemCommand) (Cart, error)
 	RemoveItem(ctx context.Context, cmd RemoveCartItemCommand) (Cart, error)
-	Estimate(ctx context.Context, userID string) (CartEstimate, error)
+	Estimate(ctx context.Context, cmd CartEstimateCommand) (CartEstimateResult, error)
 	ApplyPromotion(ctx context.Context, cmd CartPromotionCommand) (Cart, error)
 	RemovePromotion(ctx context.Context, userID string) (Cart, error)
 	ClearCart(ctx context.Context, userID string) error
@@ -478,6 +478,29 @@ type RemoveCartItemCommand struct {
 	UserID string
 	ItemID string
 }
+
+type CartEstimateCommand struct {
+	UserID              string
+	ShippingAddressID   *string
+	BillingAddressID    *string
+	PromotionCode       *string
+	BypassShippingCache bool
+}
+
+type CartEstimateResult struct {
+	Currency  string
+	Estimate  CartEstimate
+	Breakdown PricingBreakdown
+	Promotion *CartPromotion
+	Warnings  []CartEstimateWarning
+}
+
+type CartEstimateWarning string
+
+const (
+	CartEstimateWarningMissingShippingAddress CartEstimateWarning = "missing_shipping_address"
+	CartEstimateWarningPromotionNotApplied    CartEstimateWarning = "promotion_not_applied"
+)
 
 type CartPromotionCommand struct {
 	UserID string

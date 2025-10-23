@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,15 @@ import (
 
 func strPtr(v string) *string {
 	return &v
+}
+
+func containsWarning(warnings []CartEstimateWarning, target CartEstimateWarning) bool {
+	for _, w := range warnings {
+		if w == target {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCartServiceGetOrCreateCartReturnsExisting(t *testing.T) {
@@ -616,6 +626,191 @@ func TestCartServiceUpdateCartHeaderPrecision(t *testing.T) {
 	}
 	if updated.Currency != "USD" {
 		t.Fatalf("expected currency USD got %s", updated.Currency)
+	}
+}
+
+func TestCartServiceEstimateSuccess(t *testing.T) {
+	now := time.Date(2024, 8, 1, 12, 0, 0, 0, time.UTC)
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			if userID != "user-estimate" {
+				t.Fatalf("unexpected user id %s", userID)
+			}
+			return domain.Cart{
+				ID:                "cart-estimate",
+				UserID:            userID,
+				Currency:          "jpy",
+				ShippingAddressID: "addr-1",
+				Promotion:         &domain.CartPromotion{Code: "sakura10"},
+				Items: []domain.CartItem{
+					{ID: "item-1", ProductID: "prod-1", SKU: "sku-1", Quantity: 2, UnitPrice: 1500, Currency: "JPY", RequiresShipping: true},
+				},
+				CreatedAt: now.Add(-time.Hour),
+				UpdatedAt: now,
+			}, nil
+		},
+	}
+
+	addrProvider := &stubAddressProvider{
+		listFunc: func(ctx context.Context, userID string) ([]Address, error) {
+			return []Address{{
+				ID:         "addr-1",
+				Recipient:  "Hanako",
+				Line1:      "1-2-3",
+				City:       "Tokyo",
+				PostalCode: "1000001",
+				Country:    "JP",
+			}}, nil
+		},
+	}
+
+	breakdown := PricingBreakdown{
+		Currency:  "JPY",
+		Subtotal:  3000,
+		Discount:  300,
+		Tax:       270,
+		Shipping:  450,
+		Total:     3420,
+		Discounts: []DiscountBreakdown{{Type: "promotion", Amount: 300}},
+		Items: []ItemPricingBreakdown{{
+			ItemID:   "item-1",
+			Currency: "JPY",
+			Subtotal: 3000,
+			Discount: 300,
+			Tax:      270,
+			Shipping: 450,
+			Total:    3420,
+		}},
+	}
+
+	pricer := &stubCartPricer{
+		calculateFunc: func(ctx context.Context, cmd PriceCartCommand) (PriceCartResult, error) {
+			if cmd.PromotionCode == nil || *cmd.PromotionCode != "SAKURA10" {
+				t.Fatalf("expected promotion code SAKURA10, got %#v", cmd.PromotionCode)
+			}
+			if cmd.ShippingAddress == nil || strings.TrimSpace(cmd.ShippingAddress.ID) != "addr-1" {
+				t.Fatalf("expected shipping address override, got %#v", cmd.ShippingAddress)
+			}
+			return PriceCartResult{
+				Breakdown: breakdown,
+				Estimate:  CartEstimate{Subtotal: 3000, Discount: 300, Tax: 270, Shipping: 450, Total: 3420},
+			}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Pricer:          pricer,
+		Addresses:       addrProvider,
+		Clock:           func() time.Time { return now },
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	cmd := CartEstimateCommand{UserID: "user-estimate", ShippingAddressID: strPtr("addr-1")}
+	result, err := service.Estimate(context.Background(), cmd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Currency != "JPY" {
+		t.Fatalf("expected currency JPY, got %s", result.Currency)
+	}
+	if result.Estimate.Total != 3420 {
+		t.Fatalf("expected total 3420, got %d", result.Estimate.Total)
+	}
+	if result.Promotion == nil || !result.Promotion.Applied {
+		t.Fatalf("expected promotion applied, got %#v", result.Promotion)
+	}
+	if result.Promotion.DiscountAmount != 300 {
+		t.Fatalf("expected promotion discount 300, got %d", result.Promotion.DiscountAmount)
+	}
+	if result.Promotion.Code != "SAKURA10" {
+		t.Fatalf("expected promotion code uppercased, got %s", result.Promotion.Code)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("expected no warnings, got %#v", result.Warnings)
+	}
+}
+
+func TestCartServiceEstimateWarnings(t *testing.T) {
+	now := time.Date(2024, 8, 2, 9, 0, 0, 0, time.UTC)
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{
+				ID:        userID,
+				UserID:    userID,
+				Currency:  "JPY",
+				Items:     []domain.CartItem{{ID: "item-2", ProductID: "prod", SKU: "sku", Quantity: 1, UnitPrice: 1200, Currency: "JPY", RequiresShipping: true}},
+				CreatedAt: now.Add(-time.Hour),
+				UpdatedAt: now,
+			}, nil
+		},
+	}
+
+	pricer := &stubCartPricer{
+		calculateFunc: func(ctx context.Context, cmd PriceCartCommand) (PriceCartResult, error) {
+			if cmd.PromotionCode == nil || *cmd.PromotionCode != "WINTER20" {
+				t.Fatalf("expected promotion code WINTER20, got %#v", cmd.PromotionCode)
+			}
+			return PriceCartResult{
+				Breakdown: PricingBreakdown{Currency: "JPY", Subtotal: 1200, Total: 1200},
+				Estimate:  CartEstimate{Subtotal: 1200, Total: 1200},
+			}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Pricer:          pricer,
+		Clock:           func() time.Time { return now },
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	cmd := CartEstimateCommand{UserID: "user-warn", PromotionCode: strPtr("winter20")}
+	result, err := service.Estimate(context.Background(), cmd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Warnings) != 2 {
+		t.Fatalf("expected two warnings, got %#v", result.Warnings)
+	}
+	if !containsWarning(result.Warnings, CartEstimateWarningMissingShippingAddress) {
+		t.Fatalf("expected missing shipping warning, got %#v", result.Warnings)
+	}
+	if !containsWarning(result.Warnings, CartEstimateWarningPromotionNotApplied) {
+		t.Fatalf("expected promotion warning, got %#v", result.Warnings)
+	}
+	if result.Promotion != nil {
+		t.Fatalf("expected no promotion returned, got %#v", result.Promotion)
+	}
+}
+
+func TestCartServiceEstimateEmptyCart(t *testing.T) {
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{ID: userID, UserID: userID, Currency: "JPY"}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Clock:           time.Now,
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	_, err = service.Estimate(context.Background(), CartEstimateCommand{UserID: "user-empty"})
+	if err == nil || !errors.Is(err, ErrCartInvalidInput) {
+		t.Fatalf("expected ErrCartInvalidInput, got %v", err)
 	}
 }
 
