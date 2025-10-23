@@ -291,7 +291,9 @@ func (r *CartRepository) ReplaceItems(ctx context.Context, userID string, items 
 
 	err = r.provider.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		if _, err := tx.Get(cartRef); err != nil {
-			return err
+			if status.Code(err) != codes.NotFound {
+				return err
+			}
 		}
 
 		existing := make(map[string]struct{})
