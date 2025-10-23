@@ -90,30 +90,15 @@ func Base(title string, crumbs []partials.Breadcrumb, body templ.Component) temp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</span></div></div><div class=\"flex items-center gap-3\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</span></div></div><div id=\"topbar-actions\" class=\"flex items-center gap-3\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if env := middleware.EnvironmentFromContext(ctx); env != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<span class=\"badge badge-info uppercase tracking-wide\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var5 string
-			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(env)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `layouts/base.templ`, Line: 90, Col: 69}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</span>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
+		templ_7745c5c3_Err = partials.TopbarActions().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div id=\"topbar-actions\" class=\"flex items-center gap-2\"></div></div></div><div class=\"mx-auto w-full max-w-6xl px-4 pb-3 sm:px-6 lg:px-8\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div></div><div class=\"mx-auto w-full max-w-6xl px-4 pb-3 sm:px-6 lg:px-8\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -121,7 +106,7 @@ func Base(title string, crumbs []partials.Breadcrumb, body templ.Component) temp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div></header><main id=\"content\" class=\"flex-1 bg-slate-50\"><div class=\"mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div></header><main id=\"content\" class=\"flex-1 bg-slate-50\"><div class=\"mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -129,7 +114,7 @@ func Base(title string, crumbs []partials.Breadcrumb, body templ.Component) temp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</div></main></div></div><div id=\"toast-stack\" class=\"pointer-events-none fixed bottom-4 right-4 z-40 flex w-full max-w-sm flex-col gap-3\"></div><div id=\"modal-root\" class=\"fixed inset-0 z-50 flex items-center justify-center\"></div><script src=\"/public/static/app.js\" defer></script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div></main></div></div><div id=\"toast-stack\" class=\"pointer-events-none fixed bottom-4 right-4 z-40 flex w-full max-w-sm flex-col gap-3\"></div><div id=\"modal-root\" class=\"fixed inset-0 z-50 flex items-center justify-center\"></div><script src=\"/public/static/app.js\" defer></script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -1,0 +1,308 @@
+package partials
+
+import (
+	"fmt"
+	"strings"
+
+	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
+	"finitefield.org/hanko-admin/internal/admin/rbac"
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+)
+
+func environmentTone(env string) string {
+	switch strings.ToLower(strings.TrimSpace(env)) {
+	case "production", "prod", "live":
+		return "success"
+	case "staging", "stage", "stg":
+		return "warning"
+	case "development", "dev", "local":
+		return "info"
+	default:
+		return ""
+	}
+}
+
+func environmentLabel(env string) string {
+	trimmed := strings.TrimSpace(env)
+	if trimmed == "" {
+		return "DEV"
+	}
+	switch strings.ToLower(trimmed) {
+	case "production", "prod", "live":
+		return "PROD"
+	case "staging", "stage", "stg":
+		return "STG"
+	case "development", "dev", "local":
+		return "DEV"
+	default:
+		return strings.ToUpper(trimmed)
+	}
+}
+
+func environmentDisplay(env string) string {
+	trimmed := strings.TrimSpace(env)
+	if trimmed == "" {
+		return "Development"
+	}
+	return trimmed
+}
+
+func topbarRoute(basePath, suffix string) string {
+	base := strings.TrimSpace(basePath)
+	if base == "" {
+		base = "/"
+	}
+	if !strings.HasPrefix(base, "/") {
+		base = "/" + base
+	}
+	if len(base) > 1 {
+		base = strings.TrimRight(base, "/")
+	}
+
+	raw := strings.TrimSpace(suffix)
+	if raw == "" {
+		return base
+	}
+
+	query := ""
+	if idx := strings.Index(raw, "?"); idx >= 0 {
+		query = raw[idx:]
+		raw = raw[:idx]
+	}
+
+	path := strings.TrimSpace(raw)
+	if path == "" || path == "/" {
+		if query != "" {
+			return base + query
+		}
+		return base
+	}
+
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	if base == "/" {
+		return normalizeSlashes(path) + query
+	}
+
+	return normalizeSlashes(base+path) + query
+}
+
+func normalizeSlashes(path string) string {
+	if path == "" {
+		return "/"
+	}
+	result := strings.ReplaceAll(path, "//", "/")
+	if len(result) > 1 {
+		result = strings.TrimRight(result, "/")
+		if result == "" {
+			return "/"
+		}
+	}
+	return result
+}
+
+func userDisplayName(user *middleware.User) string {
+	if user == nil {
+		return "スタッフ"
+	}
+	if strings.TrimSpace(user.UID) != "" {
+		return user.UID
+	}
+	if strings.TrimSpace(user.Email) != "" {
+		return user.Email
+	}
+	return "スタッフ"
+}
+
+func userSecondaryLabel(user *middleware.User) string {
+	if user == nil {
+		return ""
+	}
+	return strings.TrimSpace(user.Email)
+}
+
+func userInitials(user *middleware.User) string {
+	display := userDisplayName(user)
+	if display == "" {
+		return "?"
+	}
+	fields := strings.Fields(display)
+	if len(fields) == 0 {
+		return "?"
+	}
+	if len(fields) == 1 {
+		runes := []rune(fields[0])
+		if len(runes) == 0 {
+			return "?"
+		}
+		return strings.ToUpper(string(runes[0]))
+	}
+	first := []rune(fields[0])
+	last := []rune(fields[len(fields)-1])
+	initials := []rune{}
+	if len(first) > 0 {
+		initials = append(initials, first[0])
+	}
+	if len(last) > 0 {
+		initials = append(initials, last[0])
+	}
+	return strings.ToUpper(string(initials))
+}
+
+func formatNotificationCount(value int) string {
+	if value > 99 {
+		return "99+"
+	}
+	if value < 0 {
+		value = 0
+	}
+	return fmt.Sprintf("%d", value)
+}
+
+templ TopbarActions() {
+	@EnvironmentBadge()
+	if helpers.HasCapability(ctx, string(rbac.CapSearchGlobal)) {
+		@SearchShortcut()
+	}
+	if helpers.HasCapability(ctx, string(rbac.CapNotificationsFeed)) {
+		@NotificationsButton()
+	}
+	@UserMenu()
+}
+
+templ EnvironmentBadge() {
+	if env := middleware.EnvironmentFromContext(ctx); true {
+		<span class="inline-flex" data-environment-badge>
+			<span class={ helpers.BadgeClass(environmentTone(env)) } title={ environmentDisplay(env) }>
+				<span aria-hidden="true">{ environmentLabel(env) }</span>
+				<span class="sr-only">環境: { environmentDisplay(env) }</span>
+			</span>
+		</span>
+	}
+}
+
+templ SearchShortcut() {
+	if base := helpers.BasePath(ctx); true {
+		<button
+			type="button"
+			class="group hidden items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1 sm:inline-flex"
+			hx-get={ topbarRoute(base, "/search?overlay=1") }
+			hx-target="#modal-root"
+			hx-swap="innerHTML"
+			data-topbar-search-trigger
+			data-search-href={ topbarRoute(base, "/search") }
+			aria-label="検索を開く（/）"
+		>
+			<span class="inline-flex items-center justify-center rounded-md bg-slate-100 p-1 text-sm text-slate-600 transition group-hover:bg-slate-200 group-hover:text-slate-900">
+				<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" class="h-4 w-4">
+					<path d="M9 3.5a5.5 5.5 0 1 1 3.5 9.748l3.376 3.376a.75.75 0 0 1-1.06 1.06l-3.376-3.375A5.5 5.5 0 0 1 9 3.5Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" fill="currentColor"></path>
+				</svg>
+			</span>
+			<span class="text-sm font-medium">検索</span>
+			<kbd class="ml-2 inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 shadow-sm">/</kbd>
+		</button>
+	}
+}
+
+templ NotificationsButton() {
+	if base := helpers.BasePath(ctx); true {
+		<div
+			class="relative"
+			data-notifications-root
+			hx-get={ topbarRoute(base, "/notifications/badge") }
+			hx-trigger="load, every 30s"
+			hx-target="this"
+			hx-swap="outerHTML"
+			data-notifications-stream={ topbarRoute(base, "/notifications/stream") }
+			data-notifications-href={ topbarRoute(base, "/notifications") }
+		>
+			<a
+				href={ topbarRoute(base, "/notifications") }
+				class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+				data-notifications-button
+				aria-label="通知センターを開く"
+			>
+				<span class="sr-only">通知センターを開く</span>
+				<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" class="h-5 w-5">
+					<path d="M10 2a4.5 4.5 0 0 1 4.5 4.5v1.085c0 .472.17.93.478 1.287l.83.953c.804.924.132 2.375-1.086 2.375H5.278c-1.218 0-1.89-1.451-1.086-2.375l.83-.953A1.999 1.999 0 0 0 5.5 7.585V6.5A4.5 4.5 0 0 1 10 2Zm0 16a2.5 2.5 0 0 1-2.45-2h4.9A2.5 2.5 0 0 1 10 18Z" fill="currentColor"></path>
+				</svg>
+				<span
+					class="absolute -top-1 -right-1 inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-danger-500 px-1 text-[11px] font-semibold leading-none text-white shadow-sm transition"
+					aria-live="polite"
+					aria-atomic="true"
+					data-notification-count
+					data-empty="true"
+				>
+					{ formatNotificationCount(0) }
+				</span>
+			</a>
+		</div>
+	}
+}
+
+templ UserMenu() {
+	if user, _ := middleware.UserFromContext(ctx); true {
+		if base := helpers.BasePath(ctx); true {
+			<div class="relative" data-user-menu>
+				<button
+					type="button"
+					class="flex items-center gap-2 rounded-full border border-transparent px-2 py-1 text-left text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+					data-user-menu-trigger
+					aria-haspopup="menu"
+					aria-expanded="false"
+				>
+					<span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">
+						{ userInitials(user) }
+					</span>
+					<span class="hidden min-w-0 flex-col sm:flex">
+						<span class="truncate text-sm font-semibold text-slate-900">{ userDisplayName(user) }</span>
+						if secondary := userSecondaryLabel(user); secondary != "" {
+							<span class="truncate text-xs text-slate-500">{ secondary }</span>
+						}
+					</span>
+					<span class="hidden sm:inline-flex">
+						<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" class="h-4 w-4 text-slate-400">
+							<path d="M6 8l4 4 4-4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+						</svg>
+					</span>
+				</button>
+				<div
+					class="absolute right-0 z-50 mt-2 w-56 transform rounded-md border border-slate-200 bg-white py-1 text-sm text-slate-700 shadow-xl opacity-0 pointer-events-none transition focus:outline-none"
+					role="menu"
+					aria-hidden="true"
+					tabindex="-1"
+					data-user-menu-panel
+				>
+					if helpers.HasCapability(ctx, string(rbac.CapProfileSelf)) {
+						<a
+							href={ topbarRoute(base, "/profile") }
+							class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 focus:bg-slate-100 focus:text-slate-900"
+							role="menuitem"
+							tabindex="-1"
+							data-user-menu-item
+						>
+							プロフィール
+						</a>
+					}
+					<form method="post" action={ topbarRoute(base, "/logout") } role="none" class="px-1" data-user-menu-logout>
+						<input type="hidden" name="_csrf" value={ middleware.CSRFTokenFromContext(ctx) } />
+						<button
+							type="submit"
+							class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 focus:bg-slate-100 focus:text-slate-900"
+							role="menuitem"
+							tabindex="-1"
+							data-user-menu-item
+						>
+							<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" class="h-4 w-4 text-slate-400">
+								<path d="M6.75 3.5h3.5a2.25 2.25 0 0 1 2.25 2.25v.25H11.5v-.25a1 1 0 0 0-1-1h-3.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3.5a1 1 0 0 0 1-1v-.25h1.5v.25a2.25 2.25 0 0 1-2.25 2.25h-3.5A2.25 2.25 0 0 1 4.5 14.75v-9A2.25 2.25 0 0 1 6.75 3.5Zm7.28 3.22 2 2a.75.75 0 0 1 0 1.06l-2 2a.75.75 0 1 1-1.06-1.06l.72-.72H8.75a.75.75 0 0 1 0-1.5h4.94l-.72-.72a.75.75 0 1 1 1.06-1.06Z" fill="currentColor"></path>
+							</svg>
+							<span>ログアウト</span>
+						</button>
+					</form>
+				</div>
+			</div>
+		}
+	}
+}

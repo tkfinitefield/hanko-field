@@ -85,11 +85,8 @@ templ Base(title string, crumbs []partials.Breadcrumb, body templ.Component) {
 									<span class="text-base font-semibold text-slate-900">{ title }</span>
 								</div>
 							</div>
-							<div class="flex items-center gap-3">
-								if env := middleware.EnvironmentFromContext(ctx); env != "" {
-									<span class="badge badge-info uppercase tracking-wide">{ env }</span>
-								}
-								<div id="topbar-actions" class="flex items-center gap-2"></div>
+							<div id="topbar-actions" class="flex items-center gap-3">
+								@partials.TopbarActions()
 							</div>
 						</div>
 						<div class="mx-auto w-full max-w-6xl px-4 pb-3 sm:px-6 lg:px-8">
