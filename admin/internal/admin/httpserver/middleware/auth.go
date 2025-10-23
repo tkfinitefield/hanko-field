@@ -135,6 +135,14 @@ func UserFromContext(ctx context.Context) (*User, bool) {
 	return user, ok
 }
 
+// ContextWithUser returns a new context containing the provided user. Primarily used in tests.
+func ContextWithUser(ctx context.Context, user *User) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, userContextKey, user)
+}
+
 func parseBearerToken(header string) string {
 	if header == "" {
 		return ""

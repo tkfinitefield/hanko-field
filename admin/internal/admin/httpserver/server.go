@@ -123,7 +123,12 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 	if opts.SessionStore != nil {
 		shared = append(shared, custommw.Session(opts.SessionStore))
 	}
-	shared = append(shared, custommw.HTMX(), custommw.NoStore(), custommw.Environment(opts.Environment))
+	shared = append(shared,
+		custommw.RequestInfoMiddleware(base),
+		custommw.HTMX(),
+		custommw.NoStore(),
+		custommw.Environment(opts.Environment),
+	)
 
 	loginChain := router.With(shared...)
 	loginChain = loginChain.With(custommw.CSRF(opts.CSRF))

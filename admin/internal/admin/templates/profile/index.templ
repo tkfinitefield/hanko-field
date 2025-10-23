@@ -10,7 +10,7 @@ import (
 )
 
 templ Index(data PageData) {
-	@layouts.Base(helpers.I18N("admin.profile.title"), navigationItems(), breadcrumbItems(), pageBody(data))
+	@layouts.Base(helpers.I18N("admin.profile.title"), breadcrumbItems(), pageBody(data))
 }
 
 templ pageBody(data PageData) {

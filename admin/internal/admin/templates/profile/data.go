@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"finitefield.org/hanko-admin/internal/admin/profile"
-	"finitefield.org/hanko-admin/internal/admin/rbac"
 	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
 	"finitefield.org/hanko-admin/internal/admin/templates/partials"
 )
@@ -60,31 +59,6 @@ type AlertContent struct {
 	Body     string
 	LinkHref string
 	LinkText string
-}
-
-func navigationItems() []partials.NavItem {
-	return []partials.NavItem{
-		{
-			Label:      helpers.I18N("admin.nav.dashboard"),
-			Href:       "/admin",
-			Capability: string(rbac.CapDashboardOverview),
-		},
-		{
-			Label:      "プロフィール",
-			Href:       "/admin/profile",
-			Active:     true,
-			Capability: string(rbac.CapProfileSelf),
-		},
-		{
-			Label:      helpers.I18N("admin.nav.orders"),
-			Href:       "/admin/orders",
-			Capability: string(rbac.CapOrdersList),
-		},
-		{
-			Label: "ログアウト",
-			Href:  "logout",
-		},
-	}
 }
 
 func breadcrumbItems() []partials.Breadcrumb {

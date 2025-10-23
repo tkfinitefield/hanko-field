@@ -1,31 +1,72 @@
 package partials
 
-import "finitefield.org/hanko-admin/internal/admin/templates/helpers"
+import (
+	"context"
+	"strings"
 
-type NavItem struct {
-	Label  string
-	Href   string
-	Icon   string
-	Active bool
-	Capability string
+	"finitefield.org/hanko-admin/internal/admin/navigation"
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+)
+
+func hasVisibleItems(groups navigation.MenuGroup, ctx context.Context) bool {
+	for _, item := range groups.Items {
+		if helpers.HasCapability(ctx, string(item.Capability)) {
+			return true
+		}
+	}
+	return false
 }
 
-templ Sidebar(items []NavItem) {
+func resolveMenu(ctx context.Context, groups []navigation.MenuGroup) []navigation.MenuGroup {
+	if len(groups) > 0 {
+		return groups
+	}
+	return navigation.BuildMenu(helpers.BasePath(ctx))
+}
+
+func navActive(ctx context.Context, item navigation.MenuItem) bool {
+	return helpers.NavActive(ctx, item.Pattern, item.MatchPrefix)
+}
+
+templ Sidebar(groups []navigation.MenuGroup) {
 	<nav class="flex h-full w-full flex-col bg-white" aria-label="メインナビゲーション">
 		<div class="px-4 pb-5 pt-2">
 			<p class="text-lg font-semibold text-slate-900">Hanko Admin</p>
 			<p class="mt-1 text-xs font-medium uppercase tracking-wide text-slate-400">Control Center</p>
 		</div>
-		<ul class="flex-1 space-y-1 px-2 pb-6">
-			for _, item := range items {
-				if helpers.HasCapability(ctx, item.Capability) {
-					<li>
-						<a href={ item.Href } class={ helpers.NavClass(item.Active) }>
-							if item.Icon != "" {
-								<span class="text-slate-400">{ item.Icon }</span>
+		<ul class="flex-1 space-y-4 px-2 pb-6">
+			for _, group := range resolveMenu(ctx, groups) {
+				if hasVisibleItems(group, ctx) {
+					<li class="space-y-2">
+						if strings.TrimSpace(group.Label) != "" {
+							<div class="px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+								{ group.Label }
+							</div>
+						}
+						<ul class="space-y-1">
+						for _, item := range group.Items {
+							if helpers.HasCapability(ctx, string(item.Capability)) {
+								<li>
+									<a href={ item.Href } class={ helpers.NavClass(navActive(ctx, item)) }
+										if navActive(ctx, item) {
+											aria-current="page"
+										}
+										if item.OpenInNewTab {
+											target="_blank"
+											if item.External {
+												rel="noopener noreferrer"
+											}
+										}
+									>
+										if strings.TrimSpace(item.Icon) != "" {
+											<span class="text-base text-slate-400" aria-hidden="true">{ item.Icon }</span>
+										}
+										<span>{ item.Label }</span>
+									</a>
+								</li>
 							}
-							<span>{ item.Label }</span>
-						</a>
+							}
+						</ul>
 					</li>
 				}
 			}

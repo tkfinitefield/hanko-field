@@ -2,10 +2,11 @@ package layouts
 
 import (
 	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
+	"finitefield.org/hanko-admin/internal/admin/navigation"
 	"finitefield.org/hanko-admin/internal/admin/templates/partials"
 )
 
-templ Base(title string, navItems []partials.NavItem, crumbs []partials.Breadcrumb, body templ.Component) {
+templ Base(title string, crumbs []partials.Breadcrumb, body templ.Component) {
 	<!DOCTYPE html>
 	<html lang="ja" class="h-full">
 		<head>
@@ -46,8 +47,8 @@ templ Base(title string, navItems []partials.NavItem, crumbs []partials.Breadcru
 							</svg>
 						</button>
 					</div>
-					<div class="flex-1 overflow-y-auto py-6">
-						@partials.Sidebar(navItems)
+                    <div class="flex-1 overflow-y-auto py-6">
+                        @partials.Sidebar(navigation.BuildMenu(middleware.BasePathFromContext(ctx)))
 					</div>
 				</div>
 			</div>
@@ -56,8 +57,8 @@ templ Base(title string, navItems []partials.NavItem, crumbs []partials.Breadcru
 				<aside class="relative hidden bg-white lg:flex lg:w-72 lg:flex-col lg:border-r lg:border-slate-200 lg:shadow-none">
 					<div class="flex h-full flex-1 flex-col overflow-hidden">
 						<div class="flex-1 overflow-y-auto py-8">
-							<div class="pr-2">
-								@partials.Sidebar(navItems)
+                            <div class="pr-2">
+                                @partials.Sidebar(navigation.BuildMenu(middleware.BasePathFromContext(ctx)))
 							</div>
 						</div>
 					</div>
