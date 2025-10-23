@@ -126,10 +126,35 @@ const initNotificationsBadge = () => {
 };
 
 const createModalController = () => {
-  const root = document.getElementById("modal");
-  if (!(root instanceof HTMLElement)) {
+  const getRoot = () => {
+    const element = document.getElementById("modal");
+    return element instanceof HTMLElement ? element : null;
+  };
+
+  const ensureRootDefaults = () => {
+    const modal = getRoot();
+    if (!modal) {
+      return null;
+    }
+    modal.classList.add("modal");
+    if (!modal.dataset.modalState) {
+      modal.dataset.modalState = "closed";
+    }
+    if (!modal.dataset.modalOpen) {
+      modal.dataset.modalOpen = "false";
+    }
+    if (!modal.hasAttribute("aria-hidden")) {
+      modal.setAttribute("aria-hidden", "true");
+    }
+    return modal;
+  };
+
+  let root = ensureRootDefaults();
+  if (!root) {
     return {
-      root: null,
+      get root() {
+        return null;
+      },
       close: () => {},
       clear: () => {},
       isOpen: () => false,
@@ -139,13 +164,15 @@ const createModalController = () => {
   let isOpen = false;
   let lastActiveElement = null;
 
-  const getPanel = () => root.querySelector("[data-modal-panel]");
-  const getOverlay = () => root.querySelector("[data-modal-overlay]");
+  const getPanel = () => {
+    const modal = getRoot();
+    return modal ? modal.querySelector("[data-modal-panel]") : null;
+  };
 
-  if (!root.dataset.modalState) {
-    root.dataset.modalState = "closed";
-  }
-  root.dataset.modalOpen = "false";
+  const getOverlay = () => {
+    const modal = getRoot();
+    return modal ? modal.querySelector("[data-modal-overlay]") : null;
+  };
 
   const ensurePanelFocusable = () => {
     const panel = getPanel();
@@ -156,12 +183,16 @@ const createModalController = () => {
 
   const focusInitialElement = () => {
     ensurePanelFocusable();
+    const modal = getRoot();
+    if (!modal) {
+      return;
+    }
     const panel = getPanel();
     const focusTarget =
-      root.querySelector("[data-modal-autofocus]") ||
-      root.querySelector("[autofocus]") ||
-      root.querySelector("[data-autofocus]");
-    const focusables = getFocusableElements(panel || root);
+      modal.querySelector("[data-modal-autofocus]") ||
+      modal.querySelector("[autofocus]") ||
+      modal.querySelector("[data-autofocus]");
+    const focusables = getFocusableElements(panel || modal);
     const target = focusTarget instanceof HTMLElement ? focusTarget : focusables[0];
 
     queueMicrotask(() => {
@@ -179,16 +210,21 @@ const createModalController = () => {
   };
 
   const finishClose = (restoreFocus) => {
-    const overlay = getOverlay();
+    const modal = ensureRootDefaults();
+    if (!modal) {
+      return;
+    }
+    root = modal;
+    const overlay = modal.querySelector("[data-modal-overlay]");
     if (overlay instanceof HTMLElement) {
       overlay.classList.remove("is-closing");
       overlay.removeAttribute("data-overlay-state");
     }
-    root.innerHTML = "";
-    root.classList.add("hidden");
-    root.setAttribute("aria-hidden", "true");
-    root.dataset.modalOpen = "false";
-    root.dataset.modalState = "closed";
+    modal.innerHTML = "";
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+    modal.dataset.modalOpen = "false";
+    modal.dataset.modalState = "closed";
     lockBodyScroll(false);
     isOpen = false;
     if (restoreFocus && lastActiveElement instanceof HTMLElement) {
@@ -203,7 +239,13 @@ const createModalController = () => {
   };
 
   const close = ({ restoreFocus = true, skipAnimation = false } = {}) => {
-    if (!isOpen && root.innerHTML.trim() === "") {
+    const modal = ensureRootDefaults();
+    if (!modal) {
+      return;
+    }
+    root = modal;
+
+    if (!isOpen && modal.innerHTML.trim() === "") {
       finishClose(restoreFocus);
       return;
     }
@@ -216,7 +258,7 @@ const createModalController = () => {
       return;
     }
 
-    root.dataset.modalState = "closing";
+    modal.dataset.modalState = "closing";
     if (overlay instanceof HTMLElement) {
       overlay.classList.add("is-closing");
       overlay.setAttribute("data-overlay-state", "closing");
@@ -235,6 +277,12 @@ const createModalController = () => {
   };
 
   const open = () => {
+    const modal = ensureRootDefaults();
+    if (!modal) {
+      return;
+    }
+    root = modal;
+
     if (isOpen) {
       focusInitialElement();
       return;
@@ -242,10 +290,10 @@ const createModalController = () => {
 
     isOpen = true;
     lastActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    root.classList.remove("hidden");
-    root.setAttribute("aria-hidden", "false");
-    root.dataset.modalOpen = "true";
-    root.dataset.modalState = "opening";
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+    modal.dataset.modalOpen = "true";
+    modal.dataset.modalState = "opening";
     lockBodyScroll(true);
 
     const overlay = getOverlay();
@@ -255,10 +303,15 @@ const createModalController = () => {
     }
 
     requestAnimationFrame(() => {
-      root.dataset.modalState = "open";
+      const currentModal = ensureRootDefaults();
+      if (!currentModal) {
+        return;
+      }
+      currentModal.dataset.modalState = "open";
       const currentOverlay = getOverlay();
       if (currentOverlay instanceof HTMLElement) {
         currentOverlay.setAttribute("data-overlay-state", "open");
+        currentOverlay.classList.remove("is-closing");
       }
       const panel = getPanel();
       if (panel instanceof HTMLElement) {
@@ -282,8 +335,13 @@ const createModalController = () => {
       return;
     }
 
+    const modal = getRoot();
+    if (!modal) {
+      return;
+    }
+
     const panel = getPanel();
-    const focusable = getFocusableElements(panel || root);
+    const focusable = getFocusableElements(panel || modal);
     if (focusable.length === 0) {
       event.preventDefault();
       event.stopPropagation();
@@ -298,7 +356,7 @@ const createModalController = () => {
     const active = document.activeElement;
 
     if (event.shiftKey) {
-      if (active === first || !root.contains(active)) {
+      if (active === first || !modal.contains(active)) {
         event.preventDefault();
         event.stopPropagation();
         last.focus({ preventScroll: true });
@@ -313,31 +371,52 @@ const createModalController = () => {
     }
   };
 
-  document.addEventListener("keydown", handleKeydown);
-
-  root.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) {
+  const handleDocumentClick = (event) => {
+    const modal = getRoot();
+    if (!modal || !(event.target instanceof Element)) {
       return;
     }
-    const closeTrigger = target.closest("[data-modal-close]");
+    if (!modal.contains(event.target)) {
+      return;
+    }
+    const closeTrigger = event.target.closest("[data-modal-close]");
     if (closeTrigger) {
       event.preventDefault();
       close();
       return;
     }
     const overlay = getOverlay();
-    if (overlay instanceof HTMLElement && target === overlay) {
+    if (overlay instanceof HTMLElement && event.target === overlay) {
       event.preventDefault();
       close();
+    }
+  };
+
+  document.addEventListener("keydown", handleKeydown);
+  document.addEventListener("click", handleDocumentClick);
+
+  const handleModalSwap = (event) => {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.id === "modal") {
+      root = ensureRootDefaults();
+    }
+  };
+
+  document.body.addEventListener("htmx:oobAfterSwap", (event) => {
+    handleModalSwap(event);
+    const detailTarget = event.detail && event.detail.target;
+    if (detailTarget instanceof HTMLElement && detailTarget.id === "modal") {
+      root = ensureRootDefaults();
     }
   });
 
   document.body.addEventListener("htmx:afterSwap", (event) => {
-    if (event.target !== root) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target.id !== "modal") {
       return;
     }
-    const hasContent = root.innerHTML.trim().length > 0;
+    root = ensureRootDefaults();
+    const hasContent = target.innerHTML.trim().length > 0;
     if (!hasContent) {
       close({ skipAnimation: true });
       return;
@@ -346,9 +425,11 @@ const createModalController = () => {
   });
 
   document.body.addEventListener("htmx:beforeSwap", (event) => {
-    if (event.target !== root) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target.id !== "modal") {
       return;
     }
+    root = ensureRootDefaults();
     const panel = getPanel();
     if (panel instanceof HTMLElement) {
       panel.classList.remove("animate-dialog-out");
@@ -368,13 +449,17 @@ const createModalController = () => {
   });
 
   document.body.addEventListener("modal:open", () => {
-    if (root.innerHTML.trim().length > 0) {
+    const modal = ensureRootDefaults();
+    if (modal && modal.innerHTML.trim().length > 0) {
+      root = modal;
       open();
     }
   });
 
   return {
-    root,
+    get root() {
+      return getRoot();
+    },
     close,
     clear: () => close({ skipAnimation: true, restoreFocus: false }),
     isOpen: () => isOpen,

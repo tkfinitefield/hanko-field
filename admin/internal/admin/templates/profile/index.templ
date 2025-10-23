@@ -444,7 +444,14 @@ templ MFAUpdate(data MFAUpdateData) {
 			@mfaCard(data.Security, data.CSRFToken)
 		</div>
 	}
-	<div id="modal" hx-swap-oob="true"></div>
+	<div
+		id="modal"
+		class="modal hidden"
+		hx-swap-oob="true"
+		aria-hidden="true"
+		data-modal-open="false"
+		data-modal-state="closed"
+	></div>
 	if data.Message != "" {
 		<div id="profile-flash" hx-swap-oob="true">
 			@flashMessage(data.Message)
@@ -459,11 +466,25 @@ templ APIKeyUpdate(data APIKeyUpdateData) {
 		</div>
 	}
 	if data.Secret != nil {
-		<div id="modal" hx-swap-oob="true">
+		<div
+			id="modal"
+			class="modal hidden"
+			hx-swap-oob="true"
+			aria-hidden="true"
+			data-modal-open="false"
+			data-modal-state="closed"
+		>
 			@APIKeySecretModal(data.Secret, data.Message)
 		</div>
 	} else {
-		<div id="modal" hx-swap-oob="true"></div>
+		<div
+			id="modal"
+			class="modal hidden"
+			hx-swap-oob="true"
+			aria-hidden="true"
+			data-modal-open="false"
+			data-modal-state="closed"
+		></div>
 	}
 	if data.Message != "" {
 		<div id="profile-flash" hx-swap-oob="true">

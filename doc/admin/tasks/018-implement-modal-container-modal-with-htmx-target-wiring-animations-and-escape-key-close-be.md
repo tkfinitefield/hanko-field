@@ -17,4 +17,4 @@ Provide reusable modal container for htmx to inject forms and handle lifecycle.
 - Return modal fragments wrapped with `layouts.Modal` (or `components.Modal`) so the panel includes the correct ARIA attributes, focus trap hooks, and close affordances.
 - When a modal action succeeds, respond with `HX-Trigger: {"modal:close": true, "refresh:fragments": {"targets": ["#fragment-id"]}}` to close the dialog and re-fetch any dependent fragments via their `hx-trigger="refresh"` listeners.
 - Fragments that should respond to modal workflows must declare `hx-trigger="refresh from:body"` alongside their `hx-get`/`hx-target` attributes so they react to the global refresh events.
-- Always render an empty `<div id="modal" hx-swap-oob="true"></div>` in htmx responses when a modal should be cleared to avoid leaving stale markup in the container.
+- Always render an empty `<div id="modal" class="modal hidden" aria-hidden="true" data-modal-state="closed" data-modal-open="false" hx-swap-oob="true"></div>` in htmx responses when a modal should be cleared to avoid leaving stale markup in the container.

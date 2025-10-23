@@ -1453,7 +1453,7 @@ func MFAUpdate(data MFAUpdateData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 112, "<div id=\"modal\" hx-swap-oob=\"true\"></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 112, "<div id=\"modal\" class=\"modal hidden\" hx-swap-oob=\"true\" aria-hidden=\"true\" data-modal-open=\"false\" data-modal-state=\"closed\"></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1511,7 +1511,7 @@ func APIKeyUpdate(data APIKeyUpdateData) templ.Component {
 			}
 		}
 		if data.Secret != nil {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 117, "<div id=\"modal\" hx-swap-oob=\"true\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 117, "<div id=\"modal\" class=\"modal hidden\" hx-swap-oob=\"true\" aria-hidden=\"true\" data-modal-open=\"false\" data-modal-state=\"closed\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1524,7 +1524,7 @@ func APIKeyUpdate(data APIKeyUpdateData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 119, "<div id=\"modal\" hx-swap-oob=\"true\"></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 119, "<div id=\"modal\" class=\"modal hidden\" hx-swap-oob=\"true\" aria-hidden=\"true\" data-modal-open=\"false\" data-modal-state=\"closed\"></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
