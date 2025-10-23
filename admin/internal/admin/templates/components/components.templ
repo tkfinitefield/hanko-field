@@ -1,6 +1,13 @@
 package components
 
-import "finitefield.org/hanko-admin/internal/admin/templates/helpers"
+import (
+	"context"
+	"fmt"
+	"io"
+	"strconv"
+
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+)
 
 type ButtonOptions struct {
 	Variant   string
@@ -122,6 +129,269 @@ templ Table(headers []string, rows [][]templ.Component) {
 				}
 			</tbody>
 		</table>
+	</div>
+}
+
+type SortDirection string
+
+const (
+	SortDirectionNone SortDirection = ""
+	SortDirectionAsc  SortDirection = "asc"
+	SortDirectionDesc SortDirection = "desc"
+)
+
+type SortHeaderProps struct {
+	Label            string
+	SortKey          string
+	ActiveValue      string
+	DefaultDirection SortDirection
+	BasePath         string
+	RawQuery         string
+	FragmentPath     string
+	FragmentQuery    string
+	Param            string
+	ResetPage        bool
+	PageParam        string
+	HxTarget         string
+	HxSwap           string
+	HxPushURL        bool
+	ButtonAttrs      templ.Attributes
+	ThAttrs          templ.Attributes
+	SrLabel          string
+}
+
+templ SortableHeader(props SortHeaderProps) {
+	if props.Label == "" || props.SortKey == "" {
+		<th
+			scope="col"
+			if props.ThAttrs != nil {
+				{ props.ThAttrs... }
+			}
+		>
+			{ props.Label }
+		</th>
+		return
+	}
+
+	<th
+		scope="col"
+		aria-sort={ ariaSortValue(sortCurrentDirectionFromProps(props)) }
+		data-sort-key={ props.SortKey }
+		data-sort-direction={ string(sortCurrentDirectionFromProps(props)) }
+		if props.ThAttrs != nil {
+			{ props.ThAttrs... }
+		}
+	>
+		<a
+			class={ sortHeaderClass(sortCurrentDirectionFromProps(props)) }
+			href={ sortHref(props) }
+			hx-get={ sortHxHref(props) }
+			if props.HxTarget != "" {
+				hx-target={ props.HxTarget }
+			}
+			if props.HxSwap != "" {
+				hx-swap={ props.HxSwap }
+			}
+			if props.HxPushURL {
+				hx-push-url="true"
+			}
+			role="button"
+			aria-pressed?={ sortCurrentDirectionFromProps(props) != SortDirectionNone }
+			data-next-direction={ sortNextDirectionAttr(props) }
+			if props.ButtonAttrs != nil {
+				{ props.ButtonAttrs... }
+			}
+		>
+			<span class="flex items-center gap-1">
+				<span>{ props.Label }</span>
+				<span class="sr-only">{ sortSrLabelFromProps(props) }</span>
+				<span aria-hidden="true" class={ sortIconClass(sortCurrentDirectionFromProps(props)) }>
+					if sortCurrentDirectionFromProps(props) == SortDirectionAsc {
+						<svg viewBox="0 0 20 20" fill="none" class="h-4 w-4 text-slate-600" focusable="false">
+							<path d="M10 5l-3 3h6l-3-3z" fill="currentColor"></path>
+							<path d="M13 12l-3 3-3-3h6z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" fill="none" opacity="0.45"></path>
+						</svg>
+					} else if sortCurrentDirectionFromProps(props) == SortDirectionDesc {
+						<svg viewBox="0 0 20 20" fill="none" class="h-4 w-4 text-slate-600" focusable="false">
+							<path d="M7 8l3-3 3 3H7z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" fill="none" opacity="0.45"></path>
+							<path d="M10 15l3-3H7l3 3z" fill="currentColor"></path>
+						</svg>
+					} else {
+						<svg viewBox="0 0 20 20" fill="none" class="h-4 w-4 text-slate-500" focusable="false">
+							<path d="M10 5l-2.5 2.5h5L10 5z" fill="currentColor" opacity="0.75"></path>
+							<path d="M10 15l2.5-2.5h-5L10 15z" fill="currentColor" opacity="0.75"></path>
+						</svg>
+					}
+				</span>
+			</span>
+		</a>
+	</th>
+}
+
+type PageInfo struct {
+	PageSize   int
+	Current    int
+	Count      int
+	TotalItems *int
+	Next       *int
+	Prev       *int
+}
+
+type PaginationProps struct {
+	Info          PageInfo
+	BasePath      string
+	RawQuery      string
+	FragmentPath  string
+	FragmentQuery string
+	Param         string
+	SizeParam     string
+	HxTarget      string
+	HxSwap        string
+	HxPushURL     bool
+	Attrs         templ.Attributes
+	Label         string
+}
+
+templ Pagination(props PaginationProps) {
+	if props.Info.PageSize <= 0 {
+		return
+	}
+
+	<nav
+		class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+		aria-label={ paginationLabel(props) }
+		data-page-size={ strconv.Itoa(paginationPageSize(props)) }
+		data-page-current={ strconv.Itoa(paginationCurrentPage(props)) }
+		if props.Attrs != nil {
+			{ props.Attrs... }
+		}
+	>
+		<div class="text-sm text-slate-600">
+			if props.Info.TotalItems != nil && *props.Info.TotalItems >= 0 {
+				<span>Showing { paginationStartIndex(props) } - { paginationEndIndex(props) } of { strconv.Itoa(*props.Info.TotalItems) }</span>
+			} else {
+				<span>Page { paginationCurrentPage(props) }</span>
+				<span class="text-slate-400"> · { paginationPageSize(props) } per page</span>
+			}
+		</div>
+		<div class="flex items-center gap-2">
+			if props.Info.Prev != nil {
+				<a
+					class="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+					href={ paginationPrevURL(props) }
+					hx-get={ paginationPrevHxURL(props) }
+					if props.HxTarget != "" {
+						hx-target={ props.HxTarget }
+					}
+					if props.HxSwap != "" {
+						hx-swap={ props.HxSwap }
+					}
+					if props.HxPushURL {
+						hx-push-url="true"
+					}
+					aria-label="Previous page"
+				>
+					<svg viewBox="0 0 20 20" fill="none" class="h-4 w-4" aria-hidden="true">
+						<path d="M12.5 5.5L8 10l4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+					</svg>
+					<span>Previous</span>
+				</a>
+			} else {
+				<span class="inline-flex cursor-not-allowed items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400 opacity-70" aria-disabled="true">
+					<svg viewBox="0 0 20 20" fill="none" class="h-4 w-4" aria-hidden="true">
+						<path d="M12.5 5.5L8 10l4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+					</svg>
+					<span>Previous</span>
+				</span>
+			}
+			<span class="text-sm font-semibold text-slate-700">
+				Page { paginationCurrentPage(props) }
+			</span>
+			if props.Info.Next != nil {
+				<a
+					class="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+					href={ paginationNextURL(props) }
+					hx-get={ paginationNextHxURL(props) }
+					if props.HxTarget != "" {
+						hx-target={ props.HxTarget }
+					}
+					if props.HxSwap != "" {
+						hx-swap={ props.HxSwap }
+					}
+					if props.HxPushURL {
+						hx-push-url="true"
+					}
+					aria-label="Next page"
+				>
+					<span>Next</span>
+					<svg viewBox="0 0 20 20" fill="none" class="h-4 w-4" aria-hidden="true">
+						<path d="M7.5 5.5L12 10l-4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+					</svg>
+				</a>
+			} else {
+				<span class="inline-flex cursor-not-allowed items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400 opacity-70" aria-disabled="true">
+					<span>Next</span>
+					<svg viewBox="0 0 20 20" fill="none" class="h-4 w-4" aria-hidden="true">
+						<path d="M7.5 5.5L12 10l-4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+					</svg>
+				</span>
+			}
+		</div>
+	</nav>
+}
+
+type BulkToolbarAction struct {
+	Label       string
+	Description string
+	Options     ButtonOptions
+	Component   templ.Component
+}
+
+type BulkToolbarProps struct {
+	SelectedCount int
+	TotalCount    int
+	Message       string
+	ClearAction   *BulkToolbarAction
+	Actions       []BulkToolbarAction
+	Attrs         templ.Attributes
+}
+
+templ BulkActionToolbar(props BulkToolbarProps) {
+	if props.SelectedCount <= 0 {
+		return
+	}
+
+	<div
+		class="flex flex-col gap-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-slate-900 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+		role="region"
+		aria-live="polite"
+		aria-label="Bulk actions toolbar"
+		data-selected-count={ strconv.Itoa(props.SelectedCount) }
+		if props.Attrs != nil {
+			{ props.Attrs... }
+		}
+	>
+		<div class="flex items-center gap-3">
+			<span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold text-white">
+				{ props.SelectedCount }
+			</span>
+			<div class="space-y-1">
+				<p class="text-sm font-semibold text-slate-900">{ bulkToolbarMessage(props) }</p>
+				if props.TotalCount > 0 {
+					<p class="text-xs text-slate-600">
+						of { props.TotalCount } total
+					</p>
+				}
+			</div>
+		</div>
+		<div class="flex flex-wrap items-center gap-2">
+			if props.ClearAction != nil {
+				@renderBulkToolbarAction(*props.ClearAction, true)
+			}
+			for _, action := range props.Actions {
+				@renderBulkToolbarAction(action, false)
+			}
+		</div>
 	</div>
 }
 
@@ -468,4 +738,367 @@ func safeComponent(c templ.Component) templ.Component {
 		return templ.NopComponent
 	}
 	return c
+}
+
+func currentSortDirection(active, key string) SortDirection {
+	if active == key {
+		return SortDirectionAsc
+	}
+	if active == "-"+key {
+		return SortDirectionDesc
+	}
+	return SortDirectionNone
+}
+
+func nextSortDirection(current, defaultDir SortDirection) SortDirection {
+	switch current {
+	case SortDirectionAsc:
+		return SortDirectionDesc
+	case SortDirectionDesc:
+		return SortDirectionNone
+	default:
+		if defaultDir == "" {
+			return SortDirectionAsc
+		}
+		return defaultDir
+	}
+}
+
+func ariaSortValue(direction SortDirection) string {
+	switch direction {
+	case SortDirectionAsc:
+		return "ascending"
+	case SortDirectionDesc:
+		return "descending"
+	default:
+		return "none"
+	}
+}
+
+func sortHeaderClass(direction SortDirection) string {
+	base := []string{
+		"group inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 hover:text-slate-900",
+	}
+	if direction != SortDirectionNone {
+		base = append(base, "text-slate-900")
+	}
+	return helpers.ClassList(base...)
+}
+
+func sortIconClass(direction SortDirection) string {
+	if direction == SortDirectionNone {
+		return "inline-flex h-5 w-5 items-center justify-center text-slate-500 transition group-hover:text-slate-700"
+	}
+	return "inline-flex h-5 w-5 items-center justify-center text-brand-600"
+}
+
+func buildSortQuery(rawQuery, param, key string, direction SortDirection) string {
+	switch direction {
+	case SortDirectionAsc:
+		return helpers.SetRawQuery(rawQuery, param, key)
+	case SortDirectionDesc:
+		return helpers.SetRawQuery(rawQuery, param, "-"+key)
+	default:
+		return helpers.DelRawQuery(rawQuery, param)
+	}
+}
+
+func sortCurrentDirectionFromProps(props SortHeaderProps) SortDirection {
+	return currentSortDirection(props.ActiveValue, props.SortKey)
+}
+
+func sortDefaultDirection(props SortHeaderProps) SortDirection {
+	if props.DefaultDirection == "" {
+		return SortDirectionAsc
+	}
+	return props.DefaultDirection
+}
+
+func sortNextDirectionFromProps(props SortHeaderProps) SortDirection {
+	return nextSortDirection(sortCurrentDirectionFromProps(props), sortDefaultDirection(props))
+}
+
+func sortParamKey(props SortHeaderProps) string {
+	if props.Param != "" {
+		return props.Param
+	}
+	return "sort"
+}
+
+func sortPageParamKey(props SortHeaderProps) string {
+	if props.PageParam != "" {
+		return props.PageParam
+	}
+	return "page"
+}
+
+func sortBasePath(props SortHeaderProps) string {
+	if props.BasePath != "" {
+		return props.BasePath
+	}
+	return "."
+}
+
+func sortFragmentPath(props SortHeaderProps) string {
+	if props.FragmentPath != "" {
+		return props.FragmentPath
+	}
+	return sortBasePath(props)
+}
+
+func sortBaseRawQuery(props SortHeaderProps) string {
+	query := props.RawQuery
+	if props.ResetPage {
+		query = helpers.DelRawQuery(query, sortPageParamKey(props))
+	}
+	return query
+}
+
+func sortFragmentRawQuery(props SortHeaderProps) string {
+	query := props.FragmentQuery
+	if query == "" {
+		query = props.RawQuery
+	}
+	if props.ResetPage {
+		query = helpers.DelRawQuery(query, sortPageParamKey(props))
+	}
+	return query
+}
+
+func sortHref(props SortHeaderProps) string {
+	nextDir := sortNextDirectionFromProps(props)
+	query := buildSortQuery(sortBaseRawQuery(props), sortParamKey(props), props.SortKey, nextDir)
+	return helpers.BuildURL(sortBasePath(props), query)
+}
+
+func sortHxHref(props SortHeaderProps) string {
+	nextDir := sortNextDirectionFromProps(props)
+	query := buildSortQuery(sortFragmentRawQuery(props), sortParamKey(props), props.SortKey, nextDir)
+	return helpers.BuildURL(sortFragmentPath(props), query)
+}
+
+func sortNextDirectionAttr(props SortHeaderProps) string {
+	dir := sortNextDirectionFromProps(props)
+	if dir == SortDirectionNone {
+		return "none"
+}
+	return string(dir)
+}
+
+func sortSrLabelFromProps(props SortHeaderProps) string {
+	if props.SrLabel != "" {
+		return props.SrLabel
+	}
+	return sortSrLabel(props.Label, sortCurrentDirectionFromProps(props), sortNextDirectionFromProps(props))
+}
+
+func sortSrLabel(label string, current SortDirection, next SortDirection) string {
+	currentState := "no sort applied"
+	switch current {
+	case SortDirectionAsc:
+		currentState = "sorted ascending"
+	case SortDirectionDesc:
+		currentState = "sorted descending"
+	}
+
+	nextState := "will clear sorting"
+	switch next {
+	case SortDirectionAsc:
+		nextState = "will sort ascending"
+	case SortDirectionDesc:
+		nextState = "will sort descending"
+	}
+
+	return fmt.Sprintf("%s (%s, activating %s)", label, currentState, nextState)
+}
+
+func bulkSelectionLabel(selected, total int) string {
+	if total > 0 {
+		return fmt.Sprintf("%d selected of %d", selected, total)
+	}
+	return fmt.Sprintf("%d selected", selected)
+}
+
+func paginationLabel(props PaginationProps) string {
+	if props.Label != "" {
+		return props.Label
+	}
+	return "Pagination"
+}
+
+func paginationPageSize(props PaginationProps) int {
+	return props.Info.PageSize
+}
+
+func paginationCurrentPage(props PaginationProps) int {
+	page := props.Info.Current
+	if page <= 0 {
+		return 1
+	}
+	return page
+}
+
+func paginationPageCount(props PaginationProps) int {
+	count := props.Info.Count
+	size := paginationPageSize(props)
+	if count <= 0 || (size > 0 && count > size) {
+		return size
+	}
+	return count
+}
+
+func paginationParam(props PaginationProps) string {
+	if props.Param != "" {
+		return props.Param
+	}
+	return "page"
+}
+
+func paginationSizeParam(props PaginationProps) string {
+	if props.SizeParam != "" {
+		return props.SizeParam
+	}
+	return "pageSize"
+}
+
+func paginationBasePath(props PaginationProps) string {
+	if props.BasePath != "" {
+		return props.BasePath
+	}
+	return "."
+}
+
+func paginationFragmentPath(props PaginationProps) string {
+	if props.FragmentPath != "" {
+		return props.FragmentPath
+	}
+	return paginationBasePath(props)
+}
+
+func paginationBaseQuery(props PaginationProps) string {
+	query := props.RawQuery
+	size := paginationPageSize(props)
+	if size > 0 {
+		query = helpers.SetRawQuery(query, paginationSizeParam(props), strconv.Itoa(size))
+	}
+	return query
+}
+
+func paginationFragmentQuery(props PaginationProps) string {
+	query := props.FragmentQuery
+	if query == "" {
+		query = props.RawQuery
+	}
+	size := paginationPageSize(props)
+	if size > 0 {
+		query = helpers.SetRawQuery(query, paginationSizeParam(props), strconv.Itoa(size))
+	}
+	return query
+}
+
+func paginationPrevURL(props PaginationProps) string {
+	if props.Info.Prev == nil {
+		return ""
+	}
+	query := helpers.SetRawQuery(paginationBaseQuery(props), paginationParam(props), strconv.Itoa(*props.Info.Prev))
+	return helpers.BuildURL(paginationBasePath(props), query)
+}
+
+func paginationPrevHxURL(props PaginationProps) string {
+	if props.Info.Prev == nil {
+		return ""
+	}
+	query := helpers.SetRawQuery(paginationFragmentQuery(props), paginationParam(props), strconv.Itoa(*props.Info.Prev))
+	return helpers.BuildURL(paginationFragmentPath(props), query)
+}
+
+func paginationNextURL(props PaginationProps) string {
+	if props.Info.Next == nil {
+		return ""
+	}
+	query := helpers.SetRawQuery(paginationBaseQuery(props), paginationParam(props), strconv.Itoa(*props.Info.Next))
+	return helpers.BuildURL(paginationBasePath(props), query)
+}
+
+func paginationNextHxURL(props PaginationProps) string {
+	if props.Info.Next == nil {
+		return ""
+	}
+	query := helpers.SetRawQuery(paginationFragmentQuery(props), paginationParam(props), strconv.Itoa(*props.Info.Next))
+	return helpers.BuildURL(paginationFragmentPath(props), query)
+}
+
+func paginationStartIndex(props PaginationProps) int {
+	page := paginationCurrentPage(props)
+	size := paginationPageSize(props)
+	if size <= 0 {
+		return 1
+	}
+	start := ((page - 1) * size) + 1
+	if start < 1 {
+		start = 1
+	}
+	if props.Info.TotalItems != nil && *props.Info.TotalItems > 0 && start > *props.Info.TotalItems {
+		return *props.Info.TotalItems
+	}
+	return start
+}
+
+func paginationEndIndex(props PaginationProps) int {
+	start := paginationStartIndex(props)
+	count := paginationPageCount(props)
+	if count <= 0 {
+		return start
+	}
+	end := start + count - 1
+	if end < start {
+		end = start
+	}
+	if props.Info.TotalItems != nil && *props.Info.TotalItems > 0 && end > *props.Info.TotalItems {
+		end = *props.Info.TotalItems
+	}
+	return end
+}
+
+func bulkToolbarMessage(props BulkToolbarProps) string {
+	if props.Message != "" {
+		return props.Message
+	}
+	return bulkSelectionLabel(props.SelectedCount, props.TotalCount)
+}
+
+func renderBulkToolbarAction(action BulkToolbarAction, isClear bool) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		component := action.Component
+		if component != nil {
+			return component.Render(ctx, w)
+		}
+
+		options := action.Options
+		if options.Variant == "" {
+			if isClear {
+				options.Variant = "ghost"
+			} else {
+				options.Variant = "secondary"
+			}
+		}
+		if options.Size == "" {
+			options.Size = "sm"
+		}
+
+		content := helpers.TextComponent(action.Label)
+		if action.Description != "" {
+			content = templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+				if _, err := io.WriteString(w, action.Label); err != nil {
+					return err
+				}
+				if _, err := io.WriteString(w, fmt.Sprintf(`<span class="sr-only"> %s</span>`, action.Description)); err != nil {
+					return err
+				}
+				return nil
+			})
+		}
+
+		return ButtonSlot(content, options).Render(ctx, w)
+	})
 }

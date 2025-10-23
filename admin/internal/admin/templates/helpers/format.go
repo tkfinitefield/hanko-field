@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -173,4 +174,54 @@ func TableRows(rows [][]string) [][]templ.Component {
 		result = append(result, cells)
 	}
 	return result
+}
+
+// SetRawQuery returns a new raw query string with the provided key set to the supplied value.
+func SetRawQuery(rawQuery, key, value string) string {
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		values = url.Values{}
+	}
+	values.Set(key, value)
+	return values.Encode()
+}
+
+// DelRawQuery removes the provided key from the raw query string.
+func DelRawQuery(rawQuery, key string) string {
+	if rawQuery == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return rawQuery
+	}
+	values.Del(key)
+	return values.Encode()
+}
+
+// BuildURL combines a path and raw query string into a URL, preserving original encoding where possible.
+func BuildURL(path, rawQuery string) string {
+	if path == "" {
+		path = "."
+	}
+	u, err := url.Parse(path)
+	if err != nil {
+		if rawQuery == "" {
+			return path
+		}
+		return path + "?" + rawQuery
+	}
+
+	if rawQuery == "" {
+		u.RawQuery = ""
+		return u.String()
+	}
+
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		u.RawQuery = rawQuery
+		return u.String()
+	}
+	u.RawQuery = values.Encode()
+	return u.String()
 }
