@@ -598,7 +598,7 @@ const normaliseToastDetail = (detail) => {
 
   const tone = readString(detail.tone, detail.type, detail.level, "info");
   const title = readString(detail.title, detail.heading);
-  const message = readString(detail.message, detail.body, detail.description);
+  const message = readString(detail.message, detail.body, detail.description, detail.value, detail.text, detail.label);
 
   const readNumber = (...candidates) => {
     for (const candidate of candidates) {

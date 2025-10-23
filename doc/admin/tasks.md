@@ -26,7 +26,7 @@
 - [x] [Create top bar components (environment badge, search shortcut, notification icon, user menu).](doc/admin/tasks/017-create-top-bar-components-environment-badge-search-shortcut-notification-icon-user-menu.md)
 - [x] [Implement modal container (`#modal`) with htmx target wiring, animations, and escape-key close behaviour.](doc/admin/tasks/018-implement-modal-container-modal-with-htmx-target-wiring-animations-and-escape-key-close-be.md)
 - [x] [Provide reusable pagination controls, table headers with sort indicators, and bulk action toolbar components.](doc/admin/tasks/019-provide-reusable-pagination-controls-table-headers-with-sort-indicators-and-bulk-action-to.md)
-- [ ] [Implement toast/alert system triggered by htmx response headers.](doc/admin/tasks/020-implement-toast-alert-system-triggered-by-htmx-response-headers.md)
+- [x] [Implement toast/alert system triggered by htmx response headers.](doc/admin/tasks/020-implement-toast-alert-system-triggered-by-htmx-response-headers.md)
 
 ## 4. Shared Utilities & System Pages
 - [ ] [Build dashboard page (`/admin`) with KPI fragment endpoints (`/admin/fragments/kpi`, `/admin/fragments/alerts`).](doc/admin/tasks/021-build-dashboard-page-admin-with-kpi-fragment-endpoints-admin-fragments-kpi-admin-fragments.md)
