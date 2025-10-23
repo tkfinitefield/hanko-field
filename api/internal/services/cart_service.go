@@ -1128,9 +1128,7 @@ func (s *cartService) Estimate(ctx context.Context, cmd CartEstimateCommand) (Ca
 
 	if promotionCopy != nil {
 		promotionCopy.Applied = promoApplied
-		if promoDiscount > 0 {
-			promotionCopy.DiscountAmount = promoDiscount
-		}
+		promotionCopy.DiscountAmount = promoDiscount
 	}
 
 	if promotionCopy == nil && promoApplied && promoCode != nil {
