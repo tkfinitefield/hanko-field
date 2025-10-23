@@ -34,6 +34,15 @@
     @apply font-sans antialiased;
   }
 
+  html.modal-open {
+    overflow: hidden;
+  }
+
+  body.has-open-modal {
+    overflow: hidden;
+    touch-action: none;
+  }
+
   h1,
   h2,
   h3,
@@ -233,15 +242,40 @@
     @apply px-4 py-3 align-middle;
   }
 
+  .modal {
+    @apply fixed inset-0 z-50;
+    pointer-events: none;
+  }
+
+  .modal[data-modal-open="true"] {
+    pointer-events: auto;
+  }
+
+  .modal[data-modal-state="closing"] {
+    pointer-events: none;
+  }
+
   .modal-overlay {
     background-color: var(--surface-overlay);
+    opacity: 0;
+    transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1);
     @apply fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm;
+  }
+
+  .modal[data-modal-state="opening"] .modal-overlay,
+  .modal[data-modal-state="open"] .modal-overlay {
+    opacity: 1;
+  }
+
+  .modal-overlay.is-closing,
+  .modal[data-modal-state="closing"] .modal-overlay {
+    opacity: 0;
   }
 
   .modal-panel {
     background-color: var(--surface-default);
     border-color: var(--border-subtle);
-    @apply w-full max-w-lg animate-dialog-in rounded-2xl border p-6 shadow-modal sm:max-w-xl;
+    @apply w-full max-w-lg animate-dialog-in rounded-2xl border p-6 shadow-modal focus:outline-none sm:max-w-xl;
   }
 
   .modal-panel.modal-lg {

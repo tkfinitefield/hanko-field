@@ -114,7 +114,7 @@ func Base(title string, crumbs []partials.Breadcrumb, body templ.Component) temp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div></main></div></div><div id=\"toast-stack\" class=\"pointer-events-none fixed bottom-4 right-4 z-40 flex w-full max-w-sm flex-col gap-3\"></div><div id=\"modal-root\" class=\"fixed inset-0 z-50 flex items-center justify-center\"></div><script src=\"/public/static/app.js\" defer></script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div></main></div></div><div id=\"toast-stack\" class=\"pointer-events-none fixed bottom-4 right-4 z-40 flex w-full max-w-sm flex-col gap-3\"></div><div id=\"modal\" class=\"modal hidden\" hx-target=\"this\" hx-swap=\"innerHTML\" aria-hidden=\"true\" data-modal-state=\"closed\" data-modal-open=\"false\"></div><script src=\"/public/static/app.js\" defer></script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

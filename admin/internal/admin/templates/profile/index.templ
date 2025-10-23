@@ -129,7 +129,7 @@ templ mfaCardBody(state *profilemodel.SecurityState, csrf string) {
 				Variant: "primary",
 				Attrs: templ.Attributes{
 					"hx-get":   "/admin/profile/mfa/totp",
-					"hx-target": "#modal-root",
+					"hx-target": "#modal",
 					"hx-swap": "innerHTML",
 				},
 			})
@@ -209,7 +209,7 @@ templ apiKeysBody(state *profilemodel.SecurityState, csrf string) {
 				Variant: "primary",
 				Attrs: templ.Attributes{
 					"hx-get":   "/admin/profile/api-keys/new",
-					"hx-target": "#modal-root",
+				"hx-target": "#modal",
 					"hx-swap": "innerHTML",
 				},
 			})
@@ -360,7 +360,7 @@ templ totpModalBody(data TOTPModalData) {
 		</div>
 		<form
 			hx-post="/admin/profile/mfa/totp"
-			hx-target="#modal-root"
+	hx-target="#modal"
 			hx-swap="innerHTML"
 			class="space-y-3"
 		>
@@ -389,7 +389,7 @@ templ APIKeyFormModal(data APIKeyFormData) {
 templ apiKeyFormBody(data APIKeyFormData) {
 	<form
 		hx-post="/admin/profile/api-keys"
-		hx-target="#modal-root"
+	hx-target="#modal"
 		hx-swap="innerHTML"
 		class="space-y-4"
 	>
@@ -444,7 +444,7 @@ templ MFAUpdate(data MFAUpdateData) {
 			@mfaCard(data.Security, data.CSRFToken)
 		</div>
 	}
-	<div id="modal-root" hx-swap-oob="true"></div>
+	<div id="modal" hx-swap-oob="true"></div>
 	if data.Message != "" {
 		<div id="profile-flash" hx-swap-oob="true">
 			@flashMessage(data.Message)
@@ -459,11 +459,11 @@ templ APIKeyUpdate(data APIKeyUpdateData) {
 		</div>
 	}
 	if data.Secret != nil {
-		<div id="modal-root" hx-swap-oob="true">
+		<div id="modal" hx-swap-oob="true">
 			@APIKeySecretModal(data.Secret, data.Message)
 		</div>
 	} else {
-		<div id="modal-root" hx-swap-oob="true"></div>
+		<div id="modal" hx-swap-oob="true"></div>
 	}
 	if data.Message != "" {
 		<div id="profile-flash" hx-swap-oob="true">

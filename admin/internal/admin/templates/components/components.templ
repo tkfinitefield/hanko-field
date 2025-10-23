@@ -345,6 +345,7 @@ templ Modal(props ModalProps) {
 			class={ helpers.ModalPanelClass(props.Size) }
 			role="dialog"
 			aria-modal="true"
+			tabindex="-1"
 			if labelID := modalTitleID(props.ID, props.Title); labelID != "" {
 				aria-labelledby={ labelID }
 			}

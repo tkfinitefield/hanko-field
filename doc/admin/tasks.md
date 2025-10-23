@@ -24,7 +24,7 @@
 - [x] [Implement global layout template (`/admin/_layout.html`) with sidebar, top bar, breadcrumbs, and responsive behaviour.](doc/admin/tasks/015-implement-global-layout-template-admin-layout-html-with-sidebar-top-bar-breadcrumbs-and-re.md)
 - [x] [Build dynamic sidebar rendering with route highlighting and permission-based sections.](doc/admin/tasks/016-build-dynamic-sidebar-rendering-with-route-highlighting-and-permission-based-sections.md)
 - [x] [Create top bar components (environment badge, search shortcut, notification icon, user menu).](doc/admin/tasks/017-create-top-bar-components-environment-badge-search-shortcut-notification-icon-user-menu.md)
-- [ ] [Implement modal container (`#modal`) with htmx target wiring, animations, and escape-key close behaviour.](doc/admin/tasks/018-implement-modal-container-modal-with-htmx-target-wiring-animations-and-escape-key-close-be.md)
+- [x] [Implement modal container (`#modal`) with htmx target wiring, animations, and escape-key close behaviour.](doc/admin/tasks/018-implement-modal-container-modal-with-htmx-target-wiring-animations-and-escape-key-close-be.md)
 - [ ] [Provide reusable pagination controls, table headers with sort indicators, and bulk action toolbar components.](doc/admin/tasks/019-provide-reusable-pagination-controls-table-headers-with-sort-indicators-and-bulk-action-to.md)
 - [ ] [Implement toast/alert system triggered by htmx response headers.](doc/admin/tasks/020-implement-toast-alert-system-triggered-by-htmx-response-headers.md)
 

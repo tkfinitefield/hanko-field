@@ -1,16 +1,20 @@
 package layouts
 
 templ Modal(title string, body templ.Component) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30">
-    <div class="w-full max-w-lg rounded-xl bg-white shadow-xl">
-      <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <h2 class="text-lg font-semibold text-slate-900">{ title }</h2>
-        <button type="button" class="rounded p-1 text-slate-500 hover:bg-slate-100" data-modal-close>
-          <span class="sr-only">Close</span>
-          ×
+  <div class="modal-overlay" data-modal-overlay>
+    <div class="modal-panel" data-modal-panel role="dialog" aria-modal="true" tabindex="-1">
+      <header class="modal-header">
+        <div class="flex-1">
+          <h2 class="modal-title">{ title }</h2>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" data-modal-close>
+          <span class="sr-only">閉じる</span>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="h-4 w-4">
+            <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" />
+          </svg>
         </button>
       </header>
-      <div class="px-4 py-5">
+      <div class="modal-body">
         @body
       </div>
     </div>

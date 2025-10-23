@@ -406,7 +406,7 @@ func mfaCardBody(state *profilemodel.SecurityState, csrf string) templ.Component
 			Variant: "primary",
 			Attrs: templ.Attributes{
 				"hx-get":    "/admin/profile/mfa/totp",
-				"hx-target": "#modal-root",
+				"hx-target": "#modal",
 				"hx-swap":   "innerHTML",
 			},
 		}).Render(ctx, templ_7745c5c3_Buffer)
@@ -659,7 +659,7 @@ func apiKeysBody(state *profilemodel.SecurityState, csrf string) templ.Component
 			Variant: "primary",
 			Attrs: templ.Attributes{
 				"hx-get":    "/admin/profile/api-keys/new",
-				"hx-target": "#modal-root",
+				"hx-target": "#modal",
 				"hx-swap":   "innerHTML",
 			},
 		}).Render(ctx, templ_7745c5c3_Buffer)
@@ -1147,7 +1147,7 @@ func totpModalBody(data TOTPModalData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 94, "</div><form hx-post=\"/admin/profile/mfa/totp\" hx-target=\"#modal-root\" hx-swap=\"innerHTML\" class=\"space-y-3\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 94, "</div><form hx-post=\"/admin/profile/mfa/totp\" hx-target=\"#modal\" hx-swap=\"innerHTML\" class=\"space-y-3\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1256,7 +1256,7 @@ func apiKeyFormBody(data APIKeyFormData) templ.Component {
 			templ_7745c5c3_Var47 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 99, "<form hx-post=\"/admin/profile/api-keys\" hx-target=\"#modal-root\" hx-swap=\"innerHTML\" class=\"space-y-4\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 99, "<form hx-post=\"/admin/profile/api-keys\" hx-target=\"#modal\" hx-swap=\"innerHTML\" class=\"space-y-4\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1453,7 +1453,7 @@ func MFAUpdate(data MFAUpdateData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 112, "<div id=\"modal-root\" hx-swap-oob=\"true\"></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 112, "<div id=\"modal\" hx-swap-oob=\"true\"></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1511,7 +1511,7 @@ func APIKeyUpdate(data APIKeyUpdateData) templ.Component {
 			}
 		}
 		if data.Secret != nil {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 117, "<div id=\"modal-root\" hx-swap-oob=\"true\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 117, "<div id=\"modal\" hx-swap-oob=\"true\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1524,7 +1524,7 @@ func APIKeyUpdate(data APIKeyUpdateData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 119, "<div id=\"modal-root\" hx-swap-oob=\"true\"></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 119, "<div id=\"modal\" hx-swap-oob=\"true\"></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

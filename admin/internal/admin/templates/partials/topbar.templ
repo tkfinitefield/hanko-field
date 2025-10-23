@@ -189,7 +189,7 @@ templ SearchShortcut() {
 			type="button"
 			class="group hidden items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1 sm:inline-flex"
 			hx-get={ topbarRoute(base, "/search?overlay=1") }
-			hx-target="#modal-root"
+			hx-target="#modal"
 			hx-swap="innerHTML"
 			data-topbar-search-trigger
 			data-search-href={ topbarRoute(base, "/search") }

@@ -29,20 +29,20 @@ func Modal(title string, body templ.Component) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30\"><div class=\"w-full max-w-lg rounded-xl bg-white shadow-xl\"><header class=\"flex items-center justify-between border-b border-slate-200 px-4 py-3\"><h2 class=\"text-lg font-semibold text-slate-900\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"modal-overlay\" data-modal-overlay><div class=\"modal-panel\" data-modal-panel role=\"dialog\" aria-modal=\"true\" tabindex=\"-1\"><header class=\"modal-header\"><div class=\"flex-1\"><h2 class=\"modal-title\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layouts/modal.templ`, Line: 7, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layouts/modal.templ`, Line: 9, Col: 50}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</h2><button type=\"button\" class=\"rounded p-1 text-slate-500 hover:bg-slate-100\" data-modal-close><span class=\"sr-only\">Close</span> ×</button></header><div class=\"px-4 py-5\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</h2></div><button type=\"button\" class=\"btn btn-ghost btn-sm\" data-modal-close><span class=\"sr-only\">閉じる</span> <svg viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\" class=\"h-4 w-4\"><path d=\"M6 18L18 6M6 6l12 12\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"></path></svg></button></header><div class=\"modal-body\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

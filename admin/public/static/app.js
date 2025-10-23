@@ -33,6 +33,37 @@ const isEditableTarget = (element) => {
   return Boolean(element.closest("input, textarea, select, [contenteditable='true'], [contenteditable='']"));
 };
 
+const isVisible = (element) => {
+  if (!(element instanceof HTMLElement)) {
+    return false;
+  }
+  if (element.offsetParent !== null) {
+    return true;
+  }
+  return element.getClientRects().length > 0;
+};
+
+const getFocusableElements = (root) => {
+  if (!(root instanceof Element)) {
+    return [];
+  }
+  return Array.from(root.querySelectorAll(focusableSelectors)).filter(
+    (el) => el instanceof HTMLElement && isVisible(el) && !el.hasAttribute("disabled"),
+  );
+};
+
+const lockBodyScroll = (locked) => {
+  document.documentElement.classList.toggle("modal-open", locked);
+  if (document.body) {
+    document.body.classList.toggle("has-open-modal", locked);
+    if (locked) {
+      document.body.dataset.modalOpen = "true";
+    } else {
+      delete document.body.dataset.modalOpen;
+    }
+  }
+};
+
 const formatNotificationCount = (value) => {
   const raw = typeof value === "string" ? value.trim() : String(value ?? "").trim();
   if (raw === "") {
@@ -92,6 +123,346 @@ const initNotificationsBadge = () => {
       event.target.querySelectorAll?.("[data-notifications-root]").forEach(initialize);
     });
   }
+};
+
+const createModalController = () => {
+  const root = document.getElementById("modal");
+  if (!(root instanceof HTMLElement)) {
+    return {
+      root: null,
+      close: () => {},
+      clear: () => {},
+      isOpen: () => false,
+    };
+  }
+
+  let isOpen = false;
+  let lastActiveElement = null;
+
+  const getPanel = () => root.querySelector("[data-modal-panel]");
+  const getOverlay = () => root.querySelector("[data-modal-overlay]");
+
+  if (!root.dataset.modalState) {
+    root.dataset.modalState = "closed";
+  }
+  root.dataset.modalOpen = "false";
+
+  const ensurePanelFocusable = () => {
+    const panel = getPanel();
+    if (panel instanceof HTMLElement && !panel.hasAttribute("tabindex")) {
+      panel.setAttribute("tabindex", "-1");
+    }
+  };
+
+  const focusInitialElement = () => {
+    ensurePanelFocusable();
+    const panel = getPanel();
+    const focusTarget =
+      root.querySelector("[data-modal-autofocus]") ||
+      root.querySelector("[autofocus]") ||
+      root.querySelector("[data-autofocus]");
+    const focusables = getFocusableElements(panel || root);
+    const target = focusTarget instanceof HTMLElement ? focusTarget : focusables[0];
+
+    queueMicrotask(() => {
+      if (target instanceof HTMLElement) {
+        target.focus({ preventScroll: true });
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+          target.select();
+        }
+        return;
+      }
+      if (panel instanceof HTMLElement) {
+        panel.focus({ preventScroll: true });
+      }
+    });
+  };
+
+  const finishClose = (restoreFocus) => {
+    const overlay = getOverlay();
+    if (overlay instanceof HTMLElement) {
+      overlay.classList.remove("is-closing");
+      overlay.removeAttribute("data-overlay-state");
+    }
+    root.innerHTML = "";
+    root.classList.add("hidden");
+    root.setAttribute("aria-hidden", "true");
+    root.dataset.modalOpen = "false";
+    root.dataset.modalState = "closed";
+    lockBodyScroll(false);
+    isOpen = false;
+    if (restoreFocus && lastActiveElement instanceof HTMLElement) {
+      const elementToFocus = lastActiveElement;
+      queueMicrotask(() => {
+        if (elementToFocus instanceof HTMLElement) {
+          elementToFocus.focus({ preventScroll: true });
+        }
+      });
+    }
+    lastActiveElement = null;
+  };
+
+  const close = ({ restoreFocus = true, skipAnimation = false } = {}) => {
+    if (!isOpen && root.innerHTML.trim() === "") {
+      finishClose(restoreFocus);
+      return;
+    }
+
+    const panel = getPanel();
+    const overlay = getOverlay();
+
+    if (skipAnimation || !(panel instanceof HTMLElement)) {
+      finishClose(restoreFocus);
+      return;
+    }
+
+    root.dataset.modalState = "closing";
+    if (overlay instanceof HTMLElement) {
+      overlay.classList.add("is-closing");
+      overlay.setAttribute("data-overlay-state", "closing");
+    }
+
+    panel.classList.remove("animate-dialog-in");
+    panel.classList.add("animate-dialog-out");
+    panel.addEventListener(
+      "animationend",
+      () => {
+        panel.classList.remove("animate-dialog-out");
+        finishClose(restoreFocus);
+      },
+      { once: true },
+    );
+  };
+
+  const open = () => {
+    if (isOpen) {
+      focusInitialElement();
+      return;
+    }
+
+    isOpen = true;
+    lastActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    root.classList.remove("hidden");
+    root.setAttribute("aria-hidden", "false");
+    root.dataset.modalOpen = "true";
+    root.dataset.modalState = "opening";
+    lockBodyScroll(true);
+
+    const overlay = getOverlay();
+    if (overlay instanceof HTMLElement) {
+      overlay.classList.remove("is-closing");
+      overlay.setAttribute("data-overlay-state", "opening");
+    }
+
+    requestAnimationFrame(() => {
+      root.dataset.modalState = "open";
+      const currentOverlay = getOverlay();
+      if (currentOverlay instanceof HTMLElement) {
+        currentOverlay.setAttribute("data-overlay-state", "open");
+      }
+      const panel = getPanel();
+      if (panel instanceof HTMLElement) {
+        panel.classList.remove("animate-dialog-out");
+      }
+      focusInitialElement();
+    });
+  };
+
+  const handleKeydown = (event) => {
+    if (!isOpen) {
+      return;
+    }
+    if (event.key === KEY_ESCAPE) {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+      return;
+    }
+    if (event.key !== KEY_TAB) {
+      return;
+    }
+
+    const panel = getPanel();
+    const focusable = getFocusableElements(panel || root);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (panel instanceof HTMLElement) {
+        panel.focus({ preventScroll: true });
+      }
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+
+    if (event.shiftKey) {
+      if (active === first || !root.contains(active)) {
+        event.preventDefault();
+        event.stopPropagation();
+        last.focus({ preventScroll: true });
+      }
+      return;
+    }
+
+    if (active === last) {
+      event.preventDefault();
+      event.stopPropagation();
+      first.focus({ preventScroll: true });
+    }
+  };
+
+  document.addEventListener("keydown", handleKeydown);
+
+  root.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const closeTrigger = target.closest("[data-modal-close]");
+    if (closeTrigger) {
+      event.preventDefault();
+      close();
+      return;
+    }
+    const overlay = getOverlay();
+    if (overlay instanceof HTMLElement && target === overlay) {
+      event.preventDefault();
+      close();
+    }
+  });
+
+  document.body.addEventListener("htmx:afterSwap", (event) => {
+    if (event.target !== root) {
+      return;
+    }
+    const hasContent = root.innerHTML.trim().length > 0;
+    if (!hasContent) {
+      close({ skipAnimation: true });
+      return;
+    }
+    open();
+  });
+
+  document.body.addEventListener("htmx:beforeSwap", (event) => {
+    if (event.target !== root) {
+      return;
+    }
+    const panel = getPanel();
+    if (panel instanceof HTMLElement) {
+      panel.classList.remove("animate-dialog-out");
+    }
+  });
+
+  document.body.addEventListener("modal:close", (event) => {
+    const detail = event instanceof CustomEvent ? event.detail || {} : {};
+    close({
+      restoreFocus: detail.restoreFocus !== false,
+      skipAnimation: detail.skipAnimation === true,
+    });
+  });
+
+  document.body.addEventListener("modal:clear", () => {
+    close({ skipAnimation: true, restoreFocus: false });
+  });
+
+  document.body.addEventListener("modal:open", () => {
+    if (root.innerHTML.trim().length > 0) {
+      open();
+    }
+  });
+
+  return {
+    root,
+    close,
+    clear: () => close({ skipAnimation: true, restoreFocus: false }),
+    isOpen: () => isOpen,
+  };
+};
+
+const normaliseRefreshDetail = (detail, defaultEvent = "refresh") => {
+  const selectors = new Set();
+  let eventName = defaultEvent;
+  let delay = 0;
+
+  const push = (value) => {
+    if (typeof value === "string" && value.trim() !== "") {
+      selectors.add(value.trim());
+    }
+  };
+
+  if (typeof detail === "string") {
+    push(detail);
+  } else if (Array.isArray(detail)) {
+    detail.forEach(push);
+  } else if (detail && typeof detail === "object") {
+    if (Array.isArray(detail.targets)) {
+      detail.targets.forEach(push);
+    }
+    if (Array.isArray(detail.selectors)) {
+      detail.selectors.forEach(push);
+    }
+    if (typeof detail.target === "string") {
+      push(detail.target);
+    }
+    if (typeof detail.selector === "string") {
+      push(detail.selector);
+    }
+    if (typeof detail.event === "string" && detail.event.trim() !== "") {
+      eventName = detail.event.trim();
+    } else if (typeof detail.trigger === "string" && detail.trigger.trim() !== "") {
+      eventName = detail.trigger.trim();
+    }
+    if (typeof detail.delay === "number" && Number.isFinite(detail.delay) && detail.delay > 0) {
+      delay = detail.delay;
+    }
+  }
+
+  return {
+    selectors: Array.from(selectors),
+    eventName,
+    delay,
+  };
+};
+
+const triggerFragmentRefresh = (detail, fallbackEvent) => {
+  const { selectors, eventName, delay } = normaliseRefreshDetail(detail, fallbackEvent);
+  if (selectors.length === 0) {
+    return;
+  }
+  const emit = () => {
+    selectors.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((element) => {
+        if (window.htmx && typeof window.htmx.trigger === "function") {
+          window.htmx.trigger(element, eventName);
+        } else {
+          element.dispatchEvent(new CustomEvent(eventName, { bubbles: true }));
+        }
+      });
+    });
+  };
+  if (delay > 0) {
+    window.setTimeout(emit, delay);
+  } else {
+    emit();
+  }
+};
+
+const initHXTriggerHandlers = () => {
+  const bus = document.body;
+  if (!bus) {
+    return;
+  }
+
+  const handler = (eventName) => (event) => {
+    const detail = event instanceof CustomEvent ? event.detail : undefined;
+    triggerFragmentRefresh(detail, eventName);
+  };
+
+  bus.addEventListener("refresh:fragment", handler("refresh"));
+  bus.addEventListener("refresh:fragments", handler("refresh"));
+  bus.addEventListener("refresh:targets", handler("refresh"));
 };
 
 const initSearchShortcut = (getModalRoot) => {
@@ -244,7 +615,8 @@ const initUserMenu = () => {
 // Expose a hook for future htmx/alpine wiring without blocking initial scaffold.
 window.hankoAdmin = window.hankoAdmin || {
   init() {
-    const modalRoot = () => document.getElementById("modal-root");
+    const modal = createModalController();
+    const modalRoot = () => modal.root;
     const sidebarRoot = () => document.getElementById("mobile-sidebar");
 
     const setSidebarState = (open) => {
@@ -256,12 +628,16 @@ window.hankoAdmin = window.hankoAdmin || {
         sidebar.classList.remove("hidden");
         sidebar.classList.add("flex");
         sidebar.setAttribute("aria-hidden", "false");
-        document.body.classList.add("overflow-hidden");
+        if (document.body) {
+          document.body.classList.add("overflow-hidden");
+        }
       } else {
         sidebar.classList.add("hidden");
         sidebar.classList.remove("flex");
         sidebar.setAttribute("aria-hidden", "true");
-        document.body.classList.remove("overflow-hidden");
+        if (document.body) {
+          document.body.classList.remove("overflow-hidden");
+        }
       }
       document.querySelectorAll("[data-sidebar-toggle]").forEach((el) => {
         el.setAttribute("aria-expanded", open ? "true" : "false");
@@ -272,25 +648,20 @@ window.hankoAdmin = window.hankoAdmin || {
     const openSidebar = () => setSidebarState(true);
 
     document.addEventListener("click", (event) => {
-      const trigger = event.target instanceof Element ? event.target.closest("[data-modal-close]") : null;
-      if (!trigger) {
-        const sidebarToggle = event.target instanceof Element ? event.target.closest("[data-sidebar-toggle]") : null;
-        if (sidebarToggle) {
-          event.preventDefault();
-          openSidebar();
-          return;
-        }
-        const sidebarDismiss = event.target instanceof Element ? event.target.closest("[data-sidebar-dismiss]") : null;
-        if (sidebarDismiss) {
-          event.preventDefault();
-          closeSidebar();
-        }
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) {
         return;
       }
-      event.preventDefault();
-      const root = modalRoot();
-      if (root) {
-        root.innerHTML = "";
+      const sidebarToggle = target.closest("[data-sidebar-toggle]");
+      if (sidebarToggle) {
+        event.preventDefault();
+        openSidebar();
+        return;
+      }
+      const sidebarDismiss = target.closest("[data-sidebar-dismiss]");
+      if (sidebarDismiss) {
+        event.preventDefault();
+        closeSidebar();
       }
     });
 
@@ -298,26 +669,23 @@ window.hankoAdmin = window.hankoAdmin || {
       if (event.key !== KEY_ESCAPE) {
         return;
       }
-
-      let handled = false;
-      const root = modalRoot();
-      if (root && root.firstChild) {
-        root.innerHTML = "";
-        handled = true;
+      if (modal.isOpen()) {
+        return;
       }
-
-      if (!handled) {
-        const sidebar = sidebarRoot();
-        const isSidebarOpen = sidebar && !sidebar.classList.contains("hidden");
-        if (isSidebarOpen) {
-          closeSidebar();
-        }
+      const sidebar = sidebarRoot();
+      const isSidebarOpen = sidebar && !sidebar.classList.contains("hidden");
+      if (isSidebarOpen) {
+        event.preventDefault();
+        closeSidebar();
       }
     });
 
     initSearchShortcut(modalRoot);
     initNotificationsBadge();
+    initHXTriggerHandlers();
     initUserMenu();
+
+    window.hankoAdmin.modal = modal;
   },
 };
 
