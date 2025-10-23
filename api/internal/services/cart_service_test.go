@@ -814,6 +814,280 @@ func TestCartServiceEstimateEmptyCart(t *testing.T) {
 	}
 }
 
+func TestCartServiceApplyPromotionSuccess(t *testing.T) {
+	now := time.Date(2024, 7, 15, 9, 0, 0, 0, time.UTC)
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			if userID != "user-apply" {
+				t.Fatalf("unexpected user id %s", userID)
+			}
+			return domain.Cart{
+				ID:       "cart-apply",
+				UserID:   userID,
+				Currency: "JPY",
+				Items: []domain.CartItem{
+					{ID: "item-1", ProductID: "prod-1", SKU: "sku-1", Quantity: 2, UnitPrice: 1000, Currency: "JPY"},
+				},
+				Metadata:  map[string]any{"existing": "value"},
+				CreatedAt: now.Add(-2 * time.Hour),
+				UpdatedAt: now.Add(-time.Minute),
+			}, nil
+		},
+		upsertFunc: func(ctx context.Context, cart domain.Cart, expected *time.Time) (domain.Cart, error) {
+			if expected == nil {
+				t.Fatalf("expected optimistic lock timestamp")
+			}
+			if cart.Promotion == nil || !strings.EqualFold(cart.Promotion.Code, "SPRING10") {
+				t.Fatalf("expected promotion SPRING10, got %#v", cart.Promotion)
+			}
+			if cart.Estimate == nil || cart.Estimate.Discount != 500 {
+				t.Fatalf("expected estimate discount 500, got %#v", cart.Estimate)
+			}
+			saved := cart
+			saved.UpdatedAt = now
+			return saved, nil
+		},
+	}
+
+	promotions := &stubPromotionService{
+		validateFunc: func(ctx context.Context, cmd ValidatePromotionCommand) (PromotionValidationResult, error) {
+			if cmd.Code != "SPRING10" {
+				t.Fatalf("expected code SPRING10, got %s", cmd.Code)
+			}
+			if cmd.UserID == nil || *cmd.UserID != "user-apply" {
+				t.Fatalf("expected user id user-apply, got %#v", cmd.UserID)
+			}
+			if cmd.CartID == nil || *cmd.CartID != "cart-apply" {
+				t.Fatalf("expected cart id cart-apply, got %#v", cmd.CartID)
+			}
+			return PromotionValidationResult{Code: "spring10", Eligible: true, DiscountAmount: 500, Reason: "seasonal"}, nil
+		},
+	}
+
+	pricer := &stubCartPricer{
+		calculateFunc: func(ctx context.Context, cmd PriceCartCommand) (PriceCartResult, error) {
+			if cmd.PromotionCode == nil || *cmd.PromotionCode != "SPRING10" {
+				t.Fatalf("expected promotion code SPRING10, got %#v", cmd.PromotionCode)
+			}
+			return PriceCartResult{
+				Estimate: CartEstimate{Subtotal: 2000, Discount: 500, Tax: 100, Shipping: 0, Total: 1600},
+				Breakdown: PricingBreakdown{
+					Currency: "JPY",
+					Discounts: []DiscountBreakdown{
+						{Type: "promotion", Code: "SPRING10", Amount: 500},
+					},
+				},
+			}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Pricer:          pricer,
+		Promotions:      promotions,
+		Clock:           func() time.Time { return now },
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	cart, err := service.ApplyPromotion(context.Background(), CartPromotionCommand{
+		UserID:         " user-apply ",
+		Code:           " spring10 ",
+		Source:         " user ",
+		IdempotencyKey: " idem-apply ",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error applying promotion: %v", err)
+	}
+
+	if cart.Promotion == nil {
+		t.Fatalf("expected promotion info returned")
+	}
+	if cart.Promotion.Code != "SPRING10" {
+		t.Fatalf("expected promotion code SPRING10, got %s", cart.Promotion.Code)
+	}
+	if !cart.Promotion.Applied {
+		t.Fatalf("expected promotion marked applied")
+	}
+	if cart.Promotion.DiscountAmount != 500 {
+		t.Fatalf("expected discount amount 500, got %d", cart.Promotion.DiscountAmount)
+	}
+	if cart.Estimate == nil || cart.Estimate.Discount != 500 {
+		t.Fatalf("expected estimate discount 500, got %#v", cart.Estimate)
+	}
+	if cart.Metadata == nil {
+		t.Fatalf("expected metadata map")
+	}
+	if v := cart.Metadata["existing"]; v != "value" {
+		t.Fatalf("expected existing metadata preserved, got %#v", v)
+	}
+	if v := cart.Metadata["promotion_source"]; v != "user" {
+		t.Fatalf("expected promotion source metadata user, got %#v", v)
+	}
+	if v := cart.Metadata["promotion_idempotency_key"]; v != "idem-apply" {
+		t.Fatalf("expected idempotency metadata idem-apply, got %#v", v)
+	}
+	if v := cart.Metadata["promotion_reason"]; v != "seasonal" {
+		t.Fatalf("expected promotion reason seasonal, got %#v", v)
+	}
+}
+
+func TestCartServiceApplyPromotionIneligible(t *testing.T) {
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{ID: userID, UserID: userID, Currency: "JPY", UpdatedAt: time.Now()}, nil
+		},
+	}
+	promotions := &stubPromotionService{
+		validateFunc: func(ctx context.Context, cmd ValidatePromotionCommand) (PromotionValidationResult, error) {
+			return PromotionValidationResult{Code: cmd.Code, Eligible: false, Reason: "expired"}, nil
+		},
+	}
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Promotions:      promotions,
+		Clock:           time.Now,
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	_, err = service.ApplyPromotion(context.Background(), CartPromotionCommand{UserID: "user-1", Code: "BADCODE"})
+	if err == nil || !errors.Is(err, ErrCartInvalidInput) {
+		t.Fatalf("expected ErrCartInvalidInput, got %v", err)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "expired") {
+		t.Fatalf("expected error mentioning expired, got %v", err)
+	}
+}
+
+func TestCartServiceApplyPromotionUnavailable(t *testing.T) {
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{ID: userID, UserID: userID, Currency: "JPY", UpdatedAt: time.Now()}, nil
+		},
+	}
+	promotions := &stubPromotionService{
+		validateFunc: func(ctx context.Context, cmd ValidatePromotionCommand) (PromotionValidationResult, error) {
+			return PromotionValidationResult{}, errors.New("service down")
+		},
+	}
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Promotions:      promotions,
+		Clock:           time.Now,
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	_, err = service.ApplyPromotion(context.Background(), CartPromotionCommand{UserID: "user-1", Code: "PROMO"})
+	if err == nil || !errors.Is(err, ErrCartUnavailable) {
+		t.Fatalf("expected ErrCartUnavailable, got %v", err)
+	}
+}
+
+func TestCartServiceRemovePromotionSuccess(t *testing.T) {
+	now := time.Date(2024, 7, 20, 14, 0, 0, 0, time.UTC)
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{
+				ID:       userID,
+				UserID:   userID,
+				Currency: "JPY",
+				Items: []domain.CartItem{
+					{ID: "item-1", ProductID: "prod-1", SKU: "sku-1", Quantity: 1, UnitPrice: 1500, Currency: "JPY"},
+				},
+				Promotion: &domain.CartPromotion{Code: "WINTER20", DiscountAmount: 200, Applied: true},
+				Metadata: map[string]any{
+					"promotion_source":          "user",
+					"promotion_idempotency_key": "idem-old",
+					"other":                     "keep",
+				},
+				UpdatedAt: now.Add(-time.Minute),
+				CreatedAt: now.Add(-time.Hour),
+			}, nil
+		},
+		upsertFunc: func(ctx context.Context, cart domain.Cart, expected *time.Time) (domain.Cart, error) {
+			if cart.Promotion != nil {
+				t.Fatalf("expected promotion removed before persistence")
+			}
+			if cart.Metadata != nil {
+				if _, exists := cart.Metadata["promotion_idempotency_key"]; exists {
+					t.Fatalf("expected idempotency metadata removed, got %#v", cart.Metadata)
+				}
+			}
+			cart.UpdatedAt = now
+			return cart, nil
+		},
+	}
+	pricer := &stubCartPricer{
+		calculateFunc: func(ctx context.Context, cmd PriceCartCommand) (PriceCartResult, error) {
+			if cmd.PromotionCode != nil {
+				t.Fatalf("expected no promotion code when removing")
+			}
+			return PriceCartResult{
+				Estimate: CartEstimate{Subtotal: 1500, Discount: 0, Tax: 120, Shipping: 0, Total: 1620},
+			}, nil
+		},
+	}
+
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Pricer:          pricer,
+		Clock:           func() time.Time { return now },
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	cart, err := service.RemovePromotion(context.Background(), " user-remove ")
+	if err != nil {
+		t.Fatalf("unexpected error removing promotion: %v", err)
+	}
+	if cart.Promotion != nil {
+		t.Fatalf("expected promotion cleared, got %#v", cart.Promotion)
+	}
+	if cart.Metadata == nil {
+		t.Fatalf("expected metadata map preserved")
+	}
+	if _, exists := cart.Metadata["promotion_source"]; exists {
+		t.Fatalf("expected promotion metadata removed, got %#v", cart.Metadata)
+	}
+	if v := cart.Metadata["other"]; v != "keep" {
+		t.Fatalf("expected other metadata kept, got %#v", v)
+	}
+	if cart.Estimate == nil || cart.Estimate.Discount != 0 {
+		t.Fatalf("expected estimate updated without discount, got %#v", cart.Estimate)
+	}
+}
+
+func TestCartServiceRemovePromotionNotFound(t *testing.T) {
+	repo := &stubCartRepository{
+		getFunc: func(ctx context.Context, userID string) (domain.Cart, error) {
+			return domain.Cart{}, &repositoryErrorStub{notFound: true}
+		},
+	}
+	service, err := NewCartService(CartServiceDeps{
+		Repository:      repo,
+		Clock:           time.Now,
+		DefaultCurrency: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error constructing cart service: %v", err)
+	}
+
+	_, err = service.RemovePromotion(context.Background(), "missing")
+	if err == nil || !errors.Is(err, ErrCartNotFound) {
+		t.Fatalf("expected ErrCartNotFound, got %v", err)
+	}
+}
+
 type stubCartRepository struct {
 	getFunc     func(ctx context.Context, userID string) (domain.Cart, error)
 	upsertFunc  func(ctx context.Context, cart domain.Cart, expected *time.Time) (domain.Cart, error)
@@ -850,6 +1124,41 @@ func (s *stubCartPricer) Calculate(ctx context.Context, cmd PriceCartCommand) (P
 		return s.calculateFunc(ctx, cmd)
 	}
 	return PriceCartResult{}, nil
+}
+
+type stubPromotionService struct {
+	validateFunc func(ctx context.Context, cmd ValidatePromotionCommand) (PromotionValidationResult, error)
+}
+
+func (s *stubPromotionService) GetPublicPromotion(context.Context, string) (PromotionPublic, error) {
+	return PromotionPublic{}, errors.New("not implemented")
+}
+
+func (s *stubPromotionService) ValidatePromotion(ctx context.Context, cmd ValidatePromotionCommand) (PromotionValidationResult, error) {
+	if s.validateFunc != nil {
+		return s.validateFunc(ctx, cmd)
+	}
+	return PromotionValidationResult{}, nil
+}
+
+func (s *stubPromotionService) ListPromotions(context.Context, PromotionListFilter) (domain.CursorPage[Promotion], error) {
+	return domain.CursorPage[Promotion]{}, errors.New("not implemented")
+}
+
+func (s *stubPromotionService) CreatePromotion(context.Context, UpsertPromotionCommand) (Promotion, error) {
+	return Promotion{}, errors.New("not implemented")
+}
+
+func (s *stubPromotionService) UpdatePromotion(context.Context, UpsertPromotionCommand) (Promotion, error) {
+	return Promotion{}, errors.New("not implemented")
+}
+
+func (s *stubPromotionService) DeletePromotion(context.Context, string) error {
+	return errors.New("not implemented")
+}
+
+func (s *stubPromotionService) ListPromotionUsage(context.Context, PromotionUsageFilter) (domain.CursorPage[PromotionUsage], error) {
+	return domain.CursorPage[PromotionUsage]{}, errors.New("not implemented")
 }
 
 type repositoryErrorStub struct {

@@ -60,6 +60,8 @@ func (h *CartHandlers) RegisterStandaloneRoutes(r chi.Router) {
 		group = group.With(h.authn.RequireFirebaseAuth())
 	}
 	group.Post("/cart:estimate", h.estimateCart)
+	group.Post("/cart:apply-promo", h.applyPromotion)
+	group.Delete("/cart:remove-promo", h.removePromotion)
 }
 
 func (h *CartHandlers) getCart(w http.ResponseWriter, r *http.Request) {
@@ -211,6 +213,88 @@ func (h *CartHandlers) estimateCart(w http.ResponseWriter, r *http.Request) {
 
 	setEstimateResponseHeaders(w)
 	payload := buildCartEstimatePayload(result)
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *CartHandlers) applyPromotion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.carts == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("cart_service_unavailable", "cart service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	body, err := readLimitedBody(r, maxCartBodySize)
+	if err != nil {
+		switch {
+		case errors.Is(err, errBodyTooLarge):
+			httpx.WriteError(ctx, w, httpx.NewError("payload_too_large", "request body exceeds allowed size", http.StatusRequestEntityTooLarge))
+		default:
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		}
+		return
+	}
+
+	var req applyPromotionRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "invalid JSON payload", http.StatusBadRequest))
+		return
+	}
+
+	code := strings.TrimSpace(req.Code)
+	if code == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "code is required", http.StatusBadRequest))
+		return
+	}
+
+	cmd := services.CartPromotionCommand{
+		UserID: identity.UID,
+		Code:   code,
+	}
+	if req.Source != nil {
+		cmd.Source = strings.TrimSpace(*req.Source)
+	}
+	if idempotency := strings.TrimSpace(r.Header.Get("Idempotency-Key")); idempotency != "" {
+		cmd.IdempotencyKey = idempotency
+	}
+
+	cart, err := h.carts.ApplyPromotion(ctx, cmd)
+	if err != nil {
+		h.writeCartError(ctx, w, err)
+		return
+	}
+
+	setCartResponseHeaders(w, cart)
+	payload := cartResponse{Cart: buildCartPayload(cart)}
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *CartHandlers) removePromotion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.carts == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("cart_service_unavailable", "cart service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	cart, err := h.carts.RemovePromotion(ctx, identity.UID)
+	if err != nil {
+		h.writeCartError(ctx, w, err)
+		return
+	}
+
+	setCartResponseHeaders(w, cart)
+	payload := cartResponse{Cart: buildCartPayload(cart)}
 	writeJSONResponse(w, http.StatusOK, payload)
 }
 
@@ -711,6 +795,11 @@ type cartItemPayload struct {
 	Estimates        map[string]int64 `json:"estimates,omitempty"`
 	AddedAt          string           `json:"added_at,omitempty"`
 	UpdatedAt        string           `json:"updated_at,omitempty"`
+}
+
+type applyPromotionRequest struct {
+	Code   string  `json:"code"`
+	Source *string `json:"source,omitempty"`
 }
 
 type updateCartRequest struct {

@@ -503,9 +503,10 @@ const (
 )
 
 type CartPromotionCommand struct {
-	UserID string
-	Code   string
-	Source string
+	UserID         string
+	Code           string
+	Source         string
+	IdempotencyKey string
 }
 
 type CreateCheckoutSessionCommand struct {

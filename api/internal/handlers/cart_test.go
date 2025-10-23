@@ -491,12 +491,162 @@ func TestCartHandlersEstimateServiceError(t *testing.T) {
 	}
 }
 
+func TestCartHandlersApplyPromotionSuccess(t *testing.T) {
+	now := time.Date(2024, 7, 10, 12, 0, 0, 0, time.UTC)
+	var captured services.CartPromotionCommand
+	service := &stubCartService{
+		applyPromoFunc: func(ctx context.Context, cmd services.CartPromotionCommand) (services.Cart, error) {
+			captured = cmd
+			return services.Cart{
+				ID:       "cart-apply",
+				UserID:   cmd.UserID,
+				Currency: "JPY",
+				Promotion: &services.CartPromotion{
+					Code:           "SPRING10",
+					DiscountAmount: 500,
+					Applied:        true,
+				},
+				Estimate:  &services.CartEstimate{Subtotal: 2000, Discount: 500, Tax: 0, Shipping: 0, Total: 1500},
+				UpdatedAt: now,
+			}, nil
+		},
+	}
+
+	handler := NewCartHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Post("/cart:apply-promo", handler.applyPromotion)
+
+	req := httptest.NewRequest(http.MethodPost, "/cart:apply-promo", strings.NewReader(`{"code":" spring10 ","source":" referral "}`))
+	req.Header.Set("Idempotency-Key", " idem-apply ")
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-promo"}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.Code)
+	}
+
+	var payload cartResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if payload.Cart.Promotion == nil || payload.Cart.Promotion.Code != "SPRING10" {
+		t.Fatalf("expected promotion SPRING10, got %#v", payload.Cart.Promotion)
+	}
+	if captured.UserID != "user-promo" {
+		t.Fatalf("expected user id user-promo, got %s", captured.UserID)
+	}
+	if captured.Code != "spring10" {
+		t.Fatalf("expected trimmed code spring10, got %s", captured.Code)
+	}
+	if captured.Source != "referral" {
+		t.Fatalf("expected source referral, got %s", captured.Source)
+	}
+	if captured.IdempotencyKey != "idem-apply" {
+		t.Fatalf("expected idempotency key idem-apply, got %s", captured.IdempotencyKey)
+	}
+}
+
+func TestCartHandlersApplyPromotionInvalidRequest(t *testing.T) {
+	handler := NewCartHandlers(nil, &stubCartService{})
+	router := chi.NewRouter()
+	router.Post("/cart:apply-promo", handler.applyPromotion)
+
+	req := httptest.NewRequest(http.MethodPost, "/cart:apply-promo", strings.NewReader(`{"code":"   "}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-promo"}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", resp.Code)
+	}
+}
+
+func TestCartHandlersApplyPromotionServiceError(t *testing.T) {
+	service := &stubCartService{
+		applyPromoFunc: func(ctx context.Context, cmd services.CartPromotionCommand) (services.Cart, error) {
+			return services.Cart{}, services.ErrCartInvalidInput
+		},
+	}
+	handler := NewCartHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Post("/cart:apply-promo", handler.applyPromotion)
+
+	req := httptest.NewRequest(http.MethodPost, "/cart:apply-promo", strings.NewReader(`{"code":"spring10"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-promo"}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", resp.Code)
+	}
+}
+
+func TestCartHandlersRemovePromotionSuccess(t *testing.T) {
+	now := time.Date(2024, 7, 11, 10, 0, 0, 0, time.UTC)
+	service := &stubCartService{
+		removePromoFunc: func(ctx context.Context, userID string) (services.Cart, error) {
+			if userID != "user-remove" {
+				t.Fatalf("expected user id user-remove, got %s", userID)
+			}
+			return services.Cart{
+				ID:        "cart-remove",
+				UserID:    userID,
+				Currency:  "JPY",
+				Estimate:  &services.CartEstimate{Subtotal: 2000, Discount: 0, Tax: 0, Shipping: 0, Total: 2000},
+				UpdatedAt: now,
+			}, nil
+		},
+	}
+	handler := NewCartHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Delete("/cart:remove-promo", handler.removePromotion)
+
+	req := httptest.NewRequest(http.MethodDelete, "/cart:remove-promo", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-remove"}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.Code)
+	}
+	var payload cartResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if payload.Cart.Promotion != nil {
+		t.Fatalf("expected promotion cleared, got %#v", payload.Cart.Promotion)
+	}
+}
+
+func TestCartHandlersRemovePromotionNotFound(t *testing.T) {
+	service := &stubCartService{
+		removePromoFunc: func(ctx context.Context, userID string) (services.Cart, error) {
+			return services.Cart{}, services.ErrCartNotFound
+		},
+	}
+	handler := NewCartHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Delete("/cart:remove-promo", handler.removePromotion)
+
+	req := httptest.NewRequest(http.MethodDelete, "/cart:remove-promo", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-remove"}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", resp.Code)
+	}
+}
+
 type stubCartService struct {
 	getOrCreateFunc func(ctx context.Context, userID string) (services.Cart, error)
 	updateFunc      func(ctx context.Context, cmd services.UpdateCartCommand) (services.Cart, error)
 	addOrUpdateFunc func(ctx context.Context, cmd services.UpsertCartItemCommand) (services.Cart, error)
 	removeFunc      func(ctx context.Context, cmd services.RemoveCartItemCommand) (services.Cart, error)
 	estimateFunc    func(ctx context.Context, cmd services.CartEstimateCommand) (services.CartEstimateResult, error)
+	applyPromoFunc  func(ctx context.Context, cmd services.CartPromotionCommand) (services.Cart, error)
+	removePromoFunc func(ctx context.Context, userID string) (services.Cart, error)
 }
 
 func (s *stubCartService) GetOrCreateCart(ctx context.Context, userID string) (services.Cart, error) {
@@ -535,10 +685,16 @@ func (s *stubCartService) Estimate(ctx context.Context, cmd services.CartEstimat
 }
 
 func (s *stubCartService) ApplyPromotion(ctx context.Context, cmd services.CartPromotionCommand) (services.Cart, error) {
+	if s.applyPromoFunc != nil {
+		return s.applyPromoFunc(ctx, cmd)
+	}
 	return services.Cart{}, errors.New("not implemented")
 }
 
 func (s *stubCartService) RemovePromotion(ctx context.Context, userID string) (services.Cart, error) {
+	if s.removePromoFunc != nil {
+		return s.removePromoFunc(ctx, userID)
+	}
 	return services.Cart{}, errors.New("not implemented")
 }
 

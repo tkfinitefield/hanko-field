@@ -22,6 +22,10 @@ var (
 const (
 	maxCartNotesLength     = 2000
 	maxPromotionHintLength = 120
+
+	promotionMetadataSourceKey      = "promotion_source"
+	promotionMetadataReasonKey      = "promotion_reason"
+	promotionMetadataIdempotencyKey = "promotion_idempotency_key"
 )
 
 type addressProvider interface {
@@ -56,6 +60,7 @@ type CartServiceDeps struct {
 	Addresses       addressProvider
 	Designs         designFinder
 	Availability    InventoryAvailabilityService
+	Promotions      PromotionService
 	Clock           func() time.Time
 	DefaultCurrency string
 	Logger          func(context.Context, string, map[string]any)
@@ -63,15 +68,16 @@ type CartServiceDeps struct {
 }
 
 type cartService struct {
-	repo      repositories.CartRepository
-	pricer    CartPricer
-	addresses addressProvider
-	designs   designFinder
-	inventory InventoryAvailabilityService
-	newID     func() string
-	now       func() time.Time
-	currency  string
-	logger    func(context.Context, string, map[string]any)
+	repo       repositories.CartRepository
+	pricer     CartPricer
+	addresses  addressProvider
+	designs    designFinder
+	inventory  InventoryAvailabilityService
+	promotions PromotionService
+	newID      func() string
+	now        func() time.Time
+	currency   string
+	logger     func(context.Context, string, map[string]any)
 }
 
 // NewCartService constructs a CartService enforcing dependency validation.
@@ -99,15 +105,16 @@ func NewCartService(deps CartServiceDeps) (CartService, error) {
 	}
 
 	service := &cartService{
-		repo:      deps.Repository,
-		pricer:    deps.Pricer,
-		addresses: deps.Addresses,
-		designs:   deps.Designs,
-		inventory: deps.Availability,
-		newID:     idGen,
-		now:       func() time.Time { return deps.Clock().UTC() },
-		currency:  defaultCurrency,
-		logger:    logger,
+		repo:       deps.Repository,
+		pricer:     deps.Pricer,
+		addresses:  deps.Addresses,
+		designs:    deps.Designs,
+		inventory:  deps.Availability,
+		newID:      idGen,
+		now:        func() time.Time { return deps.Clock().UTC() },
+		currency:   defaultCurrency,
+		logger:     logger,
+		promotions: deps.Promotions,
 	}
 	return service, nil
 }
@@ -675,6 +682,56 @@ func cloneInt64Map(values map[string]int64) map[string]int64 {
 	return out
 }
 
+func promotionStatsFromBreakdown(breakdown PricingBreakdown) (int64, bool) {
+	var discount int64
+	applied := false
+	for _, disc := range breakdown.Discounts {
+		if !strings.EqualFold(strings.TrimSpace(disc.Type), "promotion") {
+			continue
+		}
+		if disc.Amount <= 0 {
+			continue
+		}
+		applied = true
+		if disc.Amount > discount {
+			discount = disc.Amount
+		}
+	}
+	return discount, applied
+}
+
+func updatePromotionMetadata(current map[string]any, source, reason, idempotency string) map[string]any {
+	metadata := cloneAnyMap(current)
+	if metadata == nil && (strings.TrimSpace(source) != "" || strings.TrimSpace(reason) != "" || strings.TrimSpace(idempotency) != "") {
+		metadata = make(map[string]any)
+	}
+	if metadata != nil {
+		source = strings.TrimSpace(source)
+		reason = strings.TrimSpace(reason)
+		idempotency = strings.TrimSpace(idempotency)
+
+		if source != "" {
+			metadata[promotionMetadataSourceKey] = source
+		} else {
+			delete(metadata, promotionMetadataSourceKey)
+		}
+		if reason != "" {
+			metadata[promotionMetadataReasonKey] = reason
+		} else {
+			delete(metadata, promotionMetadataReasonKey)
+		}
+		if idempotency != "" {
+			metadata[promotionMetadataIdempotencyKey] = idempotency
+		} else {
+			delete(metadata, promotionMetadataIdempotencyKey)
+		}
+		if len(metadata) == 0 {
+			metadata = nil
+		}
+	}
+	return metadata
+}
+
 func cloneStringPointer(value *string) *string {
 	if value == nil {
 		return nil
@@ -1115,16 +1172,7 @@ func (s *cartService) Estimate(ctx context.Context, cmd CartEstimateCommand) (Ca
 		promotionCopy.Code = strings.ToUpper(strings.TrimSpace(promotionCopy.Code))
 	}
 
-	promoDiscount := int64(0)
-	promoApplied := false
-	for _, disc := range breakdown.Discounts {
-		if strings.EqualFold(strings.TrimSpace(disc.Type), "promotion") && disc.Amount > 0 {
-			promoApplied = true
-			if disc.Amount > promoDiscount {
-				promoDiscount = disc.Amount
-			}
-		}
-	}
+	promoDiscount, promoApplied := promotionStatsFromBreakdown(breakdown)
 
 	if promotionCopy != nil {
 		promotionCopy.Applied = promoApplied
@@ -1157,14 +1205,243 @@ func (s *cartService) Estimate(ctx context.Context, cmd CartEstimateCommand) (Ca
 	}, nil
 }
 
-// ApplyPromotion is not yet implemented.
 func (s *cartService) ApplyPromotion(ctx context.Context, cmd CartPromotionCommand) (Cart, error) {
-	return Cart{}, fmt.Errorf("cart service: apply promotion not implemented")
+	if s == nil || s.repo == nil {
+		return Cart{}, ErrCartUnavailable
+	}
+	if s.promotions == nil {
+		return Cart{}, ErrCartUnavailable
+	}
+
+	userID := strings.TrimSpace(cmd.UserID)
+	if userID == "" {
+		return Cart{}, ErrCartInvalidInput
+	}
+
+	code := strings.ToUpper(strings.TrimSpace(cmd.Code))
+	if code == "" {
+		return Cart{}, fmt.Errorf("%w: promotion code is required", ErrCartInvalidInput)
+	}
+
+	cart, err := s.repo.GetCart(ctx, userID)
+	existed := true
+	if err != nil {
+		if isRepoNotFound(err) {
+			cart = s.newCart(userID)
+			existed = false
+		} else {
+			return Cart{}, s.translateRepoError(err)
+		}
+	}
+
+	cart = s.normaliseCart(cart, userID)
+	previousUpdatedAt := cart.UpdatedAt
+
+	validateCmd := ValidatePromotionCommand{Code: code}
+	if cartID := strings.TrimSpace(cart.ID); cartID != "" {
+		validateCmd.CartID = &cartID
+	}
+	if userID != "" {
+		validateCmd.UserID = &userID
+	}
+
+	result, err := s.promotions.ValidatePromotion(ctx, validateCmd)
+	if err != nil {
+		s.logger(ctx, "cart.apply_promotion_validation_failed", map[string]any{
+			"userID": userID,
+			"code":   code,
+			"error":  err.Error(),
+		})
+		return Cart{}, ErrCartUnavailable
+	}
+	if trimmed := strings.ToUpper(strings.TrimSpace(result.Code)); trimmed != "" {
+		code = trimmed
+	}
+
+	if !result.Eligible {
+		reason := strings.TrimSpace(result.Reason)
+		if reason == "" {
+			reason = "promotion not eligible"
+		}
+		return Cart{}, fmt.Errorf("%w: %s", ErrCartInvalidInput, reason)
+	}
+
+	source := strings.TrimSpace(cmd.Source)
+	idempotencyKey := strings.TrimSpace(cmd.IdempotencyKey)
+	reason := strings.TrimSpace(result.Reason)
+	cart.Metadata = updatePromotionMetadata(cart.Metadata, source, reason, idempotencyKey)
+
+	cart.Promotion = &CartPromotion{
+		Code:           code,
+		DiscountAmount: 0,
+		Applied:        false,
+	}
+
+	if err := s.hydrateCartAddresses(ctx, &cart, false); err != nil {
+		return Cart{}, err
+	}
+
+	cart.UpdatedAt = s.now()
+	cart.Estimate = nil
+
+	var (
+		estimate     CartEstimate
+		promoApplied bool
+		promoAmount  int64
+	)
+
+	if s.pricer != nil {
+		res, priceErr := s.pricer.Calculate(ctx, PriceCartCommand{
+			Cart:          cart,
+			PromotionCode: &code,
+		})
+		if priceErr != nil {
+			s.logger(ctx, "cart.apply_promotion_pricing_failed", map[string]any{
+				"userID": userID,
+				"code":   code,
+				"error":  priceErr.Error(),
+			})
+			return Cart{}, translatePricingError(priceErr)
+		}
+		estimate = res.Estimate
+		promoAmount, promoApplied = promotionStatsFromBreakdown(res.Breakdown)
+	} else {
+		estimate = naiveCartEstimate(cart.Items)
+		promoAmount = result.DiscountAmount
+		if promoAmount < 0 {
+			promoAmount = 0
+		}
+		if promoAmount > estimate.Subtotal {
+			promoAmount = estimate.Subtotal
+		}
+		if promoAmount > 0 {
+			estimate.Discount = promoAmount
+			if estimate.Total > promoAmount {
+				estimate.Total -= promoAmount
+			} else {
+				estimate.Total = 0
+			}
+			promoApplied = true
+		}
+	}
+
+	if cart.Promotion != nil {
+		cart.Promotion.DiscountAmount = promoAmount
+		cart.Promotion.Applied = promoApplied
+	}
+	cart.Estimate = &estimate
+
+	var expected *time.Time
+	if existed {
+		if previousUpdatedAt.IsZero() {
+			return Cart{}, ErrCartConflict
+		}
+		ts := previousUpdatedAt.UTC()
+		expected = &ts
+	}
+
+	saved, err := s.repo.UpsertCart(ctx, cart, expected)
+	if err != nil {
+		return Cart{}, s.translateRepoError(err)
+	}
+
+	saved = s.normaliseCart(saved, userID)
+	_ = s.hydrateCartAddresses(ctx, &saved, false)
+	if cart.Promotion != nil {
+		promoCopy := *cart.Promotion
+		saved.Promotion = &promoCopy
+	}
+	if cart.Estimate != nil {
+		estimateCopy := *cart.Estimate
+		saved.Estimate = &estimateCopy
+	}
+	saved.Metadata = cloneAnyMap(cart.Metadata)
+	if saved.Metadata == nil {
+		saved.Metadata = map[string]any{}
+	}
+
+	return saved, nil
 }
 
-// RemovePromotion is not yet implemented.
 func (s *cartService) RemovePromotion(ctx context.Context, userID string) (Cart, error) {
-	return Cart{}, fmt.Errorf("cart service: remove promotion not implemented")
+	if s == nil || s.repo == nil {
+		return Cart{}, ErrCartUnavailable
+	}
+
+	uid := strings.TrimSpace(userID)
+	if uid == "" {
+		return Cart{}, ErrCartInvalidInput
+	}
+
+	cart, err := s.repo.GetCart(ctx, uid)
+	if err != nil {
+		return Cart{}, s.translateRepoError(err)
+	}
+
+	cart = s.normaliseCart(cart, uid)
+	_ = s.hydrateCartAddresses(ctx, &cart, false)
+
+	if cart.Promotion == nil {
+		if cart.Estimate == nil {
+			if s.pricer != nil {
+				res, priceErr := s.pricer.Calculate(ctx, PriceCartCommand{Cart: cart})
+				if priceErr != nil {
+					return Cart{}, translatePricingError(priceErr)
+				}
+				estimateCopy := res.Estimate
+				cart.Estimate = &estimateCopy
+			} else {
+				estimate := naiveCartEstimate(cart.Items)
+				cart.Estimate = &estimate
+			}
+		}
+		return cart, nil
+	}
+
+	previousUpdatedAt := cart.UpdatedAt
+	if previousUpdatedAt.IsZero() {
+		return Cart{}, ErrCartConflict
+	}
+
+	cart.Promotion = nil
+	cart.Metadata = updatePromotionMetadata(cart.Metadata, "", "", "")
+	cart.Estimate = nil
+	cart.UpdatedAt = s.now()
+
+	if s.pricer != nil {
+		res, priceErr := s.pricer.Calculate(ctx, PriceCartCommand{Cart: cart})
+		if priceErr != nil {
+			s.logger(ctx, "cart.remove_promotion_pricing_failed", map[string]any{
+				"userID": uid,
+				"error":  priceErr.Error(),
+			})
+			return Cart{}, translatePricingError(priceErr)
+		}
+		estimateCopy := res.Estimate
+		cart.Estimate = &estimateCopy
+	} else {
+		estimate := naiveCartEstimate(cart.Items)
+		cart.Estimate = &estimate
+	}
+
+	ts := previousUpdatedAt.UTC()
+	saved, err := s.repo.UpsertCart(ctx, cart, &ts)
+	if err != nil {
+		return Cart{}, s.translateRepoError(err)
+	}
+
+	saved = s.normaliseCart(saved, uid)
+	_ = s.hydrateCartAddresses(ctx, &saved, false)
+	if cart.Estimate != nil {
+		estimateCopy := *cart.Estimate
+		saved.Estimate = &estimateCopy
+	}
+	saved.Metadata = cloneAnyMap(cart.Metadata)
+	if saved.Metadata == nil {
+		saved.Metadata = map[string]any{}
+	}
+
+	return saved, nil
 }
 
 // ClearCart is not yet implemented.
