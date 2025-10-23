@@ -85,7 +85,8 @@ func BuildMenu(basePath string) []MenuGroup {
 
 var defaultMenu = []Group{
 	{
-		Key: "overview",
+		Key:        "overview",
+		Capability: rbac.CapDashboardOverview,
 		Items: []Item{
 			{
 				Key:         "dashboard",
@@ -117,8 +118,9 @@ var defaultMenu = []Group{
 		},
 	},
 	{
-		Key:   "operations",
-		Label: "受注管理",
+		Key:        "operations",
+		Label:      "受注管理",
+		Capability: rbac.CapOrdersList,
 		Items: []Item{
 			{
 				Key:         "orders",
@@ -150,8 +152,9 @@ var defaultMenu = []Group{
 		},
 	},
 	{
-		Key:   "catalog",
-		Label: "カタログ",
+		Key:        "catalog",
+		Label:      "カタログ",
+		Capability: rbac.CapCatalogManage,
 		Items: []Item{
 			{
 				Key:         "catalog-products",
@@ -183,8 +186,9 @@ var defaultMenu = []Group{
 		},
 	},
 	{
-		Key:   "content",
-		Label: "コンテンツ",
+		Key:        "content",
+		Label:      "コンテンツ",
+		Capability: rbac.CapContentManage,
 		Items: []Item{
 			{
 				Key:         "content-guides",
@@ -207,8 +211,9 @@ var defaultMenu = []Group{
 		},
 	},
 	{
-		Key:   "marketing",
-		Label: "マーケ",
+		Key:        "marketing",
+		Label:      "マーケ",
+		Capability: rbac.CapPromotionsManage,
 		Items: []Item{
 			{
 				Key:         "promotions",
@@ -231,8 +236,9 @@ var defaultMenu = []Group{
 		},
 	},
 	{
-		Key:   "customers",
-		Label: "顧客",
+		Key:        "customers",
+		Label:      "顧客",
+		Capability: rbac.CapCustomersView,
 		Items: []Item{
 			{
 				Key:         "customers",
@@ -246,8 +252,9 @@ var defaultMenu = []Group{
 		},
 	},
 	{
-		Key:   "system",
-		Label: "システム",
+		Key:        "system",
+		Label:      "システム",
+		Capability: rbac.CapSystemTasks,
 		Items: []Item{
 			{
 				Key:         "audit-logs",
@@ -288,8 +295,9 @@ var defaultMenu = []Group{
 		},
 	},
 	{
-		Key:   "account",
-		Label: "アカウント",
+		Key:        "account",
+		Label:      "アカウント",
+		Capability: rbac.CapProfileSelf,
 		Items: []Item{
 			{
 				Key:         "profile",
