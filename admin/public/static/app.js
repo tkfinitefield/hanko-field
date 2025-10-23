@@ -1083,6 +1083,366 @@ const initUserMenu = () => {
   });
 };
 
+const initGlobalSearchInteractions = () => {
+  const ROOT_SELECTOR = "[data-search-root]";
+  const RESULTS_SELECTOR = "[data-search-results]";
+  const RESULT_ROW_SELECTOR = "[data-search-result]";
+  const controllers = new WeakMap();
+
+  class SearchController {
+    constructor(root) {
+      this.root = root;
+      this.form = root.querySelector("[data-search-form]");
+      this.input = root.querySelector("[data-search-input]");
+      this.results = [];
+      this.activeRow = null;
+      this.detail = root.querySelector("[data-search-detail]");
+      this.detailEmpty = this.detail ? this.detail.querySelector("[data-search-detail-empty]") : null;
+      this.detailContent = this.detail ? this.detail.querySelector("[data-search-detail-content]") : null;
+      this.detailEntity = this.detail ? this.detail.querySelector("[data-search-detail-entity]") : null;
+      this.detailTitle = this.detail ? this.detail.querySelector("[data-search-detail-title]") : null;
+      this.detailDescription = this.detail ? this.detail.querySelector("[data-search-detail-description]") : null;
+      this.detailBadge = this.detail ? this.detail.querySelector("[data-search-detail-badge]") : null;
+      this.detailMetadata = this.detail ? this.detail.querySelector("[data-search-detail-metadata]") : null;
+      this.detailOpen = this.detail ? this.detail.querySelector("[data-search-detail-open]") : null;
+      this.detailCopy = this.detail ? this.detail.querySelector("[data-search-detail-copy]") : null;
+      this.bindEvents();
+    }
+
+    bindEvents() {
+      this.root.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target) {
+          return;
+        }
+        const openLink = target.closest("[data-search-open-link]");
+        if (openLink) {
+          return;
+        }
+        const row = target.closest(RESULT_ROW_SELECTOR);
+        if (!row) {
+          return;
+        }
+        event.preventDefault();
+        this.setActive(row);
+        row.focus({ preventScroll: true });
+      });
+
+      this.root.addEventListener("focusin", (event) => {
+        const row = event.target instanceof Element ? event.target.closest(RESULT_ROW_SELECTOR) : null;
+        if (!row) {
+          return;
+        }
+        this.setActive(row);
+      });
+
+      if (this.detailCopy instanceof HTMLElement) {
+        this.detailCopy.addEventListener("click", (event) => {
+          event.preventDefault();
+          this.copyActiveLink();
+        });
+      }
+    }
+
+    refresh() {
+      const container = this.root.querySelector(RESULTS_SELECTOR);
+      const rows = container ? Array.from(container.querySelectorAll(RESULT_ROW_SELECTOR)) : [];
+      this.results = rows.filter((row) => row instanceof HTMLElement);
+      if (this.results.length === 0) {
+        this.setActive(null);
+        return;
+      }
+      const current = this.activeRow && this.results.includes(this.activeRow) ? this.activeRow : null;
+      if (current) {
+        this.setActive(current);
+        return;
+      }
+      this.setActive(this.results[0]);
+    }
+
+    focusInput() {
+      if (!(this.input instanceof HTMLElement)) {
+        return;
+      }
+      this.input.focus({ preventScroll: true });
+      if (this.input instanceof HTMLInputElement || this.input instanceof HTMLTextAreaElement) {
+        this.input.select();
+      }
+    }
+
+    move(delta) {
+      if (this.results.length === 0) {
+        return;
+      }
+      const currentIndex = this.activeRow ? this.results.indexOf(this.activeRow) : -1;
+      let nextIndex = currentIndex + delta;
+      if (nextIndex < 0) {
+        nextIndex = 0;
+      }
+      if (nextIndex >= this.results.length) {
+        nextIndex = this.results.length - 1;
+      }
+      const nextRow = this.results[nextIndex];
+      if (!nextRow) {
+        return;
+      }
+      this.setActive(nextRow);
+      nextRow.focus({ preventScroll: false });
+      nextRow.scrollIntoView({ block: "nearest" });
+    }
+
+    openActive() {
+      const row = this.activeRow;
+      if (!row) {
+        return;
+      }
+      const url = row.getAttribute("data-search-url");
+      if (!url) {
+        return;
+      }
+      window.location.assign(url);
+    }
+
+    copyActiveLink() {
+      if (!(this.detailCopy instanceof HTMLElement)) {
+        return;
+      }
+      const url = this.activeRow ? this.activeRow.getAttribute("data-search-url") : null;
+      if (!url) {
+        return;
+      }
+      const reset = () => {
+        if (this.detailCopy) {
+          delete this.detailCopy.dataset.searchCopyState;
+        }
+      };
+      const applyCopiedState = () => {
+        if (this.detailCopy) {
+          this.detailCopy.dataset.searchCopyState = "copied";
+          window.setTimeout(reset, 1500);
+        }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard
+          .writeText(url)
+          .then(applyCopiedState)
+          .catch((error) => {
+            console.warn("search: clipboard write failed", error);
+            fallbackCopy(url);
+            applyCopiedState();
+          });
+        return;
+      }
+      fallbackCopy(url);
+      applyCopiedState();
+    }
+
+    setActive(row) {
+      if (this.activeRow === row) {
+        return;
+      }
+      if (this.activeRow instanceof HTMLElement) {
+        this.activeRow.classList.remove("ring-2", "ring-brand-200", "bg-slate-50");
+        delete this.activeRow.dataset.searchActive;
+      }
+      this.activeRow = row instanceof HTMLElement ? row : null;
+      if (this.activeRow) {
+        this.activeRow.dataset.searchActive = "true";
+        this.activeRow.classList.add("ring-2", "ring-brand-200", "bg-slate-50");
+        this.populateDetail(this.activeRow);
+      } else {
+        this.clearDetail();
+      }
+    }
+
+    populateDetail(row) {
+      if (!this.detail) {
+        return;
+      }
+      if (this.detailEmpty instanceof HTMLElement) {
+        this.detailEmpty.classList.add("hidden");
+      }
+      if (this.detailContent instanceof HTMLElement) {
+        this.detailContent.classList.remove("hidden");
+      }
+      if (this.detailEntity instanceof HTMLElement) {
+        this.detailEntity.textContent = row.getAttribute("data-search-entity") || "";
+      }
+      if (this.detailTitle instanceof HTMLElement) {
+        this.detailTitle.textContent = textContent(row, "[data-search-field='title']");
+      }
+      if (this.detailDescription instanceof HTMLElement) {
+        this.detailDescription.textContent = textContent(row, "[data-search-field='description']");
+        this.detailDescription.classList.toggle("hidden", this.detailDescription.textContent.trim() === "");
+      }
+      if (this.detailBadge instanceof HTMLElement) {
+        const badge = row.querySelector("[data-search-field='badge']");
+        this.detailBadge.innerHTML = badge ? badge.innerHTML : "";
+        this.detailBadge.classList.toggle("hidden", !badge);
+      }
+      if (this.detailMetadata instanceof HTMLElement) {
+        const metadata = row.querySelector("[data-search-field='metadata']");
+        this.detailMetadata.innerHTML = metadata ? metadata.innerHTML : "";
+        this.detailMetadata.classList.toggle("hidden", !metadata);
+      }
+      if (this.detailOpen instanceof HTMLElement) {
+        const url = row.getAttribute("data-search-url") || "#";
+        this.detailOpen.setAttribute("href", url);
+      }
+      if (this.detailCopy instanceof HTMLElement) {
+        const url = row.getAttribute("data-search-url") || "";
+        this.detailCopy.disabled = url === "";
+      }
+    }
+
+    clearDetail() {
+      if (!this.detail) {
+        return;
+      }
+      if (this.detailContent instanceof HTMLElement) {
+        this.detailContent.classList.add("hidden");
+      }
+      if (this.detailEmpty instanceof HTMLElement) {
+        this.detailEmpty.classList.remove("hidden");
+      }
+    }
+  }
+
+  const fallbackCopy = (text) => {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "readonly");
+    textarea.style.position = "absolute";
+    textarea.style.left = "-1000px";
+    textarea.style.top = "-1000px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand("copy");
+    } catch (error) {
+      console.warn("search: execCommand copy failed", error);
+    }
+    document.body.removeChild(textarea);
+  };
+
+  const textContent = (root, selector) => {
+    const element = root.querySelector(selector);
+    if (!element) {
+      return "";
+    }
+    return element.textContent ? element.textContent.trim() : "";
+  };
+
+  const getRoot = () => document.querySelector(ROOT_SELECTOR);
+
+  const getController = () => {
+    const root = getRoot();
+    if (!root) {
+      return null;
+    }
+    let controller = controllers.get(root);
+    if (!controller) {
+      controller = new SearchController(root);
+      controllers.set(root, controller);
+      controller.refresh();
+    }
+    return controller;
+  };
+
+  const refreshController = () => {
+    const controller = getController();
+    if (controller) {
+      controller.refresh();
+    }
+  };
+
+  const root = getRoot();
+  if (root) {
+    controllers.set(root, new SearchController(root));
+    refreshController();
+  }
+
+  document.addEventListener("keydown", (event) => {
+    const controller = getController();
+    if (!controller) {
+      return;
+    }
+    if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      controller.focusInput();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      if (isEditableTarget(event.target)) {
+        if (event.target instanceof Element && event.target.closest(ROOT_SELECTOR)) {
+          return;
+        }
+        return;
+      }
+      event.preventDefault();
+      controller.move(1);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      if (isEditableTarget(event.target)) {
+        if (event.target instanceof Element && event.target.closest(ROOT_SELECTOR)) {
+          return;
+        }
+        return;
+      }
+      event.preventDefault();
+      controller.move(-1);
+      return;
+    }
+    if (event.key === "Enter") {
+      const target = event.target;
+      if (isEditableTarget(target)) {
+        if (target instanceof Element && target.closest("[data-search-form]")) {
+          return;
+        }
+      }
+      const row = target instanceof Element ? target.closest(RESULT_ROW_SELECTOR) : null;
+      if (!row) {
+        if (target instanceof Element && target.closest(ROOT_SELECTOR)) {
+          event.preventDefault();
+          controller.openActive();
+        } else if (!isEditableTarget(target)) {
+          event.preventDefault();
+          controller.openActive();
+        }
+      } else {
+        event.preventDefault();
+        controller.openActive();
+      }
+    }
+  });
+
+  if (window.htmx) {
+    document.body.addEventListener("htmx:afterSwap", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      if (event.target.matches(RESULTS_SELECTOR) || event.target.querySelector(RESULT_ROW_SELECTOR)) {
+        refreshController();
+      }
+      if (event.target.closest && event.target.closest(RESULTS_SELECTOR)) {
+        refreshController();
+      }
+    });
+    document.body.addEventListener("htmx:afterSettle", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      if (event.target.matches(RESULTS_SELECTOR) || event.target.querySelector(RESULT_ROW_SELECTOR)) {
+        refreshController();
+      }
+    });
+  }
+};
+
 // Expose a hook for future htmx/alpine wiring without blocking initial scaffold.
 window.hankoAdmin = window.hankoAdmin || {
   init() {
@@ -1157,6 +1517,7 @@ window.hankoAdmin = window.hankoAdmin || {
     initHXTriggerHandlers();
     const toast = initToastStack();
     initUserMenu();
+    initGlobalSearchInteractions();
 
     window.hankoAdmin.modal = modal;
     window.hankoAdmin.toast = toast;

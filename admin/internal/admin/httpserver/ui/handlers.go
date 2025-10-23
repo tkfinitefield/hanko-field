@@ -12,6 +12,7 @@ import (
 	admindashboard "finitefield.org/hanko-admin/internal/admin/dashboard"
 	custommw "finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	"finitefield.org/hanko-admin/internal/admin/profile"
+	adminsearch "finitefield.org/hanko-admin/internal/admin/search"
 	dashboardtpl "finitefield.org/hanko-admin/internal/admin/templates/dashboard"
 	profiletpl "finitefield.org/hanko-admin/internal/admin/templates/profile"
 )
@@ -20,12 +21,14 @@ import (
 type Dependencies struct {
 	DashboardService admindashboard.Service
 	ProfileService   profile.Service
+	SearchService    adminsearch.Service
 }
 
 // Handlers exposes HTTP handlers for admin UI pages and fragments.
 type Handlers struct {
 	dashboard admindashboard.Service
 	profile   profile.Service
+	search    adminsearch.Service
 }
 
 // NewHandlers wires the UI handler set.
@@ -38,9 +41,14 @@ func NewHandlers(deps Dependencies) *Handlers {
 	if dashboardService == nil {
 		dashboardService = admindashboard.NewStaticService()
 	}
+	searchService := deps.SearchService
+	if searchService == nil {
+		searchService = adminsearch.NewStaticService()
+	}
 	return &Handlers{
 		dashboard: dashboardService,
 		profile:   profileService,
+		search:    searchService,
 	}
 }
 

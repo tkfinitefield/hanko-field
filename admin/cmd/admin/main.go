@@ -17,6 +17,7 @@ import (
 	"finitefield.org/hanko-admin/internal/admin/httpserver"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	"finitefield.org/hanko-admin/internal/admin/profile"
+	"finitefield.org/hanko-admin/internal/admin/search"
 )
 
 func main() {
@@ -26,6 +27,7 @@ func main() {
 		BasePath:       getEnv("ADMIN_BASE_PATH", "/admin"),
 		Authenticator:  buildAuthenticator(rootCtx),
 		ProfileService: buildProfileService(),
+		SearchService:  buildSearchService(),
 		Environment:    getEnv("ADMIN_ENVIRONMENT", "Development"),
 		Session: httpserver.SessionConfig{
 			CookieName:       getEnv("ADMIN_SESSION_COOKIE_NAME", ""),
@@ -166,4 +168,11 @@ func buildProfileService() profile.Service {
 		log.Fatalf("admin: failed to initialise profile service: %v", err)
 	}
 	return service
+}
+
+func buildSearchService() search.Service {
+	if base := strings.TrimSpace(os.Getenv("ADMIN_SEARCH_API_BASE_URL")); base != "" {
+		log.Printf("admin: ADMIN_SEARCH_API_BASE_URL is set (%s) but no HTTP client is implemented yet; using static search dataset", base)
+	}
+	return search.NewStaticService()
 }

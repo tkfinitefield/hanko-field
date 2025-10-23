@@ -14,6 +14,7 @@ import (
 	custommw "finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/ui"
 	"finitefield.org/hanko-admin/internal/admin/profile"
+	"finitefield.org/hanko-admin/internal/admin/search"
 	appsession "finitefield.org/hanko-admin/internal/admin/session"
 	"finitefield.org/hanko-admin/public"
 )
@@ -26,6 +27,7 @@ type Config struct {
 	Authenticator    custommw.Authenticator
 	DashboardService dashboard.Service
 	ProfileService   profile.Service
+	SearchService    search.Service
 	Session          SessionConfig
 	SessionStore     custommw.SessionStore
 	CSRFCookieName   string
@@ -90,6 +92,7 @@ func New(cfg Config) *http.Server {
 	uiHandlers := ui.NewHandlers(ui.Dependencies{
 		DashboardService: cfg.DashboardService,
 		ProfileService:   cfg.ProfileService,
+		SearchService:    cfg.SearchService,
 	})
 
 	mountAdminRoutes(router, basePath, routeOptions{
@@ -168,6 +171,10 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 			})
 			protected.Get("/logout", authHandlers.Logout)
 			protected.Post("/logout", authHandlers.Logout)
+			protected.Route("/search", func(sr chi.Router) {
+				sr.Get("/", uiHandlers.SearchPage)
+				sr.Get("/table", uiHandlers.SearchTable)
+			})
 			// Future admin routes will be registered here.
 		})
 	})

@@ -1,0 +1,192 @@
+package search
+
+import (
+	"fmt"
+
+	"finitefield.org/hanko-admin/internal/admin/templates/components"
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+)
+
+templ Table(data TableData) {
+	<div class="flex flex-col gap-4" data-search-table>
+		if data.Error != "" {
+			@inlineNotice("danger", data.Error)
+		}
+
+		if len(data.Groups) == 0 {
+			<div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
+				if data.Error != "" {
+					<p>再度実行しても問題が続く場合は、システム管理者にお問い合わせください。</p>
+				} else if data.EmptyMessage != "" {
+					<p>{ data.EmptyMessage }</p>
+				} else {
+					<p>検索対象のデータがありません。</p>
+				}
+			</div>
+		} else {
+			for _, group := range data.Groups {
+				@resultGroup(data.QueryTerm, group)
+			}
+		}
+
+		@shortcutFooter(data)
+	</div>
+}
+
+templ resultGroup(query string, group ResultGroupView) {
+	<section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" data-search-group>
+		<header class="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3">
+			<div class="flex items-center gap-3 text-sm font-semibold text-slate-900">
+				if group.Icon != "" {
+					<span class="text-lg">{ group.Icon }</span>
+				}
+				<span>{ group.Label }</span>
+			</div>
+			<span class="text-xs text-slate-500">{ group.Total } 件</span>
+		</header>
+		<div class="divide-y divide-slate-100" data-search-group-body>
+			if len(group.Hits) == 0 {
+				<div class="px-5 py-6 text-sm text-slate-500">このカテゴリに該当する結果はありません。</div>
+			} else {
+				for _, hit := range group.Hits {
+					@resultRow(query, group, hit)
+				}
+			}
+			if group.HasMore {
+				<div class="bg-slate-50 px-5 py-3 text-xs text-slate-500">さらに結果があります。検索条件を絞り込んでください。</div>
+			}
+		</div>
+	</section>
+}
+
+templ resultRow(query string, group ResultGroupView, hit HitView) {
+	<div
+		class="group flex cursor-pointer flex-col gap-3 px-5 py-4 transition hover:bg-slate-50 focus:outline-none focus-visible:bg-slate-50 focus-visible:ring-2 focus-visible:ring-brand-300 md:flex-row md:items-start"
+		tabindex="0"
+		role="button"
+		data-search-result
+		data-search-url={ hit.URL }
+		data-search-entity={ group.Label }
+		data-search-entity-key={ group.Entity }
+		data-search-entity-icon={ group.Icon }
+	>
+		<div class="flex items-start gap-3 md:flex-1">
+			<div class="hidden text-xl text-slate-500 md:block" aria-hidden="true">{ group.Icon }</div>
+			<div class="min-w-0 flex-1">
+				<div class="flex flex-wrap items-center gap-2">
+					<p class="text-sm font-semibold text-slate-900" data-search-field="title">
+						@highlightText(hit.Title, query)
+					</p>
+					if hit.Badge != "" {
+						<span data-search-field="badge">
+							@components.Badge(hit.Badge, hit.BadgeTone)
+						</span>
+					}
+				</div>
+				if hit.Description != "" {
+					<p class="mt-2 text-sm text-slate-600" data-search-field="description">
+						@highlightText(hit.Description, query)
+					</p>
+				}
+				<div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+					<span class="rounded-md bg-slate-100 px-2 py-1 text-slate-600" data-search-field="entity">
+						{ group.Label }
+					</span>
+					if hit.Persona != "" {
+						<span data-search-field="persona">担当: { hit.Persona }</span>
+					}
+					<span data-search-field="score">スコア { formatScore(hit.Score) }</span>
+					if hit.OccurredAt != nil {
+						<span data-search-field="occurred">{ helpers.Relative(*hit.OccurredAt) }</span>
+					}
+				</div>
+				if len(hit.Metadata) > 0 {
+					<dl class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-500" data-search-field="metadata">
+						for _, meta := range hit.Metadata {
+							<div class="flex items-center gap-1">
+								if meta.Icon != "" {
+									<span aria-hidden="true">{ meta.Icon }</span>
+								}
+								<dt class="font-medium text-slate-600">{ meta.Key }</dt>
+								<dd class="text-slate-600">{ meta.Value }</dd>
+							</div>
+						}
+					</dl>
+				}
+			</div>
+		</div>
+		<div class="flex items-start justify-end gap-2 md:w-40">
+			@components.ButtonWith("開く", components.ButtonOptions{
+				Variant: "ghost",
+				Size:    "sm",
+				Href:    hit.URL,
+				Attrs: templ.Attributes{
+					"data-search-open-link": "true",
+				},
+			})
+		</div>
+	</div>
+}
+
+templ shortcutFooter(data TableData) {
+	<div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+		<div>
+			<strong class="font-semibold text-slate-900">{ data.Summary.TotalHits } 件</strong>
+			<span class="ml-2 text-xs text-slate-500">処理時間: { data.Summary.Duration }</span>
+		</div>
+		if len(data.ShortcutHints) > 0 {
+			<ul class="flex flex-wrap gap-3 text-xs text-slate-500">
+				for _, hint := range data.ShortcutHints {
+					<li class="flex items-center gap-2">
+						<div class="flex items-center gap-1">
+							for _, key := range hint.Keys {
+								<kbd class="rounded border border-slate-300 bg-slate-50 px-2 py-1 font-mono text-[11px] text-slate-700 shadow-sm">{ key }</kbd>
+							}
+						</div>
+						<span>{ hint.Description }</span>
+					</li>
+				}
+			</ul>
+		}
+	</div>
+}
+
+templ highlightText(value string, term string) {
+	if segments := helpers.HighlightSegments(value, term); len(segments) == 0 {
+		{ value }
+		return
+	} else {
+		for _, segment := range segments {
+			if segment.Match {
+				<mark class="rounded bg-brand-100 px-1 text-brand-700">{ segment.Text }</mark>
+			} else {
+				{ segment.Text }
+			}
+		}
+	}
+}
+
+templ inlineNotice(tone string, message string) {
+	<div class={ noticeClass(tone) }>
+		<span>{ message }</span>
+	</div>
+}
+
+func formatScore(score float64) string {
+	if score <= 0 {
+		return "0.00"
+	}
+	return fmt.Sprintf("%.2f", score)
+}
+
+func noticeClass(tone string) string {
+	base := "flex items-center gap-2 rounded-lg border px-4 py-3 text-sm shadow-sm"
+	switch tone {
+	case "danger", "error":
+		return base + " border-rose-200 bg-rose-50 text-rose-700"
+	case "info":
+		return base + " border-sky-200 bg-sky-50 text-sky-700"
+	default:
+		return base + " border-slate-200 bg-slate-50 text-slate-600"
+	}
+}
