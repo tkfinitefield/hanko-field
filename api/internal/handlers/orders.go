@@ -19,9 +19,10 @@ import (
 )
 
 const (
-	defaultOrderPageSize   = 20
-	maxOrderPageSize       = 100
-	maxOrderCancelBodySize = 4 * 1024
+	defaultOrderPageSize    = 20
+	maxOrderPageSize        = 100
+	maxOrderCancelBodySize  = 4 * 1024
+	maxOrderInvoiceBodySize = 2 * 1024
 )
 
 var userCancellableStatuses = map[domain.OrderStatus]struct{}{
@@ -41,10 +42,33 @@ var validOrderStatuses = map[domain.OrderStatus]struct{}{
 	domain.OrderStatusCanceled:       {},
 }
 
+var invoiceRequestableStatuses = map[domain.OrderStatus]struct{}{
+	domain.OrderStatusPaid:         {},
+	domain.OrderStatusInProduction: {},
+	domain.OrderStatusReadyToShip:  {},
+	domain.OrderStatusShipped:      {},
+	domain.OrderStatusDelivered:    {},
+	domain.OrderStatusCompleted:    {},
+}
+
+var invoiceDeliveryChannels = []string{"email", "dashboard"}
+
 type cancelOrderRequest struct {
 	Reason         string         `json:"reason"`
 	Metadata       map[string]any `json:"metadata"`
 	ExpectedStatus string         `json:"expected_status"`
+}
+
+type requestInvoiceRequest struct {
+	Notes          string `json:"notes"`
+	ExpectedStatus string `json:"expected_status"`
+}
+
+type invoiceRequestResponse struct {
+	Status           string   `json:"status"`
+	DeliveryChannels []string `json:"delivery_channels"`
+	RequestedAt      string   `json:"requested_at,omitempty"`
+	Duplicate        bool     `json:"duplicate,omitempty"`
 }
 
 // OrderHandlers exposes order read-only endpoints for authenticated users.
@@ -71,6 +95,7 @@ func (h *OrderHandlers) Routes(r chi.Router) {
 	}
 	r.Get("/", h.listOrders)
 	r.Get("/{orderID}", h.getOrder)
+	r.Post("/{orderID}:request-invoice", h.requestInvoice)
 	r.Post("/{orderID}:cancel", h.cancelOrder)
 }
 
@@ -195,6 +220,120 @@ func (h *OrderHandlers) getOrder(w http.ResponseWriter, r *http.Request) {
 		Order: buildOrderPayload(order),
 	}
 	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *OrderHandlers) requestInvoice(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.orders == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("order_service_unavailable", "order service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "order id is required", http.StatusBadRequest))
+		return
+	}
+
+	order, err := h.orders.GetOrder(ctx, orderID, services.OrderReadOptions{})
+	if err != nil {
+		writeOrderError(ctx, w, err)
+		return
+	}
+
+	if !strings.EqualFold(strings.TrimSpace(order.UserID), strings.TrimSpace(identity.UID)) {
+		httpx.WriteError(ctx, w, httpx.NewError("order_not_found", "order not found", http.StatusNotFound))
+		return
+	}
+
+	statusKey := domain.OrderStatus(strings.TrimSpace(strings.ToLower(string(order.Status))))
+	if _, ok := invoiceRequestableStatuses[statusKey]; !ok {
+		httpx.WriteError(ctx, w, httpx.NewError("order_invalid_state", "invoice request only allowed after payment", http.StatusConflict))
+		return
+	}
+
+	existingRequestedAt := extractInvoiceRequestedAt(order.Metadata)
+
+	body, err := readLimitedBody(r, maxOrderInvoiceBodySize)
+	switch {
+	case err == nil:
+	case errors.Is(err, errEmptyBody):
+		body = nil
+	case errors.Is(err, errBodyTooLarge):
+		httpx.WriteError(ctx, w, httpx.NewError("payload_too_large", "request body exceeds allowed size", http.StatusRequestEntityTooLarge))
+		return
+	default:
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	var payload requestInvoiceRequest
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &payload); err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "invalid JSON body", http.StatusBadRequest))
+			return
+		}
+	}
+
+	var expectedStatus *services.OrderStatus
+	if raw := strings.TrimSpace(payload.ExpectedStatus); raw != "" {
+		parsed, ok := parseOrderStatus(raw)
+		if !ok {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "expected_status must be a valid order status", http.StatusBadRequest))
+			return
+		}
+		current, ok := parseOrderStatus(string(order.Status))
+		if !ok {
+			current = services.OrderStatus(statusKey)
+		}
+		if parsed != current {
+			httpx.WriteError(ctx, w, httpx.NewError("order_conflict", fmt.Sprintf("expected status %q but was %q", raw, order.Status), http.StatusConflict))
+			return
+		}
+		expectedStatus = &parsed
+	}
+
+	note := strings.TrimSpace(payload.Notes)
+	delivery := append([]string(nil), invoiceDeliveryChannels...)
+	response := invoiceRequestResponse{
+		DeliveryChannels: delivery,
+	}
+
+	if existingRequestedAt != "" {
+		response.Status = "duplicate"
+		response.Duplicate = true
+		response.RequestedAt = existingRequestedAt
+		writeJSONResponse(w, http.StatusAccepted, response)
+		return
+	}
+
+	cmd := services.RequestInvoiceCommand{
+		OrderID:        orderID,
+		ActorID:        strings.TrimSpace(identity.UID),
+		Notes:          note,
+		ExpectedStatus: expectedStatus,
+	}
+
+	result, err := h.orders.RequestInvoice(ctx, cmd)
+	if err != nil {
+		writeOrderError(ctx, w, err)
+		return
+	}
+
+	requestedAt := extractInvoiceRequestedAt(result.Metadata)
+	if requestedAt == "" {
+		requestedAt = formatTime(result.UpdatedAt)
+	}
+
+	response.Status = "queued"
+	response.RequestedAt = requestedAt
+	writeJSONResponse(w, http.StatusAccepted, response)
 }
 
 func (h *OrderHandlers) cancelOrder(w http.ResponseWriter, r *http.Request) {
@@ -606,6 +745,18 @@ func buildOrderShipmentPayloads(shipments []services.Shipment) []orderShipmentPa
 	return result
 }
 
+func extractInvoiceRequestedAt(metadata map[string]any) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	if value, ok := metadata["invoiceRequestedAt"]; ok {
+		if ts := stringify(value); ts != "" {
+			return ts
+		}
+	}
+	return ""
+}
+
 func writeOrderError(ctx context.Context, w http.ResponseWriter, err error) {
 	if err == nil {
 		return
@@ -649,6 +800,8 @@ func stringify(value any) string {
 		return strings.TrimSpace(v.String())
 	case []byte:
 		return strings.TrimSpace(string(v))
+	case time.Time:
+		return formatTime(v)
 	default:
 		return ""
 	}

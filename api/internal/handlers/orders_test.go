@@ -743,3 +743,249 @@ func TestOrderHandlersCancelPropagatesServiceError(t *testing.T) {
 		t.Fatalf("expected status 409, got %d", rr.Code)
 	}
 }
+
+func TestOrderHandlersRequestInvoiceSuccess(t *testing.T) {
+	now := time.Date(2025, 1, 15, 9, 45, 0, 0, time.UTC)
+	var captured services.RequestInvoiceCommand
+
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:       orderID,
+				UserID:   "user-1",
+				Status:   domain.OrderStatusPaid,
+				Metadata: map[string]any{},
+			}, nil
+		},
+		invoiceFn: func(ctx context.Context, cmd services.RequestInvoiceCommand) (services.Order, error) {
+			captured = cmd
+			return services.Order{
+				ID:     cmd.OrderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusPaid,
+				Metadata: map[string]any{
+					"invoiceRequestedAt": now.Format(time.RFC3339Nano),
+				},
+				UpdatedAt: now,
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_123:request-invoice", strings.NewReader(`{"notes":" please send ","expected_status":"paid"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d", rr.Code)
+	}
+
+	if captured.OrderID != "ord_123" {
+		t.Fatalf("expected command order id ord_123, got %s", captured.OrderID)
+	}
+	if captured.ActorID != "user-1" {
+		t.Fatalf("expected actor user-1, got %s", captured.ActorID)
+	}
+	if captured.Notes != "please send" {
+		t.Fatalf("expected trimmed notes, got %q", captured.Notes)
+	}
+	if captured.ExpectedStatus == nil || *captured.ExpectedStatus != services.OrderStatus(domain.OrderStatusPaid) {
+		t.Fatalf("expected expected status paid, got %#v", captured.ExpectedStatus)
+	}
+
+	var resp invoiceRequestResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp.Status != "queued" {
+		t.Fatalf("expected status queued, got %s", resp.Status)
+	}
+	if resp.Duplicate {
+		t.Fatalf("expected duplicate false")
+	}
+	if resp.RequestedAt != now.Format(time.RFC3339Nano) {
+		t.Fatalf("expected requested_at %s, got %s", now.Format(time.RFC3339Nano), resp.RequestedAt)
+	}
+	if len(resp.DeliveryChannels) != len(invoiceDeliveryChannels) {
+		t.Fatalf("expected delivery channels length %d, got %d", len(invoiceDeliveryChannels), len(resp.DeliveryChannels))
+	}
+	want := map[string]struct{}{"email": {}, "dashboard": {}}
+	for _, channel := range resp.DeliveryChannels {
+		if _, ok := want[channel]; !ok {
+			t.Fatalf("unexpected delivery channel %s", channel)
+		}
+	}
+}
+
+func TestOrderHandlersRequestInvoiceDuplicateSkipsService(t *testing.T) {
+	now := time.Date(2025, 2, 20, 11, 0, 0, 0, time.UTC)
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusPaid,
+				Metadata: map[string]any{
+					"invoiceRequestedAt": now.Format(time.RFC3339Nano),
+				},
+			}, nil
+		},
+		invoiceFn: func(ctx context.Context, cmd services.RequestInvoiceCommand) (services.Order, error) {
+			t.Fatalf("request invoice should not be called on duplicate")
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_777:request-invoice", strings.NewReader(`{}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d", rr.Code)
+	}
+
+	var resp invoiceRequestResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if !resp.Duplicate {
+		t.Fatalf("expected duplicate true")
+	}
+	if resp.Status != "duplicate" {
+		t.Fatalf("expected status duplicate, got %s", resp.Status)
+	}
+	if resp.RequestedAt != now.Format(time.RFC3339Nano) {
+		t.Fatalf("expected requested_at %s, got %s", now.Format(time.RFC3339Nano), resp.RequestedAt)
+	}
+}
+
+func TestOrderHandlersRequestInvoiceRequiresPaidStatus(t *testing.T) {
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusPendingPayment,
+			}, nil
+		},
+		invoiceFn: func(ctx context.Context, cmd services.RequestInvoiceCommand) (services.Order, error) {
+			t.Fatalf("request invoice should not be invoked")
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_999:request-invoice", strings.NewReader(`{"notes":"now"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersRequestInvoiceRequiresOwnership(t *testing.T) {
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "other-user",
+				Status: domain.OrderStatusPaid,
+			}, nil
+		},
+		invoiceFn: func(ctx context.Context, cmd services.RequestInvoiceCommand) (services.Order, error) {
+			t.Fatalf("request invoice should not be invoked")
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_111:request-invoice", strings.NewReader(`{"notes":"now"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersRequestInvoiceInvalidJSON(t *testing.T) {
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusPaid,
+			}, nil
+		},
+		invoiceFn: func(ctx context.Context, cmd services.RequestInvoiceCommand) (services.Order, error) {
+			t.Fatalf("request invoice should not be invoked")
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_222:request-invoice", strings.NewReader(`{"notes":`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersRequestInvoiceExpectedStatusMismatch(t *testing.T) {
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusPaid,
+			}, nil
+		},
+		invoiceFn: func(ctx context.Context, cmd services.RequestInvoiceCommand) (services.Order, error) {
+			t.Fatalf("request invoice should not be invoked")
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_333:request-invoice", strings.NewReader(`{"expected_status":"shipped"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rr.Code)
+	}
+}

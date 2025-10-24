@@ -387,6 +387,140 @@ func TestOrderServiceAppendProductionEventAdvancesStatus(t *testing.T) {
 	}
 }
 
+func TestOrderServiceRequestInvoice(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2025, 3, 10, 8, 15, 0, 0, time.UTC)
+	var updated domain.Order
+	events := &captureOrderEvents{}
+
+	orderRepo := &stubOrderRepo{
+		findFn: func(context.Context, string) (domain.Order, error) {
+			return domain.Order{
+				ID:     "ord_123",
+				UserID: "user-1",
+				Status: domain.OrderStatusPaid,
+				Metadata: map[string]any{
+					"other": "value",
+				},
+			}, nil
+		},
+		updateFn: func(_ context.Context, order domain.Order) error {
+			updated = order
+			return nil
+		},
+	}
+
+	svc, err := NewOrderService(OrderServiceDeps{
+		Orders:     orderRepo,
+		Counters:   &stubCounterRepo{},
+		UnitOfWork: &stubUnitOfWork{},
+		Clock: func() time.Time {
+			return now
+		},
+		Events: events,
+	})
+	if err != nil {
+		t.Fatalf("new order service: %v", err)
+	}
+
+	result, err := svc.RequestInvoice(ctx, RequestInvoiceCommand{
+		OrderID: "ord_123",
+		ActorID: "user-1",
+		Notes:   " please send ",
+	})
+	if err != nil {
+		t.Fatalf("request invoice: %v", err)
+	}
+
+	if updated.ID != "ord_123" {
+		t.Fatalf("expected updated order ord_123, got %s", updated.ID)
+	}
+	requestedAt, ok := updated.Metadata["invoiceRequestedAt"]
+	if !ok || stringify(requestedAt) == "" {
+		t.Fatalf("expected invoiceRequestedAt set, got %#v", updated.Metadata)
+	}
+	if updated.Metadata["invoiceRequestedBy"] != "user-1" {
+		t.Fatalf("expected invoiceRequestedBy user-1, got %#v", updated.Metadata["invoiceRequestedBy"])
+	}
+	if updated.Metadata["invoiceNotes"] != "please send" {
+		t.Fatalf("expected invoiceNotes trimmed, got %#v", updated.Metadata["invoiceNotes"])
+	}
+	if result.Metadata["invoiceRequestedAt"] == "" {
+		t.Fatalf("expected result metadata populated")
+	}
+	if result.UpdatedAt != now {
+		t.Fatalf("expected updated time %s, got %s", now, result.UpdatedAt)
+	}
+
+	if len(events.events) != 1 {
+		t.Fatalf("expected one event, got %d", len(events.events))
+	}
+	event := events.events[0]
+	if event.Type != orderEventInvoiceRequested {
+		t.Fatalf("expected event type %s, got %s", orderEventInvoiceRequested, event.Type)
+	}
+	if event.OrderID != "ord_123" {
+		t.Fatalf("expected event order ord_123, got %s", event.OrderID)
+	}
+	if event.ActorID != "user-1" {
+		t.Fatalf("expected actor user-1, got %s", event.ActorID)
+	}
+	if event.OccurredAt != now {
+		t.Fatalf("expected occurred at %s, got %s", now, event.OccurredAt)
+	}
+}
+
+func TestOrderServiceRequestInvoiceDuplicate(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2025, 4, 1, 7, 0, 0, 0, time.UTC)
+	events := &captureOrderEvents{}
+
+	orderRepo := &stubOrderRepo{
+		findFn: func(context.Context, string) (domain.Order, error) {
+			return domain.Order{
+				ID:     "ord_456",
+				UserID: "user-1",
+				Status: domain.OrderStatusPaid,
+				Metadata: map[string]any{
+					"invoiceRequestedAt": now.Add(-time.Hour).Format(time.RFC3339Nano),
+				},
+			}, nil
+		},
+		updateFn: func(_ context.Context, order domain.Order) error {
+			t.Fatalf("update should not be called on duplicate, got %#v", order)
+			return nil
+		},
+	}
+
+	svc, err := NewOrderService(OrderServiceDeps{
+		Orders:     orderRepo,
+		Counters:   &stubCounterRepo{},
+		UnitOfWork: &stubUnitOfWork{},
+		Clock: func() time.Time {
+			return now
+		},
+		Events: events,
+	})
+	if err != nil {
+		t.Fatalf("new order service: %v", err)
+	}
+
+	result, err := svc.RequestInvoice(ctx, RequestInvoiceCommand{
+		OrderID: "ord_456",
+		ActorID: "user-1",
+	})
+	if err != nil {
+		t.Fatalf("request invoice duplicate: %v", err)
+	}
+
+	if len(events.events) != 0 {
+		t.Fatalf("expected no events published, got %d", len(events.events))
+	}
+	if stringify(result.Metadata["invoiceRequestedAt"]) == "" {
+		t.Fatalf("expected metadata retained")
+	}
+}
+
 func TestOrderServiceCloneForReorder(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2025, 8, 1, 14, 0, 0, 0, time.UTC)

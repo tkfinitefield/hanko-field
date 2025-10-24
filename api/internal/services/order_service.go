@@ -622,6 +622,9 @@ func (s *orderService) RequestInvoice(ctx context.Context, cmd RequestInvoiceCom
 
 	now := s.now()
 	order.Metadata = ensureMap(order.Metadata)
+	if existing := stringify(order.Metadata["invoiceRequestedAt"]); existing != "" {
+		return order, nil
+	}
 	order.Metadata["invoiceRequestedAt"] = now.UTC().Format(time.RFC3339Nano)
 	if strings.TrimSpace(cmd.ActorID) != "" {
 		order.Metadata["invoiceRequestedBy"] = strings.TrimSpace(cmd.ActorID)
@@ -999,6 +1002,21 @@ func optionalString(v string) *string {
 	}
 	ref := v
 	return &ref
+}
+
+func stringify(value any) string {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case fmt.Stringer:
+		return strings.TrimSpace(v.String())
+	case []byte:
+		return strings.TrimSpace(string(v))
+	case time.Time:
+		return v.UTC().Format(time.RFC3339Nano)
+	default:
+		return ""
+	}
 }
 
 func canTransition(current, target domain.OrderStatus) bool {
