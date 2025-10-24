@@ -139,7 +139,7 @@
     btn.addEventListener('keydown', function(e){
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
-        selectOption(btn);
+        btn.click();
       } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
         e.preventDefault();
         focusByOffset(btn, 1);
