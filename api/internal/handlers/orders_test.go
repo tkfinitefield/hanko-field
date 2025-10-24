@@ -870,6 +870,58 @@ func TestOrderHandlersRequestInvoiceDuplicateSkipsService(t *testing.T) {
 	}
 }
 
+func TestOrderHandlersRequestInvoiceDuplicateFromService(t *testing.T) {
+	now := time.Date(2025, 2, 20, 12, 0, 0, 0, time.UTC)
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusPaid,
+			}, nil
+		},
+		invoiceFn: func(ctx context.Context, cmd services.RequestInvoiceCommand) (services.Order, error) {
+			return services.Order{
+				ID:     cmd.OrderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusPaid,
+				Metadata: map[string]any{
+					"invoiceRequestedAt": now.Format(time.RFC3339Nano),
+				},
+				UpdatedAt: now,
+			}, services.ErrOrderInvoiceAlreadyRequested
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_999:request-invoice", strings.NewReader(`{"notes":"anything"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d", rr.Code)
+	}
+
+	var resp invoiceRequestResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if !resp.Duplicate {
+		t.Fatalf("expected duplicate true")
+	}
+	if resp.Status != "duplicate" {
+		t.Fatalf("expected status duplicate got %s", resp.Status)
+	}
+	if resp.RequestedAt != now.Format(time.RFC3339Nano) {
+		t.Fatalf("expected requested_at %s, got %s", now.Format(time.RFC3339Nano), resp.RequestedAt)
+	}
+}
+
 func TestOrderHandlersRequestInvoiceRequiresPaidStatus(t *testing.T) {
 	service := &stubOrderService{
 		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {

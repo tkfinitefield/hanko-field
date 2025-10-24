@@ -322,6 +322,17 @@ func (h *OrderHandlers) requestInvoice(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.orders.RequestInvoice(ctx, cmd)
 	if err != nil {
+		if errors.Is(err, services.ErrOrderInvoiceAlreadyRequested) {
+			requestedAt := extractInvoiceRequestedAt(result.Metadata)
+			if requestedAt == "" {
+				requestedAt = formatTime(result.UpdatedAt)
+			}
+			response.Status = "duplicate"
+			response.Duplicate = true
+			response.RequestedAt = requestedAt
+			writeJSONResponse(w, http.StatusAccepted, response)
+			return
+		}
 		writeOrderError(ctx, w, err)
 		return
 	}

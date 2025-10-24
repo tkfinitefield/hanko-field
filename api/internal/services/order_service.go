@@ -34,6 +34,8 @@ var (
 	ErrOrderInvalidState = errors.New("order: invalid status transition")
 	// ErrOrderConflict indicates optimistic concurrency conflicts or duplicates.
 	ErrOrderConflict = errors.New("order: conflict")
+	// ErrOrderInvoiceAlreadyRequested indicates an invoice request already exists.
+	ErrOrderInvoiceAlreadyRequested = errors.New("order: invoice already requested")
 
 	errOrderPaymentRepositoryUnavailable    = errors.New("order: payment repository not configured")
 	errOrderShipmentRepositoryUnavailable   = errors.New("order: shipment repository not configured")
@@ -623,7 +625,7 @@ func (s *orderService) RequestInvoice(ctx context.Context, cmd RequestInvoiceCom
 	now := s.now()
 	order.Metadata = ensureMap(order.Metadata)
 	if existing := stringify(order.Metadata["invoiceRequestedAt"]); existing != "" {
-		return order, nil
+		return order, ErrOrderInvoiceAlreadyRequested
 	}
 	order.Metadata["invoiceRequestedAt"] = now.UTC().Format(time.RFC3339Nano)
 	if strings.TrimSpace(cmd.ActorID) != "" {

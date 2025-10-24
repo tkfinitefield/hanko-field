@@ -509,8 +509,8 @@ func TestOrderServiceRequestInvoiceDuplicate(t *testing.T) {
 		OrderID: "ord_456",
 		ActorID: "user-1",
 	})
-	if err != nil {
-		t.Fatalf("request invoice duplicate: %v", err)
+	if !errors.Is(err, ErrOrderInvoiceAlreadyRequested) {
+		t.Fatalf("expected ErrOrderInvoiceAlreadyRequested, got %v", err)
 	}
 
 	if len(events.events) != 0 {
