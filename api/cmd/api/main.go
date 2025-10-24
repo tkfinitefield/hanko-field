@@ -111,6 +111,19 @@ func main() {
 		logger.Fatal("failed to initialise storage copier", zap.Error(err))
 	}
 
+	signerKey := strings.TrimSpace(cfg.Storage.SignedURLKey)
+	if signerKey == "" {
+		logger.Fatal("storage signer key is required")
+	}
+	signer, err := platformstorage.NewServiceAccountSignerFromJSON([]byte(signerKey))
+	if err != nil {
+		logger.Fatal("failed to parse storage signer key", zap.Error(err))
+	}
+	signedURLClient, err := platformstorage.NewClient(signer)
+	if err != nil {
+		logger.Fatal("failed to initialise signed url client", zap.Error(err))
+	}
+
 	systemService, err := newSystemService(ctx, firestoreClient, fetcher, buildInfo)
 	if err != nil {
 		logger.Warn("health: system service init failed", zap.Error(err))
@@ -203,6 +216,10 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to initialise payment method repository", zap.Error(err))
 	}
+	assetRepo, err := firestoreRepo.NewAssetRepository(firestoreProvider, signedURLClient, cfg.Storage.AssetsBucket)
+	if err != nil {
+		logger.Fatal("failed to initialise asset repository", zap.Error(err))
+	}
 
 	if strings.TrimSpace(cfg.PSP.StripeAPIKey) == "" {
 		logger.Fatal("stripe api key is required for payment method management")
@@ -262,6 +279,14 @@ func main() {
 		logger.Fatal("failed to initialise user service", zap.Error(err))
 	}
 	meHandlers := handlers.NewMeHandlers(authenticator, userService)
+	assetService, err := services.NewAssetService(services.AssetServiceDeps{
+		Repository: assetRepo,
+		Clock:      time.Now,
+	})
+	if err != nil {
+		logger.Fatal("failed to initialise asset service", zap.Error(err))
+	}
+	assetHandlers := handlers.NewAssetHandlers(authenticator, assetService)
 
 	cartLogger := logger.Named("cart")
 	cartService, err := services.NewCartService(services.CartServiceDeps{
@@ -379,6 +404,7 @@ func main() {
 	opts = append(opts, handlers.WithNameMappingRoutes(nameMappingHandlers.Routes))
 	opts = append(opts, handlers.WithCartRoutes(cartHandlers.Routes))
 	opts = append(opts, handlers.WithAdditionalRoutes(cartHandlers.RegisterStandaloneRoutes))
+	opts = append(opts, handlers.WithAdditionalRoutes(assetHandlers.Routes))
 	opts = append(opts, handlers.WithAdditionalRoutes(checkoutHandlers.Routes))
 	publicHandlers := handlers.NewPublicHandlers()
 	opts = append(opts, handlers.WithPublicRoutes(publicHandlers.Routes))
@@ -661,6 +687,7 @@ func newSecretFetcher(ctx context.Context, logger *zap.Logger, env map[string]st
 
 func requiredSecretNames(env map[string]string) []string {
 	required := []string{
+		"Storage.SignerKey",
 		"PSP.StripeAPIKey",
 		"PSP.StripeWebhookSecret",
 		"Webhooks.SigningSecret",

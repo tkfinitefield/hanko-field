@@ -13,6 +13,7 @@ func TestLoadWithDefaults(t *testing.T) {
 	env := map[string]string{
 		"API_FIREBASE_PROJECT_ID":   "hf-dev",
 		"API_STORAGE_ASSETS_BUCKET": "hanko-assets-dev",
+		"API_STORAGE_SIGNER_KEY":    "dev-signer",
 	}
 
 	cfg, err := Load(context.Background(), WithEnvMap(env), WithoutSystemEnv(), WithEnvFile(""))
@@ -72,6 +73,7 @@ func TestLoadWithOverridesAndSecrets(t *testing.T) {
 		"API_STORAGE_ASSETS_BUCKET":          "assets-prod",
 		"API_STORAGE_LOGS_BUCKET":            "logs-prod",
 		"API_STORAGE_EXPORTS_BUCKET":         "exports-prod",
+		"API_STORAGE_SIGNER_KEY":             "secret://storage/signer",
 		"API_PSP_STRIPE_API_KEY":             "secret://stripe/api",
 		"API_PSP_STRIPE_WEBHOOK_SECRET":      "secret://stripe/webhook",
 		"API_PSP_PAYPAL_CLIENT_ID":           "paypal-client",
@@ -106,6 +108,7 @@ func TestLoadWithOverridesAndSecrets(t *testing.T) {
 		"secret://ai/token":       "ai-token",
 		"secret://webhook/secret": "webhook-secret",
 		"secret://hmac/stripe":    "stripe-hmac",
+		"secret://storage/signer": "signer-json",
 	}
 
 	resolver := SecretResolverFunc(func(_ context.Context, ref string) (string, error) {
@@ -156,6 +159,9 @@ func TestLoadWithOverridesAndSecrets(t *testing.T) {
 	if cfg.Security.HMAC.Secrets["shipping"] != "shipping-secret" {
 		t.Errorf("expected shipping secret fallback, got %s", cfg.Security.HMAC.Secrets["shipping"])
 	}
+	if cfg.Storage.SignedURLKey != "signer-json" {
+		t.Errorf("expected resolved signer key, got %q", cfg.Storage.SignedURLKey)
+	}
 	if cfg.Security.HMAC.SignatureHeader != "X-Custom-Signature" {
 		t.Errorf("unexpected signature header %s", cfg.Security.HMAC.SignatureHeader)
 	}
@@ -182,7 +188,7 @@ func TestLoadWithOverridesAndSecrets(t *testing.T) {
 func TestLoadDotEnvFallback(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env.test")
-	content := "API_SERVER_PORT=7070\nAPI_FIREBASE_PROJECT_ID=hf-dot\nAPI_STORAGE_ASSETS_BUCKET=assets-dot\n"
+	content := "API_SERVER_PORT=7070\nAPI_FIREBASE_PROJECT_ID=hf-dot\nAPI_STORAGE_ASSETS_BUCKET=assets-dot\nAPI_STORAGE_SIGNER_KEY=dot-signer\n"
 	if err := os.WriteFile(envPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write dotenv file: %v", err)
 	}
@@ -214,6 +220,7 @@ func TestLoadSecretResolverError(t *testing.T) {
 	env := map[string]string{
 		"API_FIREBASE_PROJECT_ID":   "hf-dev",
 		"API_STORAGE_ASSETS_BUCKET": "assets",
+		"API_STORAGE_SIGNER_KEY":    "signer",
 		"API_PSP_STRIPE_API_KEY":    "secret://missing",
 	}
 
@@ -269,6 +276,7 @@ func TestLoadMissingRequiredSecrets(t *testing.T) {
 	env := map[string]string{
 		"API_FIREBASE_PROJECT_ID":   "hf-dev",
 		"API_STORAGE_ASSETS_BUCKET": "assets",
+		"API_STORAGE_SIGNER_KEY":    "signer",
 	}
 
 	_, err := Load(context.Background(),
@@ -294,6 +302,7 @@ func TestLoadMissingRequiredSecretsPanic(t *testing.T) {
 	env := map[string]string{
 		"API_FIREBASE_PROJECT_ID":   "hf-dev",
 		"API_STORAGE_ASSETS_BUCKET": "assets",
+		"API_STORAGE_SIGNER_KEY":    "signer",
 	}
 
 	defer func() {
@@ -323,6 +332,7 @@ func TestLoadSupportsLegacySecretScheme(t *testing.T) {
 	env := map[string]string{
 		"API_FIREBASE_PROJECT_ID":    "hf-dev",
 		"API_STORAGE_ASSETS_BUCKET":  "assets",
+		"API_STORAGE_SIGNER_KEY":     "signer",
 		"API_WEBHOOK_SIGNING_SECRET": "sm://webhook/secret",
 	}
 

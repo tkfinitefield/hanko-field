@@ -1,0 +1,221 @@
+package services
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	domain "github.com/hanko-field/api/internal/domain"
+	"github.com/hanko-field/api/internal/repositories"
+)
+
+func TestAssetService_IssueSignedUpload_Success(t *testing.T) {
+	repo := &stubAssetRepository{
+		response: domain.SignedAssetResponse{
+			AssetID:   "asset_123",
+			URL:       "https://storage.example/upload",
+			Method:    "PUT",
+			ExpiresAt: time.Now().Add(10 * time.Minute),
+			Headers: map[string]string{
+				"Content-Type": "image/png",
+			},
+		},
+	}
+
+	svc, err := NewAssetService(AssetServiceDeps{Repository: repo})
+	if err != nil {
+		t.Fatalf("NewAssetService error: %v", err)
+	}
+
+	resp, err := svc.IssueSignedUpload(context.Background(), SignedUploadCommand{
+		ActorID:     "user_123",
+		Kind:        "PNG",
+		Purpose:     "preview",
+		FileName:    "Preview.PNG",
+		ContentType: "image/png",
+		SizeBytes:   1024,
+	})
+	if err != nil {
+		t.Fatalf("IssueSignedUpload error: %v", err)
+	}
+
+	if resp.AssetID != repo.response.AssetID {
+		t.Fatalf("expected asset id %q, got %q", repo.response.AssetID, resp.AssetID)
+	}
+	if repo.record.Kind != "png" {
+		t.Fatalf("expected kind normalised to png, got %q", repo.record.Kind)
+	}
+	if repo.record.Purpose != "preview" {
+		t.Fatalf("expected purpose preview, got %q", repo.record.Purpose)
+	}
+	if repo.record.ContentType != "image/png" {
+		t.Fatalf("expected content type image/png, got %q", repo.record.ContentType)
+	}
+	if repo.record.SizeBytes != 1024 {
+		t.Fatalf("expected size 1024, got %d", repo.record.SizeBytes)
+	}
+	if repo.record.ActorID != "user_123" {
+		t.Fatalf("expected actor id user_123, got %q", repo.record.ActorID)
+	}
+	if repo.calls != 1 {
+		t.Fatalf("expected repository called once, got %d", repo.calls)
+	}
+}
+
+func TestAssetService_IssueSignedUpload_InvalidInput(t *testing.T) {
+	svc, err := NewAssetService(AssetServiceDeps{Repository: &stubAssetRepository{response: domain.SignedAssetResponse{}}})
+	if err != nil {
+		t.Fatalf("NewAssetService error: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		cmd  SignedUploadCommand
+	}{
+		{
+			name: "missing actor",
+			cmd: SignedUploadCommand{
+				Kind:        "png",
+				Purpose:     "preview",
+				ContentType: "image/png",
+				SizeBytes:   10,
+			},
+		},
+		{
+			name: "invalid kind",
+			cmd: SignedUploadCommand{
+				ActorID:     "user",
+				Kind:        "unknown",
+				Purpose:     "preview",
+				ContentType: "image/png",
+				SizeBytes:   10,
+			},
+		},
+		{
+			name: "invalid purpose",
+			cmd: SignedUploadCommand{
+				ActorID:     "user",
+				Kind:        "png",
+				Purpose:     "invalid",
+				ContentType: "image/png",
+				SizeBytes:   10,
+			},
+		},
+		{
+			name: "invalid content type",
+			cmd: SignedUploadCommand{
+				ActorID:     "user",
+				Kind:        "png",
+				Purpose:     "preview",
+				ContentType: "application/pdf",
+				SizeBytes:   10,
+			},
+		},
+		{
+			name: "size zero",
+			cmd: SignedUploadCommand{
+				ActorID:     "user",
+				Kind:        "png",
+				Purpose:     "preview",
+				ContentType: "image/png",
+				SizeBytes:   0,
+			},
+		},
+		{
+			name: "size too large",
+			cmd: SignedUploadCommand{
+				ActorID:     "user",
+				Kind:        "json",
+				Purpose:     "other",
+				ContentType: "application/json",
+				SizeBytes:   maxStructuredAssetSize + 1,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := svc.IssueSignedUpload(context.Background(), tc.cmd)
+			if err == nil {
+				t.Fatalf("expected error")
+			}
+			if !errors.Is(err, ErrAssetInvalidInput) {
+				t.Fatalf("expected ErrAssetInvalidInput, got %v", err)
+			}
+		})
+	}
+}
+
+func TestAssetService_IssueSignedUpload_RepositoryError(t *testing.T) {
+	repoErr := fakeRepositoryError{unavailable: true}
+	repo := &stubAssetRepository{
+		err: repoErr,
+	}
+
+	svc, err := NewAssetService(AssetServiceDeps{Repository: repo})
+	if err != nil {
+		t.Fatalf("NewAssetService error: %v", err)
+	}
+
+	_, err = svc.IssueSignedUpload(context.Background(), SignedUploadCommand{
+		ActorID:     "user",
+		Kind:        "png",
+		Purpose:     "preview",
+		ContentType: "image/png",
+		SizeBytes:   1024,
+	})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !errors.Is(err, ErrAssetRepositoryUnavailable) {
+		t.Fatalf("expected ErrAssetRepositoryUnavailable, got %v", err)
+	}
+	if repo.calls != 1 {
+		t.Fatalf("expected repository called once, got %d", repo.calls)
+	}
+}
+
+type stubAssetRepository struct {
+	record   repositories.SignedUploadRecord
+	response domain.SignedAssetResponse
+	err      error
+	calls    int
+}
+
+func (s *stubAssetRepository) CreateSignedUpload(_ context.Context, cmd repositories.SignedUploadRecord) (domain.SignedAssetResponse, error) {
+	s.calls++
+	s.record = cmd
+	if s.err != nil {
+		return domain.SignedAssetResponse{}, s.err
+	}
+	return s.response, nil
+}
+
+func (s *stubAssetRepository) CreateSignedDownload(context.Context, repositories.SignedDownloadRecord) (domain.SignedAssetResponse, error) {
+	return domain.SignedAssetResponse{}, errors.New("not implemented")
+}
+
+func (s *stubAssetRepository) MarkUploaded(context.Context, string, string, map[string]any) error {
+	return errors.New("not implemented")
+}
+
+type fakeRepositoryError struct {
+	notFound    bool
+	conflict    bool
+	unavailable bool
+}
+
+func (e fakeRepositoryError) Error() string {
+	parts := []string{"repository error"}
+	if e.unavailable {
+		parts = append(parts, "(unavailable)")
+	}
+	return strings.Join(parts, " ")
+}
+
+func (e fakeRepositoryError) IsNotFound() bool    { return e.notFound }
+func (e fakeRepositoryError) IsConflict() bool    { return e.conflict }
+func (e fakeRepositoryError) IsUnavailable() bool { return e.unavailable }

@@ -79,6 +79,7 @@ type StorageConfig struct {
 	AssetsBucket  string
 	LogsBucket    string
 	ExportsBucket string
+	SignedURLKey  string
 }
 
 // PSPConfig collects secrets for payment providers.
@@ -419,6 +420,7 @@ func Load(ctx context.Context, opts ...Option) (Config, error) {
 			AssetsBucket:  stringWithDefault(lookup, "API_STORAGE_ASSETS_BUCKET", ""),
 			LogsBucket:    stringWithDefault(lookup, "API_STORAGE_LOGS_BUCKET", ""),
 			ExportsBucket: stringWithDefault(lookup, "API_STORAGE_EXPORTS_BUCKET", ""),
+			SignedURLKey:  stringWithDefault(lookup, "API_STORAGE_SIGNER_KEY", ""),
 		},
 		PSP: PSPConfig{
 			StripeAPIKey:        stringWithDefault(lookup, "API_PSP_STRIPE_API_KEY", ""),
@@ -513,6 +515,7 @@ func Load(ctx context.Context, opts ...Option) (Config, error) {
 		name  string
 		field *string
 	}{
+		{"Storage.SignerKey", &cfg.Storage.SignedURLKey},
 		{"PSP.StripeAPIKey", &cfg.PSP.StripeAPIKey},
 		{"PSP.StripeWebhookSecret", &cfg.PSP.StripeWebhookSecret},
 		{"PSP.PayPalSecret", &cfg.PSP.PayPalSecret},
@@ -573,6 +576,9 @@ func validateConfig(cfg Config) error {
 	}
 	if cfg.Storage.AssetsBucket == "" {
 		missing = append(missing, "Storage.AssetsBucket")
+	}
+	if strings.TrimSpace(cfg.Storage.SignedURLKey) == "" {
+		missing = append(missing, "Storage.SignerKey")
 	}
 	if strings.TrimSpace(cfg.Idempotency.Header) == "" {
 		missing = append(missing, "Idempotency.Header")
