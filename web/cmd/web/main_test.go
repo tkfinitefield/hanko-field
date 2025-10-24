@@ -246,6 +246,41 @@ func TestDesignAISuggestionsTableFragment(t *testing.T) {
 	}
 }
 
+func TestDesignAISuggestionsEmptyFilterKeepsPreviewNeutral(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/design/ai", DesignAISuggestionsHandler)
+		r.Get("/design/ai/table", DesignAISuggestionTableFrag)
+		r.Get("/design/ai/preview", DesignAISuggestionPreviewFrag)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/design/ai?status=ready&persona=government", nil)
+	req.Header.Set("Accept-Language", "en")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Select a suggestion to open the preview drawer") {
+		t.Fatalf("expected neutral preview message when empty; body=%s", body)
+	}
+	if !strings.Contains(body, "No suggestions match the current filters yet.") {
+		t.Fatalf("expected empty state copy when no results; body=%s", body)
+	}
+
+	fragReq := httptest.NewRequest(http.MethodGet, "/design/ai/table?status=ready&persona=government", nil)
+	fragReq.Header.Set("Accept-Language", "en")
+	fragReq.Header.Set("HX-Request", "true")
+	fragRec := httptest.NewRecorder()
+	srv.ServeHTTP(fragRec, fragReq)
+	if fragRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for fragment, got %d; body=%s", fragRec.Code, fragRec.Body.String())
+	}
+	if got := fragRec.Header().Get("HX-Push-Url"); strings.Contains(got, "focus=") {
+		t.Fatalf("expected HX-Push-Url without focus param, got %q", got)
+	}
+}
+
 func TestDesignAISuggestionAccept(t *testing.T) {
 	srv := newTestRouter(t, func(r chi.Router) {
 		r.Get("/design/ai", DesignAISuggestionsHandler)

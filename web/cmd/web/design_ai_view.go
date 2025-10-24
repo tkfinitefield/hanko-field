@@ -213,20 +213,29 @@ func buildDesignAISuggestionsView(lang string, q url.Values) DesignAISuggestions
 		})
 	}
 
-	selectedID := focus
-	if selectedID == "" && len(rows) > 0 {
-		selectedID = rows[0].ID
-	}
-
-	selected, ok := designAISuggestionByID(all, selectedID)
-	if !ok && len(all) > 0 {
-		selected = all[0]
-		selectedID = selected.ID
-		ok = true
+	selectedID := ""
+	var selected designAISuggestion
+	selectedFound := false
+	if len(filtered) > 0 {
+		if focus != "" {
+			for _, sg := range filtered {
+				if sg.ID == focus {
+					selectedID = sg.ID
+					selected = sg
+					selectedFound = true
+					break
+				}
+			}
+		}
+		if !selectedFound {
+			selectedID = filtered[0].ID
+			selected = filtered[0]
+			selectedFound = true
+		}
 	}
 
 	detail := DesignAISuggestionDetail{}
-	if ok {
+	if selectedFound {
 		detail = buildDesignAISuggestionDetail(lang, selected, selected.Status)
 	}
 
