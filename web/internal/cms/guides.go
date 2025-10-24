@@ -83,7 +83,7 @@ func (c *Client) ListGuides(ctx context.Context, opts ListGuidesOptions) ([]Guid
 		c.http = &http.Client{Timeout: 5 * time.Second}
 	}
 
-	endpoint, err := url.JoinPath(c.baseURL, "/content/guides")
+	endpoint, err := url.JoinPath(c.baseURL, "content/guides")
 	if err != nil {
 		log.Printf("cms: join path guides: %v", err)
 		return filterGuides(fallbackGuidesForLang(lang), opts), nil
@@ -158,7 +158,7 @@ func (c *Client) GetGuide(ctx context.Context, slug, lang string) (Guide, error)
 		c.http = &http.Client{Timeout: 5 * time.Second}
 	}
 
-	endpoint, err := url.JoinPath(c.baseURL, "/content/guides", slug)
+	endpoint, err := url.JoinPath(c.baseURL, "content/guides", slug)
 	if err != nil {
 		log.Printf("cms: join path guide detail: %v", err)
 		return fallbackGuide(slug, lang)
