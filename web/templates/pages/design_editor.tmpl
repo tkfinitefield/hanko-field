@@ -1,0 +1,131 @@
+{{ define "content" }}
+{{ $editor := $.Design }}
+<section class="flex min-h-[calc(100vh-4rem)] flex-col bg-slate-50">
+  <div class="border-b border-slate-200 bg-white px-6 py-5">
+    <nav class="flex flex-wrap items-center gap-2 text-sm text-slate-500" aria-label="{{ if eq $.Lang "ja" }}パンくずリスト{{ else }}Breadcrumb{{ end }}">
+      {{ range $i, $crumb := $.Breadcrumbs }}
+        {{ if $i }}<span aria-hidden="true">/</span>{{ end }}
+        {{ if $crumb.Active }}
+          <span class="font-medium text-slate-700">{{ if $crumb.LabelKey }}{{ tlang $.Lang $crumb.LabelKey }}{{ else if $crumb.Label }}{{ $crumb.Label }}{{ else }}{{ $crumb.Href }}{{ end }}</span>
+        {{ else }}
+          <a href="{{ $crumb.Href }}" class="hover:text-indigo-600 hover:underline">{{ if $crumb.LabelKey }}{{ tlang $.Lang $crumb.LabelKey }}{{ else if $crumb.Label }}{{ $crumb.Label }}{{ else }}{{ $crumb.Href }}{{ end }}</a>
+        {{ end }}
+      {{ end }}
+    </nav>
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-semibold text-slate-900">{{ $.Title }}</h1>
+        <p class="mt-1 text-sm text-slate-500">{{ if eq $.Lang "ja" }}フォームを編集すると右側のライブプレビューが数秒以内に更新されます。{{ else }}Adjust the form and the live preview updates within a moment.{{ end }}</p>
+      </div>
+      <div class="flex items-center gap-3">
+        {{ $tone := $editor.State.StatusTone }}
+        <span class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium {{ if eq $tone "success" }}border-emerald-200 bg-emerald-50 text-emerald-700{{ else if eq $tone "error" }}border-rose-200 bg-rose-50 text-rose-700{{ else if eq $tone "info" }}border-sky-200 bg-sky-50 text-sky-700{{ else }}border-slate-200 bg-slate-100 text-slate-600{{ end }}">
+          <span class="h-2 w-2 rounded-full {{ if eq $tone "success" }}bg-emerald-500{{ else if eq $tone "error" }}bg-rose-500{{ else if eq $tone "info" }}bg-sky-500{{ else }}bg-slate-400{{ end }}"></span>
+          {{ $editor.State.StatusLabel }}
+        </span>
+        <div class="flex items-center gap-2">
+          <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500" data-trigger-click="#design-undo-button">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8V4H0"/><path d="M4 4a8 8 0 018 8v0a8 8 0 01-8 8H2"/></svg>
+            {{ if eq $.Lang "ja" }}元に戻す{{ else }}Undo{{ end }}
+          </button>
+          <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500" data-trigger-click="#design-redo-button">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M16 8V4h4"/><path d="M16 4a8 8 0 00-8 8v0a8 8 0 008 8h2"/></svg>
+            {{ if eq $.Lang "ja" }}やり直す{{ else }}Redo{{ end }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-1 flex-col xl:flex-row">
+    <div id="design-editor-form-shell" class="mx-auto w-full max-w-2xl flex-none border-b border-slate-200 bg-white shadow-sm xl:max-w-sm xl:border-b-0 xl:border-r">
+      {{ slot "frag_design_editor_form" $editor }}
+    </div>
+    <div class="flex-1 bg-slate-100">
+      <div id="design-preview"
+           class="relative h-full"
+           hx-get="/design/editor/preview"
+           hx-trigger="load, refresh, change delay:250ms from:#design-editor-form input, input delay:250ms from:#design-editor-form input, change delay:250ms from:#design-editor-form select"
+           hx-include="#design-editor-form"
+           hx-indicator="#editor-preview-indicator">
+        {{ slot "frag_design_editor_preview" $editor }}
+      </div>
+    </div>
+    <aside class="hidden w-full max-w-xs flex-none border-t border-slate-200 bg-white px-5 py-6 shadow-inner xl:block xl:border-l xl:border-t-0">
+      <div class="space-y-4">
+        <h2 class="text-sm font-semibold text-slate-800">{{ if eq $.Lang "ja" }}アクション{{ else }}Action Rail{{ end }}</h2>
+        <p class="text-xs text-slate-500">{{ if eq $.Lang "ja" }}共有やエクスポート、AI提案を素早く呼び出せます。{{ else }}Quick access to sharing, export, and AI assists.{{ end }}</p>
+        <div class="space-y-3">
+          <button type="button" class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium text-slate-700 shadow-sm hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" data-trigger-click="#design-save-button">
+            <div class="flex items-center justify-between">
+              <span>{{ if eq $.Lang "ja" }}保存して共有{{ else }}Save & Share{{ end }}</span>
+              <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h12v12H4z"/><path d="M8 4v4h4V4"/><path d="M6 16h8"/></svg>
+            </div>
+            <p class="mt-1 text-xs font-normal text-slate-500">{{ if eq $.Lang "ja" }}最新の印影をワークスペースに反映します。{{ else }}Publish the latest impression to your workspace.{{ end }}</p>
+          </button>
+          <button type="button" class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium text-slate-700 shadow-sm hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" data-trigger-click="#design-ai-button">
+            <div class="flex items-center justify-between">
+              <span>{{ if eq $.Lang "ja" }}AIに提案を依頼{{ else }}Request AI Suggestion{{ end }}</span>
+              <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2v4"/><path d="M10 14v4"/><path d="M2 10h4"/><path d="M14 10h4"/><path d="M4.6 4.6l2.8 2.8"/><path d="M12.6 12.6l2.8 2.8"/><path d="M4.6 15.4l2.8-2.8"/><path d="M12.6 7.4l2.8-2.8"/></svg>
+            </div>
+            <p class="mt-1 text-xs font-normal text-slate-500">{{ if eq $.Lang "ja" }}レイアウトの改善案を即席で受け取ります。{{ else }}Queue an instant layout improvement idea.{{ end }}</p>
+          </button>
+          <button type="button" class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium text-slate-700 shadow-sm hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" data-trigger-click="#design-draft-button">
+            <div class="flex items-center justify-between">
+              <span>{{ if eq $.Lang "ja" }}下書きを保存{{ else }}Save Draft{{ end }}</span>
+              <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5a2 2 0 012-2h8l4 4v9a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/><path d="M12 3v5h5"/></svg>
+            </div>
+            <p class="mt-1 text-xs font-normal text-slate-500">{{ if eq $.Lang "ja" }}途中経過を自分だけに保存します。{{ else }}Keep progress private until you publish.{{ end }}</p>
+          </button>
+          <a href="/guides/design-basics" class="block rounded-lg border border-transparent bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            {{ if eq $.Lang "ja" }}ガイドを開く{{ else }}Open Guide{{ end }}
+          </a>
+        </div>
+      </div>
+      <div class="mt-6 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+        <p class="font-medium text-slate-600">{{ if eq $.Lang "ja" }}プレビューを共有しますか？{{ else }}Share this preview?{{ end }}</p>
+        <p class="mt-1">{{ if eq $.Lang "ja" }}保存後に共有リンクが生成され、チームに送信できます。{{ else }}Save the design to generate a link you can send to teammates.{{ end }}</p>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<script>
+(function(){
+  var preview = document.getElementById('design-preview');
+  function refresh(){
+    if (window.htmx && preview) {
+      window.htmx.trigger(preview, 'refresh');
+    }
+  }
+  function hydrateToasts(scope){
+    (scope || document).querySelectorAll('[data-editor-toast]').forEach(function(toast){
+      if (toast.dataset.dismissScheduled === 'true') { return; }
+      toast.dataset.dismissScheduled = 'true';
+      setTimeout(function(){
+        toast.classList.add('opacity-0');
+        setTimeout(function(){ if (toast && toast.remove) { toast.remove(); } }, 320);
+      }, 5000);
+    });
+  }
+  document.addEventListener('htmx:afterSwap', function(event){
+    if (event.target && event.target.id === 'design-editor-form-shell') {
+      hydrateToasts(event.target);
+      refresh();
+    }
+  });
+  document.body.addEventListener('editor:state-updated', function(){
+    refresh();
+  });
+  document.querySelectorAll('[data-trigger-click]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var target = btn.getAttribute('data-trigger-click');
+      if (!target) { return; }
+      var el = document.querySelector(target);
+      if (el && el.click) { el.click(); }
+    });
+  });
+  hydrateToasts(document);
+})();
+</script>
+{{ end }}

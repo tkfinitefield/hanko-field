@@ -31,7 +31,7 @@
 
 ## 4. Design Creation Flow
 - [x] [Implement design type selection page (`/design/new`) with CTA routing to editor.](doc/web/tasks/022-implement-design-type-selection-page-design-new-with-cta-routing-to-editor.md)
-- [ ] [Build design editor (`/design/editor`) two-pane layout with form fragment (`/design/editor/form`) and live preview fragment (`/design/editor/preview`).](doc/web/tasks/023-build-design-editor-design-editor-two-pane-layout-with-form-fragment-design-editor-form-an.md)
+- [x] [Build design editor (`/design/editor`) two-pane layout with form fragment (`/design/editor/form`) and live preview fragment (`/design/editor/preview`).](doc/web/tasks/023-build-design-editor-design-editor-two-pane-layout-with-form-fragment-design-editor-form-an.md)
 - [ ] [Implement modal pickers for fonts/templates/kanji mapping (`/modal/pick/font`, `/modal/pick/template`, `/modal/kanji-map`).](doc/web/tasks/024-implement-modal-pickers-for-fonts-templates-kanji-mapping-modal-pick-font-modal-pick-templ.md)
 - [ ] [Build AI suggestions page (`/design/ai`) with table fragment, accept/reject actions, and polling.](doc/web/tasks/025-build-ai-suggestions-page-design-ai-with-table-fragment-accept-reject-actions-and-polling.md)
 - [ ] [Implement design preview page (`/design/preview`) with background options fragment (`/design/preview/image`).](doc/web/tasks/026-implement-design-preview-page-design-preview-with-background-options-fragment-design-previ.md)

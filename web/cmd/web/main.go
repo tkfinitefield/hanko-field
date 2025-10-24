@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -838,6 +839,13 @@ func main() {
 	// Home page
 	r.Get("/", HomeHandler)
 	r.Get("/design/new", DesignNewHandler)
+	r.Get("/design/editor", DesignEditorHandler)
+	r.MethodFunc(http.MethodGet, "/design/editor/form", DesignEditorFormFrag)
+	r.MethodFunc(http.MethodPost, "/design/editor/form", DesignEditorFormFrag)
+	r.Get("/design/editor/preview", DesignEditorPreviewFrag)
+	r.Get("/design/editor/fonts/modal", DesignEditorFontsModal)
+	r.Get("/design/editor/templates/modal", DesignEditorTemplatesModal)
+	r.Get("/design/editor/kanji/modal", DesignEditorKanjiModal)
 	// Top-level pages
 	r.Get("/shop", ShopHandler)
 	r.Get("/products/{productID}", ProductDetailHandler)
@@ -1143,6 +1151,99 @@ func DesignNewHandler(w http.ResponseWriter, r *http.Request) {
 	vm.SEO.Alternates = buildAlternates(r)
 
 	renderPage(w, r, "design_new", vm)
+}
+
+func DesignEditorHandler(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	view := buildDesignEditorView(lang, r.URL.Query())
+
+	pageTitle := editorCopy(lang, "デザインエディタ", "Design editor")
+	desc := editorCopy(lang, "左右分割の編集フォームとライブプレビューで印影を整えます。", "Dual-pane editor with form controls and live seal preview.")
+
+	vm := handlersPkg.PageData{Title: pageTitle, Lang: lang}
+	vm.Path = r.URL.Path
+	vm.Nav = nav.Build(vm.Path)
+	vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+	vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+	vm.Design = view
+
+	brand := i18nOrDefault(lang, "brand.name", "Hanko Field")
+	vm.SEO.Title = fmt.Sprintf("%s | %s", pageTitle, brand)
+	vm.SEO.Description = desc
+	vm.SEO.Canonical = absoluteURL(r)
+	vm.SEO.OG.URL = vm.SEO.Canonical
+	vm.SEO.OG.SiteName = brand
+	vm.SEO.OG.Type = "website"
+	vm.SEO.OG.Title = vm.SEO.Title
+	vm.SEO.OG.Description = vm.SEO.Description
+	vm.SEO.Twitter.Card = "summary_large_image"
+	vm.SEO.Alternates = buildAlternates(r)
+
+	renderPage(w, r, "design_editor", vm)
+}
+
+func DesignEditorFormFrag(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, fmt.Sprintf("parse form: %v", err), http.StatusBadRequest)
+		return
+	}
+	view := buildDesignEditorView(lang, r.Form)
+	push := "/design/editor"
+	if view.Query != "" {
+		push = push + "?" + view.Query
+	}
+	w.Header().Set("HX-Push-Url", push)
+	triggerPayload := map[string]any{
+		"editor:state-updated": map[string]string{
+			"query": view.Query,
+		},
+	}
+	if payload, err := json.Marshal(triggerPayload); err == nil {
+		w.Header().Set("HX-Trigger", string(payload))
+	}
+	renderTemplate(w, r, "frag_design_editor_form", view)
+}
+
+func DesignEditorPreviewFrag(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	_ = r.ParseForm()
+	view := buildDesignEditorView(lang, r.Form)
+	view.Toasts = nil
+	renderTemplate(w, r, "frag_design_editor_preview", view)
+}
+
+func DesignEditorFontsModal(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	selected := strings.TrimSpace(r.URL.Query().Get("font"))
+	data := map[string]any{
+		"Lang":     lang,
+		"Fonts":    designEditorFonts(lang),
+		"Selected": selected,
+	}
+	renderTemplate(w, r, "frag_design_editor_fonts_modal", data)
+}
+
+func DesignEditorTemplatesModal(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	selected := strings.TrimSpace(r.URL.Query().Get("template"))
+	data := map[string]any{
+		"Lang":      lang,
+		"Templates": designEditorTemplates(lang),
+		"Selected":  selected,
+	}
+	renderTemplate(w, r, "frag_design_editor_templates_modal", data)
+}
+
+func DesignEditorKanjiModal(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	_ = r.ParseForm()
+	name := strings.TrimSpace(r.Form.Get("name"))
+	data := map[string]any{
+		"Lang": lang,
+		"Name": name,
+	}
+	renderTemplate(w, r, "frag_design_editor_kanji_modal", data)
 }
 
 // Generic page handlers

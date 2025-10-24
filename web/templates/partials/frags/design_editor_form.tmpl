@@ -1,0 +1,237 @@
+{{ define "frag_design_editor_form" }}
+<div class="flex h-full flex-col">
+  <header class="border-b border-slate-200 px-6 py-4">
+    <h2 class="text-sm font-semibold text-slate-800">{{ if eq .Lang "ja" }}編集フォーム{{ else }}Editor Form{{ end }}</h2>
+    <p class="mt-1 text-xs text-slate-500">{{ if eq .Lang "ja" }}設定を変更すると保存やプレビューが即時に反映されます。{{ else }}Changes sync back to your workspace and preview instantly.{{ end }}</p>
+  </header>
+  <div class="flex-1 overflow-y-auto px-6 py-5">
+    <div id="editor-toast-stack" class="space-y-3" aria-live="polite">
+      {{ range .Toasts }}
+        {{ $kind := .Kind }}
+        <div class="flex items-start gap-3 rounded-lg border px-4 py-3 text-sm transition-opacity duration-300 {{ if eq $kind "success" }}border-emerald-200 bg-emerald-50 text-emerald-800{{ else if eq $kind "error" }}border-rose-200 bg-rose-50 text-rose-700{{ else if eq $kind "info" }}border-sky-200 bg-sky-50 text-sky-800{{ else }}border-slate-200 bg-slate-50 text-slate-700{{ end }}" data-editor-toast data-kind="{{ $kind }}">
+          <span class="mt-0.5 inline-flex h-2.5 w-2.5 flex-none rounded-full {{ if eq $kind "success" }}bg-emerald-500{{ else if eq $kind "error" }}bg-rose-500{{ else if eq $kind "info" }}bg-sky-500{{ else }}bg-slate-400{{ end }}"></span>
+          <div class="flex-1">
+            <p class="font-medium">{{ .Title }}</p>
+            {{ if .Body }}<p class="mt-0.5 text-xs text-slate-600">{{ .Body }}</p>{{ end }}
+          </div>
+        </div>
+      {{ end }}
+    </div>
+
+    <form id="design-editor-form" class="mt-5 space-y-8" autocomplete="off" novalidate>
+      <input type="hidden" name="mode" value="{{ .State.Mode }}">
+
+      <section aria-labelledby="design-name">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 id="design-name" class="text-sm font-semibold text-slate-900">{{ if eq .Lang "ja" }}デザイン名{{ else }}Seal name{{ end }}</h3>
+            <p class="mt-1 text-xs text-slate-500">{{ if eq .Lang "ja" }}帳票や申請書に表示される名称です。{{ else }}Visible on paperwork and shared previews.{{ end }}</p>
+          </div>
+          <button type="button" id="design-undo-button" class="sr-only">Undo</button>
+          <button type="button" id="design-redo-button" class="sr-only">Redo</button>
+        </div>
+        <div class="mt-3 space-y-2">
+          <div>
+            {{ $err := "" }}
+            {{ if .State.Errors }}{{ $err = index .State.Errors "name" }}{{ end }}
+            {{ template "c_input" (dict
+              "ID" "editor_name"
+              "Name" "name"
+              "Label" ""
+              "Value" .State.Name
+              "Placeholder" .NamePlaceholder
+              "Required" true
+              "Error" $err
+            ) }}
+          </div>
+          <div class="flex flex-wrap items-center gap-3 text-xs">
+            <button type="button"
+                    class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 font-medium text-slate-600 hover:border-indigo-200 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    hx-get="/design/editor/kanji/modal"
+                    hx-target="#modal-root"
+                    hx-swap="innerHTML"
+                    hx-include="#design-editor-form">
+              <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 4h12v12H4z"/><path d="M6 8h8"/><path d="M10 4v12"/></svg>
+              {{ if eq .Lang "ja" }}漢字変換を確認{{ else }}Check kanji mapping{{ end }}
+            </button>
+            <a href="/guides/design-basics#naming" class="text-slate-500 hover:text-indigo-600 hover:underline">{{ if eq .Lang "ja" }}命名ガイド{{ else }}Naming tips{{ end }}</a>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="design-font">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 id="design-font" class="text-sm font-semibold text-slate-900">{{ if eq .Lang "ja" }}書体{{ else }}Typeface{{ end }}</h3>
+            <p class="mt-1 text-xs text-slate-500">{{ if eq .Lang "ja" }}社内推奨フォントから選択できます。{{ else }}Choose from recommended registry-safe fonts.{{ end }}</p>
+          </div>
+          <button type="button"
+                  class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  hx-get="/design/editor/fonts/modal?font={{ .State.FontID }}"
+                  hx-target="#modal-root"
+                  hx-swap="innerHTML">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 4h8"/><path d="M4 8h12"/><path d="M3 12h14"/><path d="M6 16h8"/></svg>
+            {{ if eq .Lang "ja" }}書体を選ぶ{{ else }}Browse fonts{{ end }}
+          </button>
+        </div>
+        <div class="mt-3 space-y-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-sm font-medium text-slate-800">{{ .SelectedFont.Name }}</p>
+              <p class="text-xs text-slate-500">{{ .SelectedFont.Description }}</p>
+            </div>
+            <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700">{{ .SelectedFont.Script }}</span>
+          </div>
+          <div class="rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-lg tracking-wider text-slate-900">{{ .SelectedFont.Sample }}</div>
+          <div>
+            <label for="font-select" class="sr-only">{{ if eq .Lang "ja" }}書体を変更{{ else }}Change font{{ end }}</label>
+            <select id="font-select" name="font" class="block w-full rounded-md border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              {{ range .Fonts }}
+                <option value="{{ .ID }}" {{ if eq $.State.FontID .ID }}selected{{ end }}>{{ .Name }}</option>
+              {{ end }}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="design-template">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 id="design-template" class="text-sm font-semibold text-slate-900">{{ if eq .Lang "ja" }}テンプレート{{ else }}Template{{ end }}</h3>
+            <p class="mt-1 text-xs text-slate-500">{{ if eq .Lang "ja" }}推奨レイアウトから始めると整いやすくなります。{{ else }}Start from a recommended layout to stay compliant.{{ end }}</p>
+          </div>
+          <button type="button"
+                  class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  hx-get="/design/editor/templates/modal?template={{ .State.TemplateID }}"
+                  hx-target="#modal-root"
+                  hx-swap="innerHTML">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 4h12v12H4z"/><path d="M4 10h12"/><path d="M10 4v12"/></svg>
+            {{ if eq .Lang "ja" }}テンプレート一覧{{ else }}Browse templates{{ end }}
+          </button>
+        </div>
+        <div class="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-inner">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-sm font-medium text-slate-800">{{ .SelectedTemplate.Name }}</p>
+              <p class="text-xs text-slate-500">{{ .SelectedTemplate.Description }}</p>
+            </div>
+            {{ if .SelectedTemplate.Badge }}
+              <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">{{ .SelectedTemplate.Badge }}</span>
+            {{ end }}
+          </div>
+          <dl class="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+            <div><span class="font-medium text-slate-600">{{ if eq .Lang "ja" }}形状{{ else }}Shape{{ end }}:</span> {{ .SelectedTemplate.Shape }}</div>
+            <div><span class="font-medium text-slate-600">{{ if eq .Lang "ja" }}サイズ{{ else }}Size{{ end }}:</span> {{ .SelectedTemplate.Size }}</div>
+            <div class="col-span-2"><span class="font-medium text-slate-600">{{ if eq .Lang "ja" }}用途{{ else }}Use case{{ end }}:</span> {{ .SelectedTemplate.UseCase }}</div>
+          </dl>
+          <input type="hidden" name="template" value="{{ .State.TemplateID }}">
+        </div>
+      </section>
+
+      <section aria-labelledby="design-style">
+        <h3 id="design-style" class="text-sm font-semibold text-slate-900">{{ if eq .Lang "ja" }}スタイル調整{{ else }}Style controls{{ end }}</h3>
+        <div class="mt-3 space-y-4">
+          <div>
+            <div class="flex items-center justify-between text-xs text-slate-600">
+              <label for="stroke_weight" class="font-medium">{{ if eq .Lang "ja" }}線の太さ{{ else }}Stroke weight{{ end }}</label>
+              <span>{{ .State.StrokeWeight }}%</span>
+            </div>
+            <input id="stroke_weight" name="stroke_weight" type="range" min="0" max="100" value="{{ .State.StrokeWeight }}" class="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <div class="flex items-center justify-between text-xs text-slate-600">
+              <label for="tracking" class="font-medium">{{ if eq .Lang "ja" }}字間{{ else }}Spacing{{ end }}</label>
+              <span>{{ .State.Tracking }}%</span>
+            </div>
+            <input id="tracking" name="tracking" type="range" min="0" max="100" value="{{ .State.Tracking }}" class="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <div class="flex items-center justify-between text-xs text-slate-600">
+              <label for="contrast" class="font-medium">{{ if eq .Lang "ja" }}コントラスト{{ else }}Contrast{{ end }}</label>
+              <span>{{ .State.Contrast }}%</span>
+            </div>
+            <input id="contrast" name="contrast" type="range" min="0" max="100" value="{{ .State.Contrast }}" class="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <div class="flex items-center justify-between text-xs text-slate-600">
+              <label for="rotation" class="font-medium">{{ if eq .Lang "ja" }}回転補正{{ else }}Rotation{{ end }}</label>
+              <span>{{ .State.Rotation }}%</span>
+            </div>
+            <input id="rotation" name="rotation" type="range" min="0" max="100" value="{{ .State.Rotation }}" class="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <div class="flex items-center justify-between text-xs text-slate-600">
+              <label for="grain" class="font-medium">{{ if eq .Lang "ja" }}押し感{{ else }}Grain{{ end }}</label>
+              <span>{{ .State.Grain }}%</span>
+            </div>
+            <input id="grain" name="grain" type="range" min="0" max="100" value="{{ .State.Grain }}" class="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+        <div class="mt-4 grid grid-cols-1 gap-3 text-xs text-slate-600 sm:grid-cols-2">
+          <label class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm hover:border-indigo-200 hover:text-indigo-700 focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-500">
+            <input type="checkbox" name="guides" value="1" class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" {{ if .State.ShowGuides }}checked{{ end }}>
+            {{ if eq .Lang "ja" }}ガイド表示{{ else }}Show guides{{ end }}
+          </label>
+          <label class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm hover:border-indigo-200 hover:text-indigo-700 focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-500">
+            <input type="checkbox" name="outline" value="1" class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" {{ if .State.ShowOutline }}checked{{ end }}>
+            {{ if eq .Lang "ja" }}アウトライン{{ else }}Show outline{{ end }}
+          </label>
+        </div>
+        {{ if .State.Validation }}
+          <div class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+            <p class="font-semibold">{{ if eq .Lang "ja" }}検証フィードバック{{ else }}Validation feedback{{ end }}</p>
+            <ul class="mt-2 list-disc space-y-1 pl-4">
+              {{ range .State.Validation }}
+                <li>{{ . }}</li>
+              {{ end }}
+            </ul>
+          </div>
+        {{ end }}
+      </section>
+    </form>
+  </div>
+  <footer class="border-t border-slate-200 bg-white px-6 py-4">
+    <div class="flex flex-wrap items-center gap-3">
+      {{ $disabled := not .State.Name }}
+      <button type="button"
+              id="design-draft-button"
+              class="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              hx-post="/design/editor/form"
+              hx-target="#design-editor-form-shell"
+              hx-swap="innerHTML"
+              hx-include="#design-editor-form"
+              hx-vals='{"action":"draft"}'
+              hx-on="htmx:afterOnLoad:window.hankoModalClose && window.hankoModalClose()">
+        {{ if eq .Lang "ja" }}下書きを保存{{ else }}Save draft{{ end }}
+      </button>
+      <button type="button"
+              id="design-save-button"
+              class="inline-flex items-center justify-center rounded-md border border-transparent px-4 py-2 text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 {{ if $disabled }}cursor-not-allowed bg-slate-200 text-slate-500{{ else }}bg-indigo-600 text-white hover:bg-indigo-500{{ end }}"
+              {{ if $disabled }}disabled aria-disabled="true"{{ end }}
+              hx-post="/design/editor/form"
+              hx-target="#design-editor-form-shell"
+              hx-swap="innerHTML"
+              hx-include="#design-editor-form"
+              hx-vals='{"action":"save"}'>
+        {{ if eq .Lang "ja" }}保存して共有{{ else }}Save design{{ end }}
+      </button>
+      <button type="button"
+              id="design-ai-button"
+              class="inline-flex items-center justify-center rounded-md border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              hx-post="/design/editor/form"
+              hx-target="#design-editor-form-shell"
+              hx-swap="innerHTML"
+              hx-include="#design-editor-form"
+              hx-vals='{"action":"ai"}'>
+        {{ if eq .Lang "ja" }}AI に提案させる{{ else }}Ask AI to suggest{{ end }}
+      </button>
+    </div>
+    {{ if .State.LastSaved }}
+      <p class="mt-2 text-xs text-slate-500">{{ if eq .Lang "ja" }}最終保存: {{ .State.LastSaved }}{{ else }}Last saved {{ .State.LastSaved }}{{ end }}</p>
+    {{ end }}
+    {{ if .State.AIStatus }}
+      <p class="mt-1 text-xs text-indigo-600">{{ .State.AIStatus }}</p>
+    {{ end }}
+  </footer>
+</div>
+{{ end }}
