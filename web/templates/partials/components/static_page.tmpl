@@ -1,0 +1,33 @@
+{{ define "static_page" }}
+<section class="py-12">
+  <div class="mx-auto w-full max-w-6xl space-y-8 px-4">
+    {{ template "content_header" dict "Lang" $.Lang "Header" $.Content.Header }}
+
+    {{ if $.Content.Banner }}
+      {{ template "alert_banner" dict "Lang" $.Lang "Banner" $.Content.Banner }}
+    {{ end }}
+
+    <div class="grid gap-12 lg:grid-cols-[minmax(0,3fr),minmax(0,1fr)]">
+      <article class="space-y-8">
+        <div class="content-prose">
+          {{ $.Content.Body }}
+        </div>
+        {{ if $.Content.Version }}
+          {{ template "version_footer" dict "Lang" $.Lang "Version" $.Content.Version }}
+        {{ end }}
+      </article>
+      {{ if $.Content.TOC }}
+        <aside class="hidden lg:block">
+          {{ template "content_toc" dict "Lang" $.Lang "TOC" $.Content.TOC }}
+        </aside>
+      {{ end }}
+    </div>
+
+    {{ if $.Content.TOC }}
+      <div class="lg:hidden">
+        {{ template "content_toc" dict "Lang" $.Lang "TOC" $.Content.TOC }}
+      </div>
+    {{ end }}
+  </div>
+</section>
+{{ end }}

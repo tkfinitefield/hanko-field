@@ -27,9 +27,14 @@ import (
 	mw "finitefield.org/hanko-web/internal/middleware"
 	"finitefield.org/hanko-web/internal/nav"
 	"finitefield.org/hanko-web/internal/seo"
+	"finitefield.org/hanko-web/internal/status"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/microcosm-cc/bluemonday"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
+	gmhtml "github.com/yuin/goldmark/renderer/html"
 	"golang.org/x/net/html"
 )
 
@@ -82,7 +87,8 @@ var (
 )
 
 var (
-	cmsClient *cms.Client
+	cmsClient    *cms.Client
+	statusClient *status.Client
 
 	guidePersonaOrder  = []string{"maker", "manager", "newcomer", "creative"}
 	guideCategoryOrder = []string{"howto", "culture", "policy", "faq", "news", "other"}
@@ -96,6 +102,25 @@ var (
 		p.AllowURLSchemes("http", "https", "mailto", "tel")
 		return p
 	}()
+
+	markdownRenderer = goldmark.New(
+		goldmark.WithExtensions(extension.GFM, extension.Linkify, extension.Strikethrough, extension.Table),
+		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
+		goldmark.WithRendererOptions(
+			gmhtml.WithHardWraps(),
+			gmhtml.WithXHTML(),
+		),
+	)
+
+	contentRenderCache = struct {
+		mu    sync.RWMutex
+		items map[string]renderedContentEntry
+	}{
+		items: map[string]renderedContentEntry{},
+	}
+
+	contentRenderTTL = 5 * time.Minute
+	jstLocation      = time.FixedZone("JST", 9*60*60)
 )
 
 func localizedLabel(table map[string]map[string]string, lang, key, fallback string) string {
@@ -765,6 +790,19 @@ func main() {
 	}
 
 	cmsClient = cms.NewClient(os.Getenv("HANKO_WEB_API_BASE_URL"))
+	contentDirEnv := strings.TrimSpace(os.Getenv("HANKO_WEB_CONTENT_DIR"))
+	if contentDirEnv == "" {
+		base := filepath.Dir(filepath.Clean(templatesDir))
+		if base == "." || base == "" {
+			contentDirEnv = "content"
+		} else {
+			contentDirEnv = filepath.Join(base, "content")
+		}
+	}
+	if cmsClient != nil {
+		cmsClient.SetContentDir(contentDirEnv)
+	}
+	statusClient = status.NewClient(os.Getenv("HANKO_WEB_STATUS_URL"))
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -813,6 +851,9 @@ func main() {
 	r.Get("/templates/{templateID}", TemplateDetailHandler)
 	r.Get("/guides", GuidesHandler)
 	r.Get("/guides/{slug}", GuideDetailHandler)
+	r.Get("/content/{slug}", ContentPageHandler)
+	r.Get("/legal/{slug}", LegalPageHandler)
+	r.Get("/status", StatusHandler)
 	r.Post("/cart/items", CartItemCreateHandler)
 	r.Get("/account", AccountHandler)
 	// Fragment endpoints (htmx)
@@ -2204,7 +2245,7 @@ func containsGuideSlug(list []cms.Guide, slug string) bool {
 	return false
 }
 
-func renderGuideBody(body string) (string, []GuideTOCEntry) {
+func renderGuideBody(body string) (string, []TOCEntry) {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return "", nil
@@ -2214,10 +2255,10 @@ func renderGuideBody(body string) (string, []GuideTOCEntry) {
 	if err != nil {
 		return sanitized, nil
 	}
-	headings := make([]GuideTOCEntry, 0, 8)
+	headings := make([]TOCEntry, 0, 8)
 	seen := map[string]struct{}{}
 	for _, node := range nodes {
-		collectGuideHeadings(node, &headings, seen)
+		collectHeadings(node, &headings, seen)
 	}
 	var buf bytes.Buffer
 	for _, node := range nodes {
@@ -2228,17 +2269,17 @@ func renderGuideBody(body string) (string, []GuideTOCEntry) {
 	return buf.String(), headings
 }
 
-func collectGuideHeadings(n *html.Node, headings *[]GuideTOCEntry, seen map[string]struct{}) {
+func collectHeadings(n *html.Node, headings *[]TOCEntry, seen map[string]struct{}) {
 	if n.Type == html.ElementNode && (n.Data == "h2" || n.Data == "h3" || n.Data == "h4") {
 		text := strings.TrimSpace(nodeText(n))
 		if text != "" {
 			id := extractHeadingID(n, text, len(*headings), seen)
 			level := headingLevel(n.Data)
-			*headings = append(*headings, GuideTOCEntry{ID: id, Text: text, Level: level})
+			*headings = append(*headings, TOCEntry{ID: id, Text: text, Level: level})
 		}
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		collectGuideHeadings(c, headings, seen)
+		collectHeadings(c, headings, seen)
 	}
 }
 
@@ -2378,6 +2419,621 @@ func isoOr(primary, secondary time.Time) string {
 		return secondary.Format(time.RFC3339)
 	}
 	return ""
+}
+
+func computeContentETag(page cms.ContentPage, slug string) string {
+	updated := ""
+	if !page.UpdatedAt.IsZero() {
+		updated = page.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	effective := ""
+	if !page.EffectiveDate.IsZero() {
+		effective = page.EffectiveDate.UTC().Format(time.RFC3339)
+	}
+	return etagFor("content:", page.Kind, page.Lang, slug, page.Version, page.Format, updated, effective, page.Body)
+}
+
+func contentCacheKey(page cms.ContentPage, slug, etag string) string {
+	return strings.Join([]string{page.Kind, page.Lang, slug, etag}, "|")
+}
+
+func cachedRenderedContent(key string) (template.HTML, []TOCEntry, bool) {
+	if key == "" {
+		return "", nil, false
+	}
+	contentRenderCache.mu.RLock()
+	entry, ok := contentRenderCache.items[key]
+	contentRenderCache.mu.RUnlock()
+	if !ok || time.Now().After(entry.expires) {
+		return "", nil, false
+	}
+	tocCopy := make([]TOCEntry, len(entry.toc))
+	copy(tocCopy, entry.toc)
+	return entry.body, tocCopy, true
+}
+
+func storeRenderedContent(key string, body template.HTML, toc []TOCEntry) {
+	if key == "" {
+		return
+	}
+	var tocCopy []TOCEntry
+	if len(toc) > 0 {
+		tocCopy = make([]TOCEntry, len(toc))
+		copy(tocCopy, toc)
+	}
+	contentRenderCache.mu.Lock()
+	contentRenderCache.items[key] = renderedContentEntry{
+		body:    body,
+		toc:     tocCopy,
+		expires: time.Now().Add(contentRenderTTL),
+	}
+	contentRenderCache.mu.Unlock()
+}
+
+func renderContentBody(page cms.ContentPage) (template.HTML, []TOCEntry, error) {
+	format := strings.ToLower(strings.TrimSpace(page.Format))
+	switch format {
+	case "", "markdown", "md":
+		htmlBody, toc, err := renderMarkdownContent(page.Body)
+		return template.HTML(htmlBody), toc, err
+	default:
+		htmlBody, toc := renderGuideBody(page.Body)
+		return template.HTML(htmlBody), toc, nil
+	}
+}
+
+func renderMarkdownContent(markdown string) (string, []TOCEntry, error) {
+	markdown = strings.TrimSpace(markdown)
+	if markdown == "" {
+		return "", nil, nil
+	}
+	var buf bytes.Buffer
+	if err := markdownRenderer.Convert([]byte(markdown), &buf); err != nil {
+		return "", nil, err
+	}
+	htmlStr := guideHTMLPolicy.Sanitize(buf.String())
+	nodes, err := html.ParseFragment(strings.NewReader(htmlStr), nil)
+	if err != nil {
+		return htmlStr, nil, err
+	}
+	headings := make([]TOCEntry, 0, 8)
+	seen := map[string]struct{}{}
+	for _, node := range nodes {
+		collectHeadings(node, &headings, seen)
+	}
+	var out bytes.Buffer
+	for _, node := range nodes {
+		if err := html.Render(&out, node); err != nil {
+			continue
+		}
+	}
+	return out.String(), headings, nil
+}
+
+func buildContentPageView(lang string, page cms.ContentPage, body template.HTML, toc []TOCEntry, fallbackSummary, defaultIcon string) ContentPageViewModel {
+	header := ContentHeaderView{
+		Icon:    valueOr(page.Icon, defaultIcon),
+		Title:   page.Title,
+		Summary: valueOr(page.Summary, fallbackSummary),
+	}
+	if eff, effISO := displayDate(page.EffectiveDate, lang); eff != "" {
+		header.Effective = eff
+		header.EffectiveISO = effISO
+	}
+	if upd, updISO := displayDate(page.UpdatedAt, lang); upd != "" {
+		header.Updated = upd
+		header.UpdatedISO = updISO
+	}
+
+	banner := buildContentBanner(lang, page.Banner)
+
+	var version *ContentVersionView
+	if page.Version != "" || header.Updated != "" || page.DownloadURL != "" {
+		version = &ContentVersionView{
+			Version:       page.Version,
+			Updated:       header.Updated,
+			UpdatedISO:    header.UpdatedISO,
+			DownloadLabel: page.DownloadLabel,
+			DownloadURL:   page.DownloadURL,
+		}
+		if version.DownloadURL != "" && version.DownloadLabel == "" {
+			version.DownloadLabel = i18nOrDefault(lang, "content.download", "Download PDF")
+		}
+	}
+
+	return ContentPageViewModel{
+		Header:  header,
+		Banner:  banner,
+		Body:    body,
+		TOC:     toc,
+		Version: version,
+	}
+}
+
+func buildContentBanner(lang string, banner *cms.ContentBanner) *AlertBannerView {
+	if banner == nil {
+		return nil
+	}
+	variant := strings.ToLower(strings.TrimSpace(banner.Variant))
+	bg, border, text, icon := alertPalette(variant)
+	return &AlertBannerView{
+		Variant:    variant,
+		Title:      banner.Title,
+		Message:    banner.Message,
+		LinkText:   banner.LinkText,
+		LinkURL:    banner.LinkURL,
+		Icon:       icon,
+		Background: bg,
+		Border:     border,
+		Text:       text,
+	}
+}
+
+func alertPalette(variant string) (bg, border, text, icon string) {
+	switch variant {
+	case "success", "positive", "ok":
+		return "bg-emerald-50", "border-emerald-200", "text-emerald-900", "check-circle"
+	case "warning", "caution":
+		return "bg-amber-50", "border-amber-200", "text-amber-900", "exclamation-triangle"
+	case "danger", "error", "critical":
+		return "bg-rose-50", "border-rose-200", "text-rose-900", "exclamation-circle"
+	default:
+		return "bg-sky-50", "border-sky-200", "text-sky-900", "information-circle"
+	}
+}
+
+func displayDate(t time.Time, lang string) (string, string) {
+	if t.IsZero() {
+		return "", ""
+	}
+	iso := t.UTC().Format(time.RFC3339)
+	switch strings.ToLower(lang) {
+	case "ja":
+		return t.In(jstLocation).Format("2006-01-02"), iso
+	default:
+		return t.In(time.UTC).Format("Jan 2, 2006"), iso
+	}
+}
+
+func displayDateTime(t time.Time, lang string) (string, string) {
+	if t.IsZero() {
+		return "", ""
+	}
+	iso := t.UTC().Format(time.RFC3339)
+	switch strings.ToLower(lang) {
+	case "ja":
+		return t.In(jstLocation).Format("2006-01-02 15:04 MST"), iso
+	default:
+		return t.In(time.UTC).Format("Jan 2, 2006 15:04 MST"), iso
+	}
+}
+
+func laterTime(a, b time.Time) time.Time {
+	if a.IsZero() {
+		return b
+	}
+	if b.IsZero() {
+		return a
+	}
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
+func valueOr(value, fallback string) string {
+	if strings.TrimSpace(value) != "" {
+		return value
+	}
+	return fallback
+}
+
+func serveStaticPage(w http.ResponseWriter, r *http.Request, kind, templateName, defaultIcon, summaryKey, summaryFallback string) {
+	if cmsClient == nil {
+		http.Error(w, "content unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	lang := mw.Lang(r)
+	slug := strings.TrimSpace(chi.URLParam(r, "slug"))
+	if slug == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	page, err := cmsClient.GetContentPage(ctx, kind, slug, lang)
+	if err != nil {
+		if errors.Is(err, cms.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		log.Printf("%s: fetch %s: %v", kind, slug, err)
+		http.Error(w, "content unavailable", http.StatusBadGateway)
+		return
+	}
+
+	etag := computeContentETag(page, slug)
+	if etag != "" {
+		w.Header().Set("ETag", etag)
+		if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+	w.Header().Set("Cache-Control", "public, max-age=600")
+	if lm := laterTime(page.UpdatedAt, page.EffectiveDate); !lm.IsZero() {
+		w.Header().Set("Last-Modified", lm.UTC().Format(http.TimeFormat))
+	}
+
+	cacheKey := contentCacheKey(page, slug, etag)
+	body, toc, cached := cachedRenderedContent(cacheKey)
+	if !cached {
+		rendered, tocEntries, renderErr := renderContentBody(page)
+		if renderErr != nil {
+			log.Printf("%s: render %s: %v", kind, slug, renderErr)
+		}
+		body = rendered
+		toc = tocEntries
+		storeRenderedContent(cacheKey, body, toc)
+	}
+
+	vm := handlersPkg.PageData{Title: page.Title, Lang: lang}
+	vm.Path = r.URL.Path
+	vm.Nav = nav.Build(vm.Path)
+	vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+	vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+	vm.SEO.Canonical = absoluteURL(r)
+	vm.SEO.OG.URL = vm.SEO.Canonical
+	vm.SEO.Alternates = buildAlternates(r)
+
+	brand := i18nOrDefault(lang, "brand.name", "Hanko Field")
+	if page.SEO.Title != "" {
+		vm.SEO.Title = page.SEO.Title
+	} else {
+		vm.SEO.Title = fmt.Sprintf("%s | %s", page.Title, brand)
+	}
+	if page.SEO.Description != "" {
+		vm.SEO.Description = page.SEO.Description
+	} else if page.Summary != "" {
+		vm.SEO.Description = page.Summary
+	} else {
+		vm.SEO.Description = i18nOrDefault(lang, "content.seo.description", "Static resources from Hanko Field.")
+	}
+	vm.SEO.OG.SiteName = brand
+	vm.SEO.OG.Type = "article"
+	vm.SEO.OG.Title = vm.SEO.Title
+	vm.SEO.OG.Description = vm.SEO.Description
+	if page.SEO.OGImage != "" {
+		vm.SEO.OG.Image = page.SEO.OGImage
+		vm.SEO.Twitter.Image = page.SEO.OGImage
+	}
+	vm.SEO.Twitter.Card = "summary_large_image"
+
+	defaultSummary := i18nOrDefault(lang, summaryKey, summaryFallback)
+	view := buildContentPageView(lang, page, body, toc, defaultSummary, defaultIcon)
+	vm.Content = view
+	renderPage(w, r, templateName, vm)
+}
+
+func ContentPageHandler(w http.ResponseWriter, r *http.Request) {
+	serveStaticPage(w, r, "content", "content", "document-text", "content.default_summary", "Company announcements and resources.")
+}
+
+func LegalPageHandler(w http.ResponseWriter, r *http.Request) {
+	serveStaticPage(w, r, "legal", "legal", "scale", "legal.default_summary", "Policies, terms of service, and compliance information.")
+}
+
+func StatusHandler(w http.ResponseWriter, r *http.Request) {
+	if statusClient == nil {
+		statusClient = status.NewClient("")
+	}
+	lang := mw.Lang(r)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	summary, err := statusClient.FetchSummary(ctx, lang)
+	if err != nil {
+		log.Printf("status: fetch: %v", err)
+	}
+
+	etag := computeStatusETag(summary, lang)
+	if etag != "" {
+		w.Header().Set("ETag", etag)
+		if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+	w.Header().Set("Cache-Control", "public, max-age=60")
+	if !summary.UpdatedAt.IsZero() {
+		w.Header().Set("Last-Modified", summary.UpdatedAt.UTC().Format(http.TimeFormat))
+	}
+
+	stateLabel := statusStateLabel(lang, summary.State)
+	pageTitle := i18nOrDefault(lang, "status.title", "System Status")
+	if stateLabel != "" {
+		pageTitle = fmt.Sprintf("%s - %s", pageTitle, stateLabel)
+	}
+
+	vm := handlersPkg.PageData{
+		Title: pageTitle,
+		Lang:  lang,
+	}
+	vm.Path = r.URL.Path
+	vm.Nav = nav.Build(vm.Path)
+	vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+	vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+	vm.SEO.Canonical = absoluteURL(r)
+	vm.SEO.OG.URL = vm.SEO.Canonical
+	vm.SEO.Alternates = buildAlternates(r)
+
+	brand := i18nOrDefault(lang, "brand.name", "Hanko Field")
+	vm.SEO.Title = fmt.Sprintf("%s | %s", i18nOrDefault(lang, "status.title", "System Status"), brand)
+	vm.SEO.Description = i18nOrDefault(lang, "status.summary", "Real-time uptime and incident history for Hanko Field services.")
+	vm.SEO.OG.SiteName = brand
+	vm.SEO.OG.Type = "website"
+	vm.SEO.OG.Title = vm.SEO.Title
+	vm.SEO.OG.Description = vm.SEO.Description
+	vm.SEO.Twitter.Card = "summary_large_image"
+
+	view := buildStatusPageView(lang, summary)
+	vm.Status = view
+	renderPage(w, r, "status", vm)
+}
+
+func computeStatusETag(summary status.Summary, lang string) string {
+	var parts []string
+	parts = append(parts, lang, summary.State, summary.StateLabel, summary.UpdatedAt.UTC().Format(time.RFC3339Nano))
+	for _, comp := range summary.Components {
+		parts = append(parts, comp.Name, comp.Status)
+	}
+	for _, incident := range summary.Incidents {
+		parts = append(parts, incident.ID, incident.Status, incident.Impact, incident.StartedAt.UTC().Format(time.RFC3339Nano), incident.ResolvedAt.UTC().Format(time.RFC3339Nano))
+		for _, upd := range incident.Updates {
+			parts = append(parts, upd.Status, upd.Timestamp.UTC().Format(time.RFC3339Nano), upd.Body)
+		}
+	}
+	return etagFor("status:", parts...)
+}
+
+func buildStatusPageView(lang string, summary status.Summary) StatusPageViewModel {
+	stateLabel := summary.StateLabel
+	if stateLabel == "" {
+		stateLabel = statusStateLabel(lang, summary.State)
+	}
+	badge, badgeText := statusStateVariant(summary.State)
+	updated, updatedISO := displayDateTime(summary.UpdatedAt, lang)
+	overview := StatusOverviewView{
+		State:      summary.State,
+		StateLabel: stateLabel,
+		Badge:      badge,
+		BadgeText:  badgeText,
+		Updated:    updated,
+		UpdatedISO: updatedISO,
+	}
+
+	components := make([]StatusComponentView, 0, len(summary.Components))
+	for _, comp := range summary.Components {
+		label := statusStateLabel(lang, comp.Status)
+		cBadge, cText := statusComponentVariant(comp.Status)
+		components = append(components, StatusComponentView{
+			Name:        comp.Name,
+			Status:      comp.Status,
+			StatusLabel: label,
+			Badge:       cBadge,
+			BadgeText:   cText,
+		})
+	}
+
+	incidents := make([]StatusIncidentView, 0, len(summary.Incidents))
+	for _, inc := range summary.Incidents {
+		statusLabel := statusTimelineLabel(lang, inc.Status)
+		statusBadge, statusText := statusIncidentVariant(inc.Status)
+		impactLabel := statusImpactLabel(lang, inc.Impact)
+		impactBadge, impactText := statusImpactVariant(inc.Impact)
+		started, startedISO := displayDateTime(inc.StartedAt, lang)
+		resolved, resolvedISO := displayDateTime(inc.ResolvedAt, lang)
+		updates := make([]StatusIncidentUpdateView, 0, len(inc.Updates))
+		for _, upd := range inc.Updates {
+			ts, tsISO := displayDateTime(upd.Timestamp, lang)
+			updates = append(updates, StatusIncidentUpdateView{
+				Timestamp:    ts,
+				TimestampISO: tsISO,
+				Status:       upd.Status,
+				StatusLabel:  statusTimelineLabel(lang, upd.Status),
+				Body:         upd.Body,
+			})
+		}
+		incidents = append(incidents, StatusIncidentView{
+			Title:       inc.Title,
+			Status:      inc.Status,
+			StatusLabel: statusLabel,
+			StatusBadge: statusBadge,
+			StatusText:  statusText,
+			Impact:      inc.Impact,
+			ImpactLabel: impactLabel,
+			ImpactBadge: impactBadge,
+			ImpactText:  impactText,
+			Started:     started,
+			StartedISO:  startedISO,
+			Resolved:    resolved,
+			ResolvedISO: resolvedISO,
+			Updates:     updates,
+		})
+	}
+
+	header := ContentHeaderView{
+		Icon:    "signal",
+		Title:   i18nOrDefault(lang, "status.title", "System Status"),
+		Summary: i18nOrDefault(lang, "status.summary", "Real-time uptime and incident history for Hanko Field services."),
+	}
+	if overview.Updated != "" {
+		header.Updated = overview.Updated
+		header.UpdatedISO = overview.UpdatedISO
+	}
+
+	var banner *AlertBannerView
+	if overview.State != "" {
+		bg, border, text, icon := statusStatePalette(overview.State)
+		banner = &AlertBannerView{
+			Variant:    overview.State,
+			Title:      overview.StateLabel,
+			Message:    i18nOrDefault(lang, "status.banner.message", "See component details and historical incidents below."),
+			Background: bg,
+			Border:     border,
+			Text:       text,
+			Icon:       icon,
+		}
+	}
+
+	return StatusPageViewModel{
+		Header:     header,
+		Banner:     banner,
+		Overview:   overview,
+		Components: components,
+		Incidents:  incidents,
+	}
+}
+
+func statusStateLabel(lang, state string) string {
+	state = strings.ToLower(strings.TrimSpace(state))
+	switch state {
+	case "operational":
+		return i18nOrDefault(lang, "status.state.operational", "Operational")
+	case "degraded":
+		return i18nOrDefault(lang, "status.state.degraded", "Degraded performance")
+	case "partial_outage", "partial-outage":
+		return i18nOrDefault(lang, "status.state.partial_outage", "Partial outage")
+	case "outage", "major_outage":
+		return i18nOrDefault(lang, "status.state.outage", "Major outage")
+	case "maintenance", "scheduled", "maintenance_mode":
+		return i18nOrDefault(lang, "status.state.maintenance", "Maintenance")
+	default:
+		return titleCase(state)
+	}
+}
+
+func statusTimelineLabel(lang, state string) string {
+	state = strings.ToLower(strings.TrimSpace(state))
+	switch state {
+	case "investigating":
+		return i18nOrDefault(lang, "status.timeline.investigating", "Investigating")
+	case "identified", "mitigating":
+		return i18nOrDefault(lang, "status.timeline.mitigating", "Mitigating")
+	case "in_progress", "in-progress":
+		return i18nOrDefault(lang, "status.timeline.in_progress", "In progress")
+	case "monitoring":
+		return i18nOrDefault(lang, "status.timeline.monitoring", "Monitoring")
+	case "resolved", "completed":
+		return i18nOrDefault(lang, "status.timeline.resolved", "Resolved")
+	case "scheduled":
+		return i18nOrDefault(lang, "status.timeline.scheduled", "Scheduled")
+	default:
+		return titleCase(state)
+	}
+}
+
+func statusImpactLabel(lang, impact string) string {
+	impact = strings.ToLower(strings.TrimSpace(impact))
+	switch impact {
+	case "minor":
+		return i18nOrDefault(lang, "status.impact.minor", "Minor impact")
+	case "major":
+		return i18nOrDefault(lang, "status.impact.major", "Major impact")
+	case "critical":
+		return i18nOrDefault(lang, "status.impact.critical", "Critical impact")
+	case "maintenance":
+		return i18nOrDefault(lang, "status.impact.maintenance", "Scheduled maintenance")
+	default:
+		return titleCase(impact)
+	}
+}
+
+func statusStatePalette(state string) (bg, border, text, icon string) {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "operational":
+		return "bg-emerald-50", "border-emerald-200", "text-emerald-900", "check-circle"
+	case "degraded":
+		return "bg-amber-50", "border-amber-200", "text-amber-900", "exclamation-triangle"
+	case "partial_outage", "partial-outage":
+		return "bg-orange-50", "border-orange-200", "text-orange-900", "exclamation-circle"
+	case "outage", "major_outage":
+		return "bg-rose-50", "border-rose-200", "text-rose-900", "x-circle"
+	case "maintenance":
+		return "bg-sky-50", "border-sky-200", "text-sky-900", "wrench-screwdriver"
+	default:
+		return "bg-slate-50", "border-slate-200", "text-slate-900", "information-circle"
+	}
+}
+
+func statusStateVariant(state string) (badge, text string) {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "operational":
+		return "bg-emerald-100 text-emerald-800", "text-emerald-900"
+	case "degraded":
+		return "bg-amber-100 text-amber-800", "text-amber-900"
+	case "partial_outage", "partial-outage":
+		return "bg-orange-100 text-orange-800", "text-orange-900"
+	case "outage", "major_outage":
+		return "bg-rose-100 text-rose-800", "text-rose-900"
+	case "maintenance":
+		return "bg-sky-100 text-sky-800", "text-sky-900"
+	default:
+		return "bg-slate-100 text-slate-800", "text-slate-900"
+	}
+}
+
+func statusComponentVariant(state string) (badge, text string) {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "operational":
+		return "bg-emerald-100 text-emerald-800", "text-emerald-900"
+	case "degraded":
+		return "bg-amber-100 text-amber-800", "text-amber-900"
+	case "partial_outage", "partial-outage":
+		return "bg-orange-100 text-orange-800", "text-orange-900"
+	case "outage", "major_outage":
+		return "bg-rose-100 text-rose-800", "text-rose-900"
+	case "maintenance":
+		return "bg-sky-100 text-sky-800", "text-sky-900"
+	default:
+		return "bg-slate-100 text-slate-800", "text-slate-900"
+	}
+}
+
+func statusIncidentVariant(state string) (badge, text string) {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "resolved":
+		return "bg-emerald-100 text-emerald-800", "text-emerald-900"
+	case "monitoring":
+		return "bg-sky-100 text-sky-800", "text-sky-900"
+	case "investigating", "mitigating", "identified":
+		return "bg-amber-100 text-amber-800", "text-amber-900"
+	case "completed":
+		return "bg-emerald-100 text-emerald-800", "text-emerald-900"
+	case "in_progress", "in-progress":
+		return "bg-indigo-100 text-indigo-800", "text-indigo-900"
+	case "scheduled":
+		return "bg-slate-100 text-slate-800", "text-slate-900"
+	default:
+		return "bg-slate-100 text-slate-800", "text-slate-900"
+	}
+}
+
+func statusImpactVariant(impact string) (badge, text string) {
+	switch strings.ToLower(strings.TrimSpace(impact)) {
+	case "minor":
+		return "bg-amber-100 text-amber-800", "text-amber-900"
+	case "major":
+		return "bg-orange-100 text-orange-800", "text-orange-900"
+	case "critical":
+		return "bg-rose-100 text-rose-800", "text-rose-900"
+	case "maintenance":
+		return "bg-sky-100 text-sky-800", "text-sky-900"
+	default:
+		return "bg-slate-100 text-slate-800", "text-slate-900"
+	}
 }
 
 func AccountHandler(w http.ResponseWriter, r *http.Request) {
@@ -2614,7 +3270,7 @@ type GuideShareLink struct {
 	Href  string
 }
 
-type GuideTOCEntry struct {
+type TOCEntry struct {
 	ID    string
 	Text  string
 	Level int
@@ -2631,12 +3287,106 @@ type GuideDetailViewModel struct {
 	CategoryLabel string
 	Tags          []string
 	Personas      []string
-	TOC           []GuideTOCEntry
+	TOC           []TOCEntry
 	ShareLinks    []GuideShareLink
 	Related       []GuideCard
 	Sources       []string
 	DownloadURL   string
 	Author        cms.Author
+}
+
+type renderedContentEntry struct {
+	body    template.HTML
+	toc     []TOCEntry
+	expires time.Time
+}
+
+type ContentHeaderView struct {
+	Icon         string
+	Title        string
+	Summary      string
+	Effective    string
+	EffectiveISO string
+	Updated      string
+	UpdatedISO   string
+}
+
+type ContentVersionView struct {
+	Version       string
+	Updated       string
+	UpdatedISO    string
+	DownloadLabel string
+	DownloadURL   string
+}
+
+type AlertBannerView struct {
+	Variant    string
+	Title      string
+	Message    string
+	LinkText   string
+	LinkURL    string
+	Icon       string
+	Background string
+	Border     string
+	Text       string
+}
+
+type ContentPageViewModel struct {
+	Header  ContentHeaderView
+	Banner  *AlertBannerView
+	Body    template.HTML
+	TOC     []TOCEntry
+	Version *ContentVersionView
+}
+
+type StatusOverviewView struct {
+	State      string
+	StateLabel string
+	Badge      string
+	BadgeText  string
+	Updated    string
+	UpdatedISO string
+}
+
+type StatusComponentView struct {
+	Name        string
+	Status      string
+	StatusLabel string
+	Badge       string
+	BadgeText   string
+}
+
+type StatusIncidentUpdateView struct {
+	Timestamp    string
+	TimestampISO string
+	Status       string
+	StatusLabel  string
+	Body         string
+}
+
+type StatusIncidentView struct {
+	Title       string
+	Status      string
+	StatusLabel string
+	StatusBadge string
+	StatusText  string
+	Impact      string
+	ImpactLabel string
+	ImpactBadge string
+	ImpactText  string
+	Started     string
+	StartedISO  string
+	Resolved    string
+	ResolvedISO string
+	Updates     []StatusIncidentUpdateView
+}
+
+type StatusPageViewModel struct {
+	Header     ContentHeaderView
+	Banner     *AlertBannerView
+	Overview   StatusOverviewView
+	Components []StatusComponentView
+	Incidents  []StatusIncidentView
 }
 
 var (

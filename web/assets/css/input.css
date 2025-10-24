@@ -6,5 +6,49 @@
   .btn {
     @apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2;
   }
+  .content-prose {
+    @apply space-y-6 text-base leading-relaxed text-gray-700;
+  }
+  .content-prose h2 {
+    @apply mt-10 text-2xl font-semibold text-gray-900;
+  }
+  .content-prose h3 {
+    @apply mt-8 text-xl font-semibold text-gray-900;
+  }
+  .content-prose h4 {
+    @apply mt-6 text-lg font-semibold text-gray-900;
+  }
+  .content-prose p {
+    @apply text-gray-700;
+  }
+  .content-prose a {
+    @apply text-indigo-600 underline hover:text-indigo-700;
+  }
+  .content-prose ul {
+    @apply list-disc space-y-2 pl-6;
+  }
+  .content-prose ol {
+    @apply list-decimal space-y-2 pl-6;
+  }
+  .content-prose li {
+    @apply text-gray-700;
+  }
+  .content-prose blockquote {
+    @apply border-l-4 border-indigo-200 bg-indigo-50/50 p-4 italic text-gray-700;
+  }
+  .content-prose code {
+    @apply rounded bg-gray-100 px-1.5 py-0.5 text-sm font-mono text-gray-800;
+  }
+  .content-prose pre {
+    @apply overflow-x-auto rounded-lg border border-gray-200 bg-gray-900 p-4 text-sm text-gray-100;
+  }
+  .content-prose table {
+    @apply w-full border-collapse overflow-hidden rounded-lg border border-gray-200;
+  }
+  .content-prose th {
+    @apply bg-gray-50 px-4 py-2 text-left text-sm font-semibold text-gray-700;
+  }
+  .content-prose td {
+    @apply px-4 py-2 text-sm text-gray-700;
+  }
 }
-

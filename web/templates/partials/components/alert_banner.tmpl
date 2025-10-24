@@ -1,0 +1,25 @@
+{{ define "alert_banner" }}
+{{ $lang := .Lang }}
+{{ $banner := .Banner }}
+<div class="rounded-lg border {{ $banner.Border }} {{ $banner.Background }} p-4 text-sm">
+  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div class="flex items-start gap-3">
+      {{ if $banner.Icon }}
+        <span class="{{ $banner.Text }} inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/60">
+          {{ template "icon" dict "Name" $banner.Icon "Class" "h-5 w-5" }}
+        </span>
+      {{ end }}
+      <div class="space-y-1">
+        {{ if $banner.Title }}<p class="font-semibold {{ $banner.Text }}">{{ $banner.Title }}</p>{{ end }}
+        {{ if $banner.Message }}<p class="{{ $banner.Text }}">{{ $banner.Message }}</p>{{ end }}
+      </div>
+    </div>
+    {{ if $banner.LinkURL }}
+      <a href="{{ $banner.LinkURL }}" class="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:underline">
+        <span>{{ if $banner.LinkText }}{{ $banner.LinkText }}{{ else }}{{ tlang $lang "content.banner.learn_more" }}{{ end }}</span>
+        {{ template "icon" dict "Name" "document-text" "Class" "h-4 w-4" }}
+      </a>
+    {{ end }}
+  </div>
+</div>
+{{ end }}

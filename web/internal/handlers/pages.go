@@ -22,4 +22,6 @@ type PageData struct {
 	Template  any
 	Guides    any
 	Guide     any
+	Content   any
+	Status    any
 }

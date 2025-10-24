@@ -1,0 +1,35 @@
+{{ define "content_header" }}
+{{ $lang := .Lang }}
+{{ $header := .Header }}
+<header class="space-y-6">
+  <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div class="flex items-start gap-4">
+      {{ if $header.Icon }}
+        <span class="inline-flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+          {{ template "icon" dict "Name" $header.Icon "Class" "h-6 w-6" }}
+        </span>
+      {{ end }}
+      <div class="space-y-2">
+        <h1 class="text-3xl font-semibold text-gray-900 md:text-4xl">{{ $header.Title }}</h1>
+        {{ if $header.Summary }}
+          <p class="max-w-3xl text-base text-gray-600 md:text-lg">{{ $header.Summary }}</p>
+        {{ end }}
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-4 text-sm text-gray-500">
+      {{ if $header.Effective }}
+        <div>
+          <dt class="font-medium text-gray-700">{{ tlang $lang "content.meta.effective" }}</dt>
+          <dd><time datetime="{{ $header.EffectiveISO }}">{{ $header.Effective }}</time></dd>
+        </div>
+      {{ end }}
+      {{ if $header.Updated }}
+        <div>
+          <dt class="font-medium text-gray-700">{{ tlang $lang "content.meta.updated" }}</dt>
+          <dd><time datetime="{{ $header.UpdatedISO }}">{{ $header.Updated }}</time></dd>
+        </div>
+      {{ end }}
+    </div>
+  </div>
+</header>
+{{ end }}

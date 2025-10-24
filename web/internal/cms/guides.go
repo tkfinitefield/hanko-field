@@ -61,14 +61,16 @@ type ListGuidesOptions struct {
 type Client struct {
 	baseURL string
 	http    *http.Client
+	contentDir string
 }
 
 // NewClient constructs a Client with the provided base URL.
 func NewClient(baseURL string) *Client {
 	baseURL = strings.TrimSpace(baseURL)
 	return &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		http:    &http.Client{Timeout: 5 * time.Second},
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		http:       &http.Client{Timeout: 5 * time.Second},
+		contentDir: defaultContentDir,
 	}
 }
 

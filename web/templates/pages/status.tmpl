@@ -1,0 +1,80 @@
+{{ define "content" }}
+<section class="py-12">
+  <div class="mx-auto w-full max-w-6xl space-y-8 px-4">
+    {{ template "content_header" dict "Lang" $.Lang "Header" $.Status.Header }}
+
+    {{ if $.Status.Banner }}
+      {{ template "alert_banner" dict "Lang" $.Lang "Banner" $.Status.Banner }}
+    {{ end }}
+
+    <div class="grid gap-8 lg:grid-cols-[minmax(0,2fr),minmax(0,1fr)]">
+      <div class="space-y-6">
+        <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <div class="flex flex-wrap items-center gap-4">
+            <span class="rounded-full px-3 py-1 text-sm font-medium {{ $.Status.Overview.Badge }}">{{ $.Status.Overview.StateLabel }}</span>
+            {{ if $.Status.Overview.Updated }}
+              <span class="text-sm text-gray-500">{{ tlang $.Lang "status.overview.updated" }} <time datetime="{{ $.Status.Overview.UpdatedISO }}">{{ $.Status.Overview.Updated }}</time></span>
+            {{ end }}
+          </div>
+        </section>
+
+        <section class="space-y-4">
+          <h2 class="text-xl font-semibold text-gray-900">{{ tlang $.Lang "status.incidents.title" }}</h2>
+          {{ if $.Status.Incidents }}
+            <div class="space-y-6">
+              {{ range $.Status.Incidents }}
+                <article class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                  <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div class="space-y-2">
+                      <h3 class="text-lg font-semibold text-gray-900">{{ .Title }}</h3>
+                      <div class="flex flex-wrap gap-2 text-xs font-medium">
+                        {{ if .ImpactLabel }}<span class="rounded-full px-2 py-1 {{ .ImpactBadge }}">{{ .ImpactLabel }}</span>{{ end }}
+                        {{ if .StatusLabel }}<span class="rounded-full px-2 py-1 {{ .StatusBadge }}">{{ .StatusLabel }}</span>{{ end }}
+                      </div>
+                    </div>
+                    <div class="space-y-1 text-sm text-gray-500">
+                      {{ if .Started }}<div>{{ tlang $.Lang "status.incidents.started" }} <time datetime="{{ .StartedISO }}">{{ .Started }}</time></div>{{ end }}
+                      {{ if .Resolved }}<div>{{ tlang $.Lang "status.incidents.resolved" }} <time datetime="{{ .ResolvedISO }}">{{ .Resolved }}</time></div>{{ end }}
+                    </div>
+                  </div>
+                  {{ if .Updates }}
+                    <ol class="mt-5 space-y-4 border-l border-gray-200 pl-4">
+                      {{ range .Updates }}
+                        <li class="space-y-1">
+                          <p class="text-xs font-medium text-gray-500">
+                            <time datetime="{{ .TimestampISO }}">{{ .Timestamp }}</time>
+                            · {{ .StatusLabel }}
+                          </p>
+                          {{ if .Body }}<p class="text-sm text-gray-700 whitespace-pre-line">{{ .Body }}</p>{{ end }}
+                        </li>
+                      {{ end }}
+                    </ol>
+                  {{ end }}
+                </article>
+              {{ end }}
+            </div>
+          {{ else }}
+            <div class="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-sm text-gray-500">
+              {{ tlang $.Lang "status.incidents.empty" }}
+            </div>
+          {{ end }}
+        </section>
+      </div>
+
+      <aside class="space-y-4">
+        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 class="text-sm font-semibold text-gray-700">{{ tlang $.Lang "status.components.title" }}</h2>
+          <ul class="mt-4 space-y-3">
+            {{ range $.Status.Components }}
+              <li class="flex items-center justify-between text-sm">
+                <span class="font-medium text-gray-700">{{ .Name }}</span>
+                <span class="rounded-full px-2 py-0.5 text-xs font-medium {{ .Badge }}">{{ .StatusLabel }}</span>
+              </li>
+            {{ end }}
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+{{ end }}
