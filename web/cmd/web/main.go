@@ -843,6 +843,8 @@ func main() {
 	r.MethodFunc(http.MethodGet, "/design/editor/form", DesignEditorFormFrag)
 	r.MethodFunc(http.MethodPost, "/design/editor/form", DesignEditorFormFrag)
 	r.Get("/design/editor/preview", DesignEditorPreviewFrag)
+	r.Get("/design/preview", DesignPreviewHandler)
+	r.Get("/design/preview/image", DesignPreviewImageFrag)
 	r.Get("/design/ai", DesignAISuggestionsHandler)
 	r.Get("/design/ai/table", DesignAISuggestionTableFrag)
 	r.Get("/design/ai/preview", DesignAISuggestionPreviewFrag)
@@ -1222,6 +1224,62 @@ func DesignEditorPreviewFrag(w http.ResponseWriter, r *http.Request) {
 	view := buildDesignEditorView(lang, r.Form)
 	view.Toasts = nil
 	renderTemplate(w, r, "frag_design_editor_preview", view)
+}
+
+// DesignPreviewHandler renders the final design preview page with background and export controls.
+func DesignPreviewHandler(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	view := buildDesignPreviewView(lang, r.URL.Query())
+
+	vm := handlersPkg.PageData{Title: view.Title, Lang: lang}
+	vm.Path = r.URL.Path
+	vm.Nav = nav.Build(vm.Path)
+	vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+	vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+	vm.DesignPreview = view
+
+	brand := i18nOrDefault(lang, "brand.name", "Hanko Field")
+	vm.SEO.Title = fmt.Sprintf("%s | %s", view.Title, brand)
+	vm.SEO.Description = editorCopy(lang, "最高解像度の印影とモックアップをエクスポートします。", "Export the final high-resolution seal impression with contextual mockups.")
+	vm.SEO.Canonical = absoluteURL(r)
+	vm.SEO.OG.URL = vm.SEO.Canonical
+	vm.SEO.OG.SiteName = brand
+	vm.SEO.OG.Type = "website"
+	vm.SEO.OG.Title = vm.SEO.Title
+	vm.SEO.OG.Description = vm.SEO.Description
+	vm.SEO.Twitter.Card = "summary_large_image"
+	vm.SEO.Alternates = buildAlternates(r)
+
+	renderPage(w, r, "design_preview", vm)
+}
+
+// DesignPreviewImageFrag returns the dynamic preview fragment responding to background/DPI controls.
+func DesignPreviewImageFrag(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form submission", http.StatusBadRequest)
+		return
+	}
+	view := buildDesignPreviewView(lang, r.Form)
+
+	push := "/design/preview"
+	if view.Query != "" {
+		push = push + "?" + view.Query
+	}
+	w.Header().Set("HX-Push-Url", push)
+
+	trigger := map[string]any{
+		"design-preview:updated": map[string]any{
+			"background": view.SelectedBackground,
+			"dpi":        view.SelectedDPI,
+			"frame":      view.ActiveFrame,
+			"grid":       view.ShowGrid,
+		},
+	}
+	if raw, err := json.Marshal(trigger); err == nil {
+		w.Header().Set("HX-Trigger", string(raw))
+	}
+	renderTemplate(w, r, "frag_design_preview_image", view)
 }
 
 // ModalPickFont renders the font selection modal fragment.

@@ -1,0 +1,101 @@
+{{ define "content" }}
+{{ $view := $.DesignPreview }}
+<section class="flex min-h-[calc(100vh-4rem)] flex-col bg-slate-950 text-slate-100">
+  <header class="border-b border-slate-800/70 bg-slate-900/60 px-6 py-5">
+    <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/design/editor"
+           class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-800 text-slate-200 transition hover:border-indigo-400 hover:text-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+           aria-label="{{ if eq $.Lang "ja" }}エディタへ戻る{{ else }}Back to editor{{ end }}">
+          <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15l-5-5 5-5"/><path d="M17 10H7"/></svg>
+        </a>
+        <div>
+          <h1 class="text-2xl font-semibold text-white">{{ $view.Title }}</h1>
+          <p class="mt-1 text-sm text-slate-300">{{ $view.Subtitle }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ $view.Hint }}</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        {{ if gt (len $view.Downloads) 0 }}
+          {{ $primary := (index $view.Downloads 0) }}
+          <a href="{{ $primary.URL }}"
+             class="inline-flex items-center gap-2 rounded-full border border-indigo-400/60 bg-indigo-500/20 px-4 py-2 text-sm font-medium text-indigo-200 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-500/30 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+             data-preview-primary-download="{{ $primary.Format }}">
+            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3v10"/><path d="M14 9l-4 4-4-4"/><path d="M4 15h12"/></svg>
+            {{ $primary.Label }}
+          </a>
+        {{ end }}
+        {{ if gt (len $view.ShareActions) 0 }}
+          {{ $share := (index $view.ShareActions 0) }}
+          <a href="{{ $share.Href }}"
+             class="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-indigo-400 hover:text-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+             title="{{ $share.Tooltip }}">
+            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 6v8"/><path d="M6 10h8"/><path d="M4 4h12v12H4z"/></svg>
+            {{ $share.Label }}
+          </a>
+        {{ end }}
+        <span class="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-3 py-1 text-xs text-slate-400">
+          <svg class="h-3 w-3 text-emerald-400" viewBox="0 0 20 20" fill="currentColor"><circle cx="10" cy="10" r="4"/></svg>
+          {{ $view.LastRegeneratedCopy }}
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex flex-1 flex-col overflow-auto">
+    {{ slot "frag_design_preview_image" $view }}
+  </div>
+</section>
+
+<script>
+(function(){
+  function setupStage(root){
+    if (!root) { return; }
+    var viewport = root.querySelector('[data-preview-canvas]');
+    var slider = root.querySelector('#design-preview-zoom');
+    var label = root.querySelector('[data-preview-zoom-label]');
+    if (!viewport || !slider) { return; }
+    function apply(value){
+      var v = parseInt(value, 10);
+      if (isNaN(v)) { v = 100; }
+      viewport.style.setProperty('--preview-zoom', (v/100).toString());
+      if (label) {
+        label.textContent = v + '%';
+      }
+    }
+    slider.addEventListener('input', function(){
+      apply(slider.value);
+    });
+    if (slider.dataset.hydrated !== 'true') {
+      slider.dataset.hydrated = 'true';
+      apply(slider.value || slider.getAttribute('value') || slider.dataset.defaultZoom || 100);
+    } else {
+      apply(slider.value || slider.dataset.defaultZoom || 100);
+    }
+  }
+
+  function hydrate(root){
+    window.requestAnimationFrame(function(){
+      setupStage(root);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    hydrate(document);
+  });
+
+  document.addEventListener('design-preview:updated', function(){
+    var stage = document.getElementById('design-preview-stage');
+    if (stage) {
+      hydrate(stage);
+    }
+  });
+
+  document.addEventListener('htmx:afterSwap', function(event){
+    if (event && event.target && event.target.id === 'design-preview-stage') {
+      hydrate(event.target);
+    }
+  });
+})();
+</script>
+{{ end }}

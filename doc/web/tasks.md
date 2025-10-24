@@ -34,7 +34,7 @@
 - [x] [Build design editor (`/design/editor`) two-pane layout with form fragment (`/design/editor/form`) and live preview fragment (`/design/editor/preview`).](doc/web/tasks/023-build-design-editor-design-editor-two-pane-layout-with-form-fragment-design-editor-form-an.md)
 - [x] [Implement modal pickers for fonts/templates/kanji mapping (`/modal/pick/font`, `/modal/pick/template`, `/modal/kanji-map`).](doc/web/tasks/024-implement-modal-pickers-for-fonts-templates-kanji-mapping-modal-pick-font-modal-pick-templ.md)
 - [x] [Build AI suggestions page (`/design/ai`) with table fragment, accept/reject actions, and polling.](doc/web/tasks/025-build-ai-suggestions-page-design-ai-with-table-fragment-accept-reject-actions-and-polling.md)
-- [ ] [Implement design preview page (`/design/preview`) with background options fragment (`/design/preview/image`).](doc/web/tasks/026-implement-design-preview-page-design-preview-with-background-options-fragment-design-previ.md)
+- [x] [Implement design preview page (`/design/preview`) with background options fragment (`/design/preview/image`).](doc/web/tasks/026-implement-design-preview-page-design-preview-with-background-options-fragment-design-previ.md)
 - [ ] [Build versions page (`/design/versions`) with table fragment and rollback modal.](doc/web/tasks/027-build-versions-page-design-versions-with-table-fragment-and-rollback-modal.md)
 - [ ] [Implement design share/download functionality with signed URL workflow.](doc/web/tasks/028-implement-design-share-download-functionality-with-signed-url-workflow.md)
 

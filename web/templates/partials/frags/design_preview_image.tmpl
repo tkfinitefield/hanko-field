@@ -1,0 +1,304 @@
+{{ define "frag_design_preview_image" }}
+{{ $view := . }}
+<div id="design-preview-stage" class="flex flex-col gap-6 px-6 py-6 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+  <aside class="w-full max-w-sm flex-none space-y-6 rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-[0_20px_45px_-20px_rgba(15,23,42,0.6)]">
+    <form id="design-preview-controls"
+          class="space-y-6"
+          hx-get="/design/preview/image"
+          hx-target="#design-preview-stage"
+          hx-swap="outerHTML"
+          hx-trigger="change delay:200ms, input delay:200ms"
+          hx-push-url="true"
+          hx-include="#design-preview-controls"
+          hx-indicator="#design-preview-indicator">
+      <fieldset class="space-y-3">
+        <legend class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ if eq $view.Lang "ja" }}背景素材{{ else }}Background material{{ end }}</legend>
+        <div class="space-y-2">
+          {{ range $view.BackgroundOptions }}
+            <label class="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm transition hover:border-indigo-400/70 hover:bg-slate-900/80 focus-within:ring-2 focus-within:ring-indigo-500">
+              <input type="radio"
+                     name="bg"
+                     value="{{ .ID }}"
+                     class="sr-only"
+                     {{ if .Active }}checked{{ end }}>
+              <span class="relative mt-0.5 flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 shadow-inner" style="background: {{ .Swatch }}">
+                <span class="absolute inset-0 rounded-full border border-white/10" style="box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);"></span>
+              </span>
+              <span>
+                <span class="font-semibold text-slate-100">{{ .Label }}</span>
+                <span class="block text-xs text-slate-400">{{ .Description }}</span>
+              </span>
+              <span class="ml-auto mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full border {{ if .Active }}border-indigo-400 bg-indigo-500/20 text-indigo-200{{ else }}border-slate-700 bg-slate-900/60 text-slate-500{{ end }}">
+                {{ if .Active }}
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 10l3 3 7-7"/></svg>
+                {{ else }}
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="10" cy="10" r="4"/></svg>
+                {{ end }}
+              </span>
+            </label>
+          {{ end }}
+        </div>
+      </fieldset>
+
+      <fieldset class="space-y-3">
+        <legend class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ if eq $view.Lang "ja" }}モックアップ{{ else }}Mockup frame{{ end }}</legend>
+        <div class="grid gap-2">
+          {{ range $view.FrameOptions }}
+            <label class="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm transition hover:border-indigo-400/70 hover:bg-slate-900/80 focus-within:ring-2 focus-within:ring-indigo-500">
+              <input type="radio"
+                     name="frame"
+                     value="{{ .ID }}"
+                     class="sr-only"
+                     {{ if .Active }}checked{{ end }}>
+              <span class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-800/60 text-slate-300">
+                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+                  {{ if eq .ID "document" }}
+                    <path d="M5 3h10l2 3v11H5z"/><path d="M9 3v5h6"/>
+                  {{ else if eq .ID "envelope" }}
+                    <path d="M2 5h16v10H2z"/><path d="M2 5l8 7 8-7"/>
+                  {{ else }}
+                    <path d="M4 4h12v12H4z"/><path d="M7 7h6v6H7z"/><path d="M4 11h3M13 11h3"/>
+                  {{ end }}
+                </svg>
+              </span>
+              <span>
+                <span class="font-semibold text-slate-100">{{ .Label }}</span>
+                <span class="block text-xs text-slate-400">{{ .Description }}</span>
+              </span>
+              <span class="ml-auto mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full border {{ if .Active }}border-indigo-400 bg-indigo-500/20 text-indigo-200{{ else }}border-slate-700 bg-slate-900/60 text-slate-500{{ end }}">
+                {{ if .Active }}
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 10l3 3 7-7"/></svg>
+                {{ else }}
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="10" cy="10" r="4"/></svg>
+                {{ end }}
+              </span>
+            </label>
+          {{ end }}
+        </div>
+      </fieldset>
+
+      <fieldset class="space-y-3">
+        <legend class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ if eq $view.Lang "ja" }}解像度{{ else }}Resolution{{ end }}</legend>
+        <div class="grid gap-2">
+          {{ range $view.DPIOtions }}
+            <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm transition hover:border-indigo-400/70 hover:bg-slate-900/80 focus-within:ring-2 focus-within:ring-indigo-500">
+              <input type="radio"
+                     name="dpi"
+                     value="{{ .Value }}"
+                     class="sr-only"
+                     {{ if .Active }}checked{{ end }}>
+              <span class="flex h-9 w-20 items-center justify-center rounded-lg border {{ if .Active }}border-indigo-400 bg-indigo-500/20 text-indigo-100{{ else }}border-slate-700 bg-slate-900/60 text-slate-300{{ end }}">
+                {{ .Label }}
+              </span>
+              <span class="flex-1 text-xs text-slate-400">{{ .Description }}</span>
+              <span class="ml-auto inline-flex items-center rounded-full border border-indigo-400/40 bg-indigo-500/10 px-2 py-1 text-[10px] uppercase tracking-wide text-indigo-200">{{ .Badge }}</span>
+            </label>
+          {{ end }}
+        </div>
+      </fieldset>
+
+      <div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3">
+        <div>
+          <p class="text-sm font-medium text-slate-200">{{ if eq $view.Lang "ja" }}製図ガイド{{ else }}Measurement grid{{ end }}</p>
+          <p class="text-xs text-slate-400">{{ if eq $view.Lang "ja" }}印影の位置合わせ用のガイドを重ねます。{{ else }}Overlay guides for placement alignment.{{ end }}</p>
+        </div>
+        <label class="relative inline-flex h-6 w-12 cursor-pointer items-center">
+          <input type="checkbox" name="grid" value="1" class="peer sr-only" {{ if $view.ShowGrid }}checked{{ end }}>
+          <span class="absolute inset-0 rounded-full bg-slate-700 transition peer-checked:bg-indigo-500"></span>
+          <span class="absolute left-1 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-6 peer-checked:bg-white"></span>
+        </label>
+      </div>
+    </form>
+
+    <div class="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3">
+      <div class="flex items-center justify-between text-xs text-slate-400">
+        <span>{{ if eq $view.Lang "ja" }}ズーム{{ else }}Zoom{{ end }}</span>
+        <span data-preview-zoom-label>{{ $view.Preview.ZoomPercent }}%</span>
+      </div>
+      <input id="design-preview-zoom"
+             type="range"
+             min="70"
+             max="130"
+             value="{{ $view.Preview.ZoomPercent }}"
+             data-default-zoom="{{ $view.Preview.ZoomPercent }}"
+             class="mt-3 w-full accent-indigo-400">
+      <p class="mt-2 text-[11px] text-slate-500">{{ if eq $view.Lang "ja" }}ズーム操作はローカル表示のみで、エクスポートには影響しません。{{ else }}Zooming is local to the mockup viewport and will not affect exports.{{ end }}</p>
+    </div>
+
+    {{ if $view.Tips }}
+      <div class="space-y-3">
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ if eq $view.Lang "ja" }}ヒント{{ else }}Tips{{ end }}</h2>
+        <ul class="space-y-3 text-sm text-slate-200">
+          {{ range $view.Tips }}
+            <li class="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3">
+              <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-800">
+                  {{ if eq .Icon "magnifying-glass" }}
+                    <svg class="h-4 w-4 text-indigo-200" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8.5" cy="8.5" r="5"/><path d="M13 13l4 4"/></svg>
+                  {{ else if eq .Icon "rectangle-group" }}
+                    <svg class="h-4 w-4 text-indigo-200" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="6" height="6"/><rect x="11" y="3" width="6" height="6"/><rect x="3" y="11" width="14" height="6"/></svg>
+                  {{ else if eq .Icon "sun" }}
+                    <svg class="h-4 w-4 text-indigo-200" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="4"/><path d="M10 1v2M10 17v2M3 10H1M19 10h-2M4.2 4.2L2.8 2.8M17.2 17.2l-1.4-1.4M4.2 15.8l-1.4 1.4M17.2 4.2l1.4-1.4"/></svg>
+                  {{ else }}
+                    <svg class="h-4 w-4 text-indigo-200" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="8"/></svg>
+                  {{ end }}
+                </span>
+                {{ .Title }}
+              </div>
+              <p class="mt-2 text-xs text-slate-400">{{ .Description }}</p>
+            </li>
+          {{ end }}
+        </ul>
+      </div>
+    {{ end }}
+  </aside>
+
+  <div class="flex-1 space-y-6">
+    <section class="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/70 p-6 {{ $view.Preview.Elevation }}">
+      <div class="absolute right-6 top-6 inline-flex items-center gap-2 rounded-full border border-indigo-400/40 bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-200 shadow-lg shadow-indigo-900/20">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2l2 5 5 1-4 3 1 5-4-2-4 2 1-5-4-3 5-1z"/></svg>
+        {{ $view.Preview.Badge }}
+      </div>
+      <div class="relative overflow-hidden rounded-2xl border border-slate-800/60 bg-slate-900/40 p-6" style="{{ $view.Preview.BackgroundStyle }}">
+        <div id="design-preview-indicator" class="htmx-indicator absolute inset-0 z-20 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm">
+          <svg class="h-6 w-6 animate-spin text-indigo-300" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2a8 8 0 018 8"/><path d="M18 10a8 8 0 01-8 8"/><path d="M2 10a8 8 0 018-8" stroke-opacity=".35"/></svg>
+        </div>
+        <div class="absolute left-6 top-6 inline-flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/80 px-3 py-1 text-xs text-slate-300">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="14" height="12" rx="2"/><path d="M3 10h14"/></svg>
+          {{ $view.Preview.FrameLabel }}
+        </div>
+        <div class="absolute left-6 bottom-6 max-w-xs rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-xs text-slate-200 shadow-lg shadow-black/30">
+          <div class="flex items-center gap-2 font-semibold text-slate-100">
+            <svg class="h-4 w-4 text-indigo-200" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 14l8-8"/><path d="M5 6h8v8"/></svg>
+            {{ $view.Coachmark.Title }}
+          </div>
+          <p class="mt-2 text-slate-400">{{ $view.Coachmark.Message }}</p>
+        </div>
+        <div class="absolute right-6 top-14 text-xs text-slate-400">
+          {{ $view.Preview.FrameDescription }}
+        </div>
+        <div class="relative mx-auto aspect-square w-full max-w-lg">
+          <div class="absolute inset-0">
+            <div class="relative h-full w-full origin-center" data-preview-canvas style="--preview-zoom: 1;">
+              <div class="absolute left-1/2 top-1/2 flex h-64 w-64 -translate-x-1/2 -translate-y-1/2 transform rounded-full border-[12px] border-slate-900/80 bg-white text-center text-3xl font-bold tracking-widest text-slate-900/80 shadow-[inset_0_12px_30px_-18px_rgba(15,23,42,0.45)] transition-transform duration-200 ease-out" style="transform: scale(var(--preview-zoom,1));">
+                <div class="absolute inset-3 rounded-full border-[3px] border-slate-900/55"></div>
+                <div class="absolute inset-0 flex flex-col items-center justify-center gap-1">
+                  <span class="text-2xl">{{ $view.Preview.PrimaryGlyph }}</span>
+                  <span class="text-sm tracking-[0.35em]">{{ $view.Preview.SecondaryGlyph }}</span>
+                </div>
+              </div>
+            </div>
+            {{ if $view.Preview.Grid }}
+              <div class="pointer-events-none absolute inset-[17%] rounded-[1.75rem] border border-indigo-300/60">
+                <div class="absolute inset-0 rounded-[1.75rem] opacity-70" style="background-image: linear-gradient(0deg, rgba(129,140,248,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(129,140,248,0.18) 1px, transparent 1px); background-size: 32px 32px;"></div>
+              </div>
+            {{ end }}
+            {{ range $view.Preview.Measurements }}
+              <div class="pointer-events-none absolute {{ .Class }} flex flex-col items-center text-[10px] font-semibold uppercase tracking-wide text-indigo-200">
+                {{ if eq .Axis "horizontal" }}
+                  <span class="mb-1 block h-px w-24 bg-gradient-to-r from-transparent via-indigo-300/80 to-transparent"></span>
+                {{ else if eq .Axis "vertical" }}
+                  <span class="mb-1 block w-px flex-1 bg-gradient-to-b from-transparent via-indigo-300/80 to-transparent" style="height: 48px;"></span>
+                {{ end }}
+                <span class="rounded-full border border-indigo-300/60 bg-slate-950/80 px-2 py-1 text-[10px] font-semibold text-indigo-100 shadow">{{ .Label }}</span>
+                <span class="mt-1 rounded-full bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-100">{{ .Value }}</span>
+              </div>
+            {{ end }}
+          </div>
+        </div>
+      </div>
+      <p class="mt-4 text-xs text-slate-400">{{ $view.Preview.MockupNote }}</p>
+    </section>
+
+    <section class="rounded-2xl border border-slate-800 bg-slate-900/70 px-5 py-4">
+      <div class="grid gap-4 md:grid-cols-3">
+        {{ range $view.InfoBar }}
+          <div class="flex items-start gap-3">
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-800">
+              {{ if eq .Icon "tag" }}
+                <svg class="h-4 w-4 text-indigo-200" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 9V3h6l8 8-6 6-8-8z"/><path d="M7 7h.01"/></svg>
+              {{ else if eq .Icon "clock" }}
+                <svg class="h-4 w-4 text-indigo-200" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l2.5 1.5"/></svg>
+              {{ else if eq .Icon "user-circle" }}
+                <svg class="h-4 w-4 text-indigo-200" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="7" r="3.5"/><path d="M4 17a6 6 0 0112 0"/></svg>
+              {{ else }}
+                <svg class="h-4 w-4 text-indigo-200" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/></svg>
+              {{ end }}
+            </span>
+            <span>
+              <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ .Label }}</span>
+              <span class="mt-0.5 block text-sm font-semibold text-slate-100">{{ .Value }}</span>
+              {{ if .Sub }}<span class="text-xs text-slate-500">{{ .Sub }}</span>{{ end }}
+            </span>
+          </div>
+        {{ end }}
+      </div>
+    </section>
+
+    {{ if $view.Preview.Metrics }}
+      <section class="grid gap-3 md:grid-cols-3">
+        {{ range $view.Preview.Metrics }}
+          <div class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-slate-400">{{ .Label }}</p>
+            <p class="mt-1 text-sm font-semibold {{ if eq .Tone "success" }}text-emerald-200{{ else if eq .Tone "info" }}text-indigo-200{{ else }}text-slate-100{{ end }}">{{ .Value }}</p>
+          </div>
+        {{ end }}
+      </section>
+    {{ end }}
+
+    <footer class="rounded-2xl border border-slate-800 bg-slate-900/70 px-5 py-4">
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div class="flex flex-wrap gap-3">
+          {{ range $view.Downloads }}
+            <a href="{{ .URL }}"
+               class="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-indigo-400 {{ if .Primary }}border-indigo-400 bg-indigo-500/20 text-indigo-100 hover:border-indigo-300 hover:bg-indigo-500/25{{ else }}border-slate-700 bg-slate-900/60 text-slate-200 hover:border-indigo-400 hover:text-indigo-200{{ end }}">
+              {{ if eq .Icon "arrow-down-tray" }}
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3v8"/><path d="M6 8l4 4 4-4"/><path d="M4 14h12"/></svg>
+              {{ else if eq .Icon "sparkles" }}
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2l2 5 5 1-4 3 1 5-4-2-4 2 1-5-4-3 5-1z"/></svg>
+              {{ else }}
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/></svg>
+              {{ end }}
+              <span>{{ .Label }}</span>
+              {{ if .Secondary }}
+                <span class="text-xs text-slate-400">{{ .Secondary }}</span>
+              {{ end }}
+            </a>
+          {{ end }}
+        </div>
+        <div class="flex flex-wrap gap-3">
+          {{ range $view.ShareActions }}
+            <a href="{{ .Href }}"
+               class="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-indigo-400 {{ if eq .Variant "primary" }}border-emerald-400 bg-emerald-500/20 text-emerald-100 hover:border-emerald-300 hover:bg-emerald-500/25{{ else }}border-slate-700 bg-slate-900/60 text-slate-200 hover:border-indigo-400 hover:text-indigo-200{{ end }}"
+               title="{{ .Tooltip }}">
+              {{ if eq .Icon "paper-airplane" }}
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 17l14-7L3 3v5l8 2-8 2z"/></svg>
+              {{ else if eq .Icon "link" }}
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7.5 12.5l-1 1a3.5 3.5 0 105-5l-1 1"/><path d="M12.5 7.5l1-1a3.5 3.5 0 10-5 5l1-1"/></svg>
+              {{ else }}
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/></svg>
+              {{ end }}
+              {{ .Label }}
+            </a>
+          {{ end }}
+        </div>
+      </div>
+      {{ if $view.Snackbars }}
+        <div id="design-preview-snackbar-host" class="mt-4 space-y-3">
+          {{ range $view.Snackbars }}
+            <div class="flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow {{ if eq .Tone "success" }}border-emerald-400/30 bg-emerald-500/10 text-emerald-100{{ else if eq .Tone "info" }}border-sky-400/30 bg-sky-500/10 text-sky-100{{ else }}border-slate-700 bg-slate-900/60 text-slate-200{{ end }}">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex h-2 w-2 rounded-full {{ if eq .Tone "success" }}bg-emerald-300{{ else if eq .Tone "info" }}bg-sky-300{{ else }}bg-slate-400{{ end }}"></span>
+                <span>{{ .Message }}</span>
+              </div>
+              {{ if .ActionLabel }}
+                <a href="{{ .ActionHref }}" class="rounded-full border border-current px-3 py-1 text-xs font-semibold hover:bg-white/10">{{ .ActionLabel }}</a>
+              {{ end }}
+            </div>
+          {{ end }}
+        </div>
+      {{ end }}
+    </footer>
+  </div>
+</div>
+{{ end }}

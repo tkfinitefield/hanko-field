@@ -55,6 +55,8 @@ func newTestRouter(t *testing.T, add func(r chi.Router)) http.Handler {
 	r.Handle("/assets/*", assets)
 	r.Get("/", HomeHandler)
 	r.Get("/design/new", DesignNewHandler)
+	r.Get("/design/preview", DesignPreviewHandler)
+	r.Get("/design/preview/image", DesignPreviewImageFrag)
 
 	if add != nil {
 		r.Group(func(r chi.Router) {
@@ -108,6 +110,47 @@ func TestDesignNewPageRenders(t *testing.T) {
 	}
 	if !strings.Contains(body, "design-primary-cta") {
 		t.Fatalf("expected primary CTA button id in body; status=%d body=%s", rec.Code, body)
+	}
+}
+
+func TestDesignPreviewPageRenders(t *testing.T) {
+	srv := newTestRouter(t, nil)
+	req := httptest.NewRequest(http.MethodGet, "/design/preview", nil)
+	req.Header.Set("Accept-Language", "en")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "design-preview-stage") {
+		t.Fatalf("expected preview stage marker in body; status=%d body=%s", rec.Code, body)
+	}
+	if !strings.Contains(body, "Background material") {
+		t.Fatalf("expected background control copy in body; status=%d body=%s", rec.Code, body)
+	}
+}
+
+func TestDesignPreviewFragmentPushesQuery(t *testing.T) {
+	srv := newTestRouter(t, nil)
+	req := httptest.NewRequest(http.MethodGet, "/design/preview/image?bg=transparent&dpi=1200&frame=desk&grid=1", nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("Accept-Language", "en")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	want := "/design/preview?bg=transparent&dpi=1200&frame=desk&grid=1"
+	if got := rec.Header().Get("HX-Push-Url"); got != want {
+		t.Fatalf("expected HX-Push-Url %q, got %q", want, got)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Transparent") && !strings.Contains(body, `value="transparent"`) {
+		t.Fatalf("expected transparent label in fragment response")
+	}
+	if !strings.Contains(body, "Measurement grid") && !strings.Contains(body, "製図ガイド") {
+		t.Fatalf("expected grid copy in fragment response")
 	}
 }
 
