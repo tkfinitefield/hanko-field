@@ -343,3 +343,101 @@ func TestStatusHandlerFallback(t *testing.T) {
 		t.Fatalf("expected 304 for matching ETag, got %d", rec2.Code)
 	}
 }
+
+func TestModalPickFontSelectedState(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/modal/pick/font", ModalPickFont)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/modal/pick/font?font=jp-gothic", nil)
+	req.Header.Set("Accept-Language", "en")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "font-picker-modal_title") {
+		t.Fatalf("expected modal title wrapper in body, got %s", body)
+	}
+	if !strings.Contains(body, "Gothic Modern") {
+		t.Fatalf("expected selected font name in body, got %s", body)
+	}
+	if strings.Count(body, "Currently applied") != 1 {
+		t.Fatalf("expected exactly one selected marker, got %s", body)
+	}
+}
+
+func TestModalPickTemplateLocalizedTitle(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/modal/pick/template", ModalPickTemplate)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/modal/pick/template", nil)
+	req.Header.Set("Accept-Language", "ja")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "template-picker-modal_title") {
+		t.Fatalf("expected modal title id in body, got %s", body)
+	}
+	if !strings.Contains(body, "テンプレートを選択") {
+		t.Fatalf("expected localized title in body, got %s", body)
+	}
+	if !strings.Contains(body, "現在の選択") {
+		t.Fatalf("expected selected badge copy, got %s", body)
+	}
+}
+
+func TestModalKanjiMapPOSTRendersCandidates(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.MethodFunc(http.MethodGet, "/modal/kanji-map", ModalKanjiMap)
+		r.MethodFunc(http.MethodPost, "/modal/kanji-map", ModalKanjiMap)
+	})
+
+	bootReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	bootReq.Header.Set("Accept-Language", "ja")
+	bootRec := httptest.NewRecorder()
+	srv.ServeHTTP(bootRec, bootReq)
+	if bootRec.Code != http.StatusOK {
+		t.Fatalf("expected bootstrapping GET to succeed, got %d; body=%s", bootRec.Code, bootRec.Body.String())
+	}
+	var csrfToken, sessionCookie string
+	for _, c := range bootRec.Result().Cookies() {
+		switch c.Name {
+		case "csrf_token":
+			csrfToken = c.Value
+		case "HANKO_WEB_SESSION":
+			sessionCookie = c.Value
+		}
+	}
+	if csrfToken == "" || sessionCookie == "" {
+		t.Fatalf("expected csrf and session cookies, got csrf=%q session=%q", csrfToken, sessionCookie)
+	}
+
+	form := strings.NewReader("name=Saito")
+	req := httptest.NewRequest(http.MethodPost, "/modal/kanji-map", form)
+	req.Header.Set("Accept-Language", "ja")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-CSRF-Token", csrfToken)
+	req.Header.Set("Cookie", "csrf_token="+csrfToken+"; HANKO_WEB_SESSION="+sessionCookie)
+
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "kanji-mapper-modal_title") {
+		t.Fatalf("expected kanji mapper modal wrapper, got %s", body)
+	}
+	if !strings.Contains(body, "斎藤") {
+		t.Fatalf("expected mapped kanji candidate in body, got %s", body)
+	}
+	if !strings.Contains(body, "信頼度") {
+		t.Fatalf("expected confidence label in body, got %s", body)
+	}
+}

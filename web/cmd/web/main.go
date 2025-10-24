@@ -1222,10 +1222,18 @@ func DesignEditorPreviewFrag(w http.ResponseWriter, r *http.Request) {
 // ModalPickFont renders the font selection modal fragment.
 func ModalPickFont(w http.ResponseWriter, r *http.Request) {
 	lang := mw.Lang(r)
+	fonts := designEditorFonts(lang)
 	selected := strings.TrimSpace(r.URL.Query().Get("font"))
+	if len(fonts) > 0 {
+		if f, ok := findDesignEditorFont(fonts, selected); ok {
+			selected = f.ID
+		} else {
+			selected = fonts[0].ID
+		}
+	}
 	data := map[string]any{
 		"Lang":     lang,
-		"Fonts":    designEditorFonts(lang),
+		"Fonts":    fonts,
 		"Selected": selected,
 	}
 	renderTemplate(w, r, "frag_design_editor_fonts_modal", data)
@@ -1234,10 +1242,18 @@ func ModalPickFont(w http.ResponseWriter, r *http.Request) {
 // ModalPickTemplate renders the template selection modal fragment.
 func ModalPickTemplate(w http.ResponseWriter, r *http.Request) {
 	lang := mw.Lang(r)
+	templates := designEditorTemplates(lang)
 	selected := strings.TrimSpace(r.URL.Query().Get("template"))
+	if len(templates) > 0 {
+		if t, ok := findDesignEditorTemplate(templates, selected); ok {
+			selected = t.ID
+		} else {
+			selected = templates[0].ID
+		}
+	}
 	data := map[string]any{
 		"Lang":      lang,
-		"Templates": designEditorTemplates(lang),
+		"Templates": templates,
 		"Selected":  selected,
 	}
 	renderTemplate(w, r, "frag_design_editor_templates_modal", data)
