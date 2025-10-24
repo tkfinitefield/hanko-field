@@ -842,8 +842,7 @@ func (s *StaticService) RefundModal(_ context.Context, _ string, orderID string)
 		}
 	}
 
-	existing := make([]RefundRecord, 0, len(cloned.Refunds))
-	copy(existing, cloned.Refunds)
+	existing := append([]RefundRecord(nil), cloned.Refunds...)
 
 	outstanding := ""
 	if cloned.Payment.PastDue {
