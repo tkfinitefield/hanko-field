@@ -1,0 +1,35 @@
+package notifications
+
+templ Badge(data BadgeData) {
+	<div
+		class="relative"
+		data-notifications-root
+		hx-get={ data.Endpoint }
+		hx-trigger="load, every 30s"
+		hx-target="this"
+		hx-swap="outerHTML"
+		data-notifications-stream={ data.StreamEndpoint }
+		data-notifications-href={ data.Href }
+	>
+		<a
+			href={ data.Href }
+			class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+			data-notifications-button
+			aria-label="通知センターを開く"
+		>
+			<span class="sr-only">通知センターを開く</span>
+			<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" class="h-5 w-5">
+				<path d="M10 2a4.5 4.5 0 0 1 4.5 4.5v1.085c0 .472.17.93.478 1.287l.83.953c.804.924.132 2.375-1.086 2.375H5.278c-1.218 0-1.89-1.451-1.086-2.375l.83-.953A1.999 1.999 0 0 0 5.5 7.585V6.5A4.5 4.5 0 0 1 10 2Zm0 16a2.5 2.5 0 0 1-2.45-2h4.9A2.5 2.5 0 0 1 10 18Z" fill="currentColor"></path>
+			</svg>
+			<span
+				class="absolute -top-1 -right-1 inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-danger-500 px-1 text-[11px] font-semibold leading-none text-white shadow-sm transition"
+				aria-live="polite"
+				aria-atomic="true"
+				data-notification-count
+				data-empty={ boolAttr(data.Total == 0) }
+			>
+				{ badgeDisplay(data.Total) }
+			</span>
+		</a>
+	</div>
+}

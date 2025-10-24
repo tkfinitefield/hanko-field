@@ -125,6 +125,361 @@ const initNotificationsBadge = () => {
   }
 };
 
+const badgeClassForTone = (tone) => {
+  const base = ["badge"];
+  switch ((tone || "").toLowerCase()) {
+    case "success":
+      base.push("badge-success");
+      break;
+    case "danger":
+      base.push("badge-danger");
+      break;
+    case "warning":
+      base.push("badge-warning");
+      break;
+    case "info":
+      base.push("badge-info");
+      break;
+    default:
+      break;
+  }
+  return base.join(" ");
+};
+
+const updateBadgeTone = (element, tone) => {
+  if (!(element instanceof HTMLElement)) {
+    return;
+  }
+  element.className = badgeClassForTone(tone);
+};
+
+const updateSelectedQueryParam = (id) => {
+  try {
+    const url = new URL(window.location.href);
+    if (typeof id === "string" && id.trim() !== "") {
+      url.searchParams.set("selected", id.trim());
+    } else {
+      url.searchParams.delete("selected");
+    }
+    window.history.replaceState({}, "", url.toString());
+  } catch (error) {
+    // ignore invalid URLs (e.g., older browsers)
+  }
+};
+
+const buildMetadataRow = (label, value) => {
+  const row = document.createElement("div");
+  row.className = "flex items-center justify-between gap-2";
+  const dt = document.createElement("dt");
+  dt.className = "font-medium text-slate-500";
+  dt.textContent = label || "";
+  const dd = document.createElement("dd");
+  dd.textContent = value || "";
+  row.appendChild(dt);
+  row.appendChild(dd);
+  return row;
+};
+
+const buildActionButton = (action) => {
+  const anchor = document.createElement("a");
+  anchor.className = "btn btn-secondary btn-sm";
+  anchor.href = typeof action.url === "string" ? action.url : "#";
+  anchor.textContent = action.label || "詳細";
+  if (typeof action.icon === "string" && action.icon.trim() !== "") {
+    anchor.textContent = `${action.icon} ${anchor.textContent}`;
+  }
+  return anchor;
+};
+
+const buildTimelineItem = (event) => {
+  const item = document.createElement("li");
+  item.className = "mb-4 last:mb-0";
+
+  const marker = document.createElement("div");
+  marker.className = "absolute -left-1.5 h-3 w-3 rounded-full border border-white bg-slate-300";
+  item.appendChild(marker);
+
+  const meta = document.createElement("p");
+  meta.className = "flex items-center gap-2 text-xs text-slate-400";
+  if (typeof event.icon === "string" && event.icon.trim() !== "") {
+    const icon = document.createElement("span");
+    icon.textContent = event.icon;
+    meta.appendChild(icon);
+  }
+  const timeLabel = document.createElement("span");
+  timeLabel.textContent = event.occurredRelative || "";
+  meta.appendChild(timeLabel);
+  if (typeof event.actor === "string" && event.actor.trim() !== "") {
+    const actor = document.createElement("span");
+    actor.textContent = `· ${event.actor}`;
+    meta.appendChild(actor);
+  }
+  item.appendChild(meta);
+
+  const title = document.createElement("p");
+  title.className = "mt-1 font-medium text-slate-800";
+  title.textContent = event.title || "";
+  item.appendChild(title);
+
+  if (typeof event.description === "string" && event.description.trim() !== "") {
+    const description = document.createElement("p");
+    description.className = "mt-1 text-slate-600";
+    description.textContent = event.description;
+    item.appendChild(description);
+  }
+
+  return item;
+};
+
+const replaceResourceElement = (scope, payload) => {
+  if (!(scope instanceof HTMLElement)) {
+    return;
+  }
+  const resource = payload && payload.resource ? payload.resource : {};
+  const current = scope.querySelector("[data-notification-resource]");
+  const element = document.createElement(typeof resource.url === "string" && resource.url.trim() !== "" ? "a" : "span");
+  element.setAttribute("data-notification-resource", "");
+  if (element instanceof HTMLAnchorElement && resource.url) {
+    element.href = resource.url;
+    element.className = "text-brand-600 hover:text-brand-500";
+  }
+  element.textContent = resource.label || "";
+  if (current instanceof HTMLElement) {
+    current.replaceWith(element);
+  } else {
+    const placeholder = scope.querySelector("[data-notification-resource-placeholder]");
+    if (placeholder instanceof HTMLElement) {
+      placeholder.replaceWith(element);
+    }
+  }
+};
+
+const renderNotificationDetail = (payload) => {
+  const container = document.querySelector("[data-notification-detail]");
+  if (!(container instanceof HTMLElement) || !payload) {
+    return;
+  }
+
+  container.dataset.notificationId = payload.id || "";
+
+  const category = container.querySelector("[data-notification-category]");
+  if (category) {
+    category.textContent = payload.categoryLabel || "";
+  }
+
+  const title = container.querySelector("[data-notification-title]");
+  if (title) {
+    title.textContent = payload.title || "";
+  }
+
+  const summary = container.querySelector("[data-notification-summary]");
+  if (summary) {
+    summary.textContent = payload.summary || "";
+  }
+
+  const severity = container.querySelector("[data-notification-severity]");
+  if (severity instanceof HTMLElement) {
+    severity.textContent = payload.severityLabel || "";
+    updateBadgeTone(severity, payload.severityTone);
+  }
+
+  const status = container.querySelector("[data-notification-status]");
+  if (status instanceof HTMLElement) {
+    status.textContent = payload.statusLabel || "";
+    updateBadgeTone(status, payload.statusTone);
+  }
+
+  const owner = container.querySelector("[data-notification-owner]");
+  if (owner) {
+    owner.textContent = payload.owner || "";
+    const ownerRow = owner.closest("div");
+    if (ownerRow instanceof HTMLElement) {
+      ownerRow.hidden = !(payload.owner && payload.owner.trim() !== "");
+    }
+  }
+
+  replaceResourceElement(container, payload);
+  const resourceElement = container.querySelector("[data-notification-resource]");
+  if (resourceElement) {
+    const label = resourceElement.parentElement && resourceElement.parentElement.previousElementSibling;
+    if (label instanceof HTMLElement) {
+      const kind = payload && payload.resource ? payload.resource.kind : "";
+      label.textContent = kind || "リソース";
+    }
+  }
+
+  const created = container.querySelector("[data-notification-created]");
+  if (created instanceof HTMLElement) {
+    created.textContent = payload.createdRelative || "";
+    if (payload.createdAt) {
+      created.title = payload.createdAt;
+    }
+  }
+
+  const acknowledged = container.querySelector("[data-notification-acknowledged]");
+  if (acknowledged instanceof HTMLElement) {
+    acknowledged.textContent = payload.acknowledgedLabel || "";
+    const row = acknowledged.closest("div");
+    if (row instanceof HTMLElement) {
+      row.hidden = !(payload.acknowledgedLabel && payload.acknowledgedLabel.trim() !== "");
+    }
+  }
+
+  const resolved = container.querySelector("[data-notification-resolved]");
+  if (resolved instanceof HTMLElement) {
+    resolved.textContent = payload.resolvedLabel || "";
+    const row = resolved.closest("div");
+    if (row instanceof HTMLElement) {
+      row.hidden = !(payload.resolvedLabel && payload.resolvedLabel.trim() !== "");
+    }
+  }
+
+  const metadataContainer = container.querySelector("[data-notification-metadata-container]");
+  const metadataList = container.querySelector("[data-notification-metadata]");
+  if (metadataList instanceof HTMLElement) {
+    metadataList.innerHTML = "";
+    const list = Array.isArray(payload.metadata) ? payload.metadata : [];
+    list.forEach((meta) => {
+      metadataList.appendChild(buildMetadataRow(meta.label, meta.value));
+    });
+    if (metadataContainer instanceof HTMLElement) {
+      metadataContainer.hidden = list.length === 0;
+    }
+  }
+
+  const actionContainer = container.querySelector("[data-notification-actions]");
+  const actionList = container.querySelector("[data-notification-action-list]");
+  if (actionList instanceof HTMLElement) {
+    actionList.innerHTML = "";
+    const actions = Array.isArray(payload.links) ? payload.links : [];
+    actions.forEach((action) => {
+      actionList.appendChild(buildActionButton(action));
+    });
+    if (actionContainer instanceof HTMLElement) {
+      actionContainer.hidden = actions.length === 0;
+    }
+  }
+
+  const timelineContainer = container.querySelector("[data-notification-timeline-container]");
+  const timelineList = container.querySelector("[data-notification-timeline]");
+  if (timelineList instanceof HTMLElement) {
+    timelineList.innerHTML = "";
+    const events = Array.isArray(payload.timeline) ? payload.timeline : [];
+    events.forEach((event) => {
+      timelineList.appendChild(buildTimelineItem(event));
+    });
+    if (timelineContainer instanceof HTMLElement) {
+      timelineContainer.hidden = events.length === 0;
+    }
+  }
+};
+
+const selectNotificationRow = (row) => {
+  if (!(row instanceof HTMLElement)) {
+    return;
+  }
+  const table = row.closest("table");
+  if (table instanceof HTMLElement) {
+    table.querySelectorAll("[data-notification-row]").forEach((tr) => {
+      if (!(tr instanceof HTMLElement)) {
+        return;
+      }
+      if (tr === row) {
+        tr.dataset.selected = "true";
+        tr.classList.add("bg-brand-50");
+      } else {
+        delete tr.dataset.selected;
+        tr.classList.remove("bg-brand-50");
+      }
+    });
+  } else {
+    row.dataset.selected = "true";
+    row.classList.add("bg-brand-50");
+  }
+};
+
+const parseNotificationPayload = (row) => {
+  if (!(row instanceof HTMLElement)) {
+    return null;
+  }
+  const raw = row.getAttribute("data-notification-payload");
+  if (typeof raw !== "string" || raw.trim() === "") {
+    return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    return null;
+  }
+};
+
+const initNotificationsSelection = () => {
+  const root = document.querySelector("[data-notifications-root]");
+  if (!(root instanceof HTMLElement)) {
+    return;
+  }
+
+  const applyDefaultSelection = (scope) => {
+    const table = scope.querySelector("[data-notifications-table]");
+    if (!(table instanceof HTMLElement)) {
+      return;
+    }
+    const selectedRow =
+      table.querySelector("[data-notification-row][data-selected='true']") ||
+      table.querySelector("[data-notification-row]");
+    const payload = selectedRow ? parseNotificationPayload(selectedRow) : null;
+    if (selectedRow && payload) {
+      selectNotificationRow(selectedRow);
+      renderNotificationDetail(payload);
+      updateSelectedQueryParam(payload.id);
+    }
+  };
+
+  const shouldIgnoreClick = (event) => {
+    if (!(event.target instanceof Element)) {
+      return true;
+    }
+    const interactive = event.target.closest("a, button, input, textarea, select, [role='button']");
+    return Boolean(interactive);
+  };
+
+  root.addEventListener("click", (event) => {
+    if (!(event instanceof MouseEvent)) {
+      return;
+    }
+    if (shouldIgnoreClick(event)) {
+      return;
+    }
+    const row = event.target instanceof Element ? event.target.closest("[data-notification-row]") : null;
+    if (!(row instanceof HTMLElement)) {
+      return;
+    }
+    const payload = parseNotificationPayload(row);
+    if (!payload) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    selectNotificationRow(row);
+    renderNotificationDetail(payload);
+    updateSelectedQueryParam(payload.id);
+  });
+
+  applyDefaultSelection(root);
+
+  if (window.htmx) {
+    document.body.addEventListener("htmx:afterSwap", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      const table = event.target.closest?.("[data-notifications-table]") || (event.target.matches && event.target.matches("[data-notifications-table]") ? event.target : null);
+      if (table instanceof HTMLElement) {
+        applyDefaultSelection(table);
+      }
+    });
+  }
+};
+
 const initDashboardRefresh = () => {
   const parseTargets = (value) => {
     if (typeof value !== "string" || value.trim() === "") {
@@ -1513,6 +1868,7 @@ window.hankoAdmin = window.hankoAdmin || {
 
     initSearchShortcut(modalRoot);
     initNotificationsBadge();
+    initNotificationsSelection();
     initDashboardRefresh();
     initHXTriggerHandlers();
     const toast = initToastStack();

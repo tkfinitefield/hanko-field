@@ -1,0 +1,306 @@
+package notifications
+
+import (
+	"finitefield.org/hanko-admin/internal/admin/templates/components"
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+	"finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
+
+templ Index(data PageData) {
+	@layouts.Base(data.Title, data.Breadcrumbs, pageBody(data))
+}
+
+templ pageBody(data PageData) {
+	<div class="space-y-6" data-notifications-root>
+		<section class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+			<div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+				<div>
+					<h1 class="text-2xl font-semibold text-slate-900">{ data.Title }</h1>
+					<p class="mt-2 text-sm text-slate-600">{ data.Description }</p>
+				</div>
+				<div class="flex flex-wrap items-center gap-3">
+					for _, legend := range data.Legend {
+						<span class={ helpers.BadgeClass(legend.Tone) } title={ legend.Description }>
+							if legend.Icon != "" {
+								<span aria-hidden="true" class="mr-1">{ legend.Icon }</span>
+							}
+							{ legend.Label }
+						</span>
+					}
+				</div>
+			</div>
+			<div class="mt-6 border-t border-slate-200 pt-4">
+				@filterToolbar(data)
+			</div>
+		</section>
+
+		<div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+			<section class="flex flex-col gap-4">
+				<div
+					id="notifications-table"
+					hx-target="this"
+					hx-swap="innerHTML"
+					class="space-y-4"
+					data-notifications-table
+				>
+					@Table(data.Table)
+				</div>
+			</section>
+			<aside class="hidden xl:block">
+				<div class="sticky top-20 space-y-4">
+					@DetailDrawer(data.Drawer)
+				</div>
+			</aside>
+		</div>
+	</div>
+}
+
+templ filterToolbar(data PageData) {
+	<form
+		class="flex flex-col gap-4"
+		hx-get={ data.TableEndpoint }
+		hx-trigger="submit"
+		hx-target="#notifications-table"
+		hx-push-url="true"
+		hx-indicator="#notifications-loading"
+	>
+		<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+			<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="種類">
+				for _, option := range data.Filters.Categories {
+					<label class={ categoryOptionClass(option.Active) }>
+						<input
+							type="radio"
+							name="category"
+							value={ option.Value }
+							class="sr-only"
+							checked?={ option.Active }
+						/>
+						<span class="inline-flex items-center gap-1 text-sm">
+							if option.Icon != "" {
+								<span aria-hidden="true">{ option.Icon }</span>
+							}
+							{ option.Label }
+							if option.Count > 0 {
+								<span class="text-xs text-slate-400">({ option.Count })</span>
+							}
+						</span>
+					</label>
+				}
+			</div>
+			<div class="flex items-center gap-3">
+				<label class="sr-only" for="notifications-search">検索</label>
+				<div class="relative">
+					<input
+						id="notifications-search"
+						name="q"
+						type="search"
+						value={ data.Query.Search }
+						placeholder="通知タイトル・リソースを検索"
+						class="w-72 rounded-lg border border-slate-300 bg-white py-2 pl-8 pr-3 text-sm text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+					/>
+					<span class="pointer-events-none absolute inset-y-0 left-2 flex items-center text-slate-400">🔍</span>
+				</div>
+				<button
+					type="submit"
+					class={ helpers.ButtonClass("primary", "sm", false, false) }
+				>
+					適用
+				</button>
+				<button
+					type="reset"
+					class={ helpers.ButtonClass("secondary", "sm", false, false) }
+					data-notifications-reset
+				>
+					クリア
+				</button>
+			</div>
+		</div>
+
+		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+			<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="優先度">
+				for _, option := range data.Filters.Severities {
+					<label class={ severityOptionClass(option.Active, option.Tone) }>
+						<input
+							type="radio"
+							name="severity"
+							value={ option.Value }
+							class="sr-only"
+							checked?={ option.Active }
+						/>
+						<span class="inline-flex items-center gap-1 text-sm">
+							{ option.Label }
+							if option.Count > 0 {
+								<span class="text-xs text-slate-400">({ option.Count })</span>
+							}
+						</span>
+					</label>
+				}
+			</div>
+			<div class="flex flex-wrap items-center gap-3">
+				<label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="notifications-status">ステータス</label>
+				<select
+					id="notifications-status"
+					name="status"
+					class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+					value={ data.Query.Status }
+				>
+					for _, option := range data.Filters.Statuses {
+						<option value={ option.Value } selected?={ option.Value == data.Query.Status }>{ option.Label }</option>
+					}
+				</select>
+				<div class="flex items-center gap-2">
+					<label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="notifications-date-start">期間</label>
+					<input
+						id="notifications-date-start"
+						name="start"
+						type="date"
+						value={ data.Query.StartDate }
+						class="w-36 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+					/>
+					<span class="text-slate-400">〜</span>
+					<input
+						id="notifications-date-end"
+						name="end"
+						type="date"
+						value={ data.Query.EndDate }
+						class="w-36 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+					/>
+				</div>
+			</div>
+		</div>
+		<div
+			id="notifications-loading"
+			class="htmx-indicator text-xs text-slate-400"
+		>
+			読み込み中…
+		</div>
+	</form>
+}
+
+templ DetailDrawer(data DrawerData) {
+	<section
+		class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+		data-notification-detail
+		data-notification-id={ data.ID }
+	>
+		if data.Empty {
+			<div class="space-y-2 text-sm text-slate-600">
+				<p class="text-base font-semibold text-slate-900">通知を選択してください</p>
+				<p>一覧から通知を選択すると、ここに詳細と対応履歴が表示されます。</p>
+			</div>
+			return
+		}
+
+		<div class="flex flex-col gap-3">
+			<div class="flex items-start justify-between gap-3" data-notification-header>
+				<div>
+					<p class="text-xs font-semibold uppercase tracking-wide text-slate-500" data-notification-category>{ data.CategoryLabel }</p>
+					<h2 class="mt-1 text-lg font-semibold text-slate-900" data-notification-title>{ data.Title }</h2>
+				</div>
+				<span class={ helpers.BadgeClass(data.SeverityTone) } data-notification-severity>{ data.SeverityLabel }</span>
+			</div>
+			<p class="text-sm text-slate-600" data-notification-summary>{ data.Summary }</p>
+
+			<dl class="mt-2 space-y-2 text-sm text-slate-600">
+				<div class="flex items-center justify-between gap-2">
+					<dt class="font-medium text-slate-500">ステータス</dt>
+					<dd><span class={ helpers.BadgeClass(data.StatusTone) } data-notification-status>{ data.StatusLabel }</span></dd>
+				</div>
+				if data.Owner != "" {
+					<div class="flex items-center justify-between gap-2">
+						<dt class="font-medium text-slate-500">担当</dt>
+						<dd data-notification-owner>{ data.Owner }</dd>
+					</div>
+				}
+				if data.Resource.Label != "" {
+					<div class="flex items-center justify-between gap-2">
+						<dt class="font-medium text-slate-500">{ data.Resource.Kind }</dt>
+						<dd>
+							if data.Resource.URL != "" {
+								<a href={ data.Resource.URL } class="text-brand-600 hover:text-brand-500" data-notification-resource>
+									{ data.Resource.Label }
+								</a>
+							} else {
+								<span data-notification-resource>{ data.Resource.Label }</span>
+							}
+						</dd>
+					</div>
+				}
+				<div class="flex items-center justify-between gap-2">
+					<dt class="font-medium text-slate-500">検知</dt>
+					<dd
+						title={ helpers.Date(data.CreatedAt, "2006-01-02 15:04") }
+						data-notification-created
+					>
+						{ data.CreatedRelative }
+					</dd>
+				</div>
+				if data.AcknowledgedLabel != "" {
+					<div class="flex items-center justify-between gap-2">
+						<dt class="font-medium text-slate-500">確認</dt>
+						<dd data-notification-acknowledged>{ data.AcknowledgedLabel }</dd>
+					</div>
+				}
+				if data.ResolvedLabel != "" {
+					<div class="flex items-center justify-between gap-2">
+						<dt class="font-medium text-slate-500">解決</dt>
+						<dd data-notification-resolved>{ data.ResolvedLabel }</dd>
+					</div>
+				}
+			</dl>
+
+			<div class="mt-4 space-y-2" data-notification-metadata-container hidden?={ len(data.Metadata) == 0 }>
+				<h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">追加情報</h3>
+				<dl class="space-y-2 text-sm text-slate-600" data-notification-metadata>
+					for _, meta := range data.Metadata {
+						<div class="flex items-center justify-between gap-2">
+							<dt class="font-medium text-slate-500">{ meta.Label }</dt>
+							<dd>{ meta.Value }</dd>
+						</div>
+					}
+				</dl>
+			</div>
+
+			<div class="mt-4 space-y-2" data-notification-actions hidden?={ len(data.Links) == 0 }>
+				<h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">アクション</h3>
+				<div class="flex flex-wrap gap-2" data-notification-action-list>
+					for _, action := range data.Links {
+						@components.ButtonWith(action.Label, components.ButtonOptions{
+							Href:    action.URL,
+							Variant: "secondary",
+							Size:    "sm",
+						})
+					}
+				</div>
+			</div>
+
+			<div class="mt-6 space-y-3" data-notification-timeline-container hidden?={ len(data.Timeline) == 0 }>
+				if len(data.Timeline) == 0 {
+					<p class="text-sm text-slate-500">まだタイムラインイベントはありません。</p>
+				} else {
+					<h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">タイムライン</h3>
+					<ol class="relative border-l border-slate-200 pl-4 text-sm text-slate-600" data-notification-timeline>
+						for _, event := range data.Timeline {
+							<li class="mb-4 last:mb-0">
+								<div class="absolute -left-1.5 h-3 w-3 rounded-full border border-white bg-slate-300"></div>
+								<p class="flex items-center gap-2 text-xs text-slate-400">
+									if event.Icon != "" {
+										<span>{ event.Icon }</span>
+									}
+									<span>{ event.OccurredRelative }</span>
+									if event.Actor != "" {
+										<span>· { event.Actor }</span>
+									}
+								</p>
+								<p class="mt-1 font-medium text-slate-800">{ event.Title }</p>
+								if event.Description != "" {
+									<p class="mt-1 text-slate-600">{ event.Description }</p>
+								}
+							</li>
+						}
+					</ol>
+				}
+			</div>
+		</div>
+	</section>
+}

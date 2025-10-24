@@ -13,6 +13,7 @@ import (
 	"finitefield.org/hanko-admin/internal/admin/dashboard"
 	custommw "finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/ui"
+	adminnotifications "finitefield.org/hanko-admin/internal/admin/notifications"
 	"finitefield.org/hanko-admin/internal/admin/profile"
 	"finitefield.org/hanko-admin/internal/admin/search"
 	appsession "finitefield.org/hanko-admin/internal/admin/session"
@@ -21,20 +22,21 @@ import (
 
 // Config holds runtime options for the admin HTTP server.
 type Config struct {
-	Address          string
-	BasePath         string
-	LoginPath        string
-	Authenticator    custommw.Authenticator
-	DashboardService dashboard.Service
-	ProfileService   profile.Service
-	SearchService    search.Service
-	Session          SessionConfig
-	SessionStore     custommw.SessionStore
-	CSRFCookieName   string
-	CSRFCookiePath   string
-	CSRFCookieSecure bool
-	CSRFHeaderName   string
-	Environment      string
+	Address              string
+	BasePath             string
+	LoginPath            string
+	Authenticator        custommw.Authenticator
+	DashboardService     dashboard.Service
+	ProfileService       profile.Service
+	SearchService        search.Service
+	NotificationsService adminnotifications.Service
+	Session              SessionConfig
+	SessionStore         custommw.SessionStore
+	CSRFCookieName       string
+	CSRFCookiePath       string
+	CSRFCookieSecure     bool
+	CSRFHeaderName       string
+	Environment          string
 }
 
 // SessionConfig represents optional overrides for the admin session manager.
@@ -90,9 +92,10 @@ func New(cfg Config) *http.Server {
 	}
 
 	uiHandlers := ui.NewHandlers(ui.Dependencies{
-		DashboardService: cfg.DashboardService,
-		ProfileService:   cfg.ProfileService,
-		SearchService:    cfg.SearchService,
+		DashboardService:     cfg.DashboardService,
+		ProfileService:       cfg.ProfileService,
+		SearchService:        cfg.SearchService,
+		NotificationsService: cfg.NotificationsService,
 	})
 
 	mountAdminRoutes(router, basePath, routeOptions{
@@ -174,6 +177,11 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 			protected.Route("/search", func(sr chi.Router) {
 				sr.Get("/", uiHandlers.SearchPage)
 				sr.Get("/table", uiHandlers.SearchTable)
+			})
+			protected.Route("/notifications", func(nr chi.Router) {
+				nr.Get("/", uiHandlers.NotificationsPage)
+				nr.Get("/table", uiHandlers.NotificationsTable)
+				nr.Get("/badge", uiHandlers.NotificationsBadge)
 			})
 			// Future admin routes will be registered here.
 		})
