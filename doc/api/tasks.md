@@ -82,7 +82,7 @@
 - [x] [060 Implement order payment history retrieval.](./tasks/060-implement-order-payment-history-retrieval.md)
 - [x] [061 Implement order shipment list/detail endpoints including tracking events.](./tasks/061-implement-order-shipment-list-detail-endpoints-including-tracking-events.md)
 - [x] [062 Implement production events retrieval endpoint exposing timeline.](./tasks/062-implement-production-events-retrieval-endpoint-exposing-timeline.md)
-- [ ] [063 Implement reorder endpoint cloning design snapshot and cart lines to new order draft.](./tasks/063-implement-reorder-endpoint-cloning-design-snapshot-and-cart-lines-to-new-order-d.md)
+- [x] [063 Implement reorder endpoint cloning design snapshot and cart lines to new order draft.](./tasks/063-implement-reorder-endpoint-cloning-design-snapshot-and-cart-lines-to-new-order-d.md)
 
 ### 5.6 Reviews
 - [ ] [064 Implement review creation endpoint validating order ownership and completion.](./tasks/064-implement-review-creation-endpoint-validating-order-ownership-and-completion.md)
