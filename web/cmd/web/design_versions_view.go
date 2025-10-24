@@ -221,9 +221,13 @@ func buildDesignVersionHistoryView(lang string, q url.Values) DesignVersionHisto
 	view.Empty = len(filtered) == 0
 	view.Versions = buildDesignVersionRows(lang, filtered, focus)
 
-	selected := findSelectedDesignVersion(filtered, all, focus)
-	view.Selected = buildDesignVersionDetail(lang, selected, all)
-	view.Timeline = buildDesignVersionTimeline(selected)
+	if selected, ok := findSelectedDesignVersion(filtered, all, focus); ok {
+		view.Selected = buildDesignVersionDetail(lang, selected, all)
+		view.Timeline = buildDesignVersionTimeline(selected)
+	} else {
+		view.Selected = DesignVersionDetail{}
+		view.Timeline = nil
+	}
 
 	return view
 }
@@ -308,6 +312,9 @@ func buildDesignVersionRows(lang string, versions []designVersion, focus string)
 }
 
 func buildDesignVersionDetail(lang string, selected designVersion, all []designVersion) DesignVersionDetail {
+	if selected.ID == "" {
+		return DesignVersionDetail{}
+	}
 	before := selected
 	for i, v := range all {
 		if v.ID == selected.ID {
@@ -367,26 +374,23 @@ func buildDesignVersionTimeline(selected designVersion) []DesignVersionTimelineE
 	return out
 }
 
-func findSelectedDesignVersion(filtered, all []designVersion, focus string) designVersion {
+func findSelectedDesignVersion(filtered, all []designVersion, focus string) (designVersion, bool) {
 	if focus != "" {
 		for _, v := range filtered {
 			if v.ID == focus {
-				return v
+				return v, true
 			}
 		}
 		for _, v := range all {
 			if v.ID == focus {
-				return v
+				return v, true
 			}
 		}
 	}
-	if len(filtered) > 0 {
-		return filtered[0]
+	if focus == "" && len(filtered) > 0 {
+		return filtered[0], true
 	}
-	if len(all) > 0 {
-		return all[0]
-	}
-	return designVersion{}
+	return designVersion{}, false
 }
 
 func normalizeDesignVersionAuthor(author string) string {

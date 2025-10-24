@@ -444,6 +444,20 @@ func TestDesignVersionsPreviewFragment(t *testing.T) {
 	}
 }
 
+func TestDesignVersionsPreviewFragmentNotFound(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/design/versions/preview", DesignVersionsPreviewFrag)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/design/versions/preview?version=missing", nil)
+	req.Header.Set("Accept-Language", "en")
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing version, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestDesignVersionsRollbackModal(t *testing.T) {
 	srv := newTestRouter(t, func(r chi.Router) {
 		r.Get("/design/versions/table", DesignVersionsTableFrag)
