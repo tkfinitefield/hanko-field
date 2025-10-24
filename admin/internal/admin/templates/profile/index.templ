@@ -34,9 +34,7 @@ templ pageBody(data PageData) {
 						@flashMessage(data.Flash)
 					}
 				</div>
-				<div id="profile-tabs" class="space-y-4">
-					@profileTabs(data)
-				</div>
+				@ProfileTabs(data)
 			</div>
 			<aside class="space-y-4">
 				@supportPanel()
@@ -175,7 +173,13 @@ templ supportPanel() {
 	</section>
 }
 
-templ profileTabs(data PageData) {
+templ ProfileTabs(data PageData) {
+	<div id="profile-tabs" class="space-y-4">
+		@profileTabsInner(data)
+	</div>
+}
+
+templ profileTabsInner(data PageData) {
 	@components.UnderlineTabs(components.UnderlineTabsProps{
 		Tabs: []components.UnderlineTab{
 			{ID: "account", Label: "アカウント", Href: "/admin/profile?tab=account", Active: data.ActiveTab == "account"},

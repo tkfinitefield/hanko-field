@@ -210,6 +210,15 @@ func (h *Handlers) renderProfilePage(w http.ResponseWriter, r *http.Request) {
 		CSRFToken:    custommw.CSRFTokenFromContext(r.Context()),
 	}
 
+	if custommw.IsHTMXRequest(r.Context()) {
+		target := strings.TrimSpace(custommw.HTMXInfoFromContext(r.Context()).Target)
+		target = strings.TrimPrefix(target, "#")
+		if strings.EqualFold(target, "profile-tabs") {
+			templ.Handler(profiletpl.ProfileTabs(payload)).ServeHTTP(w, r)
+			return
+		}
+	}
+
 	component := profiletpl.Index(payload)
 	templ.Handler(component).ServeHTTP(w, r)
 }

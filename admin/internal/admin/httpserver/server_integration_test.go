@@ -222,6 +222,42 @@ func TestProfilePageRenders(t *testing.T) {
 	require.Contains(t, doc.Find("body").Text(), "API キー")
 }
 
+func TestProfileTabsFragmentHTMX(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "tab-token"}
+	service := &profileStub{
+		state: &profile.SecurityState{
+			UserEmail: "staff@example.com",
+			Sessions: []profile.Session{
+				{ID: "sess-2", UserAgent: "Safari", IPAddress: "203.0.113.10", CreatedAt: time.Now(), LastSeenAt: time.Now(), Current: false},
+			},
+		},
+	}
+
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth), testutil.WithProfileService(service))
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/profile?tab=sessions", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+auth.Token)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "profile-tabs")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	html := string(body)
+
+	require.NotContains(t, html, "<html")
+	require.Contains(t, html, `id="profile-tabs"`)
+	require.Contains(t, html, "アクティブセッション")
+}
+
 func TestLoginSuccessFlow(t *testing.T) {
 	t.Parallel()
 
