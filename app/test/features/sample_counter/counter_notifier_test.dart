@@ -15,9 +15,9 @@ class _FakeRepo implements CounterRepository {
 
 void main() {
   test('loads initial value and increments', () async {
-    final container = ProviderContainer(overrides: [
-      counterRepositoryProvider.overrideWithValue(_FakeRepo(1)),
-    ]);
+    final container = ProviderContainer(
+      overrides: [counterRepositoryProvider.overrideWithValue(_FakeRepo(1))],
+    );
     addTearDown(container.dispose);
 
     final notifier = container.read(counterProvider.notifier);

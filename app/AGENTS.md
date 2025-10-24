@@ -186,3 +186,6 @@ fake: 実装を簡略化した軽量版。メモリ内の擬似リポジトリ�
 - `test/doubles/mocks/` : mock objects
 - `test/doubles/stubs/` : stub objects
 - `test/doubles/fakes/` : fake objects
+
+### clock, fake_async
+テストでは、時間の経過を制御するために clock と fake_async を使用します。

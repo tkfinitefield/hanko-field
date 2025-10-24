@@ -36,7 +36,9 @@ class AppTypography {
     // Start from Material defaults and fine-tune if needed.
     return base
         .copyWith(
-          headlineMedium: base.headlineMedium?.copyWith(fontWeight: FontWeight.w600),
+          headlineMedium: base.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
           titleLarge: base.titleLarge?.copyWith(fontWeight: FontWeight.w600),
           bodyLarge: base.bodyLarge?.copyWith(height: 1.3),
           bodyMedium: base.bodyMedium?.copyWith(height: 1.35),
@@ -44,4 +46,3 @@ class AppTypography {
         .apply(fontFamily: '');
   }
 }
-

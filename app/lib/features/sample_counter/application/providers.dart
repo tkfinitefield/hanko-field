@@ -8,6 +8,6 @@ final counterRepositoryProvider = Provider<CounterRepository>((ref) {
   return LocalCounterRepository();
 });
 
-final counterProvider =
-    AsyncNotifierProvider<CounterNotifier, int>(CounterNotifier.new);
-
+final counterProvider = AsyncNotifierProvider<CounterNotifier, int>(
+  CounterNotifier.new,
+);

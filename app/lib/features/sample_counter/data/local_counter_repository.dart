@@ -18,4 +18,3 @@ class LocalCounterRepository implements CounterRepository {
     _value = value;
   }
 }
-

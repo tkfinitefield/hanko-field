@@ -1,15 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../domain/counter_repository.dart';
-import 'providers.dart';
+import 'package:app/features/sample_counter/application/providers.dart';
 
 class CounterNotifier extends AsyncNotifier<int> {
-  late final CounterRepository _repo;
-
   @override
   Future<int> build() async {
-    _repo = ref.read(counterRepositoryProvider);
-    return _repo.load();
+    final repo = ref.read(counterRepositoryProvider);
+    return repo.load();
   }
 
   Future<void> increment() async {
@@ -17,7 +14,8 @@ class CounterNotifier extends AsyncNotifier<int> {
     final next = current + 1;
     state = const AsyncLoading();
     try {
-      await _repo.save(next);
+      final repo = ref.read(counterRepositoryProvider);
+      await repo.save(next);
       if (!ref.mounted) return;
       state = AsyncData(next);
     } catch (e, st) {
@@ -26,4 +24,3 @@ class CounterNotifier extends AsyncNotifier<int> {
     }
   }
 }
-

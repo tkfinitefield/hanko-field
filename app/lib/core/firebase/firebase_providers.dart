@@ -1,14 +1,17 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:app/core/app/app_flavor.dart';
+import 'package:app/core/firebase/app_firebase.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
-
-import 'package:app/core/app/app_flavor.dart';
-import 'package:app/core/firebase/app_firebase.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final firebaseAuthProvider = Provider<FirebaseAuth>((_) => AppFirebase.auth);
-final firebaseMessagingProvider = Provider<FirebaseMessaging>((_) => AppFirebase.messaging);
-final firebaseRemoteConfigProvider = Provider<FirebaseRemoteConfig>((_) => AppFirebase.remoteConfig);
+final firebaseMessagingProvider = Provider<FirebaseMessaging>(
+  (_) => AppFirebase.messaging,
+);
+final firebaseRemoteConfigProvider = Provider<FirebaseRemoteConfig>(
+  (_) => AppFirebase.remoteConfig,
+);
 
 final firebaseInitializedProvider = FutureProvider<void>((ref) async {
   final flavor = ref.read(appFlavorProvider);

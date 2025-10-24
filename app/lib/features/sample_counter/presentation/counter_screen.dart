@@ -16,16 +16,16 @@ class CounterScreen extends ConsumerWidget {
       body: Center(
         child: switch (counter) {
           AsyncData(:final value) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(l10n.countLabel(value)),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () => ref.read(counterProvider.notifier).increment(),
-                  child: Text(l10n.increment),
-                ),
-              ],
-            ),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(l10n.countLabel(value)),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => ref.read(counterProvider.notifier).increment(),
+                child: Text(l10n.increment),
+              ),
+            ],
+          ),
           AsyncLoading() => const CircularProgressIndicator(),
           AsyncError(:final error) => Text('Error: $error'),
         },

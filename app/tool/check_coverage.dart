@@ -44,7 +44,9 @@ Future<void> main(List<String> args) async {
 
   final pct = (hit / total) * 100.0;
   final pctStr = pct.toStringAsFixed(2);
-  stdout.writeln('Coverage: $pctStr% (hits: $hit / total: $total). Minimum: $min%');
+  stdout.writeln(
+    'Coverage: $pctStr% (hits: $hit / total: $total). Minimum: $min%',
+  );
 
   if (pct + 1e-9 < min) {
     stderr.writeln('Coverage below threshold.');
@@ -64,4 +66,3 @@ Map<String, String> _parseArgs(List<String> args) {
   }
   return map;
 }
-

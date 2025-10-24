@@ -1,11 +1,11 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:firebase_remote_config/firebase_remote_config.dart';
- 
-
 import 'package:app/core/app/app_flavor.dart';
 import 'package:app/firebase_options.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -27,6 +27,15 @@ class AppFirebase {
     // Messaging background handler
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
+    // Disable Crashlytics data collection until explicit consent is granted.
+    try {
+      await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);
+    } catch (_) {}
+
+    try {
+      await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
+    } catch (_) {}
+
     // iOS/macOS notification permission
     try {
       await FirebaseMessaging.instance.requestPermission();
@@ -39,10 +48,12 @@ class AppFirebase {
       AppFlavor.stg => const Duration(seconds: 30),
       AppFlavor.prod => const Duration(hours: 12),
     };
-    await rc.setConfigSettings(RemoteConfigSettings(
-      fetchTimeout: const Duration(seconds: 10),
-      minimumFetchInterval: minInterval,
-    ));
+    await rc.setConfigSettings(
+      RemoteConfigSettings(
+        fetchTimeout: const Duration(seconds: 10),
+        minimumFetchInterval: minInterval,
+      ),
+    );
     await rc.setDefaults(const {
       'feature_sample_counter': true,
       'welcome_title': 'Hanko Field',

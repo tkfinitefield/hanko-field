@@ -26,7 +26,9 @@ class AppRouterDelegate extends RouterDelegate<AppRoute>
   Widget build(BuildContext context) {
     return Navigator(
       key: navigatorKey,
-      pages: const [MaterialPage(key: ValueKey('RootPage'), child: SizedBox.shrink())],
+      pages: const [
+        MaterialPage(key: ValueKey('RootPage'), child: SizedBox.shrink()),
+      ],
       onDidRemovePage: (page) {},
     );
   }
@@ -34,6 +36,6 @@ class AppRouterDelegate extends RouterDelegate<AppRoute>
   @override
   Future<void> setNewRoutePath(AppRoute configuration) async {
     final notifier = ref.read(appStateProvider.notifier);
-      notifier.setRouteAndTab(configuration, AppTab.home);
+    notifier.setRouteAndTab(configuration, AppTab.home);
   }
 }
