@@ -211,6 +211,23 @@ func TablePayload(basePath string, state QueryState, result adminshipments.ListR
 		selected = strings.TrimSpace(result.SelectedID)
 	}
 	rows := buildRows(basePath, result.Batches, selected)
+	hasSelected := false
+	for _, row := range rows {
+		if row.Selected {
+			hasSelected = true
+			break
+		}
+	}
+	if !hasSelected {
+		if len(rows) > 0 {
+			selected = rows[0].ID
+			for i := range rows {
+				rows[i].Selected = rows[i].ID == selected
+			}
+		} else {
+			selected = ""
+		}
+	}
 	if errMsg != "" {
 		return TableData{
 			BasePath:     basePath,
