@@ -81,7 +81,7 @@
 - [x] [059 Implement order invoice request endpoint producing task to generate PDF.](./tasks/059-implement-order-invoice-request-endpoint-producing-task-to-generate-pdf.md)
 - [x] [060 Implement order payment history retrieval.](./tasks/060-implement-order-payment-history-retrieval.md)
 - [x] [061 Implement order shipment list/detail endpoints including tracking events.](./tasks/061-implement-order-shipment-list-detail-endpoints-including-tracking-events.md)
-- [ ] [062 Implement production events retrieval endpoint exposing timeline.](./tasks/062-implement-production-events-retrieval-endpoint-exposing-timeline.md)
+- [x] [062 Implement production events retrieval endpoint exposing timeline.](./tasks/062-implement-production-events-retrieval-endpoint-exposing-timeline.md)
 - [ ] [063 Implement reorder endpoint cloning design snapshot and cart lines to new order draft.](./tasks/063-implement-reorder-endpoint-cloning-design-snapshot-and-cart-lines-to-new-order-d.md)
 
 ### 5.6 Reviews

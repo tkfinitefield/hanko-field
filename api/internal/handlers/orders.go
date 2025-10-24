@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -54,6 +55,8 @@ var invoiceRequestableStatuses = map[domain.OrderStatus]struct{}{
 
 var invoiceDeliveryChannels = []string{"email", "dashboard"}
 
+var productionNoteTagPattern = regexp.MustCompile(`(?is)<[^>]+>`)
+
 type cancelOrderRequest struct {
 	Reason         string         `json:"reason"`
 	Metadata       map[string]any `json:"metadata"`
@@ -95,6 +98,7 @@ func (h *OrderHandlers) Routes(r chi.Router) {
 		r.Use(h.authn.RequireFirebaseAuth())
 	}
 	r.Get("/", h.listOrders)
+	r.Get("/{orderID}/production-events", h.listOrderProductionEvents)
 	r.Get("/{orderID}/payments", h.listOrderPayments)
 	r.Get("/{orderID}/shipments", h.listOrderShipments)
 	r.Get("/{orderID}/shipments/{shipmentID}", h.getOrderShipment)
@@ -258,6 +262,53 @@ func (h *OrderHandlers) listOrderShipments(w http.ResponseWriter, r *http.Reques
 
 	shipments := buildOrderShipmentSummaries(order.Shipments)
 	writeJSONResponse(w, http.StatusOK, shipments)
+}
+
+func (h *OrderHandlers) listOrderProductionEvents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.orders == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("order_service_unavailable", "order service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "order id is required", http.StatusBadRequest))
+		return
+	}
+
+	includeNotes := true
+	if raw := strings.TrimSpace(r.URL.Query().Get("includeNotes")); raw != "" {
+		flag, err := strconv.ParseBool(raw)
+		if err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "includeNotes must be a boolean", http.StatusBadRequest))
+			return
+		}
+		includeNotes = flag
+	}
+
+	order, err := h.orders.GetOrder(ctx, orderID, services.OrderReadOptions{IncludeProductionEvents: true})
+	if err != nil {
+		writeOrderError(ctx, w, err)
+		return
+	}
+
+	if !strings.EqualFold(strings.TrimSpace(order.UserID), strings.TrimSpace(identity.UID)) {
+		httpx.WriteError(ctx, w, httpx.NewError("order_not_found", "order not found", http.StatusNotFound))
+		return
+	}
+
+	timeline := buildOrderProductionTimeline(order.ProductionEvents, includeNotes)
+	response := orderProductionTimelineResponse{
+		Events: timeline,
+	}
+	writeJSONResponse(w, http.StatusOK, response)
 }
 
 func (h *OrderHandlers) getOrderShipment(w http.ResponseWriter, r *http.Request) {
@@ -685,6 +736,18 @@ type orderPaymentPayload struct {
 	UpdatedAt  string `json:"updated_at,omitempty"`
 }
 
+type orderProductionTimelineResponse struct {
+	Events []orderProductionTimelineEvent `json:"events"`
+}
+
+type orderProductionTimelineEvent struct {
+	Timestamp   string   `json:"timestamp"`
+	Stage       string   `json:"stage"`
+	Operator    string   `json:"operator,omitempty"`
+	Notes       string   `json:"notes,omitempty"`
+	Attachments []string `json:"attachments,omitempty"`
+}
+
 type orderPaymentHistoryResponse struct {
 	Payments []orderPaymentHistoryEntry `json:"payments"`
 }
@@ -963,6 +1026,47 @@ func buildOrderShipmentDetail(shipment services.Shipment) orderShipmentPayload {
 	return payload
 }
 
+func buildOrderProductionTimeline(events []services.OrderProductionEvent, includeNotes bool) []orderProductionTimelineEvent {
+	if len(events) == 0 {
+		return []orderProductionTimelineEvent{}
+	}
+
+	sorted := append([]services.OrderProductionEvent(nil), events...)
+	slices.SortFunc(sorted, func(a, b services.OrderProductionEvent) int {
+		switch {
+		case a.CreatedAt.Before(b.CreatedAt):
+			return -1
+		case a.CreatedAt.After(b.CreatedAt):
+			return 1
+		default:
+			return strings.Compare(strings.TrimSpace(a.ID), strings.TrimSpace(b.ID))
+		}
+	})
+
+	result := make([]orderProductionTimelineEvent, 0, len(sorted))
+	for _, event := range sorted {
+		entry := orderProductionTimelineEvent{
+			Timestamp: formatTime(event.CreatedAt),
+			Stage:     strings.TrimSpace(event.Type),
+		}
+		if ref := event.OperatorRef; ref != nil {
+			if trimmed := strings.TrimSpace(*ref); trimmed != "" {
+				entry.Operator = trimmed
+			}
+		}
+		if includeNotes {
+			if note := sanitizeProductionNote(event.Note); note != "" {
+				entry.Notes = note
+			}
+		}
+		if attachments := buildProductionEventAttachments(event); len(attachments) > 0 {
+			entry.Attachments = attachments
+		}
+		result = append(result, entry)
+	}
+	return result
+}
+
 func buildShipmentEvents(events []services.ShipmentEvent) []orderShipmentEventData {
 	if len(events) == 0 {
 		return nil
@@ -1012,6 +1116,35 @@ func sanitizeShipmentEventDetails(details map[string]any) map[string]any {
 		return nil
 	}
 	return sanitized
+}
+
+func sanitizeProductionNote(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	withoutTags := productionNoteTagPattern.ReplaceAllString(trimmed, "")
+	sanitized := strings.Map(func(r rune) rune {
+		if r < 32 && r != '\n' && r != '\r' && r != '\t' {
+			return -1
+		}
+		return r
+	}, withoutTags)
+
+	result := strings.TrimSpace(sanitized)
+	return result
+}
+
+func buildProductionEventAttachments(event services.OrderProductionEvent) []string {
+	if event.PhotoURL == nil {
+		return nil
+	}
+	url := strings.TrimSpace(*event.PhotoURL)
+	if url == "" {
+		return nil
+	}
+	return []string{url}
 }
 
 func extractRefundedAmount(payment services.Payment) int64 {

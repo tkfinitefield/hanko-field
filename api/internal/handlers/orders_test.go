@@ -785,6 +785,189 @@ func TestOrderHandlersGetOrderShipmentNotFound(t *testing.T) {
 	}
 }
 
+func TestOrderHandlersListOrderProductionEventsSuccess(t *testing.T) {
+	t.Helper()
+
+	now := time.Date(2024, 4, 2, 9, 0, 0, 0, time.UTC)
+	later := now.Add(2 * time.Hour)
+	photoURL := "https://cdn.example.com/photo.jpg"
+	ptr := func(s string) *string { return &s }
+
+	var capturedOpts services.OrderReadOptions
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			if orderID != "ord_123" {
+				t.Fatalf("expected order id ord_123, got %s", orderID)
+			}
+			capturedOpts = opts
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				ProductionEvents: []services.OrderProductionEvent{
+					{
+						ID:          "ope_2",
+						Type:        "qc",
+						OperatorRef: ptr(" op-2 "),
+						Note:        " \t<script>alert(1)</script> QC passed ",
+						CreatedAt:   later,
+					},
+					{
+						ID:          "ope_1",
+						Type:        "engraving",
+						OperatorRef: ptr("op-1"),
+						PhotoURL:    &photoURL,
+						Note:        "  Engraving done ",
+						CreatedAt:   now,
+					},
+				},
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_123/production-events", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	if !capturedOpts.IncludeProductionEvents {
+		t.Fatalf("expected IncludeProductionEvents to be true")
+	}
+
+	var resp orderProductionTimelineResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	if len(resp.Events) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(resp.Events))
+	}
+
+	first := resp.Events[0]
+	if first.Stage != "engraving" {
+		t.Fatalf("expected first stage engraving, got %s", first.Stage)
+	}
+	if first.Timestamp != now.UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("expected first timestamp %s, got %s", now.UTC().Format(time.RFC3339Nano), first.Timestamp)
+	}
+	if first.Operator != "op-1" {
+		t.Fatalf("expected operator op-1, got %q", first.Operator)
+	}
+	if len(first.Attachments) != 1 || first.Attachments[0] != photoURL {
+		t.Fatalf("expected attachment %s, got %#v", photoURL, first.Attachments)
+	}
+	if strings.TrimSpace(first.Notes) != "Engraving done" {
+		t.Fatalf("expected sanitized note Engraving done, got %q", first.Notes)
+	}
+
+	second := resp.Events[1]
+	if second.Stage != "qc" {
+		t.Fatalf("expected second stage qc, got %s", second.Stage)
+	}
+	if strings.Contains(strings.ToLower(second.Notes), "<script") {
+		t.Fatalf("expected sanitized notes without script tag, got %q", second.Notes)
+	}
+	if second.Operator != "op-2" {
+		t.Fatalf("expected operator op-2, got %q", second.Operator)
+	}
+}
+
+func TestOrderHandlersListOrderProductionEventsRedactsNotes(t *testing.T) {
+	t.Helper()
+
+	now := time.Date(2024, 4, 2, 9, 0, 0, 0, time.UTC)
+	ptr := func(s string) *string { return &s }
+
+	var capturedOpts services.OrderReadOptions
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			capturedOpts = opts
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				ProductionEvents: []services.OrderProductionEvent{
+					{
+						ID:          "ope_1",
+						Type:        "engraving",
+						Note:        "internal details",
+						CreatedAt:   now,
+						OperatorRef: ptr("op-1"),
+					},
+				},
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_555/production-events?includeNotes=false", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	if !capturedOpts.IncludeProductionEvents {
+		t.Fatalf("expected IncludeProductionEvents to be true")
+	}
+
+	body := rr.Body.String()
+	if strings.Contains(body, "\"notes\"") {
+		t.Fatalf("expected notes to be redacted, got %s", body)
+	}
+
+	var resp orderProductionTimelineResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	if len(resp.Events) != 1 {
+		t.Fatalf("expected single event, got %d", len(resp.Events))
+	}
+
+	if resp.Events[0].Notes != "" {
+		t.Fatalf("expected notes to be empty, got %q", resp.Events[0].Notes)
+	}
+}
+
+func TestOrderHandlersListOrderProductionEventsInvalidFlag(t *testing.T) {
+	t.Helper()
+
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			t.Fatalf("service should not be called on invalid flag")
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_555/production-events?includeNotes=maybe", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
 func TestOrderHandlersListOrderPaymentsSuccess(t *testing.T) {
 	t.Parallel()
 
