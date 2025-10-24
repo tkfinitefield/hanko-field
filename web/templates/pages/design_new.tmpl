@@ -1,0 +1,189 @@
+{{ define "content" }}
+{{ $sel := index $.Design "Selection" }}
+{{ $options := index $sel "Options" }}
+{{ $filters := index $sel "Filters" }}
+{{ $features := index $sel "Features" }}
+{{ $help := index $sel "Help" }}
+{{ $default := index $sel "DefaultMode" }}
+{{ $analytics := index $sel "AnalyticsEvent" }}
+{{ $base := index $sel "EditorBasePath" }}
+<section class="pb-32">
+  {{ template "c_hero" (dict
+    "Eyebrow" (tlang $.Lang "design.new.hero.eyebrow")
+    "Title" (tlang $.Lang "design.new.hero.title")
+    "Subtitle" (tlang $.Lang "design.new.hero.subtitle")
+    "Bg" "brand"
+  ) }}
+
+  <div class="mx-auto max-w-6xl px-4">
+    <div class="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div class="space-y-6">
+        {{ template "c_filter_chips" (dict
+          "Eyebrow" (tlang $.Lang "design.new.filters.eyebrow")
+          "AriaLabel" (tlang $.Lang "design.new.filters.aria")
+          "Filters" $filters
+        ) }}
+
+        {{ template "c_selection_grid" (dict
+          "Options" $options
+          "DefaultMode" $default
+          "AnalyticsEvent" $analytics
+          "AriaLabel" (tlang $.Lang "design.new.options.aria")
+          "RecommendedLabel" (tlang $.Lang "design.new.options.recommended")
+        ) }}
+      </div>
+
+      <aside class="space-y-6 lg:sticky lg:top-24">
+        {{ template "c_feature_list" (dict
+          "Title" (tlang $.Lang "design.new.features.title")
+          "Subtitle" (tlang $.Lang "design.new.features.subtitle")
+          "Items" $features
+        ) }}
+
+        {{ template "c_inline_help" (dict
+          "Title" (index $help "Title")
+          "Description" (index $help "Description")
+          "Href" (index $help "Href")
+          "Label" (index $help "Label")
+        ) }}
+      </aside>
+    </div>
+  </div>
+</section>
+
+{{ template "c_sticky_action_bar" (dict
+  "Primary" (dict "Base" $base "Label" (tlang $.Lang "design.new.cta.primary"))
+  "Secondary" (dict "Href" "/templates" "Label" (tlang $.Lang "design.new.cta.secondary"))
+  "SummaryEmpty" (tlang $.Lang "design.new.summary.empty")
+  "SummarySelected" (tlang $.Lang "design.new.summary.selected")
+) }}
+
+<script>
+(function(){
+  var grid = document.getElementById('design-selection-grid');
+  if (!grid) { return; }
+  var options = Array.prototype.slice.call(grid.querySelectorAll('[data-design-option]'));
+  var chips = Array.prototype.slice.call(document.querySelectorAll('[data-design-filter]'));
+  var primary = document.getElementById('design-primary-cta');
+  var summary = document.getElementById('design-selection-summary');
+  var summaryEmpty = summary ? summary.getAttribute('data-summary-empty') : '';
+  var summarySelected = summary ? summary.getAttribute('data-summary-selected') : '';
+  var base = primary ? primary.getAttribute('data-base') : '';
+  var defaultMode = grid.getAttribute('data-default-mode') || '';
+  var selected = null;
+  var activeFilter = 'all';
+
+  function updateSummary(){
+    if (!summary) { return; }
+    if (selected) {
+      var label = selected.getAttribute('data-mode-label') || '';
+      summary.textContent = summarySelected.replace('%s', label);
+    } else {
+      summary.textContent = summaryEmpty;
+    }
+  }
+
+  function setPrimaryState(enabled, mode){
+    if (!primary) { return; }
+    if (enabled) {
+      primary.disabled = false;
+      primary.setAttribute('aria-disabled', 'false');
+      if (mode) {
+        primary.setAttribute('data-mode', mode);
+      }
+    } else {
+      primary.disabled = true;
+      primary.setAttribute('aria-disabled', 'true');
+      primary.removeAttribute('data-mode');
+    }
+  }
+
+  function selectOption(option){
+    if (!option) { return; }
+    options.forEach(function(btn){
+      var isSelected = btn === option;
+      btn.setAttribute('data-selected', isSelected ? 'true' : 'false');
+      btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+      btn.tabIndex = isSelected ? 0 : -1;
+    });
+    selected = option;
+    setPrimaryState(true, option.getAttribute('data-design-option'));
+    updateSummary();
+  }
+
+  function focusByOffset(current, delta){
+    var idx = options.indexOf(current);
+    if (idx === -1) { return; }
+    var next = (idx + delta + options.length) % options.length;
+    options[next].focus();
+  }
+
+  function applyFilter(value){
+    activeFilter = value || 'all';
+    options.forEach(function(btn){
+      var highlight = false;
+      if (activeFilter === 'all') {
+        highlight = btn.getAttribute('data-design-option') === defaultMode;
+      } else {
+        var tags = (btn.getAttribute('data-tags') || '').split(',');
+        highlight = tags.indexOf(activeFilter) !== -1;
+      }
+      btn.setAttribute('data-recommended', highlight ? 'true' : 'false');
+    });
+  }
+
+  options.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      selectOption(btn);
+    });
+    btn.addEventListener('keydown', function(e){
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        selectOption(btn);
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        focusByOffset(btn, 1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        focusByOffset(btn, -1);
+      }
+    });
+  });
+
+  if (primary) {
+    primary.addEventListener('click', function(){
+      if (primary.disabled) { return; }
+      var mode = primary.getAttribute('data-mode');
+      if (!mode) { return; }
+      var target = base || '/design/editor';
+      window.location.href = target + '?mode=' + encodeURIComponent(mode);
+    });
+  }
+
+  chips.forEach(function(chip){
+    chip.addEventListener('click', function(){
+      var value = chip.getAttribute('data-design-filter');
+      chips.forEach(function(c){
+        var active = c === chip;
+        c.setAttribute('data-active', active ? 'true' : 'false');
+        c.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      applyFilter(value);
+    });
+  });
+
+  applyFilter('all');
+  var defaultOption = options.find(function(btn){ return btn.getAttribute('data-design-option') === defaultMode; });
+  if (defaultOption) {
+    selectOption(defaultOption);
+    defaultOption.focus();
+  } else {
+    setPrimaryState(false);
+    if (options.length) {
+      options[0].tabIndex = 0;
+    }
+    updateSummary();
+  }
+})();
+</script>
+{{ end }}

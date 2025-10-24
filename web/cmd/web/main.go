@@ -837,6 +837,7 @@ func main() {
 
 	// Home page
 	r.Get("/", HomeHandler)
+	r.Get("/design/new", DesignNewHandler)
 	// Top-level pages
 	r.Get("/shop", ShopHandler)
 	r.Get("/products/{productID}", ProductDetailHandler)
@@ -1113,6 +1114,35 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 	art2 := seo.Article(i18nOrDefault(lang, "home.guides.title", "Latest Guides")+": Design Basics", siteURL+"/guides/design-basics", "", "Hanko Field", "2025-01-05")
 	vm.SEO.JSONLD = append(vm.SEO.JSONLD, seo.JSON(art1), seo.JSON(art2))
 	renderPage(w, r, "home", vm)
+}
+
+func DesignNewHandler(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	title := i18nOrDefault(lang, "design.new.seo.title", "Choose your starting point")
+	desc := i18nOrDefault(lang, "design.new.seo.description", "Pick how you want to begin your seal design and continue to the editor with tailored guidance.")
+
+	vm := handlersPkg.PageData{Title: title, Lang: lang}
+	vm.Path = r.URL.Path
+	vm.Nav = nav.Build(vm.Path)
+	vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+	vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+	vm.Design = map[string]any{
+		"Selection": buildDesignSelectionProps(lang),
+	}
+
+	brand := i18nOrDefault(lang, "brand.name", "Hanko Field")
+	vm.SEO.Title = fmt.Sprintf("%s | %s", title, brand)
+	vm.SEO.Description = desc
+	vm.SEO.Canonical = absoluteURL(r)
+	vm.SEO.OG.URL = vm.SEO.Canonical
+	vm.SEO.OG.SiteName = brand
+	vm.SEO.OG.Type = "website"
+	vm.SEO.OG.Title = vm.SEO.Title
+	vm.SEO.OG.Description = vm.SEO.Description
+	vm.SEO.Twitter.Card = "summary_large_image"
+	vm.SEO.Alternates = buildAlternates(r)
+
+	renderPage(w, r, "design_new", vm)
 }
 
 // Generic page handlers
@@ -1491,6 +1521,123 @@ func findProduct(lang, id string) (Product, bool) {
 		}
 	}
 	return Product{}, false
+}
+
+// --- Design creation selection data ---
+
+type DesignModeOption struct {
+	ID          string
+	Icon        string
+	Title       string
+	Description string
+	Badge       string
+	Tags        []string
+	TagsCSV     string
+}
+
+type DesignFilterChip struct {
+	ID     string
+	Label  string
+	Active bool
+}
+
+type DesignFeature struct {
+	Icon        string
+	Title       string
+	Description string
+}
+
+func buildDesignSelectionProps(lang string) map[string]any {
+	options := []DesignModeOption{
+		{
+			ID:          "text",
+			Icon:        "document-text",
+			Title:       i18nOrDefault(lang, "design.new.option.text.title", "Type your text"),
+			Description: i18nOrDefault(lang, "design.new.option.text.description", "Structured layout with grid, kerning, and engraving rules applied automatically."),
+			Badge:       i18nOrDefault(lang, "design.new.option.text.badge", "Most popular"),
+			Tags:        []string{"all", "business", "personal"},
+		},
+		{
+			ID:          "upload",
+			Icon:        "cloud-upload",
+			Title:       i18nOrDefault(lang, "design.new.option.upload.title", "Upload an image"),
+			Description: i18nOrDefault(lang, "design.new.option.upload.description", "Use an existing seal scan or artwork. We clean up edges and prepare it for engraving."),
+			Badge:       "",
+			Tags:        []string{"all", "personal", "legacy"},
+		},
+		{
+			ID:          "logo",
+			Icon:        "stamp",
+			Title:       i18nOrDefault(lang, "design.new.option.logo.title", "Engrave a logo"),
+			Description: i18nOrDefault(lang, "design.new.option.logo.description", "Import vector artwork for precision engraving with compliance checks."),
+			Badge:       i18nOrDefault(lang, "design.new.option.logo.badge", "New"),
+			Tags:        []string{"all", "business", "export"},
+		},
+	}
+
+	for i := range options {
+		options[i].TagsCSV = strings.Join(options[i].Tags, ",")
+	}
+
+	filters := []DesignFilterChip{
+		{
+			ID:     "all",
+			Label:  i18nOrDefault(lang, "design.new.filters.all", "All"),
+			Active: true,
+		},
+		{
+			ID:    "business",
+			Label: i18nOrDefault(lang, "design.new.filters.business", "Business"),
+		},
+		{
+			ID:    "personal",
+			Label: i18nOrDefault(lang, "design.new.filters.personal", "Personal"),
+		},
+		{
+			ID:    "export",
+			Label: i18nOrDefault(lang, "design.new.filters.export", "Export"),
+		},
+		{
+			ID:    "legacy",
+			Label: i18nOrDefault(lang, "design.new.filters.legacy", "Legacy"),
+		},
+	}
+
+	features := []DesignFeature{
+		{
+			Icon:        "sparkles",
+			Title:       i18nOrDefault(lang, "design.new.feature.ai.title", "AI-assisted layout"),
+			Description: i18nOrDefault(lang, "design.new.feature.ai.description", "We align strokes, balance spacing, and preview drag adjustments instantly."),
+		},
+		{
+			Icon:        "layers",
+			Title:       i18nOrDefault(lang, "design.new.feature.templates.title", "Template recommendations"),
+			Description: i18nOrDefault(lang, "design.new.feature.templates.description", "Start from proven registrable templates tailored to your use case."),
+		},
+		{
+			Icon:        "shield-check",
+			Title:       i18nOrDefault(lang, "design.new.feature.compliance.title", "Compliance guardrails"),
+			Description: i18nOrDefault(lang, "design.new.feature.compliance.description", "We flag contrast, size, and text issues before you send to production."),
+		},
+	}
+
+	help := map[string]string{
+		"Title":       i18nOrDefault(lang, "design.new.help.title", "Need help choosing?"),
+		"Description": i18nOrDefault(lang, "design.new.help.description", "Watch the four-minute guided tour to see each mode in action."),
+		"Href":        "/guides/design-basics",
+		"Label":       i18nOrDefault(lang, "design.new.help.label", "Open tutorial"),
+	}
+
+	return map[string]any{
+		"Lang":           lang,
+		"Options":        options,
+		"Filters":        filters,
+		"Features":       features,
+		"Help":           help,
+		"DefaultMode":    "text",
+		"EditorBasePath": "/design/editor",
+		"AnalyticsEvent": "design_mode_select",
+	}
 }
 
 // buildShopProps constructs view props for shop results from query params.

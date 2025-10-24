@@ -24,4 +24,5 @@ type PageData struct {
 	Guide     any
 	Content   any
 	Status    any
+	Design    any
 }

@@ -54,6 +54,7 @@ func newTestRouter(t *testing.T, add func(r chi.Router)) http.Handler {
 	assets := http.StripPrefix("/assets", mw.AssetsWithCache("public/assets"))
 	r.Handle("/assets/*", assets)
 	r.Get("/", HomeHandler)
+	r.Get("/design/new", DesignNewHandler)
 
 	if add != nil {
 		r.Group(func(r chi.Router) {
@@ -89,6 +90,24 @@ func TestHomeLocalizedNav_EN(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, ">Shop<") {
 		t.Fatalf("expected localized nav label 'Shop' in body; status=%d body=%s", rec.Code, body)
+	}
+}
+
+func TestDesignNewPageRenders(t *testing.T) {
+	srv := newTestRouter(t, nil)
+	req := httptest.NewRequest(http.MethodGet, "/design/new", nil)
+	req.Header.Set("Accept-Language", "en")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "data-design-option") {
+		t.Fatalf("expected design option markers in body; status=%d body=%s", rec.Code, body)
+	}
+	if !strings.Contains(body, "design-primary-cta") {
+		t.Fatalf("expected primary CTA button id in body; status=%d body=%s", rec.Code, body)
 	}
 }
 
