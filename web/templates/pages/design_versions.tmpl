@@ -1,0 +1,251 @@
+{{ define "content" }}
+{{ $view := $.DesignVersions }}
+<section class="py-6 space-y-6">
+  <header class="space-y-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+    <nav class="flex flex-wrap items-center gap-2 text-sm text-gray-500" aria-label="{{ if eq $.Lang "ja" }}パンくずリスト{{ else }}Breadcrumb{{ end }}">
+      {{ range $i, $crumb := $.Breadcrumbs }}
+        {{ if $i }}<span aria-hidden="true">/</span>{{ end }}
+        {{ if $crumb.Active }}
+          <span class="font-medium text-gray-700">{{ if $crumb.LabelKey }}{{ tlang $.Lang $crumb.LabelKey }}{{ else if $crumb.Label }}{{ $crumb.Label }}{{ else }}{{ $crumb.Href }}{{ end }}</span>
+        {{ else }}
+          <a href="{{ $crumb.Href }}" class="hover:text-indigo-600 hover:underline">{{ if $crumb.LabelKey }}{{ tlang $.Lang $crumb.LabelKey }}{{ else if $crumb.Label }}{{ $crumb.Label }}{{ else }}{{ $crumb.Href }}{{ end }}</a>
+        {{ end }}
+      {{ end }}
+    </nav>
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div class="space-y-2">
+        <p class="text-xs font-semibold uppercase tracking-wide text-indigo-500">{{ if eq $.Lang "ja" }}バージョン履歴{{ else }}Version history{{ end }}</p>
+        <h1 class="text-3xl font-bold text-gray-900 leading-tight">{{ if eq $.Lang "ja" }}デザインの更新履歴とロールバック{{ else }}Design versions & rollbacks{{ end }}</h1>
+        <p class="text-sm text-gray-600 leading-6">
+          {{ if eq $.Lang "ja" }}
+            保存された各バージョンの差分を確認し、必要に応じてエディタとプレビューを即座に巻き戻します。
+          {{ else }}
+            Inspect every saved state, review audit notes, and roll back the design editor preview when needed.
+          {{ end }}
+        </p>
+        <div class="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-600">
+            {{ template "icon" (dict "Name" "document-duplicate" "Class" "h-4 w-4" ) }}
+            {{ if eq $.Lang "ja" }}デザインID{{ else }}Design ID{{ end }}: {{ $view.DesignID }}
+          </span>
+          <span class="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 font-medium text-indigo-600">
+            {{ template "icon" (dict "Name" "archive-box" "Class" "h-4 w-4" ) }}
+            {{ if eq $.Lang "ja" }}保存済み{{ else }}Saved{{ end }}: {{ len $view.Versions }}
+          </span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+    <div class="space-y-5">
+      <form id="design-versions-filters"
+            class="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+            data-hx-get="/design/versions/table">
+        <input type="hidden" name="author" value="{{ if $view.ActiveAuthor }}{{ $view.ActiveAuthor }}{{ else }}all{{ end }}">
+        <input type="hidden" name="range" value="{{ if $view.ActiveRange }}{{ $view.ActiveRange }}{{ else }}all{{ end }}">
+        <input type="hidden" name="focus" value="{{ $view.Selected.ID }}">
+
+        <div class="grid gap-4 md:grid-cols-2">
+          <div data-filter-group="author" data-filter-param="author" class="space-y-3">
+            {{ if eq $.Lang "ja" }}
+              {{ template "c_filter_chips" (dict "Eyebrow" "担当者" "AriaLabel" "担当者で絞り込む" "Filters" $view.AuthorFilters) }}
+            {{ else }}
+              {{ template "c_filter_chips" (dict "Eyebrow" "Authors" "AriaLabel" "Filter by author" "Filters" $view.AuthorFilters) }}
+            {{ end }}
+          </div>
+          <div data-filter-group="range" data-filter-param="range" class="space-y-3">
+            {{ if eq $.Lang "ja" }}
+              {{ template "c_filter_chips" (dict "Eyebrow" "期間" "AriaLabel" "保存日時で絞り込む" "Filters" $view.RangeFilters) }}
+            {{ else }}
+              {{ template "c_filter_chips" (dict "Eyebrow" "Time range" "AriaLabel" "Filter by date range" "Filters" $view.RangeFilters) }}
+            {{ end }}
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+          <span>{{ if eq $.Lang "ja" }}表示中{{ else }}Showing{{ end }} {{ len $view.Versions }} {{ if eq $.Lang "ja" }}件{{ else }}versions{{ end }}</span>
+          <a href="/design/editor" class="inline-flex items-center gap-1 font-medium text-indigo-600 hover:underline">
+            {{ template "icon" (dict "Name" "arrow-uturn-left" "Class" "h-4 w-4") }}
+            {{ if eq $.Lang "ja" }}エディタへ戻る{{ else }}Back to editor{{ end }}
+          </a>
+        </div>
+      </form>
+
+      <div id="design-versions-table-shell">
+        {{ slot "frag_design_versions_table" $view }}
+      </div>
+    </div>
+
+    <aside id="design-versions-preview">
+      {{ slot "frag_design_versions_preview" (dict "Lang" $.Lang "Detail" $view.Selected "Timeline" $view.Timeline "Query" $view.Query) }}
+    </aside>
+  </div>
+
+  <div class="text-xs text-gray-500">Path: {{ $.Path }}</div>
+</section>
+
+<script>
+(function(){
+  if (window.__designVersionsInit) { return; }
+  window.__designVersionsInit = true;
+
+  var form = document.getElementById('design-versions-filters');
+  var tableShell = document.getElementById('design-versions-table-shell');
+
+  function ensureHTMX(){
+    if (!window.htmx) { throw new Error('htmx not available'); }
+    return window.htmx;
+  }
+
+  function serializeForm(targetForm){
+    var params = new URLSearchParams();
+    Array.prototype.forEach.call(targetForm.elements, function(el){
+      if (!el.name || el.disabled) { return; }
+      if (el.type === 'hidden' || el.type === 'text' || el.type === 'select-one') {
+        params.append(el.name, el.value);
+      }
+    });
+    return params.toString();
+  }
+
+  function updateChipGroup(group, activeValue){
+    if (!group) { return; }
+    Array.prototype.forEach.call(group.querySelectorAll('[data-design-filter]'), function(btn){
+      var isActive = btn.getAttribute('data-design-filter') === activeValue;
+      btn.setAttribute('data-active', isActive ? 'true' : 'false');
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+  }
+
+  function setFocusValue(versionID){
+    if (!form) { return; }
+    var input = form.querySelector('input[name="focus"]');
+    if (input) { input.value = versionID || ''; }
+  }
+
+  function highlightRowByID(versionID){
+    var table = document.getElementById('design-versions-table');
+    if (!table) { return; }
+    var target = table.querySelector('[data-version-row][data-version-id="'+versionID+'"]');
+    if (!target) { return; }
+    Array.prototype.forEach.call(table.querySelectorAll('[data-version-row]'), function(row){
+      row.setAttribute('data-active', row === target ? 'true' : 'false');
+    });
+  }
+
+  function requestPreview(versionID, query){
+    if (!versionID) { return; }
+    var h = ensureHTMX();
+    var params = query || serializeForm(form);
+    var url = '/design/versions/preview?version=' + encodeURIComponent(versionID);
+    if (params) {
+      if (params.startsWith('?')) {
+        url += '&' + params.slice(1);
+      } else {
+        url += '&' + params;
+      }
+    }
+    h.ajax('GET', url, {target: '#design-versions-preview', swap: 'innerHTML'});
+  }
+
+  function reloadTable(query){
+    var h = ensureHTMX();
+    var params = (typeof query === 'string' && query !== '') ? query : serializeForm(form);
+    var url = '/design/versions/table';
+    if (params) {
+      if (params.startsWith('?')) {
+        url += params;
+      } else {
+        url += '?' + params;
+      }
+    }
+    h.ajax('GET', url, {target: '#design-versions-table', swap: 'outerHTML'});
+  }
+
+  if (form) {
+    Array.prototype.forEach.call(form.querySelectorAll('[data-filter-group]'), function(group){
+      var param = group.getAttribute('data-filter-param');
+      if (!param) { return; }
+      var input = form.querySelector('[name="'+param+'"]');
+      updateChipGroup(group, input ? (input.value || 'all') : 'all');
+    });
+
+    form.addEventListener('click', function(event){
+      var btn = event.target.closest('[data-design-filter]');
+      if (!btn) { return; }
+      event.preventDefault();
+      var group = btn.closest('[data-filter-group]');
+      if (!group) { return; }
+      var param = group.getAttribute('data-filter-param');
+      var input = form.querySelector('[name="'+param+'"]');
+      if (!input) { return; }
+      var value = btn.getAttribute('data-design-filter');
+      if (input.value === value) { return; }
+      input.value = value;
+      updateChipGroup(group, value);
+      reloadTable();
+    });
+  }
+
+  if (tableShell) {
+    tableShell.addEventListener('click', function(event){
+      var row = event.target.closest('[data-version-row]');
+      if (!row) { return; }
+      if (event.target.closest('[data-stop-propagation]')) {
+        return;
+      }
+      event.preventDefault();
+      var versionID = row.getAttribute('data-version-id');
+      highlightRowByID(versionID);
+      setFocusValue(versionID);
+      requestPreview(versionID);
+    });
+    tableShell.addEventListener('keydown', function(event){
+      if (event.key !== 'Enter' && event.key !== ' ') { return; }
+      var row = event.target.closest('[data-version-row]');
+      if (!row) { return; }
+      event.preventDefault();
+      var versionID = row.getAttribute('data-version-id');
+      highlightRowByID(versionID);
+      setFocusValue(versionID);
+      requestPreview(versionID);
+    });
+  }
+
+  document.body.addEventListener('htmx:afterSwap', function(event){
+    if (event.target && event.target.id === 'design-versions-table') {
+      var table = event.target;
+      var versionID = null;
+      var activeRow = table.querySelector('[data-version-row][data-active="true"]');
+      if (activeRow) {
+        versionID = activeRow.getAttribute('data-version-id');
+      }
+      setFocusValue(versionID);
+      if (versionID) {
+        var query = table.getAttribute('data-query') || serializeForm(form);
+        requestPreview(versionID, query);
+      }
+    }
+    if (event.target && event.target.id === 'design-versions-preview') {
+      var vid = event.target.getAttribute('data-version-id');
+      if (vid) {
+        highlightRowByID(vid);
+        setFocusValue(vid);
+      }
+    }
+  });
+
+  document.body.addEventListener('design-versions:refresh-table', function(event){
+    var detail = event && event.detail ? event.detail : {};
+    reloadTable(detail.query || '');
+  });
+
+  document.body.addEventListener('design-versions:rolled-back', function(){
+    if (window.hankoModalClose) {
+      window.hankoModalClose();
+    }
+  });
+})();
+</script>
+{{ end }}

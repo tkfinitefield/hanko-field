@@ -378,6 +378,145 @@ func TestDesignAISuggestionAccept(t *testing.T) {
 	}
 }
 
+func TestDesignVersionsPageRenders(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/design/versions", DesignVersionsHandler)
+		r.Get("/design/versions/table", DesignVersionsTableFrag)
+		r.Get("/design/versions/preview", DesignVersionsPreviewFrag)
+		r.Get("/design/versions/{versionID}/rollback/modal", DesignVersionRollbackModal)
+		r.MethodFunc(http.MethodPost, "/design/versions/{versionID}/rollback", DesignVersionRollbackHandler)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/design/versions", nil)
+	req.Header.Set("Accept-Language", "en")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "design-versions-table") {
+		t.Fatalf("expected table container in body; body=%s", body)
+	}
+	if !strings.Contains(body, "design-versions-preview") {
+		t.Fatalf("expected preview container in body; body=%s", body)
+	}
+}
+
+func TestDesignVersionsTableFragment(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/design/versions/table", DesignVersionsTableFrag)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/design/versions/table?author=all&range=all", nil)
+	req.Header.Set("Accept-Language", "en")
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Push-Url"); got == "" || !strings.HasPrefix(got, "/design/versions") {
+		t.Fatalf("expected HX-Push-Url header for versions, got %q", got)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "data-version-row") {
+		t.Fatalf("expected version rows in fragment; body=%s", body)
+	}
+}
+
+func TestDesignVersionsPreviewFragment(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/design/versions/preview", DesignVersionsPreviewFrag)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/design/versions/preview?version=ver-210", nil)
+	req.Header.Set("Accept-Language", "en")
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "data-version-id=\"ver-210\"") {
+		t.Fatalf("expected selected version id in preview; body=%s", body)
+	}
+	if !strings.Contains(body, "Audit timeline") {
+		t.Fatalf("expected audit timeline section in preview; body=%s", body)
+	}
+}
+
+func TestDesignVersionsRollbackModal(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/design/versions/table", DesignVersionsTableFrag)
+		r.Get("/design/versions/{versionID}/rollback/modal", DesignVersionRollbackModal)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/design/versions/ver-210/rollback/modal", nil)
+	req.Header.Set("Accept-Language", "en")
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "data-modal-container") {
+		t.Fatalf("expected modal container in response; body=%s", body)
+	}
+	if !strings.Contains(body, "name=\"author\"") {
+		t.Fatalf("expected hidden filter fields in modal; body=%s", body)
+	}
+}
+
+func TestDesignVersionsRollbackHandler(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/design/versions", DesignVersionsHandler)
+		r.Get("/design/versions/table", DesignVersionsTableFrag)
+		r.Get("/design/versions/preview", DesignVersionsPreviewFrag)
+		r.Get("/design/versions/{versionID}/rollback/modal", DesignVersionRollbackModal)
+		r.MethodFunc(http.MethodPost, "/design/versions/{versionID}/rollback", DesignVersionRollbackHandler)
+	})
+
+	// Prime CSRF/session
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/design/versions", nil)
+	req.Header.Set("Accept-Language", "en")
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /design/versions expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	var csrfCookie, sessionCookie string
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "csrf_token" {
+			csrfCookie = c.Value
+		}
+		if c.Name == "HANKO_WEB_SESSION" {
+			sessionCookie = c.Value
+		}
+	}
+	if csrfCookie == "" || sessionCookie == "" {
+		t.Fatalf("expected csrf and session cookies, got csrf=%q session=%q", csrfCookie, sessionCookie)
+	}
+
+	postRec := httptest.NewRecorder()
+	postReq := httptest.NewRequest(http.MethodPost, "/design/versions/ver-210/rollback", strings.NewReader("author=all&range=all&focus=ver-210"))
+	postReq.Header.Set("Accept-Language", "en")
+	postReq.Header.Set("HX-Request", "true")
+	postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	postReq.Header.Set("X-CSRF-Token", csrfCookie)
+	postReq.Header.Set("Cookie", "csrf_token="+csrfCookie+"; HANKO_WEB_SESSION="+sessionCookie)
+	srv.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 rollback response, got %d; body=%s", postRec.Code, postRec.Body.String())
+	}
+	trigger := postRec.Header().Get("HX-Trigger")
+	if trigger == "" || !strings.Contains(trigger, "design-versions:rolled-back") || !strings.Contains(trigger, "design-versions:refresh-table") {
+		t.Fatalf("expected HX-Trigger with rollback events, got %q", trigger)
+	}
+	body := postRec.Body.String()
+	if !strings.Contains(body, "data-version-id=\"ver-210\"") {
+		t.Fatalf("expected preview body for selected version; body=%s", body)
+	}
+}
+
 func setupStaticTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	cmsClient = cms.NewClient("")

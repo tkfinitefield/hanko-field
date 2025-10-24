@@ -1,0 +1,426 @@
+{{ define "frag_design_versions_table" }}
+{{ $view := . }}
+<div id="design-versions-table"
+     class="rounded-2xl border border-gray-200 bg-white shadow-sm"
+     data-query="{{ $view.Query }}">
+  <div class="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-500">{{ if eq $view.Lang "ja" }}保存履歴{{ else }}Version history{{ end }}</h2>
+      <p class="text-xs text-gray-500">
+        {{ if $view.Empty }}
+          {{ if eq $view.Lang "ja" }}条件に一致するバージョンがありません。フィルターを調整してください。{{ else }}No versions match the current filters. Adjust filters to see more entries.{{ end }}
+        {{ else }}
+          {{ if eq $view.Lang "ja" }}一覧からバージョンを選択すると差分プレビューが右側に表示されます。{{ else }}Select a version to load the diff preview and audit timeline on the right.{{ end }}
+        {{ end }}
+      </p>
+    </div>
+    <div class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+      {{ template "icon" (dict "Name" "clock" "Class" "h-4 w-4") }}
+      {{ if eq $view.Lang "ja" }}合計{{ else }}Total{{ end }} {{ len $view.Versions }}
+    </div>
+  </div>
+
+  {{ if $view.Empty }}
+    <div class="flex items-center justify-center px-5 py-12 text-center">
+      <div class="space-y-2 text-sm text-gray-600">
+        <p class="font-medium text-gray-700">{{ if eq $view.Lang "ja" }}保存履歴はまだありません。{{ else }}No saved versions yet.{{ end }}</p>
+        <p class="text-xs text-gray-500">{{ if eq $view.Lang "ja" }}エディタで更新すると最新の状態がここに表示されます。{{ else }}Updates from the design editor will start a version history timeline.{{ end }}</p>
+      </div>
+    </div>
+  {{ else }}
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-100">
+        <thead class="bg-gray-50">
+          <tr>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">{{ if eq $view.Lang "ja" }}バージョン{{ else }}Version{{ end }}</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">{{ if eq $view.Lang "ja" }}メモ{{ else }}Notes{{ end }}</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">{{ if eq $view.Lang "ja" }}保存日時{{ else }}Saved{{ end }}</th>
+            <th scope="col" class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">{{ if eq $view.Lang "ja" }}比較{{ else }}Compare{{ end }}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 bg-white">
+          {{ range $view.Versions }}
+            {{ $row := . }}
+            <tr data-version-row
+                data-version-id="{{ $row.ID }}"
+                data-active="{{ if $row.Active }}true{{ else }}false{{ end }}"
+                role="button"
+                tabindex="0"
+                aria-selected="{{ if $row.Active }}true{{ else }}false{{ end }}"
+                class="group cursor-pointer transition data-[active=true]:bg-indigo-50/80 hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+              <td class="px-4 py-4 align-top">
+                <div class="flex flex-col gap-2">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-sm font-semibold text-gray-900">{{ $row.VersionLabel }}</span>
+                    {{ if $row.StatusBadge }}
+                      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide
+                                   {{ if eq $row.StatusTone "success" }}bg-emerald-50 text-emerald-700
+                                   {{ else if eq $row.StatusTone "info" }}bg-sky-50 text-sky-700
+                                   {{ else if eq $row.StatusTone "warning" }}bg-amber-50 text-amber-700
+                                   {{ else if eq $row.StatusTone "muted" }}bg-gray-100 text-gray-600
+                                   {{ else }}bg-gray-100 text-gray-600{{ end }}">
+                        {{ $row.StatusBadge }}
+                      </span>
+                    {{ end }}
+                    {{ if $row.Tag }}
+                      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+                                   {{ if eq $row.TagTone "emerald" }}bg-emerald-50 text-emerald-700
+                                   {{ else if eq $row.TagTone "indigo" }}bg-indigo-50 text-indigo-600
+                                   {{ else if eq $row.TagTone "amber" }}bg-amber-50 text-amber-700
+                                   {{ else if eq $row.TagTone "sky" }}bg-sky-50 text-sky-700
+                                   {{ else if eq $row.TagTone "slate" }}bg-slate-100 text-slate-600
+                                   {{ else if eq $row.TagTone "gray" }}bg-gray-100 text-gray-600
+                                   {{ else if eq $row.TagTone "muted" }}bg-gray-100 text-gray-600
+                                   {{ else }}bg-gray-100 text-gray-600{{ end }}">
+                        {{ $row.Tag }}
+                      </span>
+                    {{ end }}
+                  </div>
+                  {{ if $row.DiffSummary }}
+                    <div class="flex flex-wrap gap-2 text-[11px] font-medium">
+                      {{ range $row.DiffSummary }}
+                        {{ $kind := .Kind }}
+                        <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5
+                                     {{ if eq $kind "add" }}bg-emerald-50 text-emerald-700
+                                     {{ else if eq $kind "change" }}bg-indigo-50 text-indigo-600
+                                     {{ else if eq $kind "remove" }}bg-rose-50 text-rose-600
+                                     {{ else if eq $kind "issue" }}bg-amber-50 text-amber-700
+                                     {{ else if eq $kind "pending" }}bg-gray-100 text-gray-600
+                                     {{ else }}bg-gray-100 text-gray-600{{ end }}">
+                          {{ .Label }}
+                        </span>
+                      {{ end }}
+                    </div>
+                  {{ end }}
+                </div>
+              </td>
+              <td class="px-4 py-4 align-top">
+                <div class="space-y-1 text-sm text-gray-700">
+                  <p class="leading-5">{{ $row.Note }}</p>
+                  <p class="text-xs text-gray-500">
+                    {{ $row.AuthorName }}
+                    {{ if $row.AuthorRole }}
+                      <span class="text-gray-400">·</span>
+                      {{ $row.AuthorRole }}
+                    {{ end }}
+                  </p>
+                </div>
+              </td>
+              <td class="px-4 py-4 align-top">
+                <div class="space-y-1 text-sm text-gray-700">
+                  <p>{{ $row.CreatedDisplay }}</p>
+                  <p class="text-xs text-gray-500">{{ $row.CreatedAgo }}</p>
+                </div>
+              </td>
+              <td class="px-4 py-4 align-top text-right">
+                <a href="{{ $row.CompareURL }}"
+                   class="inline-flex items-center justify-center rounded-full border border-gray-200 bg-white p-2 text-gray-500 transition hover:border-indigo-300 hover:text-indigo-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                   title="{{ if eq $view.Lang "ja" }}ラベルを比較{{ else }}Compare in editor{{ end }}"
+                   data-stop-propagation="true">
+                  {{ template "icon" (dict "Name" "arrow-top-right-on-square" "Class" "h-4 w-4") }}
+                </a>
+              </td>
+            </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+  {{ end }}
+</div>
+{{ end }}
+
+{{ define "frag_design_versions_preview" }}
+{{ $lang := .Lang }}
+{{ $detail := .Detail }}
+{{ $timeline := .Timeline }}
+{{ $query := .Query }}
+<div id="design-versions-preview"
+     class="space-y-5"
+     data-version-id="{{ $detail.ID }}">
+  <section class="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+    <header class="flex flex-col gap-3 border-b border-gray-100 pb-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="space-y-1">
+          <p class="text-xs font-semibold uppercase tracking-wide text-indigo-500">{{ if eq $lang "ja" }}選択中のバージョン{{ else }}Selected version{{ end }}</p>
+          <h2 class="text-xl font-semibold text-gray-900 leading-tight">{{ $detail.VersionLabel }}</h2>
+          <p class="text-sm text-gray-500">{{ $detail.Subtitle }}</p>
+        </div>
+        {{ if $detail.StatusBadge }}
+          <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide
+                       {{ if eq $detail.StatusTone "success" }}bg-emerald-50 text-emerald-700
+                       {{ else if eq $detail.StatusTone "info" }}bg-sky-50 text-sky-700
+                       {{ else if eq $detail.StatusTone "warning" }}bg-amber-50 text-amber-700
+                       {{ else if eq $detail.StatusTone "muted" }}bg-gray-100 text-gray-600
+                       {{ else }}bg-gray-100 text-gray-600{{ end }}">
+            {{ $detail.StatusBadge }}
+          </span>
+        {{ end }}
+      </div>
+      {{ if $detail.ChangelogTags }}
+        <div class="flex flex-wrap gap-2 text-xs font-medium text-gray-600">
+          {{ range $detail.ChangelogTags }}
+            <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">
+              {{ .Label }}
+            </span>
+          {{ end }}
+        </div>
+      {{ end }}
+    </header>
+
+    <div class="flex flex-wrap items-center gap-3">
+      {{ if $query }}
+        {{ $rollbackHref := printf "/design/versions/%s/rollback/modal?%s" $detail.ID $query }}
+        {{ if eq $lang "ja" }}
+          {{ template "c_button" (dict
+            "Label" "このバージョンに戻す"
+            "Variant" "primary"
+            "Attrs" (dict
+              "hx-get" $rollbackHref
+              "hx-target" "#modal-root"
+              "hx-swap" "innerHTML")) }}
+        {{ else }}
+          {{ template "c_button" (dict
+            "Label" "Roll back to this version"
+            "Variant" "primary"
+            "Attrs" (dict
+              "hx-get" $rollbackHref
+              "hx-target" "#modal-root"
+              "hx-swap" "innerHTML")) }}
+        {{ end }}
+      {{ else }}
+        {{ $rollbackHref := printf "/design/versions/%s/rollback/modal" $detail.ID }}
+        {{ if eq $lang "ja" }}
+          {{ template "c_button" (dict
+            "Label" "このバージョンに戻す"
+            "Variant" "primary"
+            "Attrs" (dict
+              "hx-get" $rollbackHref
+              "hx-target" "#modal-root"
+              "hx-swap" "innerHTML")) }}
+        {{ else }}
+          {{ template "c_button" (dict
+            "Label" "Roll back to this version"
+            "Variant" "primary"
+            "Attrs" (dict
+              "hx-get" $rollbackHref
+              "hx-target" "#modal-root"
+              "hx-swap" "innerHTML")) }}
+        {{ end }}
+      {{ end }}
+      {{ if eq $lang "ja" }}
+        {{ template "c_button" (dict
+          "Label" "複製"
+          "Variant" "secondary"
+          "Href" $detail.DuplicateURL) }}
+        {{ template "c_button" (dict
+          "Label" "削除"
+          "Variant" "danger"
+          "Attrs" (dict "type" "button" "disabled" "true" "aria-disabled" "true")) }}
+      {{ else }}
+        {{ template "c_button" (dict
+          "Label" "Duplicate copy"
+          "Variant" "secondary"
+          "Href" $detail.DuplicateURL) }}
+        {{ template "c_button" (dict
+          "Label" "Delete"
+          "Variant" "danger"
+          "Attrs" (dict "type" "button" "disabled" "true" "aria-disabled" "true")) }}
+      {{ end }}
+    </div>
+
+    <div class="space-y-4">
+      <div class="grid gap-4 lg:grid-cols-2">
+        <figure class="relative overflow-hidden rounded-xl border border-gray-200 bg-gray-50 shadow-sm">
+          {{ if $detail.Preview.Before.Badge }}
+            <span class="absolute left-3 top-3 inline-flex items-center rounded-full bg-gray-900/80 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">{{ $detail.Preview.Before.Badge }}</span>
+          {{ end }}
+          <img src="{{ $detail.Preview.Before.Image }}"
+               alt="{{ $detail.Preview.Before.Description }}"
+               class="w-full object-cover"
+               loading="lazy">
+          <figcaption class="space-y-1 px-4 py-3">
+            <p class="text-sm font-semibold text-gray-900">{{ $detail.Preview.Before.Title }}</p>
+            <p class="text-xs text-gray-500">{{ $detail.Preview.Before.Description }}</p>
+            {{ if $detail.Preview.Before.Meta }}
+              <div class="flex flex-wrap gap-2 text-[11px] text-gray-500">
+                {{ range $detail.Preview.Before.Meta }}
+                  <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">{{ . }}</span>
+                {{ end }}
+              </div>
+            {{ end }}
+          </figcaption>
+        </figure>
+        <figure class="relative overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-sm ring-1 ring-indigo-100">
+          {{ if $detail.Preview.After.Badge }}
+            <span class="absolute left-3 top-3 inline-flex items-center rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">{{ $detail.Preview.After.Badge }}</span>
+          {{ end }}
+          <img src="{{ $detail.Preview.After.Image }}"
+               alt="{{ $detail.Preview.After.Description }}"
+               class="w-full object-cover"
+               loading="lazy">
+          <figcaption class="space-y-1 px-4 py-3">
+            <p class="text-sm font-semibold text-gray-900">{{ $detail.Preview.After.Title }}</p>
+            <p class="text-xs text-gray-500">{{ $detail.Preview.After.Description }}</p>
+            {{ if $detail.Preview.After.Meta }}
+              <div class="flex flex-wrap gap-2 text-[11px] text-gray-500">
+                {{ range $detail.Preview.After.Meta }}
+                  <span class="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-indigo-700">{{ . }}</span>
+                {{ end }}
+              </div>
+            {{ end }}
+          </figcaption>
+        </figure>
+      </div>
+      <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-xs text-gray-600">
+        <div class="flex flex-wrap items-center gap-2 text-gray-700">
+          {{ template "icon" (dict "Name" "arrows-right-left" "Class" "h-4 w-4 text-gray-500") }}
+          <span>{{ $detail.Preview.LastComparedText }}</span>
+        </div>
+        {{ if $detail.Preview.DiffSummary }}
+          <div class="mt-2 flex flex-wrap gap-2 text-[11px] font-medium">
+            {{ range $detail.Preview.DiffSummary }}
+              <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-indigo-50 text-indigo-600">{{ .Label }}</span>
+            {{ end }}
+          </div>
+        {{ end }}
+        {{ if $detail.Preview.Hints }}
+          <ul class="mt-3 list-disc space-y-1 pl-5 text-[11px] text-gray-500">
+            {{ range $detail.Preview.Hints }}
+              <li>{{ . }}</li>
+            {{ end }}
+          </ul>
+        {{ end }}
+      </div>
+    </div>
+
+    {{ if $detail.Insights }}
+      <div class="grid gap-3 sm:grid-cols-2">
+        {{ range $detail.Insights }}
+          <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-gray-500">{{ .Label }}</p>
+            <p class="mt-1 text-lg font-semibold text-gray-900">{{ .Value }}</p>
+          </div>
+        {{ end }}
+      </div>
+    {{ end }}
+
+    {{ if $detail.Note }}
+      <div class="rounded-lg border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-900">
+        {{ template "icon" (dict "Name" "information-circle" "Class" "mr-2 inline h-4 w-4 align-middle text-indigo-500") }}
+        <span class="align-middle">{{ $detail.Note }}</span>
+      </div>
+    {{ end }}
+  </section>
+
+  <section class="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+    <header class="flex items-center justify-between gap-3">
+      <div>
+        <h3 class="text-sm font-semibold text-gray-900">{{ if eq $lang "ja" }}監査タイムライン{{ else }}Audit timeline{{ end }}</h3>
+        <p class="text-xs text-gray-500">{{ if eq $lang "ja" }}最新のアクティビティから順に表示されます。{{ else }}Latest events for this version ordered by recency.{{ end }}</p>
+      </div>
+    </header>
+    <ol class="relative space-y-4">
+      {{ if $timeline }}
+        {{ range $timeline }}
+          <li class="relative pl-9">
+            <span class="absolute left-3 top-1 h-full w-px bg-gray-200" aria-hidden="true"></span>
+            <span class="absolute left-0 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full
+                         {{ if eq .Tone "success" }}bg-emerald-100 text-emerald-600
+                         {{ else if eq .Tone "info" }}bg-sky-100 text-sky-600
+                         {{ else if eq .Tone "warning" }}bg-amber-100 text-amber-600
+                         {{ else }}bg-gray-100 text-gray-500{{ end }}">
+              {{ template "icon" (dict "Name" .Icon "Class" "h-3.5 w-3.5") }}
+            </span>
+            <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+              <p class="text-sm font-semibold text-gray-900">{{ .Title }}</p>
+              <p class="mt-1 text-xs text-gray-500">{{ .Description }}</p>
+              <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+                <span>{{ .Actor }}</span>
+                {{ if .ActorRole }}<span class="text-gray-300">·</span><span>{{ .ActorRole }}</span>{{ end }}
+                <span class="text-gray-300">·</span>
+                <span>{{ .DisplayTime }}</span>
+                <span class="text-gray-300">·</span>
+                <span>{{ .Relative }}</span>
+              </div>
+            </div>
+          </li>
+        {{ end }}
+      {{ else }}
+        <li class="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+          {{ if eq $lang "ja" }}このバージョンに関連する監査イベントはまだありません。{{ else }}No additional audit events recorded for this version yet.{{ end }}
+        </li>
+      {{ end }}
+    </ol>
+  </section>
+</div>
+{{ end }}
+
+{{ define "frag_design_versions_rollback_modal" }}
+{{ $detail := .Detail }}
+{{ $query := .Query }}
+{{ $lang := .Lang }}
+{{ if eq $lang "ja" }}
+  {{ $title := printf "ロールバック確認 %s" $detail.VersionLabel }}
+  {{ template "c_modal" (dict
+    "ID" "design-version-rollback-modal"
+    "Title" $title
+    "BodyTmpl" "frag_design_versions_rollback_modal_body"
+    "BodyData" .
+    "FooterTmpl" "frag_design_versions_rollback_modal_footer"
+    "FooterData" .
+  ) }}
+{{ else }}
+  {{ $title := printf "Confirm rollback %s" $detail.VersionLabel }}
+  {{ template "c_modal" (dict
+    "ID" "design-version-rollback-modal"
+    "Title" $title
+    "BodyTmpl" "frag_design_versions_rollback_modal_body"
+    "BodyData" .
+    "FooterTmpl" "frag_design_versions_rollback_modal_footer"
+    "FooterData" .
+  ) }}
+{{ end }}
+{{ end }}
+
+{{ define "frag_design_versions_rollback_modal_body" }}
+{{ $detail := .Detail }}
+{{ $lang := .Lang }}
+<div class="space-y-4 text-sm text-gray-600">
+  <p>
+    {{ if eq $lang "ja" }}
+      この操作でエディタとプレビューが <strong>{{ $detail.VersionLabel }}</strong> の内容に巻き戻され、編集中のドラフトも上書きされます。
+    {{ else }}
+      Rolling back will update the editor form and live preview to match <strong>{{ $detail.VersionLabel }}</strong>, replacing the current draft.
+    {{ end }}
+  </p>
+  <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+    {{ template "icon" (dict "Name" "exclamation-triangle" "Class" "mr-2 inline h-4 w-4 align-middle") }}
+    <span class="align-middle">
+      {{ if eq $lang "ja" }}AI提案の反映状況や未保存の変更も巻き戻されます。{{ else }}Any pending AI suggestions or unsaved tweaks will be rewound as part of this action.{{ end }}
+    </span>
+  </div>
+</div>
+{{ end }}
+
+{{ define "frag_design_versions_rollback_modal_footer" }}
+{{ $detail := .Detail }}
+{{ $query := .Query }}
+{{ $lang := .Lang }}
+<form class="flex items-center justify-end gap-3"
+      hx-post="/design/versions/{{ $detail.ID }}/rollback{{ if $query }}?{{ $query }}{{ end }}"
+      hx-target="#design-versions-preview"
+      hx-swap="innerHTML">
+  <input type="hidden" name="author" value="{{ if $.FormAuthor }}{{ $.FormAuthor }}{{ else }}all{{ end }}">
+  <input type="hidden" name="range" value="{{ if $.FormRange }}{{ $.FormRange }}{{ else }}all{{ end }}">
+  <input type="hidden" name="focus" value="{{ $detail.ID }}">
+  <button type="button"
+          class="inline-flex items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          data-modal-close>
+    {{ if eq $lang "ja" }}キャンセル{{ else }}Cancel{{ end }}
+  </button>
+  <button type="submit"
+          class="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+    {{ if eq $lang "ja" }}ロールバック{{ else }}Roll back{{ end }}
+  </button>
+</form>
+{{ end }}
