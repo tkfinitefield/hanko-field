@@ -1321,6 +1321,231 @@ func TestOrderHandlersCancelPropagatesServiceError(t *testing.T) {
 	}
 }
 
+func TestOrderHandlersReorderSuccess(t *testing.T) {
+	now := time.Date(2025, 3, 10, 8, 30, 0, 0, time.UTC)
+	var captured services.CloneForReorderCommand
+
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			if orderID != "ord_123" {
+				t.Fatalf("unexpected order id %s", orderID)
+			}
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusDelivered,
+			}, nil
+		},
+		reorderFn: func(ctx context.Context, cmd services.CloneForReorderCommand) (services.Order, error) {
+			captured = cmd
+			designRef := "design-1"
+			return services.Order{
+				ID:          "ord_reorder",
+				OrderNumber: "HF-2025-000050",
+				UserID:      "user-1",
+				Status:      domain.OrderStatusDraft,
+				Currency:    "JPY",
+				Items: []services.OrderLineItem{
+					{
+						ProductRef: "prod-1",
+						SKU:        "SKU-1",
+						Quantity:   1,
+						DesignRef:  &designRef,
+						DesignSnapshot: map[string]any{
+							"layer": "text",
+						},
+						Metadata: map[string]any{
+							"source": "reorder",
+						},
+					},
+				},
+				Metadata: map[string]any{
+					"reorderOf": "ord_123",
+				},
+				CreatedAt: now,
+				UpdatedAt: now,
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_123:reorder", strings.NewReader(`{"metadata":{"channel":"app"}}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rr.Code)
+	}
+
+	if captured.OrderID != "ord_123" {
+		t.Fatalf("expected command order id ord_123, got %s", captured.OrderID)
+	}
+	if captured.ActorID != "user-1" {
+		t.Fatalf("expected actor user-1, got %s", captured.ActorID)
+	}
+	if captured.Metadata == nil || captured.Metadata["channel"] != "app" {
+		t.Fatalf("expected metadata channel app, got %#v", captured.Metadata)
+	}
+
+	var resp orderResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	payload := resp.Order
+	if payload.ID != "ord_reorder" {
+		t.Fatalf("expected reorder id ord_reorder, got %s", payload.ID)
+	}
+	if payload.Status != string(domain.OrderStatusDraft) {
+		t.Fatalf("expected draft status, got %s", payload.Status)
+	}
+	if payload.Metadata["reorderOf"] != "ord_123" {
+		t.Fatalf("expected reorder metadata, got %#v", payload.Metadata)
+	}
+	if len(payload.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(payload.Items))
+	}
+	if snapshot := payload.Items[0].DesignSnapshot; snapshot == nil || snapshot["layer"] != "text" {
+		t.Fatalf("expected design snapshot preserved, got %#v", snapshot)
+	}
+	if payload.Items[0].Metadata["source"] != "reorder" {
+		t.Fatalf("expected item metadata preserved, got %#v", payload.Items[0].Metadata)
+	}
+}
+
+func TestOrderHandlersReorderRequiresOwnership(t *testing.T) {
+	var reorderCalled bool
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "other-user",
+				Status: domain.OrderStatusDelivered,
+			}, nil
+		},
+		reorderFn: func(ctx context.Context, cmd services.CloneForReorderCommand) (services.Order, error) {
+			reorderCalled = true
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_456:reorder", strings.NewReader(`{"metadata":{}}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if reorderCalled {
+		t.Fatalf("reorder should not be invoked")
+	}
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersReorderRejectsStatus(t *testing.T) {
+	var reorderCalled bool
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusPendingPayment,
+			}, nil
+		},
+		reorderFn: func(ctx context.Context, cmd services.CloneForReorderCommand) (services.Order, error) {
+			reorderCalled = true
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_789:reorder", strings.NewReader(`{}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if reorderCalled {
+		t.Fatalf("reorder should not be invoked")
+	}
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersReorderInvalidJSON(t *testing.T) {
+	var getCalled bool
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			getCalled = true
+			return services.Order{}, nil
+		},
+		reorderFn: func(ctx context.Context, cmd services.CloneForReorderCommand) (services.Order, error) {
+			t.Fatalf("reorder should not be called on invalid JSON")
+			return services.Order{}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_135:reorder", strings.NewReader(`{"metadata":`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if getCalled {
+		t.Fatalf("expected to reject before fetching order")
+	}
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersReorderPropagatesServiceError(t *testing.T) {
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:     orderID,
+				UserID: "user-1",
+				Status: domain.OrderStatusDelivered,
+			}, nil
+		},
+		reorderFn: func(ctx context.Context, cmd services.CloneForReorderCommand) (services.Order, error) {
+			return services.Order{}, services.ErrOrderInvalidState
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodPost, "/orders/ord_246:reorder", strings.NewReader(`{}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rr.Code)
+	}
+}
+
 func TestOrderHandlersRequestInvoiceSuccess(t *testing.T) {
 	now := time.Date(2025, 1, 15, 9, 45, 0, 0, time.UTC)
 	var captured services.RequestInvoiceCommand

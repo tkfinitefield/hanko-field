@@ -25,6 +25,7 @@ const (
 	maxOrderPageSize        = 100
 	maxOrderCancelBodySize  = 4 * 1024
 	maxOrderInvoiceBodySize = 2 * 1024
+	maxOrderReorderBodySize = 4 * 1024
 )
 
 var userCancellableStatuses = map[domain.OrderStatus]struct{}{
@@ -53,6 +54,11 @@ var invoiceRequestableStatuses = map[domain.OrderStatus]struct{}{
 	domain.OrderStatusCompleted:    {},
 }
 
+var reorderableStatuses = map[domain.OrderStatus]struct{}{
+	domain.OrderStatusDelivered: {},
+	domain.OrderStatusCompleted: {},
+}
+
 var invoiceDeliveryChannels = []string{"email", "dashboard"}
 
 var productionNoteTagPattern = regexp.MustCompile(`(?is)<[^>]+>`)
@@ -73,6 +79,10 @@ type invoiceRequestResponse struct {
 	DeliveryChannels []string `json:"delivery_channels"`
 	RequestedAt      string   `json:"requested_at,omitempty"`
 	Duplicate        bool     `json:"duplicate,omitempty"`
+}
+
+type reorderOrderRequest struct {
+	Metadata map[string]any `json:"metadata"`
 }
 
 // OrderHandlers exposes order read-only endpoints for authenticated users.
@@ -103,6 +113,7 @@ func (h *OrderHandlers) Routes(r chi.Router) {
 	r.Get("/{orderID}/shipments", h.listOrderShipments)
 	r.Get("/{orderID}/shipments/{shipmentID}", h.getOrderShipment)
 	r.Get("/{orderID}", h.getOrder)
+	r.Post("/{orderID}:reorder", h.reorderOrder)
 	r.Post("/{orderID}:request-invoice", h.requestInvoice)
 	r.Post("/{orderID}:cancel", h.cancelOrder)
 }
@@ -401,6 +412,82 @@ func (h *OrderHandlers) listOrderPayments(w http.ResponseWriter, r *http.Request
 		Payments: buildOrderPaymentHistory(order.Payments),
 	}
 	writeJSONResponse(w, http.StatusOK, response)
+}
+
+func (h *OrderHandlers) reorderOrder(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.orders == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("order_service_unavailable", "order service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "order id is required", http.StatusBadRequest))
+		return
+	}
+
+	body, err := readLimitedBody(r, maxOrderReorderBodySize)
+	switch {
+	case err == nil:
+	case errors.Is(err, errEmptyBody):
+		body = nil
+	case errors.Is(err, errBodyTooLarge):
+		httpx.WriteError(ctx, w, httpx.NewError("payload_too_large", "request body exceeds allowed size", http.StatusRequestEntityTooLarge))
+		return
+	default:
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	var payload reorderOrderRequest
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &payload); err != nil {
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "invalid JSON body", http.StatusBadRequest))
+			return
+		}
+	}
+
+	order, err := h.orders.GetOrder(ctx, orderID, services.OrderReadOptions{})
+	if err != nil {
+		writeOrderError(ctx, w, err)
+		return
+	}
+
+	userID := strings.TrimSpace(identity.UID)
+	if !strings.EqualFold(strings.TrimSpace(order.UserID), userID) {
+		httpx.WriteError(ctx, w, httpx.NewError("order_not_found", "order not found", http.StatusNotFound))
+		return
+	}
+
+	statusKey := domain.OrderStatus(strings.TrimSpace(strings.ToLower(string(order.Status))))
+	if _, allowed := reorderableStatuses[statusKey]; !allowed {
+		httpx.WriteError(ctx, w, httpx.NewError("order_invalid_state", "reorder only allowed from delivered/completed orders", http.StatusConflict))
+		return
+	}
+
+	cmd := services.CloneForReorderCommand{
+		OrderID:  orderID,
+		ActorID:  userID,
+		Metadata: cloneMap(payload.Metadata),
+	}
+
+	result, err := h.orders.CloneForReorder(ctx, cmd)
+	if err != nil {
+		writeOrderError(ctx, w, err)
+		return
+	}
+
+	response := orderResponse{
+		Order: buildOrderPayload(result),
+	}
+	writeJSONResponse(w, http.StatusCreated, response)
 }
 
 func (h *OrderHandlers) requestInvoice(w http.ResponseWriter, r *http.Request) {
