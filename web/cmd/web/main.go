@@ -843,9 +843,15 @@ func main() {
 	r.MethodFunc(http.MethodGet, "/design/editor/form", DesignEditorFormFrag)
 	r.MethodFunc(http.MethodPost, "/design/editor/form", DesignEditorFormFrag)
 	r.Get("/design/editor/preview", DesignEditorPreviewFrag)
-	r.Get("/design/editor/fonts/modal", DesignEditorFontsModal)
-	r.Get("/design/editor/templates/modal", DesignEditorTemplatesModal)
-	r.Get("/design/editor/kanji/modal", DesignEditorKanjiModal)
+	// Design editor modal endpoints (new + legacy aliases)
+	r.Get("/modal/pick/font", ModalPickFont)
+	r.Get("/modal/pick/template", ModalPickTemplate)
+	r.MethodFunc(http.MethodGet, "/modal/kanji-map", ModalKanjiMap)
+	r.MethodFunc(http.MethodPost, "/modal/kanji-map", ModalKanjiMap)
+	// Legacy paths kept temporarily for backwards compatibility during migration.
+	r.Get("/design/editor/fonts/modal", ModalPickFont)
+	r.Get("/design/editor/templates/modal", ModalPickTemplate)
+	r.Get("/design/editor/kanji/modal", ModalKanjiMap)
 	// Top-level pages
 	r.Get("/shop", ShopHandler)
 	r.Get("/products/{productID}", ProductDetailHandler)
@@ -1213,7 +1219,8 @@ func DesignEditorPreviewFrag(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, r, "frag_design_editor_preview", view)
 }
 
-func DesignEditorFontsModal(w http.ResponseWriter, r *http.Request) {
+// ModalPickFont renders the font selection modal fragment.
+func ModalPickFont(w http.ResponseWriter, r *http.Request) {
 	lang := mw.Lang(r)
 	selected := strings.TrimSpace(r.URL.Query().Get("font"))
 	data := map[string]any{
@@ -1224,7 +1231,8 @@ func DesignEditorFontsModal(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, r, "frag_design_editor_fonts_modal", data)
 }
 
-func DesignEditorTemplatesModal(w http.ResponseWriter, r *http.Request) {
+// ModalPickTemplate renders the template selection modal fragment.
+func ModalPickTemplate(w http.ResponseWriter, r *http.Request) {
 	lang := mw.Lang(r)
 	selected := strings.TrimSpace(r.URL.Query().Get("template"))
 	data := map[string]any{
@@ -1235,13 +1243,28 @@ func DesignEditorTemplatesModal(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, r, "frag_design_editor_templates_modal", data)
 }
 
-func DesignEditorKanjiModal(w http.ResponseWriter, r *http.Request) {
+// ModalKanjiMap renders the kanji mapping helper modal. Accepts GET (query) and POST (form) requests.
+func ModalKanjiMap(w http.ResponseWriter, r *http.Request) {
 	lang := mw.Lang(r)
-	_ = r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+
 	name := strings.TrimSpace(r.Form.Get("name"))
+	// Fall back to query param when invoked via GET.
+	if name == "" {
+		name = strings.TrimSpace(r.URL.Query().Get("name"))
+	}
+
+	candidates := kanjiMappingCandidates(lang, name)
 	data := map[string]any{
-		"Lang": lang,
-		"Name": name,
+		"Lang":        lang,
+		"Name":        name,
+		"Candidates":  candidates,
+		"HasName":     name != "",
+		"HasResults":  len(candidates) > 0,
+		"LastUpdated": time.Now(),
 	}
 	renderTemplate(w, r, "frag_design_editor_kanji_modal", data)
 }

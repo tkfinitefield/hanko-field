@@ -47,7 +47,7 @@
           <div class="flex flex-wrap items-center gap-3 text-xs">
             <button type="button"
                     class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 font-medium text-slate-600 hover:border-indigo-200 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    hx-get="/design/editor/kanji/modal"
+                    hx-post="/modal/kanji-map"
                     hx-target="#modal-root"
                     hx-swap="innerHTML"
                     hx-include="#design-editor-form">
@@ -67,7 +67,7 @@
           </div>
           <button type="button"
                   class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  hx-get="/design/editor/fonts/modal?font={{ .State.FontID }}"
+                  hx-get="/modal/pick/font?font={{ .State.FontID }}"
                   hx-target="#modal-root"
                   hx-swap="innerHTML">
             <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 4h8"/><path d="M4 8h12"/><path d="M3 12h14"/><path d="M6 16h8"/></svg>
@@ -102,7 +102,7 @@
           </div>
           <button type="button"
                   class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  hx-get="/design/editor/templates/modal?template={{ .State.TemplateID }}"
+                  hx-get="/modal/pick/template?template={{ .State.TemplateID }}"
                   hx-target="#modal-root"
                   hx-swap="innerHTML">
             <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 4h12v12H4z"/><path d="M4 10h12"/><path d="M10 4v12"/></svg>

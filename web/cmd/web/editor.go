@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type DesignEditorFont struct {
@@ -29,6 +30,16 @@ type DesignEditorTemplate struct {
 	Description string
 	Badge       string
 	UseCase     string
+}
+
+type KanjiMappingCandidate struct {
+	ID         string
+	Kanji      string
+	Reading    string
+	Notes      string
+	Confidence int
+	Variant    string
+	Primary    bool
 }
 
 type DesignEditorToast struct {
@@ -237,6 +248,117 @@ func appendUnique(list []string, s string) []string {
 		}
 	}
 	return append(list, s)
+}
+
+var (
+	legacyKanjiReplacer     = strings.NewReplacer("辺", "邊", "沢", "澤", "斉", "齊", "広", "廣", "崎", "﨑", "国", "國", "高", "髙")
+	simplifiedKanjiReplacer = strings.NewReplacer("邊", "辺", "澤", "沢", "齊", "斉", "廣", "広", "﨑", "崎", "國", "国", "髙", "高")
+)
+
+func kanjiMappingCandidates(lang, name string) []KanjiMappingCandidate {
+	cleaned := strings.TrimSpace(name)
+	if cleaned == "" {
+		return nil
+	}
+
+	base, reading, noteHint := mapNameToKanji(cleaned, lang)
+
+	primary := KanjiMappingCandidate{
+		ID:         "registry",
+		Kanji:      base,
+		Reading:    reading,
+		Variant:    editorCopy(lang, "戸籍標準", "Registry preferred"),
+		Confidence: 94,
+		Primary:    true,
+		Notes:      editorCopy(lang, fmt.Sprintf("入力「%s」に最も近い候補です。", cleaned), fmt.Sprintf("Closest registry-safe spelling for %q.", cleaned)),
+	}
+	if noteHint != "" {
+		primary.Notes = noteHint
+	}
+
+	candidates := []KanjiMappingCandidate{primary}
+
+	if legacy := legacyKanjiReplacer.Replace(base); legacy != "" && legacy != base {
+		candidates = append(candidates, KanjiMappingCandidate{
+			ID:         "legacy",
+			Kanji:      legacy,
+			Reading:    reading,
+			Variant:    editorCopy(lang, "旧字体", "Legacy glyphs"),
+			Confidence: 82,
+			Notes:      editorCopy(lang, "旧字体を含むため自治体によっては再提出が必要です。", "Contains legacy characters. Some municipalities may request resubmission."),
+		})
+	}
+
+	if simplified := simplifiedKanjiReplacer.Replace(base); simplified != "" && simplified != base {
+		candidates = append(candidates, KanjiMappingCandidate{
+			ID:         "modern",
+			Kanji:      simplified,
+			Reading:    reading,
+			Variant:    editorCopy(lang, "新字体", "Modernised glyphs"),
+			Confidence: 76,
+			Notes:      editorCopy(lang, "彫刻機で再現しやすいように文字を簡略化しています。", "Normalized characters for higher legibility with machine engraving."),
+		})
+	}
+
+	return candidates
+}
+
+func mapNameToKanji(name, lang string) (kanji, reading, hint string) {
+	if containsKanji(name) {
+		return name, "", ""
+	}
+
+	norm := normalizeNameKey(name)
+	if mapped, ok := knownNameMappings[norm]; ok {
+		return mapped.Kanji, mapped.Reading, ""
+	}
+
+	// Fall back to the most common sample and communicate placeholder state.
+	sample := editorCopy(lang, "山田太郎", "山田太郎")
+	sampleReading := "やまだ たろう"
+	hint = editorCopy(lang,
+		"API 連携前のため漢字候補をサンプル表示しています。正式版では入力内容から即時変換されます。",
+		"Until the API integration is ready we display a representative sample. Production will convert your input automatically.")
+	return sample, sampleReading, hint
+}
+
+func containsKanji(s string) bool {
+	for _, r := range s {
+		if unicode.In(r, unicode.Han) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeNameKey(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case unicode.In(r, unicode.Hiragana, unicode.Katakana):
+			b.WriteRune(r)
+		case unicode.In(r, unicode.Han):
+			// Preserve kanji for lookups (remove whitespace/punctuation only).
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+type nameMappingSample struct {
+	Kanji   string
+	Reading string
+}
+
+var knownNameMappings = map[string]nameMappingSample{
+	"yamadataro":   {Kanji: "山田太郎", Reading: "やまだ たろう"},
+	"suzukihanako": {Kanji: "鈴木花子", Reading: "すずき はなこ"},
+	"tanakashoji":  {Kanji: "田中商事", Reading: "たなか しょうじ"},
+	"hankofield":   {Kanji: "判子フィールド", Reading: "はんこ ふぃーるど"},
+	"saito":        {Kanji: "斎藤", Reading: "さいとう"},
+	"kato":         {Kanji: "加藤", Reading: "かとう"},
 }
 
 func findDesignEditorFont(fonts []DesignEditorFont, id string) (DesignEditorFont, bool) {

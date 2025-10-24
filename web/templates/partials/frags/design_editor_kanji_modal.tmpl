@@ -10,16 +10,58 @@
 {{ end }}
 
 {{ define "editor_modal_kanji_body" }}
-<div class="space-y-3 text-sm text-slate-700">
-  <p>{{ if eq .Lang "ja" }}入力した氏名・法人名に対応する漢字表記を下記で確認できます。外字が含まれる場合は代替候補を AI が提案します。{{ else }}Review the official kanji mapping for the entered name. If rare characters are detected, we suggest compliant alternatives automatically.{{ end }}</p>
+<div class="space-y-4 text-sm text-slate-700">
+  <p>{{ if eq .Lang "ja" }}入力した氏名・法人名に対応する漢字表記を確認し、フォームに反映できます。外字が含まれる場合は代替候補を AI が提案します。{{ else }}Review AI-generated kanji spellings and apply them back to the form instantly. If rare glyphs are found we surface registry-safe alternatives.{{ end }}</p>
   <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
     <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ if eq .Lang "ja" }}現在の入力{{ else }}Current input{{ end }}</h3>
     <p class="mt-2 text-lg font-semibold text-slate-900">{{ if .Name }}{{ .Name }}{{ else if eq .Lang "ja" }}（未入力）{{ else }}(empty){{ end }}</p>
-    <p class="mt-2 text-xs text-slate-500">{{ if eq .Lang "ja" }}外字の有無、旧字体の揺れ、よみ仮名をまとめて確認できます。{{ else }}Check for legacy glyphs, uncommon characters, and reading guides in one place.{{ end }}</p>
+    <p class="mt-2 text-xs text-slate-500">{{ if eq .Lang "ja" }}外字の有無、旧字体の揺れ、よみ仮名をまとめて確認できます。{{ else }}Surface legacy glyphs, uncommon characters, and reading guides in one place.{{ end }}</p>
   </div>
+  {{ if not .HasName }}
+    <div class="rounded-lg border border-dashed border-slate-300 bg-white/60 px-3 py-3 text-xs text-slate-600">
+      <p class="font-semibold">{{ if eq .Lang "ja" }}氏名を入力してください{{ else }}Enter a name first{{ end }}</p>
+      <p class="mt-1">{{ if eq .Lang "ja" }}フォームの「デザイン名」に漢字またはローマ字を入力すると候補が表示されます。{{ else }}Add a name into the editor form to see suggested kanji spellings here.{{ end }}</p>
+    </div>
+  {{ else if .HasResults }}
+    <div class="space-y-3">
+      {{ range .Candidates }}
+        {{ $active := eq $.Name .Kanji }}
+        <button type="button"
+                class="w-full rounded-lg border px-4 py-3 text-left shadow-sm transition-colors {{ if $active }}border-indigo-400 bg-indigo-50 text-indigo-900{{ else }}border-slate-200 bg-white text-slate-800 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-800{{ end }}"
+                hx-post="/design/editor/form"
+                hx-target="#design-editor-form-shell"
+                hx-swap="innerHTML"
+                hx-include="#design-editor-form"
+                hx-vals='{"name":{{ printf "%q" .Kanji }}}'
+                hx-on="htmx:afterOnLoad:window.hankoModalClose && window.hankoModalClose()">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <p class="text-lg font-semibold">{{ .Kanji }}</p>
+              {{ if .Reading }}<p class="text-xs text-slate-500">{{ .Reading }}</p>{{ end }}
+            </div>
+            <div class="text-right">
+              {{ if .Variant }}<p class="text-[11px] font-semibold uppercase tracking-wide text-indigo-600">{{ .Variant }}</p>{{ end }}
+              <p class="text-[11px] text-slate-500">{{ if eq $.Lang "ja" }}信頼度{{ else }}Confidence{{ end }} {{ .Confidence }}%</p>
+            </div>
+          </div>
+          {{ if .Notes }}<p class="mt-3 text-xs text-slate-500">{{ .Notes }}</p>{{ end }}
+          {{ if $active }}
+            <p class="mt-2 text-xs font-semibold text-indigo-600">{{ if eq $.Lang "ja" }}現在のフォームに反映済み{{ else }}Already applied{{ end }}</p>
+          {{ else }}
+            <p class="mt-2 text-xs text-slate-500">{{ if eq $.Lang "ja" }}クリックでフォームへ反映{{ else }}Click to apply to the form{{ end }}</p>
+          {{ end }}
+        </button>
+      {{ end }}
+    </div>
+  {{ else }}
+    <div class="rounded-lg border border-dashed border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+      <p class="font-semibold">{{ if eq .Lang "ja" }}サンプル候補を表示中{{ else }}Showing sample suggestions{{ end }}</p>
+      <p class="mt-1">{{ if eq .Lang "ja" }}現在は API 連携準備中のため代表的な候補を表示しています。正式版では入力内容に合わせた漢字が提示されます。{{ else }}API integration is underway, so we show representative samples for now. Production will serve kanji tailored to your input.{{ end }}</p>
+    </div>
+  {{ end }}
   <div class="rounded-lg border border-dashed border-indigo-200 bg-indigo-50 px-3 py-3 text-xs text-indigo-700">
     <p class="font-semibold">{{ if eq .Lang "ja" }}ヒント{{ else }}Tip{{ end }}</p>
-    <p class="mt-1">{{ if eq .Lang "ja" }}AI マッピングでは住民票・登記簿と同一表記であることを優先します。読み仮名の修正もこの画面から送信できます。{{ else }}Our mapper prioritises the legal spelling used on residence records and registry filings. Submit furigana adjustments here if needed.{{ end }}</p>
+    <p class="mt-1">{{ if eq .Lang "ja" }}AI マッピングでは住民票・登記簿と同一表記であることを優先します。読み仮名の修正もこの画面から送信できます。{{ else }}Our mapper prioritises the legal spelling used on residence records and registry filings. You can submit furigana adjustments from this view.{{ end }}</p>
   </div>
   <a href="/design/kanji-mapper" class="inline-flex items-center gap-2 rounded-md border border-transparent bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
     <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h12v12H4z"/><path d="M4 10h12"/><path d="M10 4v12"/></svg>
