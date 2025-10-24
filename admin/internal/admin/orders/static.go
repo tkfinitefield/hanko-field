@@ -3,6 +3,7 @@ package orders
 import (
 	"context"
 	"fmt"
+	"net/mail"
 	"sort"
 	"strings"
 	"sync"
@@ -11,10 +12,13 @@ import (
 
 // StaticService provides deterministic order data suitable for local development and tests.
 type StaticService struct {
-	mu        sync.RWMutex
-	orders    []Order
-	timelines map[string][]TimelineEvent
-	audit     AuditLogger
+	mu               sync.RWMutex
+	orders           []Order
+	timelines        map[string][]TimelineEvent
+	invoiceJobs      map[string]*invoiceJobState
+	invoiceTemplates []InvoiceTemplate
+	invoiceLanguages []InvoiceLanguage
+	audit            AuditLogger
 }
 
 // NewStaticService returns a StaticService populated with representative orders.
@@ -686,15 +690,143 @@ func NewStaticService() *StaticService {
 		}),
 	}
 
+	for i := range orders {
+		switch orders[i].ID {
+		case "order-1052":
+			orders[i].Invoices = []InvoiceRecord{
+				{
+					ID:            "inv-order-1052-001",
+					Number:        "INV-2025-001",
+					Status:        "発行済み",
+					StatusTone:    "success",
+					IssuedAt:      now.Add(-6 * time.Hour),
+					DeliveryEmail: "jun.hasegawa@example.com",
+					Note:          "制作開始時に送付",
+					Actor:         "finance@hanko.example",
+					PDFURL:        "https://storage.example.com/invoices/INV-2025-001.pdf",
+					TemplateID:    "invoice-standard",
+					Language:      "ja-JP",
+					CreatedAt:     now.Add(-6 * time.Hour),
+					UpdatedAt:     now.Add(-6 * time.Hour),
+				},
+			}
+		case "order-1050":
+			orders[i].Invoices = []InvoiceRecord{
+				{
+					ID:            "inv-order-1050-001",
+					Number:        "INV-2025-045",
+					Status:        "発行準備中",
+					StatusTone:    "info",
+					DeliveryEmail: "maho.sato@example.com",
+					Note:          "法人請求書 (バッチ)",
+					Actor:         "ops@hanko.example",
+					TemplateID:    "invoice-batch",
+					Language:      "ja-JP",
+					JobID:         "job-invoice-1050-1",
+					CreatedAt:     now.Add(-10 * time.Minute),
+					UpdatedAt:     now.Add(-10 * time.Minute),
+				},
+			}
+		case "order-1047":
+			orders[i].Invoices = []InvoiceRecord{
+				{
+					ID:            "inv-order-1047-001",
+					Number:        "INV-2025-019",
+					Status:        "発行済み",
+					StatusTone:    "success",
+					IssuedAt:      now.Add(-12 * time.Hour),
+					DeliveryEmail: "ilena.smith@example.com",
+					Note:          "International shipment invoice",
+					Actor:         "finance@hanko.example",
+					PDFURL:        "https://storage.example.com/invoices/INV-2025-019.pdf",
+					TemplateID:    "invoice-standard",
+					Language:      "en-US",
+					CreatedAt:     now.Add(-12 * time.Hour),
+					UpdatedAt:     now.Add(-12 * time.Hour),
+				},
+			}
+		case "order-1045":
+			orders[i].Invoices = []InvoiceRecord{
+				{
+					ID:            "inv-order-1045-001",
+					Number:        "INV-2024-312",
+					Status:        "キャンセル済み",
+					StatusTone:    "muted",
+					IssuedAt:      now.Add(-80 * time.Hour),
+					DeliveryEmail: "yusuke.suzuki@example.com",
+					Note:          "返金対応のため無効化済み",
+					Actor:         "finance@hanko.example",
+					PDFURL:        "",
+					TemplateID:    "invoice-detailed",
+					Language:      "ja-JP",
+					CreatedAt:     now.Add(-81 * time.Hour),
+					UpdatedAt:     now.Add(-80 * time.Hour),
+				},
+			}
+		}
+	}
+
+	templates := []InvoiceTemplate{
+		{
+			ID:          "invoice-standard",
+			Label:       "標準テンプレート（日本語）",
+			Description: "一般的な個人向けフォーマット。税込表示と注文番号を含みます。",
+			Default:     true,
+		},
+		{
+			ID:          "invoice-detailed",
+			Label:       "明細付きテンプレート",
+			Description: "ラインアイテムと備考を細かく記載します。",
+			Default:     false,
+		},
+		{
+			ID:          "invoice-batch",
+			Label:       "法人請求（バッチ生成）",
+			Description: "大量発行向けテンプレート。生成に数分かかる場合があります。",
+			Default:     false,
+		},
+	}
+
+	languages := []InvoiceLanguage{
+		{Code: "ja-JP", Label: "日本語", Default: true},
+		{Code: "en-US", Label: "English", Default: false},
+	}
+
+	invoiceJobs := make(map[string]*invoiceJobState)
+	for _, order := range orders {
+		for _, invoice := range order.Invoices {
+			jobID := strings.TrimSpace(invoice.JobID)
+			if jobID == "" {
+				continue
+			}
+			state := &invoiceJobState{
+				OrderID:   order.ID,
+				InvoiceID: invoice.ID,
+				Job: InvoiceJob{
+					ID:          jobID,
+					Status:      "キュー投入済み",
+					StatusTone:  "info",
+					SubmittedAt: invoice.CreatedAt,
+					Message:     "バッチ処理でPDFを生成中です（通常1-2分程度）。",
+				},
+				Completed: false,
+			}
+			invoiceJobs[jobID] = state
+		}
+	}
+
 	timelines := make(map[string][]TimelineEvent, len(orders))
 	for _, order := range orders {
 		timelines[order.ID] = seedTimeline(order)
 	}
 
 	return &StaticService{
-		orders:    orders,
-		timelines: timelines,
-		audit:     noopAuditLogger{},
+		orders:           orders,
+		timelines:        timelines,
+		invoiceJobs:      invoiceJobs,
+		invoiceTemplates: templates,
+		invoiceLanguages: languages,
+		audit:            noopAuditLogger{},
 	}
 }
 
@@ -724,6 +856,9 @@ func cloneOrder(order Order) Order {
 	}
 	if len(order.Refunds) > 0 {
 		result.Refunds = append([]RefundRecord(nil), order.Refunds...)
+	}
+	if len(order.Invoices) > 0 {
+		result.Invoices = append([]InvoiceRecord(nil), order.Invoices...)
 	}
 	return result
 }
@@ -870,6 +1005,301 @@ func (s *StaticService) RefundModal(_ context.Context, _ string, orderID string)
 		SupportsPartial: supportsPartial,
 		Currency:        cloned.Currency,
 	}, nil
+}
+
+// InvoiceModal assembles invoice modal data for the specified order.
+func (s *StaticService) InvoiceModal(_ context.Context, _ string, orderID string) (InvoiceModal, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	_, order := s.findOrderLocked(orderID)
+	if order == nil {
+		return InvoiceModal{}, ErrOrderNotFound
+	}
+
+	cloned := cloneOrder(*order)
+
+	recent := append([]InvoiceRecord(nil), cloned.Invoices...)
+	sort.SliceStable(recent, func(i, j int) bool {
+		return recent[i].UpdatedAt.After(recent[j].UpdatedAt)
+	})
+
+	templates := append([]InvoiceTemplate(nil), s.invoiceTemplates...)
+	languages := append([]InvoiceLanguage(nil), s.invoiceLanguages...)
+
+	defaultTemplate := defaultInvoiceTemplateID(templates)
+	defaultLanguage := defaultInvoiceLanguageCode(languages)
+
+	summary := InvoiceOrderSummary{
+		ID:            cloned.ID,
+		Number:        cloned.Number,
+		CustomerName:  cloned.Customer.Name,
+		CustomerEmail: cloned.Customer.Email,
+		Currency:      cloned.Currency,
+		TotalMinor:    cloned.TotalMinor,
+	}
+
+	return InvoiceModal{
+		Order:           summary,
+		Templates:       templates,
+		Languages:       languages,
+		SuggestedEmail:  strings.TrimSpace(cloned.Customer.Email),
+		RecentInvoices:  recent,
+		DefaultTemplate: defaultTemplate,
+		DefaultLanguage: defaultLanguage,
+	}, nil
+}
+
+// IssueInvoice records a simulated invoice issuance for development usage.
+func (s *StaticService) IssueInvoice(_ context.Context, _ string, req InvoiceIssueRequest) (InvoiceIssueResult, error) {
+	orderID := strings.TrimSpace(req.OrderID)
+	templateID := strings.TrimSpace(req.TemplateID)
+	email := strings.TrimSpace(req.DeliveryEmail)
+	language := strings.TrimSpace(req.Language)
+	note := strings.TrimSpace(req.Note)
+
+	fieldErrors := map[string]string{}
+	if orderID == "" {
+		fieldErrors["orderID"] = "注文IDが不正です。"
+	}
+	if templateID == "" {
+		fieldErrors["templateID"] = "テンプレートを選択してください。"
+	}
+	if email == "" {
+		fieldErrors["email"] = "送付先メールアドレスを入力してください。"
+	} else if !isValidEmail(email) {
+		fieldErrors["email"] = "メールアドレスの形式が正しくありません。"
+	}
+
+	if len(fieldErrors) > 0 {
+		return InvoiceIssueResult{}, &InvoiceValidationError{
+			Message:     "入力内容を確認してください。",
+			FieldErrors: fieldErrors,
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx, order := s.findOrderLocked(orderID)
+	if order == nil {
+		return InvoiceIssueResult{}, ErrOrderNotFound
+	}
+
+	template, ok := s.templateByIDLocked(templateID)
+	if !ok {
+		return InvoiceIssueResult{}, &InvoiceValidationError{
+			Message:     "選択したテンプレートが見つかりません。",
+			FieldErrors: map[string]string{"templateID": "選択したテンプレートが見つかりません。"},
+		}
+	}
+
+	language = s.normaliseLanguageLocked(language)
+
+	now := time.Now()
+	counter := len(order.Invoices) + 1
+	invoiceID := fmt.Sprintf("inv-%s-%d", orderID, now.UnixNano())
+	invoiceNumber := fmt.Sprintf("INV-%d%02d-%03d", now.Year(), int(now.Month()), counter)
+	actor := strings.TrimSpace(req.ActorEmail)
+	if actor == "" {
+		actor = strings.TrimSpace(req.ActorID)
+	}
+	if actor == "" {
+		actor = "オペレーター"
+	}
+
+	invoice := InvoiceRecord{
+		ID:            invoiceID,
+		Number:        invoiceNumber,
+		Status:        "発行済み",
+		StatusTone:    "success",
+		IssuedAt:      now,
+		DeliveryEmail: email,
+		Note:          note,
+		Actor:         actor,
+		PDFURL:        buildInvoicePDFURL(invoiceNumber),
+		TemplateID:    template.ID,
+		Language:      language,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	var job *InvoiceJob
+	if strings.EqualFold(template.ID, "invoice-batch") {
+		jobID := fmt.Sprintf("job-%s-%d", orderID, now.UnixNano())
+		job = &InvoiceJob{
+			ID:          jobID,
+			Status:      "キュー投入済み",
+			StatusTone:  "info",
+			SubmittedAt: now,
+			Message:     "請求書を生成しています。完了まで少し時間がかかる場合があります。",
+		}
+		invoice.Status = "発行準備中"
+		invoice.StatusTone = "info"
+		invoice.IssuedAt = time.Time{}
+		invoice.PDFURL = ""
+		invoice.JobID = jobID
+	}
+
+	order.Invoices = append([]InvoiceRecord{invoice}, order.Invoices...)
+	s.orders[idx] = *order
+
+	storedInvoice := order.Invoices[0]
+
+	if job != nil {
+		s.invoiceJobs[job.ID] = &invoiceJobState{
+			OrderID:   orderID,
+			InvoiceID: storedInvoice.ID,
+			Job:       *job,
+			Completed: false,
+			Attempts:  0,
+		}
+	}
+
+	return InvoiceIssueResult{
+		OrderID: orderID,
+		Invoice: storedInvoice,
+		Job:     job,
+	}, nil
+}
+
+// InvoiceJobStatus returns the latest status for an asynchronous invoice issuance job.
+func (s *StaticService) InvoiceJobStatus(_ context.Context, _ string, jobID string) (InvoiceJobStatus, error) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return InvoiceJobStatus{}, ErrInvoiceJobNotFound
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.invoiceJobs[jobID]
+	if !ok {
+		return InvoiceJobStatus{}, ErrInvoiceJobNotFound
+	}
+
+	idx, order := s.findOrderLocked(state.OrderID)
+	if order == nil {
+		delete(s.invoiceJobs, jobID)
+		return InvoiceJobStatus{}, ErrOrderNotFound
+	}
+
+	var invoice *InvoiceRecord
+	for i := range order.Invoices {
+		if order.Invoices[i].ID == state.InvoiceID {
+			invoice = &order.Invoices[i]
+			break
+		}
+	}
+	if invoice == nil {
+		delete(s.invoiceJobs, jobID)
+		return InvoiceJobStatus{}, ErrInvoiceJobNotFound
+	}
+
+	if !state.Completed {
+		state.Attempts++
+		if state.Attempts >= 2 {
+			state.Completed = true
+			state.Job.Status = "発行済み"
+			state.Job.StatusTone = "success"
+			state.Job.Message = "請求書の生成が完了しました。"
+			now := time.Now()
+			if invoice.IssuedAt.IsZero() {
+				invoice.IssuedAt = now
+			}
+			invoice.Status = "発行済み"
+			invoice.StatusTone = "success"
+			invoice.PDFURL = buildInvoicePDFURL(invoice.Number)
+			invoice.JobID = ""
+			invoice.UpdatedAt = now
+			s.orders[idx] = *order
+			delete(s.invoiceJobs, jobID)
+		} else {
+			state.Job.Status = "処理中"
+			state.Job.StatusTone = "info"
+			state.Job.Message = "PDFを生成しています。完了までお待ちください。"
+		}
+	}
+
+	result := InvoiceJobStatus{
+		OrderID: state.OrderID,
+		Invoice: *invoice,
+		Job:     state.Job,
+		Done:    state.Completed,
+	}
+
+	if !state.Completed {
+		s.invoiceJobs[jobID] = state
+	}
+
+	return result, nil
+}
+
+func defaultInvoiceTemplateID(templates []InvoiceTemplate) string {
+	for _, tpl := range templates {
+		if tpl.Default && strings.TrimSpace(tpl.ID) != "" {
+			return strings.TrimSpace(tpl.ID)
+		}
+	}
+	if len(templates) > 0 {
+		return strings.TrimSpace(templates[0].ID)
+	}
+	return ""
+}
+
+func defaultInvoiceLanguageCode(languages []InvoiceLanguage) string {
+	for _, lang := range languages {
+		if lang.Default && strings.TrimSpace(lang.Code) != "" {
+			return strings.TrimSpace(lang.Code)
+		}
+	}
+	if len(languages) > 0 {
+		return strings.TrimSpace(languages[0].Code)
+	}
+	return ""
+}
+
+func (s *StaticService) templateByIDLocked(id string) (InvoiceTemplate, bool) {
+	target := strings.TrimSpace(id)
+	for _, tpl := range s.invoiceTemplates {
+		if strings.EqualFold(strings.TrimSpace(tpl.ID), target) {
+			return tpl, true
+		}
+	}
+	return InvoiceTemplate{}, false
+}
+
+func (s *StaticService) normaliseLanguageLocked(code string) string {
+	trimmed := strings.TrimSpace(code)
+	if trimmed == "" {
+		return defaultInvoiceLanguageCode(s.invoiceLanguages)
+	}
+	for _, lang := range s.invoiceLanguages {
+		if strings.EqualFold(strings.TrimSpace(lang.Code), trimmed) {
+			return strings.TrimSpace(lang.Code)
+		}
+	}
+	return defaultInvoiceLanguageCode(s.invoiceLanguages)
+}
+
+func isValidEmail(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	if _, err := mail.ParseAddress(value); err != nil {
+		return false
+	}
+	return true
+}
+
+func buildInvoicePDFURL(number string) string {
+	safe := strings.TrimSpace(number)
+	if safe == "" {
+		return ""
+	}
+	safe = strings.ReplaceAll(safe, " ", "_")
+	return fmt.Sprintf("https://storage.example.com/invoices/%s.pdf", safe)
 }
 
 // UpdateStatus mutates the order status with optimistic local data for development use.
@@ -1113,6 +1543,14 @@ func (s *StaticService) SubmitRefund(ctx context.Context, _ string, orderID stri
 		Payment:  paymentOption,
 		Payments: paymentOptions,
 	}, nil
+}
+
+type invoiceJobState struct {
+	OrderID   string
+	InvoiceID string
+	Job       InvoiceJob
+	Completed bool
+	Attempts  int
 }
 
 func (s *StaticService) findOrderLocked(orderID string) (int, *Order) {

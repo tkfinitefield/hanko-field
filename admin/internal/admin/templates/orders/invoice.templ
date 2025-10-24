@@ -1,0 +1,229 @@
+package orders
+
+import (
+    "finitefield.org/hanko-admin/internal/admin/templates/components"
+    "finitefield.org/hanko-admin/internal/admin/templates/helpers"
+    "finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
+
+templ InvoiceModal(data InvoiceModalData) {
+    @layouts.Modal("領収書を発行", invoiceModalBody(data))
+}
+
+templ invoiceModalBody(data InvoiceModalData) {
+    <div class="space-y-6 text-sm text-slate-700">
+        if data.Form != nil {
+            @invoiceModalForm(data.Form)
+        } else if data.Job != nil {
+            @invoiceJobView(data.Job)
+        }
+        if len(data.Recent) > 0 {
+            <div class="space-y-3">
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">発行履歴</h3>
+                <ul class="space-y-2">
+                    for _, invoice := range data.Recent {
+                        <li class="space-y-2 rounded-lg border border-slate-200 p-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="font-medium text-slate-800">#{ invoice.Number }</p>
+                                <span class={ helpers.BadgeClass(invoice.StatusTone) }>{ invoice.Status }</span>
+                            </div>
+                            if invoice.Issued != "" {
+                                <p class="text-xs text-slate-500">発行: { invoice.Issued }
+                                    if invoice.Relative != "" {
+                                        <span class="ml-1 text-slate-400">({ invoice.Relative })</span>
+                                    }
+                                </p>
+                            }
+                            if invoice.DeliveryEmail != "" {
+                                <p class="text-xs text-slate-500">送付先: { invoice.DeliveryEmail }</p>
+                            }
+                            if invoice.Actor != "" {
+                                <p class="text-xs text-slate-400">担当: { invoice.Actor }</p>
+                            }
+                            if invoice.Note != "" {
+                                <p class="text-xs text-slate-500">備考: { invoice.Note }</p>
+                            }
+                            if invoice.DownloadURL != "" {
+                                <a
+                                    href={ invoice.DownloadURL }
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    class={ helpers.ButtonClass("ghost", "xs", false, false) }
+                                >PDFを開く</a>
+                            }
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+    </div>
+}
+
+templ invoiceModalForm(form *InvoiceModalFormData) {
+    <form
+        hx-post={ form.ActionURL }
+        hx-target="#modal"
+        hx-swap="innerHTML"
+        class="space-y-4"
+    >
+        <input type="hidden" name="csrf_token" value={ form.CSRFToken } />
+        <input type="hidden" name="orderID" value={ form.OrderID } />
+        <div class="space-y-1">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">注文番号</p>
+            <p class="text-lg font-semibold text-slate-900">#{ form.OrderNumber }</p>
+            if form.CustomerName != "" {
+                <p class="text-xs text-slate-500">{ form.CustomerName }</p>
+            }
+            if form.CustomerEmail != "" {
+                <p class="text-xs text-slate-500">{ form.CustomerEmail }</p>
+            }
+            <p class="text-xs text-slate-500">合計 { form.Total }</p>
+        </div>
+        <div class="space-y-2">
+            <label for="invoice-template" class="text-xs font-semibold uppercase tracking-wide text-slate-500">テンプレート</label>
+            <select
+                id="invoice-template"
+                name="templateID"
+                class={ form.TemplateClass }
+                required
+            >
+                for _, option := range form.TemplateOptions {
+                    <option value={ option.ID } selected?={ option.Selected }>{ option.Label }</option>
+                }
+            </select>
+            if msg := form.FieldErrors["templateID"]; msg != "" {
+                <p class="text-xs text-rose-600">{ msg }</p>
+            } else {
+                <p class="text-xs text-slate-500">発行するフォーマットを選択してください。</p>
+            }
+        </div>
+        if len(form.LanguageOptions) > 0 {
+            <div class="space-y-2">
+                <label for="invoice-language" class="text-xs font-semibold uppercase tracking-wide text-slate-500">言語</label>
+                <select
+                    id="invoice-language"
+                    name="language"
+                    class={ form.LanguageClass }
+                >
+                    for _, option := range form.LanguageOptions {
+                        <option value={ option.Value } selected?={ option.Selected }>{ option.Label }</option>
+                    }
+                </select>
+                if msg := form.FieldErrors["language"]; msg != "" {
+                    <p class="text-xs text-rose-600">{ msg }</p>
+                } else {
+                    <p class="text-xs text-slate-500">顧客向けに表示する言語を選択します。</p>
+                }
+            </div>
+        }
+        <div class="space-y-2">
+            <label for="invoice-email" class="text-xs font-semibold uppercase tracking-wide text-slate-500">送付先メールアドレス</label>
+            <input
+                id="invoice-email"
+                name="email"
+                type="email"
+                value={ form.Email }
+                placeholder={ form.SuggestedEmail }
+                class={ form.EmailClass }
+                required
+            />
+            if msg := form.FieldErrors["email"]; msg != "" {
+                <p class="text-xs text-rose-600">{ msg }</p>
+            } else {
+                <p class="text-xs text-slate-500">発行後にPDFを送信するメールアドレスを入力してください。</p>
+            }
+        </div>
+        <div class="space-y-2">
+            <label for="invoice-note" class="text-xs font-semibold uppercase tracking-wide text-slate-500">備考</label>
+            <textarea
+                id="invoice-note"
+                name="note"
+                rows="3"
+                class={ form.NoteClass }
+                placeholder="社内共有や顧客向けの注記があれば入力してください。"
+            >{ form.Note }</textarea>
+            if msg := form.FieldErrors["note"]; msg != "" {
+                <p class="text-xs text-rose-600">{ msg }</p>
+            } else {
+                <p class="text-xs text-slate-500">空欄の場合は標準テンプレートの本文が使用されます。</p>
+            }
+        </div>
+        if form.Error != "" {
+            <p class="text-sm text-rose-600">{ form.Error }</p>
+        }
+        @components.ButtonWith("領収書を発行", components.ButtonOptions{
+            Type:     "submit",
+            Variant:  "primary",
+            FullWidth: true,
+        })
+    </form>
+}
+
+templ invoiceJobView(job *InvoiceJobModalData) {
+    <div class="space-y-4">
+        <div class="space-y-1">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">ジョブID</p>
+            <p class="text-lg font-semibold text-slate-900">{ job.JobID }</p>
+            if job.InvoiceNumber != "" {
+                <p class="text-xs text-slate-500">対象領収書: #{ job.InvoiceNumber }</p>
+            }
+            <p class="text-xs text-slate-500">受付: { job.Submitted }
+                if job.Relative != "" {
+                    <span class="ml-1 text-slate-400">({ job.Relative })</span>
+                }
+            </p>
+            if job.Message != "" {
+                <p class="text-sm text-slate-600">{ job.Message }</p>
+            }
+        </div>
+        @invoiceJobStatusContainer(job.Status, job.PollURL, job.PollTrigger)
+        <div class="flex justify-end">
+            <button type="button" class={ helpers.ButtonClass("ghost", "sm", false, false) } data-modal-close>閉じる</button>
+        </div>
+    </div>
+}
+
+templ invoiceJobStatusContainer(status InvoiceJobStatusFragmentData, pollURL, pollTrigger string) {
+    <div
+        class="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4"
+        data-invoice-job-status
+        hx-target="this"
+        hx-swap="outerHTML"
+        if pollURL != "" {
+            hx-get={ pollURL }
+        }
+        if pollTrigger != "" {
+            hx-trigger={ pollTrigger }
+        }
+    >
+        <div class="flex items-center justify-between gap-2">
+            <p class="text-sm font-semibold text-slate-600">現在のステータス</p>
+            <span class={ helpers.BadgeClass(status.StatusTone) }>{ status.StatusLabel }</span>
+        </div>
+        if status.Message != "" {
+            <p class="text-sm text-slate-600">{ status.Message }</p>
+        }
+        if status.InvoiceNumber != "" {
+            <p class="text-xs text-slate-500">領収書番号: #{ status.InvoiceNumber }</p>
+        }
+        if status.DownloadURL != "" {
+            <a
+                href={ status.DownloadURL }
+                target="_blank"
+                rel="noreferrer"
+                class={ helpers.ButtonClass("secondary", "sm", false, false) }
+            >PDFをダウンロード</a>
+        }
+        if status.Updated != "" {
+            <p class="text-xs text-slate-400">最終更新: { status.Updated }
+                if status.Relative != "" {
+                    <span class="ml-1">({ status.Relative })</span>
+                }
+            </p>
+        }
+    </div>
+}
+
+templ InvoiceJobStatusFragment(status InvoiceJobStatusFragmentData) {
+    @invoiceJobStatusContainer(status, status.PollURL, status.PollTrigger)
+}

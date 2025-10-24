@@ -23,6 +23,15 @@ type Service interface {
 
 	// SubmitRefund attempts to create a refund for the specified order payment.
 	SubmitRefund(ctx context.Context, token, orderID string, req RefundRequest) (RefundResult, error)
+
+	// InvoiceModal loads metadata required to render the invoice issuance modal for an order.
+	InvoiceModal(ctx context.Context, token, orderID string) (InvoiceModal, error)
+
+	// IssueInvoice attempts to issue an invoice for the specified order using the provided parameters.
+	IssueInvoice(ctx context.Context, token string, req InvoiceIssueRequest) (InvoiceIssueResult, error)
+
+	// InvoiceJobStatus returns the progress of an asynchronous invoice issuance job.
+	InvoiceJobStatus(ctx context.Context, token, jobID string) (InvoiceJobStatus, error)
 }
 
 // Status represents the canonical lifecycle state of an order.
@@ -66,6 +75,10 @@ var (
 	ErrPaymentNotFound = errors.New("payment not found")
 	// ErrRefundFailed indicates the PSP refund attempt failed for reasons other than validation.
 	ErrRefundFailed = errors.New("refund failed")
+	// ErrInvoiceTemplateNotFound indicates the requested invoice template does not exist.
+	ErrInvoiceTemplateNotFound = errors.New("invoice template not found")
+	// ErrInvoiceJobNotFound indicates the requested invoice issuance job does not exist.
+	ErrInvoiceJobNotFound = errors.New("invoice job not found")
 )
 
 // Query captures filters and pagination arguments for listing orders.
@@ -178,6 +191,7 @@ type Order struct {
 	HasRefundRequest bool
 	Payments         []PaymentDetail
 	Refunds          []RefundRecord
+	Invoices         []InvoiceRecord
 }
 
 // StatusModal represents data necessary to render the status update modal.
@@ -421,6 +435,113 @@ func (e *RefundValidationError) Error() string {
 	msg := strings.TrimSpace(e.Message)
 	if msg == "" {
 		msg = "invalid refund request"
+	}
+	return msg
+}
+
+// InvoiceModal provides information required to render the invoice issuance modal.
+type InvoiceModal struct {
+	Order           InvoiceOrderSummary
+	Templates       []InvoiceTemplate
+	Languages       []InvoiceLanguage
+	SuggestedEmail  string
+	RecentInvoices  []InvoiceRecord
+	DefaultTemplate string
+	DefaultLanguage string
+}
+
+// InvoiceOrderSummary captures primary order details needed when issuing invoices.
+type InvoiceOrderSummary struct {
+	ID            string
+	Number        string
+	CustomerName  string
+	CustomerEmail string
+	Currency      string
+	TotalMinor    int64
+}
+
+// InvoiceTemplate represents a selectable template option.
+type InvoiceTemplate struct {
+	ID          string
+	Label       string
+	Description string
+	Default     bool
+}
+
+// InvoiceLanguage represents a selectable language option.
+type InvoiceLanguage struct {
+	Code    string
+	Label   string
+	Default bool
+}
+
+// InvoiceRecord describes an issued (or pending) invoice.
+type InvoiceRecord struct {
+	ID            string
+	Number        string
+	Status        string
+	StatusTone    string
+	IssuedAt      time.Time
+	DeliveryEmail string
+	Note          string
+	Actor         string
+	PDFURL        string
+	TemplateID    string
+	Language      string
+	JobID         string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+// InvoiceIssueRequest contains parameters required to issue an invoice.
+type InvoiceIssueRequest struct {
+	OrderID       string
+	TemplateID    string
+	Language      string
+	DeliveryEmail string
+	Note          string
+	ActorID       string
+	ActorEmail    string
+}
+
+// InvoiceIssueResult returns information about a newly issued invoice.
+type InvoiceIssueResult struct {
+	OrderID string
+	Invoice InvoiceRecord
+	Job     *InvoiceJob
+}
+
+// InvoiceJob represents an asynchronous invoice generation job.
+type InvoiceJob struct {
+	ID          string
+	Status      string
+	StatusTone  string
+	SubmittedAt time.Time
+	Message     string
+}
+
+// InvoiceJobStatus reports the latest status of an asynchronous invoice job.
+type InvoiceJobStatus struct {
+	OrderID string
+	Invoice InvoiceRecord
+	Job     InvoiceJob
+	Done    bool
+}
+
+// InvoiceValidationError indicates validation issues for invoice issuance.
+type InvoiceValidationError struct {
+	Message     string
+	FieldErrors map[string]string
+}
+
+// Error implements the error interface.
+func (e *InvoiceValidationError) Error() string {
+	if e == nil {
+		return "invalid invoice request"
+	}
+	msg := strings.TrimSpace(e.Message)
+	if msg == "" {
+		msg = "invalid invoice request"
 	}
 	return msg
 }

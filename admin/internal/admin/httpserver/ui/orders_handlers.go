@@ -370,6 +370,185 @@ func (h *Handlers) OrdersSubmitRefund(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// OrdersInvoiceModal renders the invoice issuance modal for a specific order.
+func (h *Handlers) OrdersInvoiceModal(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		http.Error(w, "注文IDが不正です。", http.StatusBadRequest)
+		return
+	}
+
+	modal, err := h.orders.InvoiceModal(ctx, user.Token, orderID)
+	if err != nil {
+		if errors.Is(err, adminorders.ErrOrderNotFound) {
+			http.Error(w, "指定された注文が見つかりません。", http.StatusNotFound)
+			return
+		}
+		log.Printf("orders: fetch invoice modal failed: %v", err)
+		http.Error(w, "領収書モーダルの取得に失敗しました。", http.StatusBadGateway)
+		return
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	csrf := custommw.CSRFTokenFromContext(ctx)
+	data := orderstpl.InvoiceModalPayload(basePath, modal, csrf, orderstpl.InvoiceFormState{}, "", nil)
+
+	templ.Handler(orderstpl.InvoiceModal(data)).ServeHTTP(w, r)
+}
+
+// InvoicesIssue processes invoice issuance requests.
+func (h *Handlers) InvoicesIssue(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "リクエストの解析に失敗しました。", http.StatusBadRequest)
+		return
+	}
+
+	orderID := strings.TrimSpace(r.FormValue("orderID"))
+	templateID := strings.TrimSpace(r.FormValue("templateID"))
+	language := strings.TrimSpace(r.FormValue("language"))
+	email := strings.TrimSpace(r.FormValue("email"))
+	note := strings.TrimSpace(r.FormValue("note"))
+
+	if orderID == "" {
+		http.Error(w, "注文IDが不正です。", http.StatusBadRequest)
+		return
+	}
+
+	formState := orderstpl.InvoiceFormState{
+		TemplateID: templateID,
+		Language:   language,
+		Email:      email,
+		Note:       note,
+	}
+
+	request := adminorders.InvoiceIssueRequest{
+		OrderID:       orderID,
+		TemplateID:    templateID,
+		Language:      language,
+		DeliveryEmail: email,
+		Note:          note,
+		ActorID:       user.UID,
+		ActorEmail:    user.Email,
+	}
+
+	result, err := h.orders.IssueInvoice(ctx, user.Token, request)
+	if err != nil {
+		if errors.Is(err, adminorders.ErrOrderNotFound) {
+			http.Error(w, "指定された注文が見つかりません。", http.StatusNotFound)
+			return
+		}
+		var valErr *adminorders.InvoiceValidationError
+		if errors.As(err, &valErr) {
+			h.renderInvoiceModalError(w, r, user, orderID, formState, valErr.Message, valErr.FieldErrors, http.StatusUnprocessableEntity)
+			return
+		}
+		if errors.Is(err, adminorders.ErrInvoiceTemplateNotFound) {
+			h.renderInvoiceModalError(w, r, user, orderID, formState, "選択したテンプレートが見つかりません。", map[string]string{"templateID": "選択したテンプレートが見つかりません。"}, http.StatusUnprocessableEntity)
+			return
+		}
+		log.Printf("orders: issue invoice failed: %v", err)
+		http.Error(w, "領収書の発行に失敗しました。", http.StatusBadGateway)
+		return
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	if result.Job != nil {
+		modal, modalErr := h.orders.InvoiceModal(ctx, user.Token, orderID)
+		if modalErr != nil {
+			log.Printf("orders: reload invoice modal after enqueue failed: %v", modalErr)
+			http.Error(w, "領収書モーダルの再取得に失敗しました。", http.StatusBadGateway)
+			return
+		}
+		pollURL := joinBasePath(basePath, "/invoices/jobs/"+url.PathEscape(result.Job.ID))
+		payload := orderstpl.InvoiceModalJobPayload(modal, *result.Job, result.Invoice, pollURL)
+		w.Header().Set("HX-Trigger", `{"toast":{"message":"領収書の生成を開始しました。","tone":"info"},"refresh:fragment":{"targets":["[data-order-invoice]"]}}`)
+		templ.Handler(orderstpl.InvoiceModal(payload)).ServeHTTP(w, r)
+		return
+	}
+
+	w.Header().Set("HX-Trigger", `{"toast":{"message":"領収書を発行しました。","tone":"success"},"modal:close":true,"refresh:fragment":{"targets":["[data-order-invoice]"]}}`)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// InvoiceJobStatus polls the status of an invoice issuance job.
+func (h *Handlers) InvoiceJobStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	jobID := strings.TrimSpace(chi.URLParam(r, "jobID"))
+	if jobID == "" {
+		http.Error(w, "ジョブIDが不正です。", http.StatusBadRequest)
+		return
+	}
+
+	statusResult, err := h.orders.InvoiceJobStatus(ctx, user.Token, jobID)
+	if err != nil {
+		switch {
+		case errors.Is(err, adminorders.ErrInvoiceJobNotFound):
+			http.Error(w, "指定されたジョブが見つかりません。", http.StatusNotFound)
+			return
+		case errors.Is(err, adminorders.ErrOrderNotFound):
+			http.Error(w, "指定された注文が見つかりません。", http.StatusNotFound)
+			return
+		default:
+			log.Printf("orders: invoice job status failed: %v", err)
+			http.Error(w, "ジョブの状態取得に失敗しました。", http.StatusBadGateway)
+			return
+		}
+	}
+
+	pollURL := r.URL.Path
+	statusData := orderstpl.InvoiceJobStatusFragmentPayload(statusResult, pollURL)
+	if statusData.Done {
+		w.Header().Set("HX-Trigger", `{"toast":{"message":"領収書を発行しました。","tone":"success"},"modal:close":true,"refresh:fragment":{"targets":["[data-order-invoice]"]}}`)
+	}
+
+	templ.Handler(orderstpl.InvoiceJobStatusFragment(statusData)).ServeHTTP(w, r)
+}
+
+func (h *Handlers) renderInvoiceModalError(w http.ResponseWriter, r *http.Request, user *custommw.User, orderID string, form orderstpl.InvoiceFormState, message string, fieldErrors map[string]string, status int) {
+	ctx := r.Context()
+	modal, err := h.orders.InvoiceModal(ctx, user.Token, orderID)
+	if err != nil {
+		if errors.Is(err, adminorders.ErrOrderNotFound) {
+			http.Error(w, "指定された注文が見つかりません。", http.StatusNotFound)
+			return
+		}
+		log.Printf("orders: reload invoice modal after error failed: %v", err)
+		http.Error(w, "領収書モーダルの再取得に失敗しました。", http.StatusBadGateway)
+		return
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	csrf := custommw.CSRFTokenFromContext(ctx)
+	data := orderstpl.InvoiceModalPayload(basePath, modal, csrf, form, strings.TrimSpace(message), fieldErrors)
+
+	if status > 0 {
+		w.WriteHeader(status)
+	} else {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	}
+	templ.Handler(orderstpl.InvoiceModal(data)).ServeHTTP(w, r)
+}
+
 func (h *Handlers) renderRefundModalError(w http.ResponseWriter, r *http.Request, user *custommw.User, orderID string, form orderstpl.RefundFormState, message string, fieldErrors map[string]string, status int) {
 	ctx := r.Context()
 	modal, err := h.orders.RefundModal(ctx, user.Token, orderID)
@@ -730,4 +909,23 @@ func normalizeBoolInput(value string) string {
 	default:
 		return "any"
 	}
+}
+
+func joinBasePath(basePath, suffix string) string {
+	base := strings.TrimSpace(basePath)
+	if base == "" {
+		base = "/admin"
+	}
+	if !strings.HasPrefix(base, "/") {
+		base = "/" + base
+	}
+	base = strings.TrimRight(base, "/")
+	path := strings.TrimSpace(suffix)
+	if path == "" {
+		return base
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return base + path
 }

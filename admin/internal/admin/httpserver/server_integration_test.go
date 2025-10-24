@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -534,6 +535,144 @@ func TestOrdersRefundFlow(t *testing.T) {
 	require.Equal(t, `{"toast":{"message":"返金を登録しました。","tone":"success"},"modal:close":true,"refresh:fragment":{"targets":["[data-order-payments]","[data-order-summary]"]}}`, validResp.Header.Get("HX-Trigger"))
 }
 
+func TestOrdersInvoiceIssueFlow(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "invoice-token"}
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth))
+	client := noRedirectClient(t)
+
+	// Seed CSRF cookie.
+	seedReq, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/orders", nil)
+	require.NoError(t, err)
+	seedReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	seedResp, err := client.Do(seedReq)
+	require.NoError(t, err)
+	seedResp.Body.Close()
+	require.Equal(t, http.StatusOK, seedResp.StatusCode)
+
+	csrf := findCSRFCookie(t, client.Jar, ts.URL+"/admin")
+	require.NotEmpty(t, csrf)
+
+	// Load the invoice modal.
+	modalReq, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/orders/order-1052/modal/invoice", nil)
+	require.NoError(t, err)
+	modalReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	modalReq.Header.Set("HX-Request", "true")
+	modalReq.Header.Set("HX-Target", "modal")
+	modalResp, err := client.Do(modalReq)
+	require.NoError(t, err)
+	defer modalResp.Body.Close()
+	require.Equal(t, http.StatusOK, modalResp.StatusCode)
+	modalBody, err := io.ReadAll(modalResp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(modalBody), `hx-post="/admin/invoices:issue"`)
+
+	// Submit invalid invoice request (invalid email).
+	form := url.Values{}
+	form.Set("orderID", "order-1052")
+	form.Set("templateID", "invoice-standard")
+	form.Set("language", "ja-JP")
+	form.Set("email", "invalid-email")
+	form.Set("note", "テスト領収書")
+
+	invalidReq, err := http.NewRequest(http.MethodPost, ts.URL+"/admin/invoices:issue", strings.NewReader(form.Encode()))
+	require.NoError(t, err)
+	invalidReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	invalidReq.Header.Set("HX-Request", "true")
+	invalidReq.Header.Set("HX-Target", "modal")
+	invalidReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	invalidReq.Header.Set("X-CSRF-Token", csrf)
+	invalidResp, err := client.Do(invalidReq)
+	require.NoError(t, err)
+	defer invalidResp.Body.Close()
+	require.Equal(t, http.StatusUnprocessableEntity, invalidResp.StatusCode)
+	invalidBody, err := io.ReadAll(invalidResp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(invalidBody), "メールアドレスの形式が正しくありません")
+
+	// Submit valid invoice request (synchronous template).
+	form.Set("email", "jun.hasegawa+new@example.com")
+	validReq, err := http.NewRequest(http.MethodPost, ts.URL+"/admin/invoices:issue", strings.NewReader(form.Encode()))
+	require.NoError(t, err)
+	validReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	validReq.Header.Set("HX-Request", "true")
+	validReq.Header.Set("HX-Target", "modal")
+	validReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	validReq.Header.Set("X-CSRF-Token", csrf)
+	validResp, err := client.Do(validReq)
+	require.NoError(t, err)
+	validResp.Body.Close()
+	require.Equal(t, http.StatusNoContent, validResp.StatusCode)
+	require.Equal(t, `{"toast":{"message":"領収書を発行しました。","tone":"success"},"modal:close":true,"refresh:fragment":{"targets":["[data-order-invoice]"]}}`, validResp.Header.Get("HX-Trigger"))
+
+	// Load modal for asynchronous template.
+	asyncModalReq, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/orders/order-1050/modal/invoice", nil)
+	require.NoError(t, err)
+	asyncModalReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	asyncModalReq.Header.Set("HX-Request", "true")
+	asyncModalReq.Header.Set("HX-Target", "modal")
+	asyncModalResp, err := client.Do(asyncModalReq)
+	require.NoError(t, err)
+	defer asyncModalResp.Body.Close()
+	require.Equal(t, http.StatusOK, asyncModalResp.StatusCode)
+
+	// Submit asynchronous invoice request.
+	asyncForm := url.Values{}
+	asyncForm.Set("orderID", "order-1050")
+	asyncForm.Set("templateID", "invoice-batch")
+	asyncForm.Set("language", "ja-JP")
+	asyncForm.Set("email", "maho.sato@example.com")
+	asyncForm.Set("note", "バッチ請求書")
+
+	asyncReq, err := http.NewRequest(http.MethodPost, ts.URL+"/admin/invoices:issue", strings.NewReader(asyncForm.Encode()))
+	require.NoError(t, err)
+	asyncReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	asyncReq.Header.Set("HX-Request", "true")
+	asyncReq.Header.Set("HX-Target", "modal")
+	asyncReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	asyncReq.Header.Set("X-CSRF-Token", csrf)
+	asyncResp, err := client.Do(asyncReq)
+	require.NoError(t, err)
+	defer asyncResp.Body.Close()
+	require.Equal(t, http.StatusOK, asyncResp.StatusCode)
+	require.Equal(t, `{"toast":{"message":"領収書の生成を開始しました。","tone":"info"},"refresh:fragment":{"targets":["[data-order-invoice]"]}}`, asyncResp.Header.Get("HX-Trigger"))
+	asyncBody, err := io.ReadAll(asyncResp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(asyncBody), "ジョブID")
+	require.Contains(t, string(asyncBody), `data-invoice-job-status`)
+
+	jobID := extractJobID(t, string(asyncBody))
+	require.NotEmpty(t, jobID)
+
+	// First poll should keep the job running.
+	pollReq, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/invoices/jobs/"+jobID, nil)
+	require.NoError(t, err)
+	pollReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	pollReq.Header.Set("HX-Request", "true")
+	pollReq.Header.Set("HX-Target", "modal")
+	pollResp, err := client.Do(pollReq)
+	require.NoError(t, err)
+	defer pollResp.Body.Close()
+	require.Equal(t, http.StatusOK, pollResp.StatusCode)
+	require.Empty(t, pollResp.Header.Get("HX-Trigger"))
+	pollBody, err := io.ReadAll(pollResp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(pollBody), "現在のステータス")
+
+	// Second poll should complete the job and close the modal.
+	finalPollReq, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/invoices/jobs/"+jobID, nil)
+	require.NoError(t, err)
+	finalPollReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	finalPollReq.Header.Set("HX-Request", "true")
+	finalPollReq.Header.Set("HX-Target", "modal")
+	finalPollResp, err := client.Do(finalPollReq)
+	require.NoError(t, err)
+	defer finalPollResp.Body.Close()
+	require.Equal(t, http.StatusOK, finalPollResp.StatusCode)
+	require.Equal(t, `{"toast":{"message":"領収書を発行しました。","tone":"success"},"modal:close":true,"refresh:fragment":{"targets":["[data-order-invoice]"]}}`, finalPollResp.Header.Get("HX-Trigger"))
+}
+
 type dashboardStub struct {
 	kpis        []admindashboard.KPI
 	alerts      []admindashboard.Alert
@@ -674,6 +813,13 @@ func findCSRFCookie(t testing.TB, jar http.CookieJar, rawURL string) string {
 		}
 	}
 	return ""
+}
+
+func extractJobID(t testing.TB, body string) string {
+	t.Helper()
+	re := regexp.MustCompile(`job-[A-Za-z0-9\-]+`)
+	match := re.FindString(body)
+	return strings.TrimSpace(match)
 }
 
 func mustParseURL(t testing.TB, raw string) *url.URL {

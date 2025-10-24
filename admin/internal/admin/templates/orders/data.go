@@ -273,6 +273,96 @@ type RefundFormState struct {
 	NotifyCustomer bool
 }
 
+// InvoiceModalData describes the invoice issuance modal view model.
+type InvoiceModalData struct {
+	Form   *InvoiceModalFormData
+	Job    *InvoiceJobModalData
+	Recent []InvoiceRecordData
+}
+
+// InvoiceModalFormData stores state required to render the invoice issuance form.
+type InvoiceModalFormData struct {
+	OrderID          string
+	OrderNumber      string
+	CustomerName     string
+	CustomerEmail    string
+	Total            string
+	ActionURL        string
+	CSRFToken        string
+	TemplateOptions  []InvoiceTemplateOptionData
+	LanguageOptions  []SelectOption
+	SelectedTemplate string
+	SelectedLanguage string
+	Email            string
+	SuggestedEmail   string
+	Note             string
+	TemplateClass    string
+	EmailClass       string
+	LanguageClass    string
+	NoteClass        string
+	FieldErrors      map[string]string
+	Error            string
+}
+
+// InvoiceTemplateOptionData represents a selectable invoice template.
+type InvoiceTemplateOptionData struct {
+	ID          string
+	Label       string
+	Description string
+	Selected    bool
+}
+
+// InvoiceRecordData summarises an existing invoice.
+type InvoiceRecordData struct {
+	ID            string
+	Number        string
+	Status        string
+	StatusTone    string
+	Issued        string
+	Relative      string
+	DownloadURL   string
+	DeliveryEmail string
+	Note          string
+	Actor         string
+}
+
+// InvoiceJobModalData represents the asynchronous issuance job view.
+type InvoiceJobModalData struct {
+	OrderID       string
+	InvoiceNumber string
+	JobID         string
+	Submitted     string
+	Relative      string
+	Message       string
+	PollURL       string
+	PollTrigger   string
+	Status        InvoiceJobStatusFragmentData
+}
+
+// InvoiceJobStatusFragmentData captures the current job status payload for polling.
+type InvoiceJobStatusFragmentData struct {
+	JobID         string
+	StatusLabel   string
+	StatusTone    string
+	Message       string
+	InvoiceNumber string
+	DownloadURL   string
+	Updated       string
+	Relative      string
+	Done          bool
+	Active        bool
+	PollURL       string
+	PollTrigger   string
+}
+
+// InvoiceFormState stores user input when re-rendering the invoice modal.
+type InvoiceFormState struct {
+	TemplateID string
+	Language   string
+	Email      string
+	Note       string
+}
+
 // BadgeView describes a badge to render for a row.
 type BadgeView struct {
 	Label string
@@ -621,6 +711,152 @@ func RefundModalPayload(basePath string, modal adminorders.RefundModal, csrfToke
 	}
 }
 
+// InvoiceModalPayload prepares the invoice issuance modal payload.
+func InvoiceModalPayload(basePath string, modal adminorders.InvoiceModal, csrfToken string, form InvoiceFormState, errMsg string, fieldErrors map[string]string) InvoiceModalData {
+	errs := normaliseFieldErrors(fieldErrors)
+
+	selectedTemplate := strings.TrimSpace(form.TemplateID)
+	if selectedTemplate == "" || !hasInvoiceTemplate(modal.Templates, selectedTemplate) {
+		selectedTemplate = strings.TrimSpace(modal.DefaultTemplate)
+	}
+	if selectedTemplate == "" && len(modal.Templates) > 0 {
+		selectedTemplate = strings.TrimSpace(modal.Templates[0].ID)
+	}
+
+	selectedLanguage := strings.TrimSpace(form.Language)
+	if selectedLanguage == "" || !hasInvoiceLanguage(modal.Languages, selectedLanguage) {
+		selectedLanguage = strings.TrimSpace(modal.DefaultLanguage)
+	}
+	if selectedLanguage == "" && len(modal.Languages) > 0 {
+		selectedLanguage = strings.TrimSpace(modal.Languages[0].Code)
+	}
+
+	email := strings.TrimSpace(form.Email)
+	if email == "" {
+		email = strings.TrimSpace(modal.SuggestedEmail)
+	}
+	note := strings.TrimSpace(form.Note)
+
+	templateOptions := make([]InvoiceTemplateOptionData, 0, len(modal.Templates))
+	for _, tpl := range modal.Templates {
+		id := strings.TrimSpace(tpl.ID)
+		if id == "" {
+			continue
+		}
+		templateOptions = append(templateOptions, InvoiceTemplateOptionData{
+			ID:          id,
+			Label:       safeText(tpl.Label, "テンプレート"),
+			Description: strings.TrimSpace(tpl.Description),
+			Selected:    strings.EqualFold(id, selectedTemplate),
+		})
+	}
+
+	languageOptions := make([]SelectOption, 0, len(modal.Languages))
+	for _, lang := range modal.Languages {
+		code := strings.TrimSpace(lang.Code)
+		if code == "" {
+			continue
+		}
+		languageOptions = append(languageOptions, SelectOption{
+			Value:    code,
+			Label:    safeText(lang.Label, code),
+			Selected: strings.EqualFold(code, selectedLanguage),
+		})
+	}
+
+	baseClass := "w-full rounded-lg border px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+	defaultClass := helpers.ClassList(baseClass, "border-slate-300")
+	errorClass := helpers.ClassList(baseClass, "border-rose-400 focus:border-rose-500 focus:ring-rose-200")
+
+	templateClass := defaultClass
+	if errs != nil && errs["templateID"] != "" {
+		templateClass = errorClass
+	}
+	emailClass := defaultClass
+	if errs != nil && errs["email"] != "" {
+		emailClass = errorClass
+	}
+	languageClass := defaultClass
+	if errs != nil && errs["language"] != "" {
+		languageClass = errorClass
+	}
+	noteClass := helpers.ClassList(baseClass, "border-slate-300")
+	if errs != nil && errs["note"] != "" {
+		noteClass = errorClass
+	}
+
+	recent := buildInvoiceRecords(modal.RecentInvoices)
+
+	formData := &InvoiceModalFormData{
+		OrderID:          strings.TrimSpace(modal.Order.ID),
+		OrderNumber:      strings.TrimSpace(modal.Order.Number),
+		CustomerName:     strings.TrimSpace(modal.Order.CustomerName),
+		CustomerEmail:    strings.TrimSpace(modal.Order.CustomerEmail),
+		Total:            helpers.Currency(modal.Order.TotalMinor, modal.Order.Currency),
+		ActionURL:        joinBase(basePath, "/invoices:issue"),
+		CSRFToken:        csrfToken,
+		TemplateOptions:  templateOptions,
+		LanguageOptions:  languageOptions,
+		SelectedTemplate: selectedTemplate,
+		SelectedLanguage: selectedLanguage,
+		Email:            email,
+		SuggestedEmail:   strings.TrimSpace(modal.SuggestedEmail),
+		Note:             note,
+		TemplateClass:    templateClass,
+		EmailClass:       emailClass,
+		LanguageClass:    languageClass,
+		NoteClass:        noteClass,
+		FieldErrors:      errs,
+		Error:            strings.TrimSpace(errMsg),
+	}
+
+	return InvoiceModalData{
+		Form:   formData,
+		Recent: recent,
+	}
+}
+
+// InvoiceModalJobPayload prepares the job state view for asynchronous issuance.
+func InvoiceModalJobPayload(modal adminorders.InvoiceModal, job adminorders.InvoiceJob, invoice adminorders.InvoiceRecord, pollURL string) InvoiceModalData {
+	status := buildInvoiceJobStatus(invoice, job)
+	if trimmed := strings.TrimSpace(pollURL); trimmed != "" && !status.Done {
+		status.Active = true
+		status.PollURL = trimmed
+		status.PollTrigger = "load, every 4s"
+	}
+
+	jobData := &InvoiceJobModalData{
+		OrderID:       strings.TrimSpace(modal.Order.ID),
+		InvoiceNumber: strings.TrimSpace(invoice.Number),
+		JobID:         strings.TrimSpace(job.ID),
+		Submitted:     helpers.Date(job.SubmittedAt, "2006-01-02 15:04"),
+		Relative:      helpers.Relative(job.SubmittedAt),
+		Message:       strings.TrimSpace(job.Message),
+		PollURL:       status.PollURL,
+		PollTrigger:   status.PollTrigger,
+		Status:        status,
+	}
+
+	return InvoiceModalData{
+		Job:    jobData,
+		Recent: buildInvoiceRecords(modal.RecentInvoices),
+	}
+}
+
+// InvoiceJobStatusFragmentPayload prepares the polling fragment payload.
+func InvoiceJobStatusFragmentPayload(result adminorders.InvoiceJobStatus, pollURL string) InvoiceJobStatusFragmentData {
+	status := buildInvoiceJobStatus(result.Invoice, result.Job)
+	status.Done = result.Done
+	if !result.Done {
+		status.Active = true
+		status.PollURL = strings.TrimSpace(pollURL)
+		if status.PollURL != "" {
+			status.PollTrigger = "load, every 4s"
+		}
+	}
+	return status
+}
+
 func defaultRefundPayment(payments []adminorders.RefundPaymentOption) string {
 	for _, payment := range payments {
 		if payment.SupportsRefunds && payment.AvailableMinor > 0 {
@@ -686,6 +922,110 @@ func refundStatusTone(status string) string {
 	default:
 		return "info"
 	}
+}
+
+func buildInvoiceRecords(records []adminorders.InvoiceRecord) []InvoiceRecordData {
+	if len(records) == 0 {
+		return nil
+	}
+	result := make([]InvoiceRecordData, 0, len(records))
+	for _, rec := range records {
+		issuedAt := rec.IssuedAt
+		if issuedAt.IsZero() {
+			issuedAt = rec.UpdatedAt
+		}
+		if issuedAt.IsZero() {
+			issuedAt = rec.CreatedAt
+		}
+		issued := ""
+		relative := ""
+		if !issuedAt.IsZero() {
+			issued = helpers.Date(issuedAt, "2006-01-02 15:04")
+			relative = helpers.Relative(issuedAt)
+		}
+		result = append(result, InvoiceRecordData{
+			ID:            strings.TrimSpace(rec.ID),
+			Number:        strings.TrimSpace(rec.Number),
+			Status:        safeText(rec.Status, "処理中"),
+			StatusTone:    strings.TrimSpace(rec.StatusTone),
+			Issued:        issued,
+			Relative:      relative,
+			DownloadURL:   strings.TrimSpace(rec.PDFURL),
+			DeliveryEmail: strings.TrimSpace(rec.DeliveryEmail),
+			Note:          strings.TrimSpace(rec.Note),
+			Actor:         strings.TrimSpace(rec.Actor),
+		})
+	}
+	return result
+}
+
+func buildInvoiceJobStatus(invoice adminorders.InvoiceRecord, job adminorders.InvoiceJob) InvoiceJobStatusFragmentData {
+	updatedAt := invoice.UpdatedAt
+	if updatedAt.IsZero() {
+		updatedAt = invoice.CreatedAt
+	}
+	if updatedAt.IsZero() {
+		updatedAt = job.SubmittedAt
+	}
+	data := InvoiceJobStatusFragmentData{
+		JobID:         strings.TrimSpace(job.ID),
+		StatusLabel:   safeText(job.Status, "処理中"),
+		StatusTone:    strings.TrimSpace(job.StatusTone),
+		Message:       strings.TrimSpace(job.Message),
+		InvoiceNumber: strings.TrimSpace(invoice.Number),
+		DownloadURL:   strings.TrimSpace(invoice.PDFURL),
+		Done:          strings.TrimSpace(invoice.JobID) == "",
+	}
+	if !updatedAt.IsZero() {
+		data.Updated = helpers.Date(updatedAt, "2006-01-02 15:04")
+		data.Relative = helpers.Relative(updatedAt)
+	}
+	return data
+}
+
+func hasInvoiceTemplate(templates []adminorders.InvoiceTemplate, id string) bool {
+	target := strings.TrimSpace(id)
+	if target == "" {
+		return false
+	}
+	for _, tpl := range templates {
+		if strings.EqualFold(strings.TrimSpace(tpl.ID), target) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasInvoiceLanguage(languages []adminorders.InvoiceLanguage, code string) bool {
+	target := strings.TrimSpace(code)
+	if target == "" {
+		return false
+	}
+	for _, lang := range languages {
+		if strings.EqualFold(strings.TrimSpace(lang.Code), target) {
+			return true
+		}
+	}
+	return false
+}
+
+func normaliseFieldErrors(fieldErrors map[string]string) map[string]string {
+	if len(fieldErrors) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(fieldErrors))
+	for key, value := range fieldErrors {
+		k := strings.TrimSpace(key)
+		v := strings.TrimSpace(value)
+		if k == "" || v == "" {
+			continue
+		}
+		result[k] = v
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func safeText(value, fallback string) string {
