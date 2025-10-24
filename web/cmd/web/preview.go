@@ -202,7 +202,7 @@ func buildDesignPreviewView(lang string, values url.Values) DesignPreviewView {
 	view.Downloads = buildPreviewDownloads(lang, bg, frame, dpi)
 	view.ShareActions = buildPreviewShare(lang, bg, frame, dpi)
 	view.Tips = buildPreviewTips(lang, frame)
-	view.Snackbars = buildPreviewSnackbars(lang, showGrid)
+	view.Snackbars = buildPreviewSnackbars(lang, bg, frame, dpi, showGrid)
 	view.Coachmark = buildPreviewCoachmark(lang, frame)
 	view.LastRegeneratedCopy = editorCopy(lang, "最終プレビューは 45 秒前に更新されました。", "Last render refreshed 45 seconds ago.")
 
@@ -614,7 +614,7 @@ func buildPreviewTips(lang, frame string) []DesignPreviewTip {
 	return tips
 }
 
-func buildPreviewSnackbars(lang string, showGrid bool) []DesignPreviewSnackbar {
+func buildPreviewSnackbars(lang, bg, frame string, dpi int, showGrid bool) []DesignPreviewSnackbar {
 	message := editorCopy(lang, "プレビューは保存済みのデザインを使用しています。", "Preview uses your saved design state.")
 	snack := DesignPreviewSnackbar{
 		ID:      "preview-sync",
@@ -623,12 +623,23 @@ func buildPreviewSnackbars(lang string, showGrid bool) []DesignPreviewSnackbar {
 	}
 	out := []DesignPreviewSnackbar{snack}
 	if showGrid {
+		vals := url.Values{}
+		vals.Set("bg", bg)
+		vals.Set("dpi", strconv.Itoa(dpi))
+		if frame != "document" {
+			vals.Set("frame", frame)
+		}
+		vals.Set("grid", "0")
+		href := "/design/preview"
+		if encoded := vals.Encode(); encoded != "" {
+			href = href + "?" + encoded
+		}
 		out = append(out, DesignPreviewSnackbar{
 			ID:          "grid-enabled",
 			Message:     editorCopy(lang, "製図ガイドがオンになっています。", "Measurement grid enabled."),
 			Tone:        "success",
 			ActionLabel: editorCopy(lang, "オフにする", "Disable"),
-			ActionHref:  "/design/preview?grid=0",
+			ActionHref:  href,
 		})
 	}
 	return out

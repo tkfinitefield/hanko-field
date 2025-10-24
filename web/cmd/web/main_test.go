@@ -152,6 +152,9 @@ func TestDesignPreviewFragmentPushesQuery(t *testing.T) {
 	if !strings.Contains(body, "Measurement grid") && !strings.Contains(body, "製図ガイド") {
 		t.Fatalf("expected grid copy in fragment response")
 	}
+	if !strings.Contains(body, `/design/preview?bg=transparent&amp;dpi=1200&amp;frame=desk&amp;grid=0`) {
+		t.Fatalf("expected disable grid action to preserve query parameters; body=%s", body)
+	}
 }
 
 func TestHTMXPostRequiresCSRF(t *testing.T) {
