@@ -1,51 +1,50 @@
 ---
 title: "Privacy Policy"
-summary: "Understand how Hanko Field collects, processes, and safeguards personal information."
-effective_date: 2024-12-01
-updated_at: 2025-01-05T08:30:00Z
-version: "3.4"
-icon: "scale"
+summary: "How Hanko Field collects, uses, and protects personal information."
+lang: en
+effective_date: 2025-01-05
+updated_at: 2025-01-20
+version: "2025.1.2"
+download_label: "Download full policy (PDF)"
+download_url: "https://cdn.hanko-field.jp/legal/privacy-policy-en.pdf"
+icon: "shield-check"
 banner:
   variant: warning
-  title: "Summary of January updates"
-  message: "We clarified data residency options and retention periods for archived seal impressions."
+  title: "Policy update"
+  message: "We introduced region-specific retention windows. Review the details below."
 seo:
-  title: "Hanko Field Privacy Policy"
-  description: "Details on data collection, processing purposes, and user rights for Hanko Field services."
+  title: "Privacy Policy | Hanko Field"
+  description: "Details on how Hanko Field handles personal information, data residency, and security controls."
 ---
-## 1. Scope
 
-This policy applies to the Hanko Field web application, mobile apps, and accompanying API services that collect or process personal information, including contact details, billing records, and audit logs.
+## Overview
 
-## 2. Information we collect
+This policy explains the categories of data we handle, why we process it, and how you can exercise your rights.
 
-### Account details
+### Who this policy covers
 
-We collect your name, email address, organisation, and role to provision secure access. Optional profile data, such as phonetic name entries, helps tailor localisation features.
+- Customers using our web, admin, or API products
+- Workshop partners fulfilling stamped products
+- Visitors signing up for newsletters or webinars
 
-### Usage metadata
+## Data we process
 
-For traceability, we log seal design events, approvals, and imprint downloads. These records are encrypted at rest and retained according to the retention schedule defined in the admin console.
+We process the following categories of personal information:
 
-## 3. Processing purposes
+1. **Account data** — names, emails, business profile, and audit logs.
+2. **Production artefacts** — stamp designs, approval flows, and engraving instructions.
+3. **Support interactions** — case notes, attachments, and call recordings when you contact support.
 
-- Service delivery and authentication
-- Regulatory compliance and audit trails
-- Product research and service improvements
+We use the data to maintain the service, comply with legal requirements, and deliver product communications you opt into.
 
-## 4. Data residency and retention
+## Retention and deletion
 
-Customers can select primary storage regions in Japan, Singapore, or the EU. Archived imprint assets are retained for seven years unless a shorter period is configured. Aggregated telemetry is kept for 18 months.
+Retention periods differ per region. As of the latest revision we keep production artefacts for 24 months in the default region and 12 months in the EU data residency option.
 
-## 5. Your rights
+When you request deletion, we anonymise audit logs and remove design artefacts within 30 days unless we must retain them for legal reasons.
 
-If you are located in the EEA, UK, or Japan, you may request access, correction, deletion, or export of personal data by contacting our support desk at privacy@hanko-field.example.
+## Your choices
 
-## 6. Contact
-
-Questions about this policy can be directed to:
-
-```
-Hanko Field Privacy Office
-1-2-3 Marunouchi, Chiyoda-ku, Tokyo 100-0005
-```
+- You can access or export your data at any time through the account portal.
+- Incident notifications include a one-click unsubscribe link.
+- Contact privacy@hanko-field.jp for requests about this policy.
