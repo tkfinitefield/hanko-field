@@ -12,19 +12,31 @@
   - `widgets/`, `controllers/`, `notification/`, `security/`, `utils/` に機能別分類。
 - `features/` : ドメイン機能ごとのモジュール。Feature + MVVM で `application/`（状態・ViewModel）, `data/`（リポジトリ・モデル）, `domain/`（エンティティ）, `presentation/`（UI）を分割。
 
-### `test/` サブディレクトリ
-- `core/`, `shared/`, `features/` など `lib/` と同じ構成で配置。ユースケース・ViewModel・サービスの検証を目的としたテストコードを格納。
+## アーキテクチャ
+- Feature + MVVM パターンを採用する。
+- Navigation
+  - 画面遷移には Navigator 2.0 を用いる。
+  - できる限り Navigator.push や pushNamed は使わず、 Navigator 2.0 の仕組みを用いる。
+- Riverpod 3.0
+  - 自動コード生成は用いない。
+  - Provider, FutureProvider や StreamProvider は使用しない。代わりに Notifier, AsyncNotifier を使用する。
+  - ProviderScope は ルートに一つ配置する。ルート以外の箇所に ProviderScope を配置してはならない。
+- `print` は使わずに `logger` ライブラリを使用する。
+- できる限りコメントを日本語でつけること
+- 時刻を取得する際は clock ライブラリを使用して、テストを容易にする。
 
 ## Riverpod 3.0
 Use Riverpod 3.0 for business logic.
 
 ### Providers
-Providers come 6 variants:
+Providers come 6 variants but we only use Notifier and AsyncNotifier:
 
 | | Synchronous | Future | Stream |
 | --- | --- | --- | --- |
-| Unmodifiable | Provider | FutureProvider | StreamProvider |
+| Unmodifiable | Provider (DO NOT USE) | FutureProvider (DO NOT USE) | StreamProvider (DO NOT USE) |
 | Modifiable | NotifierProvider | AsyncNotifierProvider | StreamNotifierProvider |
+
+Only use Notifier and AsyncNotifier. Do not use Provider, FutureProvider, and StreamProvider.
 
 ### Ref.mounted
 You can use ref.mounted to check if a provider is still mounted after an async operation:
@@ -54,6 +66,8 @@ final provider = NotifierProvider.autoDispose<MyNotifier, int>(
 );
 
 class MyNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
 }
 ```
 
@@ -70,7 +84,32 @@ class CounterNotifier extends Notifier<int> {
 }
 ```
 
+```dart
+final provider = AsyncNotifierProvider.autoDispose<MyNotifier, int>(
+  MyNotifier.new,
+);
+
+class MyNotifier extends AsyncNotifier<int> {
+  @override
+  Future<int> build() async => 0;
+}
+```
+
+```dart
+final provider = AsyncNotifierProvider.family<CounterNotifier, int, Argument>(
+  CounterNotifier.new,
+);
+
+class CounterNotifier extends AsyncNotifier<int> {
+  CounterNotifier(this.arg);
+  final Argument arg;
+  @override
+  Future<int> build() async => 0;
+}
+```
+
 Instead of Notifier+FamilyNotifier+AutoDisposeNotifier+AutoDisposeFamilyNotifier, we always use the Notifier class.
+Instead of AsyncNotifier+AsyncFamilyNotifier+AsyncAutoDisposeNotifier+AsyncAutoDisposeFamilyNotifier, we always use the AsyncNotifier class.
 
 ### Mutations
 A new feature called "mutations" is introduced in Riverpod 3.0.
@@ -133,3 +172,17 @@ note
 Note how we called tsx.get here instead of Ref.read.
 This is a feature unique to mutations. That tsx.get obtains the state of a provider, but keep it alive until the mutation is completed.
 
+## test
+### test double naming convention
+mock: 振る舞いを検証するためのテストダブル。呼び出し回数や引数など「どう使われたか」をアサートしたいときに使います。
+stub: 戻り値を差し替えるだけのシンプルなテストダブル。呼び出された事実は気にせず、「こう返ってくる」と決め打ちしたい場合に使います。
+fake: 実装を簡略化した軽量版。メモリ内の擬似リポジトリなど、小規模でも本物に近い振る舞いを提供したいときに使います。
+
+### test directory structure
+### `test/` サブディレクトリ
+- `core/`, `shared/`, `features/` など `lib/` と同じ構成で配置。ユースケース・ViewModel・サービスの検証を目的としたテストコードを格納。
+
+### test double directory structure
+- `test/doubles/mocks/` : mock objects
+- `test/doubles/stubs/` : stub objects
+- `test/doubles/fakes/` : fake objects
