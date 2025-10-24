@@ -546,6 +546,245 @@ func TestOrderHandlersGetOrderServiceUnavailable(t *testing.T) {
 	}
 }
 
+func TestOrderHandlersListOrderShipmentsSuccess(t *testing.T) {
+	now := time.Date(2024, 6, 20, 9, 0, 0, 0, time.UTC)
+	latest := now.Add(2 * time.Hour)
+	created := now.Add(-30 * time.Minute)
+
+	var capturedOpts services.OrderReadOptions
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			capturedOpts = opts
+			return services.Order{
+				ID:     "ord_123",
+				UserID: "user-1",
+				Shipments: []services.Shipment{
+					{
+						ID:           "shp_1",
+						OrderID:      "ord_123",
+						Carrier:      "  yamato  ",
+						TrackingCode: "  TRK123  ",
+						Status:       "in_transit",
+						Events: []services.ShipmentEvent{
+							{
+								Status:     "picked_up",
+								OccurredAt: now,
+								Details: map[string]any{
+									"location": "Tokyo",
+								},
+							},
+							{
+								Status:     "delivered",
+								OccurredAt: latest,
+								Details: map[string]any{
+									"location":       "Osaka",
+									"internal_note":  "hide this",
+									"PrivateComment": "hide",
+								},
+							},
+						},
+						CreatedAt: created,
+						UpdatedAt: latest,
+					},
+				},
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_123/shipments", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	if !capturedOpts.IncludeShipments {
+		t.Fatalf("expected IncludeShipments true")
+	}
+	if capturedOpts.IncludePayments || capturedOpts.IncludeProductionEvents {
+		t.Fatalf("expected only shipments to be requested")
+	}
+
+	var resp []orderShipmentSummaryPayload
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(resp) != 1 {
+		t.Fatalf("expected 1 shipment summary, got %d", len(resp))
+	}
+	summary := resp[0]
+	if summary.ID != "shp_1" {
+		t.Fatalf("expected shipment id shp_1, got %s", summary.ID)
+	}
+	if summary.Carrier != "yamato" {
+		t.Fatalf("expected trimmed carrier, got %q", summary.Carrier)
+	}
+	if summary.TrackingCode != "TRK123" {
+		t.Fatalf("expected trimmed tracking code, got %q", summary.TrackingCode)
+	}
+	if summary.CreatedAt != created.UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("unexpected created_at %s", summary.CreatedAt)
+	}
+	if summary.UpdatedAt != latest.UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("unexpected updated_at %s", summary.UpdatedAt)
+	}
+	if summary.LatestEvent == nil {
+		t.Fatalf("expected latest event in summary")
+	}
+	if summary.LatestEvent.Status != "delivered" {
+		t.Fatalf("expected latest event status delivered, got %s", summary.LatestEvent.Status)
+	}
+	if summary.LatestEvent.OccurredAt != latest.UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("unexpected latest event timestamp %s", summary.LatestEvent.OccurredAt)
+	}
+	if summary.LatestEvent.Details == nil {
+		t.Fatalf("expected details on latest event")
+	}
+	if _, ok := summary.LatestEvent.Details["internal_note"]; ok {
+		t.Fatalf("internal note should be stripped: %#v", summary.LatestEvent.Details)
+	}
+	if _, ok := summary.LatestEvent.Details["PrivateComment"]; ok {
+		t.Fatalf("private comment should be stripped: %#v", summary.LatestEvent.Details)
+	}
+	if summary.LatestEvent.Details["location"] != "Osaka" {
+		t.Fatalf("expected location Osaka, got %#v", summary.LatestEvent.Details["location"])
+	}
+}
+
+func TestOrderHandlersListOrderShipmentsUnauthorized(t *testing.T) {
+	handler := NewOrderHandlers(nil, &stubOrderService{})
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_123/shipments", nil)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rr.Code)
+	}
+}
+
+func TestOrderHandlersGetOrderShipmentSuccess(t *testing.T) {
+	now := time.Date(2024, 6, 20, 12, 0, 0, 0, time.UTC)
+	earliest := now.Add(-3 * time.Hour)
+	middle := now.Add(-time.Hour)
+	latest := now.Add(30 * time.Minute)
+
+	var capturedOpts services.OrderReadOptions
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			capturedOpts = opts
+			return services.Order{
+				ID:     "ord_123",
+				UserID: "user-1",
+				Shipments: []services.Shipment{
+					{
+						ID:           "shp_1",
+						OrderID:      "ord_123",
+						Carrier:      "JPPOST",
+						TrackingCode: "CODE",
+						Status:       "out_for_delivery",
+						Events: []services.ShipmentEvent{
+							{Status: "label_created", OccurredAt: earliest, Details: map[string]any{"note": "label"}},
+							{Status: "delivered", OccurredAt: latest, Details: map[string]any{"location": "Kyoto", "internal_memo": "hide"}},
+							{Status: "in_transit", OccurredAt: middle, Details: map[string]any{"location": "Nagoya"}},
+						},
+						CreatedAt: earliest.Add(-time.Minute),
+						UpdatedAt: latest,
+					},
+				},
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_123/shipments/shp_1", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	if !capturedOpts.IncludeShipments {
+		t.Fatalf("expected IncludeShipments true")
+	}
+	if capturedOpts.IncludePayments || capturedOpts.IncludeProductionEvents {
+		t.Fatalf("expected only shipments to be requested")
+	}
+
+	var resp orderShipmentPayload
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.ID != "shp_1" {
+		t.Fatalf("expected shipment id shp_1, got %s", resp.ID)
+	}
+	if len(resp.Events) != 3 {
+		t.Fatalf("expected 3 events, got %d", len(resp.Events))
+	}
+	if resp.Events[0].Status != "delivered" {
+		t.Fatalf("expected newest event first, got %s", resp.Events[0].Status)
+	}
+	if resp.Events[0].OccurredAt != latest.UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("unexpected latest occurred_at %s", resp.Events[0].OccurredAt)
+	}
+	if resp.Events[1].Status != "in_transit" {
+		t.Fatalf("expected second event in_transit, got %s", resp.Events[1].Status)
+	}
+	if resp.Events[2].Status != "label_created" {
+		t.Fatalf("expected oldest event label_created, got %s", resp.Events[2].Status)
+	}
+	if resp.Events[0].Details == nil || resp.Events[0].Details["location"] != "Kyoto" {
+		t.Fatalf("expected sanitized details with location Kyoto, got %#v", resp.Events[0].Details)
+	}
+	if _, ok := resp.Events[0].Details["internal_memo"]; ok {
+		t.Fatalf("internal memo should be stripped: %#v", resp.Events[0].Details)
+	}
+}
+
+func TestOrderHandlersGetOrderShipmentNotFound(t *testing.T) {
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:        orderID,
+				UserID:    "user-1",
+				Shipments: []services.Shipment{},
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_123/shipments/shp_missing", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rr.Code)
+	}
+}
+
 func TestOrderHandlersListOrderPaymentsSuccess(t *testing.T) {
 	t.Parallel()
 

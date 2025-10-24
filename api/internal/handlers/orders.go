@@ -96,6 +96,8 @@ func (h *OrderHandlers) Routes(r chi.Router) {
 	}
 	r.Get("/", h.listOrders)
 	r.Get("/{orderID}/payments", h.listOrderPayments)
+	r.Get("/{orderID}/shipments", h.listOrderShipments)
+	r.Get("/{orderID}/shipments/{shipmentID}", h.getOrderShipment)
 	r.Get("/{orderID}", h.getOrder)
 	r.Post("/{orderID}:request-invoice", h.requestInvoice)
 	r.Post("/{orderID}:cancel", h.cancelOrder)
@@ -221,6 +223,94 @@ func (h *OrderHandlers) getOrder(w http.ResponseWriter, r *http.Request) {
 	payload := orderResponse{
 		Order: buildOrderPayload(order),
 	}
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *OrderHandlers) listOrderShipments(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.orders == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("order_service_unavailable", "order service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "order id is required", http.StatusBadRequest))
+		return
+	}
+
+	order, err := h.orders.GetOrder(ctx, orderID, services.OrderReadOptions{IncludeShipments: true})
+	if err != nil {
+		writeOrderError(ctx, w, err)
+		return
+	}
+
+	if !strings.EqualFold(strings.TrimSpace(order.UserID), strings.TrimSpace(identity.UID)) {
+		httpx.WriteError(ctx, w, httpx.NewError("order_not_found", "order not found", http.StatusNotFound))
+		return
+	}
+
+	shipments := buildOrderShipmentSummaries(order.Shipments)
+	writeJSONResponse(w, http.StatusOK, shipments)
+}
+
+func (h *OrderHandlers) getOrderShipment(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.orders == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("order_service_unavailable", "order service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "order id is required", http.StatusBadRequest))
+		return
+	}
+
+	shipmentID := strings.TrimSpace(chi.URLParam(r, "shipmentID"))
+	if shipmentID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "shipment id is required", http.StatusBadRequest))
+		return
+	}
+
+	order, err := h.orders.GetOrder(ctx, orderID, services.OrderReadOptions{IncludeShipments: true})
+	if err != nil {
+		writeOrderError(ctx, w, err)
+		return
+	}
+
+	if !strings.EqualFold(strings.TrimSpace(order.UserID), strings.TrimSpace(identity.UID)) {
+		httpx.WriteError(ctx, w, httpx.NewError("order_not_found", "order not found", http.StatusNotFound))
+		return
+	}
+
+	var target *services.Shipment
+	for i := range order.Shipments {
+		shipment := &order.Shipments[i]
+		if strings.EqualFold(strings.TrimSpace(shipment.ID), shipmentID) {
+			target = shipment
+			break
+		}
+	}
+
+	if target == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("shipment_not_found", "shipment not found", http.StatusNotFound))
+		return
+	}
+
+	payload := buildOrderShipmentDetail(*target)
 	writeJSONResponse(w, http.StatusOK, payload)
 }
 
@@ -619,6 +709,16 @@ type orderShipmentPayload struct {
 	UpdatedAt    string                   `json:"updated_at,omitempty"`
 }
 
+type orderShipmentSummaryPayload struct {
+	ID           string                  `json:"id"`
+	Carrier      string                  `json:"carrier"`
+	TrackingCode string                  `json:"tracking_code,omitempty"`
+	Status       string                  `json:"status"`
+	CreatedAt    string                  `json:"created_at"`
+	UpdatedAt    string                  `json:"updated_at,omitempty"`
+	LatestEvent  *orderShipmentEventData `json:"latest_event,omitempty"`
+}
+
 type orderShipmentEventData struct {
 	Status     string         `json:"status"`
 	OccurredAt string         `json:"occurred_at"`
@@ -819,28 +919,99 @@ func buildOrderShipmentPayloads(shipments []services.Shipment) []orderShipmentPa
 	}
 	result := make([]orderShipmentPayload, 0, len(shipments))
 	for _, shipment := range shipments {
-		payload := orderShipmentPayload{
-			ID:           strings.TrimSpace(shipment.ID),
-			Carrier:      strings.TrimSpace(shipment.Carrier),
-			TrackingCode: strings.TrimSpace(shipment.TrackingCode),
-			Status:       strings.TrimSpace(shipment.Status),
-			CreatedAt:    formatTime(shipment.CreatedAt),
-			UpdatedAt:    formatTime(shipment.UpdatedAt),
-		}
-		if len(shipment.Events) > 0 {
-			events := make([]orderShipmentEventData, 0, len(shipment.Events))
-			for _, event := range shipment.Events {
-				events = append(events, orderShipmentEventData{
-					Status:     strings.TrimSpace(event.Status),
-					OccurredAt: formatTime(event.OccurredAt),
-					Details:    cloneMap(event.Details),
-				})
-			}
-			payload.Events = events
-		}
-		result = append(result, payload)
+		result = append(result, buildOrderShipmentDetail(shipment))
 	}
 	return result
+}
+
+func buildOrderShipmentSummaries(shipments []services.Shipment) []orderShipmentSummaryPayload {
+	if len(shipments) == 0 {
+		return []orderShipmentSummaryPayload{}
+	}
+	result := make([]orderShipmentSummaryPayload, 0, len(shipments))
+	for _, shipment := range shipments {
+		detail := buildOrderShipmentDetail(shipment)
+		summary := orderShipmentSummaryPayload{
+			ID:           detail.ID,
+			Carrier:      detail.Carrier,
+			TrackingCode: detail.TrackingCode,
+			Status:       detail.Status,
+			CreatedAt:    detail.CreatedAt,
+			UpdatedAt:    detail.UpdatedAt,
+		}
+		if len(detail.Events) > 0 {
+			latest := detail.Events[0]
+			summary.LatestEvent = &latest
+		}
+		result = append(result, summary)
+	}
+	return result
+}
+
+func buildOrderShipmentDetail(shipment services.Shipment) orderShipmentPayload {
+	payload := orderShipmentPayload{
+		ID:           strings.TrimSpace(shipment.ID),
+		Carrier:      strings.TrimSpace(shipment.Carrier),
+		TrackingCode: strings.TrimSpace(shipment.TrackingCode),
+		Status:       strings.TrimSpace(shipment.Status),
+		CreatedAt:    formatTime(shipment.CreatedAt),
+		UpdatedAt:    formatTime(shipment.UpdatedAt),
+	}
+	if events := buildShipmentEvents(shipment.Events); len(events) > 0 {
+		payload.Events = events
+	}
+	return payload
+}
+
+func buildShipmentEvents(events []services.ShipmentEvent) []orderShipmentEventData {
+	if len(events) == 0 {
+		return nil
+	}
+	sorted := append([]services.ShipmentEvent(nil), events...)
+	slices.SortFunc(sorted, func(a, b services.ShipmentEvent) int {
+		switch {
+		case a.OccurredAt.After(b.OccurredAt):
+			return -1
+		case a.OccurredAt.Before(b.OccurredAt):
+			return 1
+		default:
+			return strings.Compare(strings.TrimSpace(a.Status), strings.TrimSpace(b.Status))
+		}
+	})
+	result := make([]orderShipmentEventData, 0, len(sorted))
+	for _, event := range sorted {
+		entry := orderShipmentEventData{
+			Status:     strings.TrimSpace(event.Status),
+			OccurredAt: formatTime(event.OccurredAt),
+		}
+		if details := sanitizeShipmentEventDetails(event.Details); len(details) > 0 {
+			entry.Details = details
+		}
+		result = append(result, entry)
+	}
+	return result
+}
+
+func sanitizeShipmentEventDetails(details map[string]any) map[string]any {
+	if len(details) == 0 {
+		return nil
+	}
+	sanitized := make(map[string]any, len(details))
+	for key, value := range details {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			continue
+		}
+		lowerKey := strings.ToLower(trimmedKey)
+		if strings.Contains(lowerKey, "internal") || strings.Contains(lowerKey, "private") {
+			continue
+		}
+		sanitized[trimmedKey] = value
+	}
+	if len(sanitized) == 0 {
+		return nil
+	}
+	return sanitized
 }
 
 func extractRefundedAmount(payment services.Payment) int64 {
