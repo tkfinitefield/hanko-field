@@ -132,7 +132,7 @@ func (h *ReviewHandlers) listReviews(w http.ResponseWriter, r *http.Request) {
 				httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
 				return
 			case errors.Is(err, services.ErrReviewNotFound):
-				writeJSONResponse(w, http.StatusOK, []reviewPublicPayload{})
+				writeJSONResponse(w, http.StatusOK, reviewListResponse{Items: []reviewPublicPayload{}})
 				return
 			default:
 				var repoErr repositories.RepositoryError
@@ -142,7 +142,7 @@ func (h *ReviewHandlers) listReviews(w http.ResponseWriter, r *http.Request) {
 						return
 					}
 					if repoErr.IsNotFound() {
-						writeJSONResponse(w, http.StatusOK, []reviewPublicPayload{})
+						writeJSONResponse(w, http.StatusOK, reviewListResponse{Items: []reviewPublicPayload{}})
 						return
 					}
 				}
@@ -151,8 +151,10 @@ func (h *ReviewHandlers) listReviews(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		payload := buildReviewPublicPayload(review)
-		writeJSONResponse(w, http.StatusOK, []reviewPublicPayload{payload})
+		payload := reviewListResponse{
+			Items: []reviewPublicPayload{buildReviewPublicPayload(review)},
+		}
+		writeJSONResponse(w, http.StatusOK, payload)
 		return
 	}
 
@@ -190,7 +192,7 @@ func (h *ReviewHandlers) listReviews(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if repoErr.IsNotFound() {
-					writeJSONResponse(w, http.StatusOK, []reviewPublicPayload{})
+					writeJSONResponse(w, http.StatusOK, reviewListResponse{Items: []reviewPublicPayload{}})
 					return
 				}
 			}
@@ -204,7 +206,11 @@ func (h *ReviewHandlers) listReviews(w http.ResponseWriter, r *http.Request) {
 		response = append(response, buildReviewPublicPayload(review))
 	}
 
-	writeJSONResponse(w, http.StatusOK, response)
+	payload := reviewListResponse{
+		Items:         response,
+		NextPageToken: strings.TrimSpace(page.NextPageToken),
+	}
+	writeJSONResponse(w, http.StatusOK, payload)
 }
 
 type createReviewRequest struct {
@@ -263,6 +269,11 @@ type reviewPublicReplyPayload struct {
 	Message   string `json:"message"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
+}
+
+type reviewListResponse struct {
+	Items         []reviewPublicPayload `json:"items"`
+	NextPageToken string                `json:"next_page_token,omitempty"`
 }
 
 func buildReviewComment(req createReviewRequest) string {

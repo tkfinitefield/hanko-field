@@ -205,7 +205,10 @@ func TestReviewHandlersListReviewsSuccess(t *testing.T) {
 	service := &stubReviewService{
 		listByUserFunc: func(ctx context.Context, cmd services.ListUserReviewsCommand) (domain.CursorPage[services.Review], error) {
 			capturedCmd = cmd
-			return domain.CursorPage[services.Review]{Items: reviews}, nil
+			return domain.CursorPage[services.Review]{
+				Items:         reviews,
+				NextPageToken: " 10 ",
+			}, nil
 		},
 	}
 
@@ -232,15 +235,18 @@ func TestReviewHandlersListReviewsSuccess(t *testing.T) {
 		t.Fatalf("expected page token trimmed to 5, got %s", capturedCmd.Pagination.PageToken)
 	}
 
-	var payload []reviewPublicPayload
+	var payload reviewListResponse
 	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if len(payload) != 2 {
-		t.Fatalf("expected 2 reviews, got %d", len(payload))
+	if payload.NextPageToken != "10" {
+		t.Fatalf("expected next page token 10, got %q", payload.NextPageToken)
+	}
+	if len(payload.Items) != 2 {
+		t.Fatalf("expected 2 reviews, got %d", len(payload.Items))
 	}
 
-	first := payload[0]
+	first := payload.Items[0]
 	if first.ID != "rev_approved" || first.OrderID != "order-1" {
 		t.Fatalf("unexpected review payload: %#v", first)
 	}
@@ -257,7 +263,7 @@ func TestReviewHandlersListReviewsSuccess(t *testing.T) {
 		t.Fatalf("expected visible reply, got %#v", first.Reply)
 	}
 
-	second := payload[1]
+	second := payload.Items[1]
 	if second.Status != string(domain.ReviewStatusRejected) {
 		t.Fatalf("expected rejected status, got %s", second.Status)
 	}
@@ -310,18 +316,19 @@ func TestReviewHandlersListReviewsFilterByOrder(t *testing.T) {
 		t.Fatalf("expected actor id user-2, got %s", captured.ActorID)
 	}
 
-	var payload []reviewPublicPayload
+	var payload reviewListResponse
 	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if len(payload) != 1 {
-		t.Fatalf("expected single review, got %d", len(payload))
+	if len(payload.Items) != 1 {
+		t.Fatalf("expected single review, got %d", len(payload.Items))
 	}
-	if payload[0].ID != "rev_by_order" || payload[0].OrderID != "order-99" {
-		t.Fatalf("unexpected payload %#v", payload[0])
+	item := payload.Items[0]
+	if item.ID != "rev_by_order" || item.OrderID != "order-99" {
+		t.Fatalf("unexpected payload %#v", item)
 	}
-	if payload[0].Body != "Solid" {
-		t.Fatalf("expected body Solid, got %q", payload[0].Body)
+	if item.Body != "Solid" {
+		t.Fatalf("expected body Solid, got %q", item.Body)
 	}
 }
 
@@ -346,12 +353,12 @@ func TestReviewHandlersListReviewsOrderNotFound(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", resp.Code)
 	}
 
-	var payload []reviewPublicPayload
+	var payload reviewListResponse
 	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if len(payload) != 0 {
-		t.Fatalf("expected empty result, got %d", len(payload))
+	if len(payload.Items) != 0 {
+		t.Fatalf("expected empty result, got %d", len(payload.Items))
 	}
 }
 
