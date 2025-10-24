@@ -3,6 +3,7 @@ package orders
 import (
 	"fmt"
 	"math"
+	"net/url"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ type PageData struct {
 	Metrics       []MetricCard
 	LastUpdated   string
 	LastRelative  string
+	ExportJobs    ExportJobsSectionData
 }
 
 // QueryState captures current filter and view state.
@@ -382,8 +384,38 @@ type MetricCard struct {
 	Description string
 }
 
+// ExportJobsSectionData represents the export jobs wrapper payload.
+type ExportJobsSectionData struct {
+	Jobs  []ExportJobCardData
+	Empty bool
+	OOB   bool
+}
+
+// ExportJobCardData describes a single export job progress card.
+type ExportJobCardData struct {
+	ID                string
+	DOMID             string
+	Format            string
+	FormatLabel       string
+	StatusLabel       string
+	StatusTone        string
+	Message           string
+	SubmittedAt       string
+	SubmittedRelative string
+	CountsLabel       string
+	ProgressPercent   int
+	ProgressWidth     string
+	FieldsSummary     string
+	DownloadURL       string
+	DownloadLabel     string
+	PollURL           string
+	PollTrigger       string
+	Done              bool
+	HasDownload       bool
+}
+
 // BuildPageData assembles the full SSR payload for the orders page.
-func BuildPageData(basePath string, state QueryState, result adminorders.ListResult, table TableData) PageData {
+func BuildPageData(basePath string, state QueryState, result adminorders.ListResult, table TableData, exports ExportJobsSectionData) PageData {
 	filters := buildFilters(state, result.Filters)
 	metrics := buildMetrics(result.Summary)
 	lastUpdated := ""
@@ -404,6 +436,191 @@ func BuildPageData(basePath string, state QueryState, result adminorders.ListRes
 		Metrics:       metrics,
 		LastUpdated:   lastUpdated,
 		LastRelative:  lastRelative,
+		ExportJobs:    exports,
+	}
+}
+
+// ExportJobsSectionPayload prepares the export jobs wrapper payload.
+func ExportJobsSectionPayload(basePath string, jobs []adminorders.ExportJob, oob bool) ExportJobsSectionData {
+	cards := buildExportJobCards(basePath, jobs)
+	return ExportJobsSectionData{
+		Jobs:  cards,
+		Empty: len(cards) == 0,
+		OOB:   oob,
+	}
+}
+
+// ExportJobCardPayload converts a single export job into card data.
+func ExportJobCardPayload(basePath string, job adminorders.ExportJob) ExportJobCardData {
+	cards := buildExportJobCards(basePath, []adminorders.ExportJob{job})
+	if len(cards) == 0 {
+		return ExportJobCardData{}
+	}
+	return cards[0]
+}
+
+// ExportFormatLabel returns a human-friendly label for the export format.
+func ExportFormatLabel(format adminorders.ExportFormat) string {
+	switch strings.ToLower(strings.TrimSpace(string(format))) {
+	case string(adminorders.ExportFormatPDF):
+		return "PDF印刷"
+	default:
+		return "CSVエクスポート"
+	}
+}
+
+func buildExportJobCards(basePath string, jobs []adminorders.ExportJob) []ExportJobCardData {
+	if len(jobs) == 0 {
+		return nil
+	}
+	result := make([]ExportJobCardData, 0, len(jobs))
+	for _, job := range jobs {
+		id := strings.TrimSpace(job.ID)
+		done := strings.TrimSpace(job.DownloadURL) != "" && job.Progress >= 100
+		status := strings.TrimSpace(job.Status)
+		if status == "" {
+			if done {
+				status = "完了"
+			} else {
+				status = "処理中"
+			}
+		}
+		tone := strings.TrimSpace(job.StatusTone)
+		if tone == "" {
+			if done {
+				tone = "success"
+			} else {
+				tone = "info"
+			}
+		}
+
+		submitted := ""
+		relative := ""
+		if !job.SubmittedAt.IsZero() {
+			submitted = helpers.Date(job.SubmittedAt, "2006-01-02 15:04")
+			relative = helpers.Relative(job.SubmittedAt)
+		}
+
+		total := job.TotalOrders
+		processed := job.ProcessedOrders
+		if processed > total {
+			processed = total
+		}
+		countsLabel := fmt.Sprintf("%d 件", total)
+		if total > 0 {
+			countsLabel = fmt.Sprintf("%d / %d 件", processed, total)
+		}
+
+		percent := job.Progress
+		if percent < 0 {
+			percent = 0
+		}
+		if percent == 0 && total > 0 {
+			percent = (processed * 100) / total
+		}
+		if percent > 100 {
+			percent = 100
+		}
+		progressWidth := fmt.Sprintf("%d%%", percent)
+
+		fieldsSummary := strings.Join(job.Fields, ", ")
+		downloadURL := strings.TrimSpace(job.DownloadURL)
+		downloadLabel := exportDownloadLabel(job.Format)
+		pollURL := exportJobPollURL(basePath, id)
+		pollTrigger := ""
+		if !done {
+			pollTrigger = "load, every 3s"
+		}
+
+		message := strings.TrimSpace(job.Message)
+		if message == "" {
+			message = fallbackExportMessage(job.Format, done)
+		}
+
+		result = append(result, ExportJobCardData{
+			ID:                id,
+			DOMID:             exportJobDOMID(id),
+			Format:            strings.ToLower(strings.TrimSpace(string(job.Format))),
+			FormatLabel:       ExportFormatLabel(job.Format),
+			StatusLabel:       status,
+			StatusTone:        tone,
+			Message:           message,
+			SubmittedAt:       submitted,
+			SubmittedRelative: relative,
+			CountsLabel:       countsLabel,
+			ProgressPercent:   percent,
+			ProgressWidth:     progressWidth,
+			FieldsSummary:     fieldsSummary,
+			DownloadURL:       downloadURL,
+			DownloadLabel:     downloadLabel,
+			PollURL:           pollURL,
+			PollTrigger:       pollTrigger,
+			Done:              done,
+			HasDownload:       downloadURL != "",
+		})
+	}
+	return result
+}
+
+func exportDownloadLabel(format adminorders.ExportFormat) string {
+	switch strings.ToLower(strings.TrimSpace(string(format))) {
+	case string(adminorders.ExportFormatPDF):
+		return "PDFを開く"
+	default:
+		return "CSVをダウンロード"
+	}
+}
+
+func exportJobPollURL(basePath string, jobID string) string {
+	trimmed := strings.TrimSpace(jobID)
+	if trimmed == "" {
+		return ""
+	}
+	return joinBase(basePath, "/orders/bulk/export/jobs/"+url.PathEscape(trimmed))
+}
+
+func exportJobDOMID(id string) string {
+	trimmed := strings.TrimSpace(id)
+	if trimmed == "" {
+		return "orders-export-job"
+	}
+	var b strings.Builder
+	b.WriteString("orders-export-job-")
+	lastHyphen := false
+	for _, r := range trimmed {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastHyphen = false
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + ('a' - 'A'))
+			lastHyphen = false
+		default:
+			if !lastHyphen {
+				b.WriteRune('-')
+				lastHyphen = true
+			}
+		}
+	}
+	dom := strings.Trim(b.String(), "-")
+	if dom == "" {
+		return "orders-export-job"
+	}
+	return dom
+}
+
+func fallbackExportMessage(format adminorders.ExportFormat, done bool) string {
+	switch strings.ToLower(strings.TrimSpace(string(format))) {
+	case string(adminorders.ExportFormatPDF):
+		if done {
+			return "PDFの生成が完了しました。"
+		}
+		return "PDFを生成しています。"
+	default:
+		if done {
+			return "CSVエクスポートが完了しました。"
+		}
+		return "CSVを書き出しています。"
 	}
 }
 

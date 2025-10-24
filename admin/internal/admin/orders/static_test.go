@@ -80,3 +80,94 @@ func TestStaticServiceUpdateStatusInvalid(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, StatusInProduction, modal.Order.Status)
 }
+
+func TestStaticServiceStartBulkExportCSV(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := NewStaticService()
+
+	job, err := svc.StartBulkExport(ctx, "", BulkExportRequest{
+		Format:   ExportFormatCSV,
+		OrderIDs: []string{"order-1052", "order-1051"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, ExportFormatCSV, job.Format)
+	require.NotEmpty(t, job.ID)
+	require.Equal(t, 2, job.TotalOrders)
+	require.Zero(t, job.ProcessedOrders)
+	require.NotEmpty(t, job.Fields)
+	require.Contains(t, job.Fields, "order_number")
+	require.NotContains(t, job.Fields, "internal_notes")
+
+	jobs, err := svc.ListExportJobs(ctx, "")
+	require.NoError(t, err)
+	require.NotEmpty(t, jobs)
+
+	var found bool
+	for _, listed := range jobs {
+		if listed.ID == job.ID {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "started export job should be present in listings")
+}
+
+func TestStaticServiceExportJobLifecycle(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := NewStaticService()
+
+	job, err := svc.StartBulkExport(ctx, "", BulkExportRequest{
+		Format: ExportFormatPDF,
+	})
+	require.NoError(t, err)
+
+	status1, err := svc.ExportJobStatus(ctx, "", job.ID)
+	require.NoError(t, err)
+	require.Equal(t, job.ID, status1.Job.ID)
+	require.Equal(t, ExportFormatPDF, status1.Job.Format)
+
+	if status1.Done {
+		// Some datasets may complete immediately when only a single order matches.
+		require.Equal(t, 100, status1.Job.Progress)
+		require.NotEmpty(t, status1.Job.DownloadURL)
+		return
+	}
+
+	require.False(t, status1.Done)
+	require.Greater(t, status1.Job.Progress, 0)
+	require.Empty(t, status1.Job.DownloadURL)
+
+	status2, err := svc.ExportJobStatus(ctx, "", job.ID)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, status2.Job.Progress, status1.Job.Progress)
+
+	status3, err := svc.ExportJobStatus(ctx, "", job.ID)
+	require.NoError(t, err)
+	require.True(t, status3.Done)
+	require.Equal(t, 100, status3.Job.Progress)
+	require.Equal(t, status3.Job.TotalOrders, status3.Job.ProcessedOrders)
+	require.NotEmpty(t, status3.Job.DownloadURL)
+}
+
+func TestStaticServiceStartBulkExportValidations(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := NewStaticService()
+
+	job, err := svc.StartBulkExport(ctx, "", BulkExportRequest{
+		Format: ExportFormat("xlsx"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, ExportFormatCSV, job.Format)
+
+	_, err = svc.StartBulkExport(ctx, "", BulkExportRequest{
+		Format:   ExportFormatCSV,
+		OrderIDs: []string{"non-existent"},
+	})
+	require.ErrorIs(t, err, ErrExportNoOrders)
+}

@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -43,7 +45,13 @@ func (h *Handlers) OrdersPage(w http.ResponseWriter, r *http.Request) {
 
 	basePath := custommw.BasePathFromContext(ctx)
 	table := orderstpl.TablePayload(basePath, req.state, result, errMsg)
-	page := orderstpl.BuildPageData(basePath, req.state, result, table)
+	exportJobs, exportErr := h.orders.ListExportJobs(ctx, user.Token)
+	if exportErr != nil {
+		log.Printf("orders: list export jobs failed: %v", exportErr)
+		exportJobs = nil
+	}
+	exportSection := orderstpl.ExportJobsSectionPayload(basePath, exportJobs, false)
+	page := orderstpl.BuildPageData(basePath, req.state, result, table, exportSection)
 
 	templ.Handler(orderstpl.Index(page)).ServeHTTP(w, r)
 }
@@ -116,11 +124,11 @@ func (h *Handlers) OrdersBulkLabels(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// OrdersBulkExport handles bulk CSV export submissions.
+// OrdersBulkExport handles bulk export submissions.
 func (h *Handlers) OrdersBulkExport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	_, ok := custommw.UserFromContext(ctx)
-	if !ok {
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
@@ -130,8 +138,105 @@ func (h *Handlers) OrdersBulkExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("HX-Trigger", `{"toast":{"message":"エクスポートを開始しました。完了後に通知します。","tone":"info"}}`)
-	w.WriteHeader(http.StatusNoContent)
+	formReq := buildOrdersRequestFromValues(r.PostForm, r.PostForm.Encode())
+	format := strings.TrimSpace(r.FormValue("format"))
+	orderIDs := r.PostForm["orderID"]
+
+	exportReq := adminorders.BulkExportRequest{
+		Format:     adminorders.ExportFormat(format),
+		OrderIDs:   append([]string(nil), orderIDs...),
+		Query:      formReq.query,
+		ActorID:    user.UID,
+		ActorEmail: user.Email,
+	}
+
+	job, err := h.orders.StartBulkExport(ctx, user.Token, exportReq)
+	if err != nil {
+		switch {
+		case errors.Is(err, adminorders.ErrExportFormatNotAllowed):
+			triggerToast(w, "このエクスポート形式には対応していません。", "danger")
+			http.Error(w, "対応していないエクスポート形式です。", http.StatusBadRequest)
+		case errors.Is(err, adminorders.ErrExportNoOrders):
+			triggerToast(w, "エクスポート対象の注文が見つかりませんでした。", "warning")
+			http.Error(w, "エクスポート対象がありません。", http.StatusBadRequest)
+		default:
+			log.Printf("orders: start export failed: %v", err)
+			triggerToast(w, "エクスポートの開始に失敗しました。時間を置いて再度お試しください。", "danger")
+			http.Error(w, "エクスポートの開始に失敗しました。", http.StatusBadGateway)
+		}
+		return
+	}
+
+	jobs, listErr := h.orders.ListExportJobs(ctx, user.Token)
+	if listErr != nil {
+		log.Printf("orders: list export jobs after start failed: %v", listErr)
+		jobs = []adminorders.ExportJob{job}
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	section := orderstpl.ExportJobsSectionPayload(basePath, jobs, true)
+
+	triggerPayload := map[string]any{
+		"toast": map[string]string{
+			"message": fmt.Sprintf("%sのエクスポートを開始しました。(ジョブID: %s)", orderstpl.ExportFormatLabel(job.Format), job.ID),
+			"tone":    "info",
+		},
+	}
+	if data, err := json.Marshal(triggerPayload); err == nil {
+		w.Header().Set("HX-Trigger", string(data))
+	} else {
+		log.Printf("orders: marshal HX-Trigger payload failed: %v", err)
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	templ.Handler(orderstpl.ExportJobsSection(section)).ServeHTTP(w, r)
+}
+
+// OrdersBulkExportJobStatus returns the progress fragment for a specific export job.
+func (h *Handlers) OrdersBulkExportJobStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	jobID := strings.TrimSpace(chi.URLParam(r, "jobID"))
+	if jobID == "" {
+		http.Error(w, "ジョブIDが不正です。", http.StatusBadRequest)
+		return
+	}
+
+	status, err := h.orders.ExportJobStatus(ctx, user.Token, jobID)
+	if err != nil {
+		if errors.Is(err, adminorders.ErrExportJobNotFound) {
+			http.Error(w, "指定されたジョブが見つかりません。", http.StatusNotFound)
+			return
+		}
+		log.Printf("orders: fetch export job status failed: %v", err)
+		http.Error(w, "エクスポート進捗の取得に失敗しました。", http.StatusBadGateway)
+		return
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	card := orderstpl.ExportJobCardPayload(basePath, status.Job)
+
+	if status.Done && status.Job.DownloadURL != "" {
+		triggerPayload := map[string]any{
+			"toast": map[string]string{
+				"message": fmt.Sprintf("%sのエクスポートが完了しました。(ジョブID: %s)", orderstpl.ExportFormatLabel(status.Job.Format), status.Job.ID),
+				"tone":    "success",
+			},
+		}
+		if data, err := json.Marshal(triggerPayload); err == nil {
+			w.Header().Set("HX-Trigger", string(data))
+		} else {
+			log.Printf("orders: marshal HX-Trigger payload failed: %v", err)
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	templ.Handler(orderstpl.ExportJobCard(card)).ServeHTTP(w, r)
 }
 
 // OrdersStatusModal renders the status update modal for a specific order.
@@ -595,8 +700,33 @@ type ordersRequest struct {
 	state orderstpl.QueryState
 }
 
+func triggerToast(w http.ResponseWriter, message, tone string) {
+	payload := map[string]any{
+		"toast": map[string]string{
+			"message": strings.TrimSpace(message),
+			"tone":    strings.TrimSpace(tone),
+		},
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("orders: marshal HX-Trigger payload failed: %v", err)
+		return
+	}
+	w.Header().Set("HX-Trigger", string(data))
+}
+
 func buildOrdersRequest(r *http.Request) ordersRequest {
-	values := r.URL.Query()
+	rawQuery := ""
+	if r.URL != nil {
+		rawQuery = r.URL.RawQuery
+	}
+	return buildOrdersRequestFromValues(r.URL.Query(), rawQuery)
+}
+
+func buildOrdersRequestFromValues(values url.Values, rawQuery string) ordersRequest {
+	if values == nil {
+		values = url.Values{}
+	}
 
 	status := normalizeStatus(values.Get("status"))
 	sinceStr := strings.TrimSpace(values.Get("since"))
@@ -668,7 +798,7 @@ func buildOrdersRequest(r *http.Request) ordersRequest {
 		Sort:       sortToken,
 		Page:       page,
 		PageSize:   pageSize,
-		RawQuery:   r.URL.RawQuery,
+		RawQuery:   rawQuery,
 		SortKey:    sortKey,
 		SortDir:    string(sortDir),
 		SortToken:  sortToken,

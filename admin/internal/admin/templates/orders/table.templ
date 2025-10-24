@@ -227,18 +227,32 @@ templ Table(data TableData) {
 				>
 					出荷ラベル生成
 				</button>
-				<button
-					type="button"
-					class={ helpers.ButtonClass("secondary", "sm", false, false) }
-					data-orders-bulk-action="export"
-					disabled
-					hx-post={ joinBase(helpers.BasePath(ctx), "/orders/bulk/export") }
-					hx-include="#orders-selection,#orders-filter"
-					hx-target="#orders-table"
-					hx-swap="none"
-				>
-					CSVエクスポート
-				</button>
+			<button
+				type="button"
+				class={ helpers.ButtonClass("secondary", "sm", false, false) }
+				data-orders-bulk-action="export-csv"
+				disabled
+				hx-post={ joinBase(helpers.BasePath(ctx), "/orders/bulk/export") }
+				hx-include="#orders-selection,#orders-filter"
+				hx-vals='{"format":"csv"}'
+				hx-target="#orders-table"
+				hx-swap="none"
+			>
+				CSVエクスポート
+			</button>
+			<button
+				type="button"
+				class={ helpers.ButtonClass("secondary", "sm", false, false) }
+				data-orders-bulk-action="export-pdf"
+				disabled
+				hx-post={ joinBase(helpers.BasePath(ctx), "/orders/bulk/export") }
+				hx-include="#orders-selection,#orders-filter"
+				hx-vals='{"format":"pdf"}'
+				hx-target="#orders-table"
+				hx-swap="none"
+			>
+				PDF印刷
+			</button>
 			</div>
 		</div>
 

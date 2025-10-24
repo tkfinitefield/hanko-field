@@ -32,6 +32,15 @@ type Service interface {
 
 	// InvoiceJobStatus returns the progress of an asynchronous invoice issuance job.
 	InvoiceJobStatus(ctx context.Context, token, jobID string) (InvoiceJobStatus, error)
+
+	// StartBulkExport enqueues a background export or print job.
+	StartBulkExport(ctx context.Context, token string, req BulkExportRequest) (ExportJob, error)
+
+	// ListExportJobs returns the known export jobs scoped to the current user.
+	ListExportJobs(ctx context.Context, token string) ([]ExportJob, error)
+
+	// ExportJobStatus returns the latest status of a bulk export job.
+	ExportJobStatus(ctx context.Context, token, jobID string) (ExportJobStatus, error)
 }
 
 // Status represents the canonical lifecycle state of an order.
@@ -79,6 +88,12 @@ var (
 	ErrInvoiceTemplateNotFound = errors.New("invoice template not found")
 	// ErrInvoiceJobNotFound indicates the requested invoice issuance job does not exist.
 	ErrInvoiceJobNotFound = errors.New("invoice job not found")
+	// ErrExportJobNotFound indicates the requested export job does not exist.
+	ErrExportJobNotFound = errors.New("export job not found")
+	// ErrExportFormatNotAllowed indicates the requested export format is not supported.
+	ErrExportFormatNotAllowed = errors.New("export format not allowed")
+	// ErrExportNoOrders indicates there were no orders available for export.
+	ErrExportNoOrders = errors.New("no orders to export")
 )
 
 // Query captures filters and pagination arguments for listing orders.
@@ -526,6 +541,47 @@ type InvoiceJobStatus struct {
 	Invoice InvoiceRecord
 	Job     InvoiceJob
 	Done    bool
+}
+
+// ExportFormat declares the supported export output formats.
+type ExportFormat string
+
+const (
+	// ExportFormatCSV streams CSV data for spreadsheets.
+	ExportFormatCSV ExportFormat = "csv"
+	// ExportFormatPDF renders printable PDF bundles.
+	ExportFormatPDF ExportFormat = "pdf"
+)
+
+// BulkExportRequest captures parameters for starting a background export or print job.
+type BulkExportRequest struct {
+	Format     ExportFormat
+	OrderIDs   []string
+	Query      Query
+	ActorID    string
+	ActorEmail string
+}
+
+// ExportJob stores metadata about an export job visible in the UI.
+type ExportJob struct {
+	ID              string
+	Format          ExportFormat
+	Status          string
+	StatusTone      string
+	Message         string
+	SubmittedAt     time.Time
+	CompletedAt     *time.Time
+	Progress        int
+	ProcessedOrders int
+	TotalOrders     int
+	Fields          []string
+	DownloadURL     string
+}
+
+// ExportJobStatus reports the current status for a background export job.
+type ExportJobStatus struct {
+	Job  ExportJob
+	Done bool
 }
 
 // InvoiceValidationError indicates validation issues for invoice issuance.

@@ -192,6 +192,7 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 				or.Post("/bulk/status", uiHandlers.OrdersBulkStatus)
 				or.Post("/bulk/labels", uiHandlers.OrdersBulkLabels)
 				or.Post("/bulk/export", uiHandlers.OrdersBulkExport)
+				or.Get("/bulk/export/jobs/{jobID}", uiHandlers.OrdersBulkExportJobStatus)
 				or.Get("/{orderID}/modal/status", uiHandlers.OrdersStatusModal)
 				or.Put("/{orderID}:status", uiHandlers.OrdersStatusUpdate)
 				or.Get("/{orderID}/modal/refund", uiHandlers.OrdersRefundModal)

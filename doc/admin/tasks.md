@@ -41,7 +41,7 @@
 - [x] [Implement status update modal (`/admin/orders/{id}/modal/status`) posting to `PUT /admin/orders/{id}:status` and updating the UI inline.](doc/admin/tasks/027-implement-status-update-modal-admin-orders-id-modal-status-posting-to-put-admin-orders-id-.md)
 - [x] [Implement refund modal (`/admin/orders/{id}/modal/refund`) integrating with `POST /orders/{id}/payments:refund` and showing validation errors.](doc/admin/tasks/028-implement-refund-modal-admin-orders-id-modal-refund-integrating-with-post-orders-id-paymen.md)
 - [x] [Implement invoice request modal (`/admin/orders/{id}/modal/invoice`) calling `POST /admin/invoices:issue` and reflecting result in tabs.](doc/admin/tasks/029-implement-invoice-request-modal-admin-orders-id-modal-invoice-calling-post-admin-invoices-.md)
-- [ ] [Add bulk export and print actions (CSV, PDF) with progress feedback.](doc/admin/tasks/030-add-bulk-export-and-print-actions-csv-pdf-with-progress-feedback.md)
+- [x] [Add bulk export and print actions (CSV, PDF) with progress feedback.](doc/admin/tasks/030-add-bulk-export-and-print-actions-csv-pdf-with-progress-feedback.md)
 
 ### 5.2 Shipments & Tracking
 - [ ] [Create shipment batch page (`/admin/shipments/batches`) for label generation workflows and integration with shipment POST endpoints.](doc/admin/tasks/031-create-shipment-batch-page-admin-shipments-batches-for-label-generation-workflows-and-inte.md)

@@ -16,6 +16,7 @@ type StaticService struct {
 	orders           []Order
 	timelines        map[string][]TimelineEvent
 	invoiceJobs      map[string]*invoiceJobState
+	exportJobs       map[string]*exportJobState
 	invoiceTemplates []InvoiceTemplate
 	invoiceLanguages []InvoiceLanguage
 	audit            AuditLogger
@@ -820,14 +821,37 @@ func NewStaticService() *StaticService {
 		timelines[order.ID] = seedTimeline(order)
 	}
 
+	exportJobs := make(map[string]*exportJobState)
+
 	return &StaticService{
 		orders:           orders,
 		timelines:        timelines,
 		invoiceJobs:      invoiceJobs,
+		exportJobs:       exportJobs,
 		invoiceTemplates: templates,
 		invoiceLanguages: languages,
 		audit:            noopAuditLogger{},
 	}
+}
+
+var exportAllowedFields = map[ExportFormat][]string{
+	ExportFormatCSV: {
+		"order_id",
+		"order_number",
+		"status",
+		"total_minor",
+		"currency",
+		"customer_name",
+		"created_at",
+	},
+	ExportFormatPDF: {
+		"order_number",
+		"customer_name",
+		"items",
+		"total_minor",
+		"currency",
+		"fulfillment",
+	},
 }
 
 func (s *StaticService) snapshotOrders() []Order {
@@ -870,6 +894,68 @@ func cloneTimeline(events []TimelineEvent) []TimelineEvent {
 	cloned := make([]TimelineEvent, len(events))
 	copy(cloned, events)
 	return cloned
+}
+
+func cloneExportJob(job ExportJob) ExportJob {
+	copied := job
+	if job.CompletedAt != nil {
+		ts := *job.CompletedAt
+		copied.CompletedAt = &ts
+	}
+	if len(job.Fields) > 0 {
+		copied.Fields = append([]string(nil), job.Fields...)
+	}
+	return copied
+}
+
+func normaliseExportFormat(format ExportFormat) ExportFormat {
+	switch strings.ToLower(strings.TrimSpace(string(format))) {
+	case string(ExportFormatPDF):
+		return ExportFormatPDF
+	default:
+		return ExportFormatCSV
+	}
+}
+
+func exportQueuedMessage(format ExportFormat) string {
+	switch format {
+	case ExportFormatPDF:
+		return "印刷用PDFを生成キューに投入しました。準備ができ次第ダウンロードできます。"
+	default:
+		return "CSVエクスポートを準備しています。完了後にダウンロードリンクが表示されます。"
+	}
+}
+
+func exportProcessingMessage(format ExportFormat) string {
+	switch format {
+	case ExportFormatPDF:
+		return "PDFを生成しています。完了までしばらくお待ちください。"
+	default:
+		return "CSVを書き出しています。完了までしばらくお待ちください。"
+	}
+}
+
+func exportCompletedMessage(format ExportFormat) string {
+	switch format {
+	case ExportFormatPDF:
+		return "PDFの生成が完了しました。ダウンロードリンクから印刷できます。"
+	default:
+		return "CSVエクスポートが完了しました。ダウンロードリンクから取得できます。"
+	}
+}
+
+func buildExportDownloadURL(format ExportFormat, jobID string) string {
+	safeID := strings.TrimSpace(jobID)
+	if safeID == "" {
+		return ""
+	}
+	safeID = strings.ReplaceAll(safeID, " ", "_")
+	switch format {
+	case ExportFormatPDF:
+		return fmt.Sprintf("https://storage.example.com/orders/exports/%s.pdf", safeID)
+	default:
+		return fmt.Sprintf("https://storage.example.com/orders/exports/%s.csv", safeID)
+	}
 }
 
 // List implements the orders Service interface.
@@ -1235,6 +1321,159 @@ func (s *StaticService) InvoiceJobStatus(_ context.Context, _ string, jobID stri
 	return result, nil
 }
 
+// StartBulkExport records a simulated export job for development usage.
+func (s *StaticService) StartBulkExport(_ context.Context, _ string, req BulkExportRequest) (ExportJob, error) {
+	format := normaliseExportFormat(req.Format)
+
+	fields, ok := exportAllowedFields[format]
+	if !ok {
+		return ExportJob{}, ErrExportFormatNotAllowed
+	}
+
+	targetIDs := make(map[string]struct{})
+	for _, raw := range req.OrderIDs {
+		if trimmed := strings.TrimSpace(raw); trimmed != "" {
+			targetIDs[trimmed] = struct{}{}
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	orders := make([]Order, len(s.orders))
+	copy(orders, s.orders)
+
+	filtered := filterOrders(orders, req.Query, true)
+	if len(targetIDs) > 0 {
+		subset := make([]Order, 0, len(filtered))
+		for _, order := range filtered {
+			if _, ok := targetIDs[order.ID]; ok {
+				subset = append(subset, order)
+			}
+		}
+		filtered = subset
+	}
+
+	total := len(filtered)
+	if total == 0 {
+		return ExportJob{}, ErrExportNoOrders
+	}
+
+	now := time.Now()
+	jobID := fmt.Sprintf("export-%d", now.UnixNano())
+
+	job := ExportJob{
+		ID:              jobID,
+		Format:          format,
+		Status:          "キュー投入済み",
+		StatusTone:      "info",
+		Message:         exportQueuedMessage(format),
+		SubmittedAt:     now,
+		Progress:        0,
+		ProcessedOrders: 0,
+		TotalOrders:     total,
+		Fields:          append([]string(nil), fields...),
+	}
+
+	state := &exportJobState{
+		Job:       job,
+		Completed: false,
+		Attempts:  0,
+	}
+
+	if s.exportJobs == nil {
+		s.exportJobs = make(map[string]*exportJobState)
+	}
+	s.exportJobs[jobID] = state
+
+	return cloneExportJob(job), nil
+}
+
+// ListExportJobs returns the set of known export jobs.
+func (s *StaticService) ListExportJobs(_ context.Context, _ string) ([]ExportJob, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if len(s.exportJobs) == 0 {
+		return nil, nil
+	}
+
+	jobs := make([]ExportJob, 0, len(s.exportJobs))
+	for _, state := range s.exportJobs {
+		jobs = append(jobs, cloneExportJob(state.Job))
+	}
+
+	sort.SliceStable(jobs, func(i, j int) bool {
+		return jobs[i].SubmittedAt.After(jobs[j].SubmittedAt)
+	})
+
+	return jobs, nil
+}
+
+// ExportJobStatus reports the simulated progress of an export job.
+func (s *StaticService) ExportJobStatus(_ context.Context, _ string, jobID string) (ExportJobStatus, error) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return ExportJobStatus{}, ErrExportJobNotFound
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.exportJobs[jobID]
+	if !ok {
+		return ExportJobStatus{}, ErrExportJobNotFound
+	}
+
+	if !state.Completed {
+		state.Attempts++
+
+		total := state.Job.TotalOrders
+		step := total / 3
+		if step < 1 {
+			step = 1
+		}
+		state.Job.ProcessedOrders += step
+		if state.Job.ProcessedOrders > total {
+			state.Job.ProcessedOrders = total
+		}
+
+		if total > 0 {
+			state.Job.Progress = (state.Job.ProcessedOrders * 100) / total
+		} else {
+			state.Job.Progress = 100
+		}
+		if state.Job.Progress > 100 {
+			state.Job.Progress = 100
+		}
+
+		if state.Attempts >= 3 || state.Job.ProcessedOrders >= total {
+			now := time.Now()
+			state.Completed = true
+			state.Job.Status = "完了"
+			state.Job.StatusTone = "success"
+			state.Job.Message = exportCompletedMessage(state.Job.Format)
+			state.Job.ProcessedOrders = total
+			state.Job.Progress = 100
+			state.Job.CompletedAt = &now
+			state.Job.DownloadURL = buildExportDownloadURL(state.Job.Format, jobID)
+		} else {
+			state.Job.Status = "処理中"
+			state.Job.StatusTone = "info"
+			state.Job.Message = exportProcessingMessage(state.Job.Format)
+		}
+	}
+
+	result := ExportJobStatus{
+		Job:  cloneExportJob(state.Job),
+		Done: state.Completed,
+	}
+
+	s.exportJobs[jobID] = state
+
+	return result, nil
+}
+
 func defaultInvoiceTemplateID(templates []InvoiceTemplate) string {
 	for _, tpl := range templates {
 		if tpl.Default && strings.TrimSpace(tpl.ID) != "" {
@@ -1549,6 +1788,12 @@ type invoiceJobState struct {
 	OrderID   string
 	InvoiceID string
 	Job       InvoiceJob
+	Completed bool
+	Attempts  int
+}
+
+type exportJobState struct {
+	Job       ExportJob
 	Completed bool
 	Attempts  int
 }
