@@ -352,6 +352,7 @@ func main() {
 		logger.Fatal("failed to initialise design service", zap.Error(err))
 	}
 	designHandlers := handlers.NewDesignHandlers(authenticator, designService)
+	reviewHandlers := handlers.NewReviewHandlers(authenticator, nil)
 	orderHandlers := handlers.NewOrderHandlers(authenticator, nil)
 
 	projectID := traceProjectID(cfg)
@@ -373,6 +374,7 @@ func main() {
 	opts = append(opts, handlers.WithHealthHandlers(healthHandlers))
 	opts = append(opts, handlers.WithMeRoutes(meHandlers.Routes))
 	opts = append(opts, handlers.WithDesignRoutes(designHandlers.Routes))
+	opts = append(opts, handlers.WithReviewRoutes(reviewHandlers.Routes))
 	opts = append(opts, handlers.WithOrderRoutes(orderHandlers.Routes))
 	opts = append(opts, handlers.WithNameMappingRoutes(nameMappingHandlers.Routes))
 	opts = append(opts, handlers.WithCartRoutes(cartHandlers.Routes))
