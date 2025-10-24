@@ -86,7 +86,7 @@
 
 ### 5.6 Reviews
 - [x] [064 Implement review creation endpoint validating order ownership and completion.](./tasks/064-implement-review-creation-endpoint-validating-order-ownership-and-completion.md)
-- [ ] [065 Implement review retrieval endpoint scoped to requesting user/order.](./tasks/065-implement-review-retrieval-endpoint-scoped-to-requesting-user-order.md)
+- [x] [065 Implement review retrieval endpoint scoped to requesting user/order.](./tasks/065-implement-review-retrieval-endpoint-scoped-to-requesting-user-order.md)
 
 ### 5.7 Assets
 - [ ] [066 Implement signed upload endpoint validating asset kind/purpose and returning pre-signed URL + metadata record.](./tasks/066-implement-signed-upload-endpoint-validating-asset-kind-purpose-and-returning-pre.md)

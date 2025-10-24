@@ -167,6 +167,208 @@ func TestReviewHandlersServiceUnavailable(t *testing.T) {
 	}
 }
 
+func TestReviewHandlersListReviewsSuccess(t *testing.T) {
+	now := time.Date(2024, 7, 15, 9, 0, 0, 0, time.UTC)
+	moderatedAt := now.Add(time.Hour)
+
+	reviews := []services.Review{
+		{
+			ID:       "rev_approved",
+			OrderRef: "order-1",
+			UserRef:  "user-1",
+			Rating:   5,
+			Comment:  "Great product",
+			Status:   domain.ReviewStatusApproved,
+			Reply: &domain.ReviewReply{
+				Message:   "Thanks!",
+				Visible:   true,
+				CreatedAt: now.Add(30 * time.Minute),
+				UpdatedAt: now.Add(45 * time.Minute),
+			},
+			ModeratedAt: &moderatedAt,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+		{
+			ID:        "rev_rejected",
+			OrderRef:  "order-2",
+			UserRef:   "user-1",
+			Rating:    2,
+			Comment:   "Not so great",
+			Status:    domain.ReviewStatusRejected,
+			CreatedAt: now.Add(-time.Hour),
+			UpdatedAt: now.Add(-30 * time.Minute),
+		},
+	}
+
+	var capturedCmd services.ListUserReviewsCommand
+	service := &stubReviewService{
+		listByUserFunc: func(ctx context.Context, cmd services.ListUserReviewsCommand) (domain.CursorPage[services.Review], error) {
+			capturedCmd = cmd
+			return domain.CursorPage[services.Review]{Items: reviews}, nil
+		},
+	}
+
+	handler := NewReviewHandlers(nil, service)
+	router := NewRouter(WithReviewRoutes(handler.Routes))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/reviews", nil)
+	req.URL.RawQuery = "page_size=200&page_token=%205%20"
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: " user-1 "}))
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.Code)
+	}
+	if capturedCmd.UserID != "user-1" {
+		t.Fatalf("expected user id trimmed, got %s", capturedCmd.UserID)
+	}
+	if capturedCmd.Pagination.PageSize != maxReviewPageSize {
+		t.Fatalf("expected page size clamped to %d, got %d", maxReviewPageSize, capturedCmd.Pagination.PageSize)
+	}
+	if capturedCmd.Pagination.PageToken != "5" {
+		t.Fatalf("expected page token trimmed to 5, got %s", capturedCmd.Pagination.PageToken)
+	}
+
+	var payload []reviewPublicPayload
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(payload) != 2 {
+		t.Fatalf("expected 2 reviews, got %d", len(payload))
+	}
+
+	first := payload[0]
+	if first.ID != "rev_approved" || first.OrderID != "order-1" {
+		t.Fatalf("unexpected review payload: %#v", first)
+	}
+	if first.Body != "Great product" {
+		t.Fatalf("expected body preserved, got %q", first.Body)
+	}
+	if first.Moderation.Status != string(domain.ReviewStatusApproved) {
+		t.Fatalf("expected moderation status approved, got %s", first.Moderation.Status)
+	}
+	if first.Moderation.ModeratedAt != formatTime(moderatedAt) {
+		t.Fatalf("expected moderated_at %s, got %s", formatTime(moderatedAt), first.Moderation.ModeratedAt)
+	}
+	if first.Reply == nil || first.Reply.Message != "Thanks!" {
+		t.Fatalf("expected visible reply, got %#v", first.Reply)
+	}
+
+	second := payload[1]
+	if second.Status != string(domain.ReviewStatusRejected) {
+		t.Fatalf("expected rejected status, got %s", second.Status)
+	}
+	if second.Body != "" {
+		t.Fatalf("expected rejected body hidden, got %q", second.Body)
+	}
+	if second.Reply != nil {
+		t.Fatalf("expected no reply for rejected review, got %#v", second.Reply)
+	}
+}
+
+func TestReviewHandlersListReviewsFilterByOrder(t *testing.T) {
+	now := time.Date(2024, 7, 15, 12, 0, 0, 0, time.UTC)
+	review := services.Review{
+		ID:        "rev_by_order",
+		OrderRef:  "order-99",
+		UserRef:   "user-2",
+		Rating:    4,
+		Comment:   "Solid",
+		Status:    domain.ReviewStatusPending,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	var captured services.GetReviewByOrderCommand
+	service := &stubReviewService{
+		getByOrderFunc: func(ctx context.Context, cmd services.GetReviewByOrderCommand) (services.Review, error) {
+			captured = cmd
+			return review, nil
+		},
+	}
+
+	handler := NewReviewHandlers(nil, service)
+	router := NewRouter(WithReviewRoutes(handler.Routes))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/reviews", nil)
+	req.URL.RawQuery = "orderId=%20order-99%20"
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: " user-2 "}))
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.Code)
+	}
+	if captured.OrderID != "order-99" {
+		t.Fatalf("expected order id trimmed, got %s", captured.OrderID)
+	}
+	if captured.ActorID != "user-2" {
+		t.Fatalf("expected actor id user-2, got %s", captured.ActorID)
+	}
+
+	var payload []reviewPublicPayload
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(payload) != 1 {
+		t.Fatalf("expected single review, got %d", len(payload))
+	}
+	if payload[0].ID != "rev_by_order" || payload[0].OrderID != "order-99" {
+		t.Fatalf("unexpected payload %#v", payload[0])
+	}
+	if payload[0].Body != "Solid" {
+		t.Fatalf("expected body Solid, got %q", payload[0].Body)
+	}
+}
+
+func TestReviewHandlersListReviewsOrderNotFound(t *testing.T) {
+	service := &stubReviewService{
+		getByOrderFunc: func(ctx context.Context, cmd services.GetReviewByOrderCommand) (services.Review, error) {
+			return services.Review{}, services.ErrReviewNotFound
+		},
+	}
+
+	handler := NewReviewHandlers(nil, service)
+	router := NewRouter(WithReviewRoutes(handler.Routes))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/reviews", nil)
+	req.URL.RawQuery = "orderId=order-missing"
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-3"}))
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.Code)
+	}
+
+	var payload []reviewPublicPayload
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(payload) != 0 {
+		t.Fatalf("expected empty result, got %d", len(payload))
+	}
+}
+
+func TestReviewHandlersListReviewsUnauthenticated(t *testing.T) {
+	handler := NewReviewHandlers(nil, &stubReviewService{})
+	router := NewRouter(WithReviewRoutes(handler.Routes))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/reviews", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", resp.Code)
+	}
+}
+
 type stubReviewService struct {
 	createFunc     func(ctx context.Context, cmd services.CreateReviewCommand) (services.Review, error)
 	getByOrderFunc func(ctx context.Context, cmd services.GetReviewByOrderCommand) (services.Review, error)
