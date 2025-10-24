@@ -1,86 +1,23 @@
-{{ define "demo_card_body" }}<p class="text-sm text-gray-600">{{ . }}</p>{{ end }}
-{{ define "demo_card_footer" }}
-  {{ template "c_button_set" (dict "Align" "left" "Buttons" (list (dict "Label" "View" "Href" "/shop" "Variant" "primary" "Size" "sm") (dict "Label" "Details" "Href" "/guides" "Variant" "outline" "Size" "sm"))) }}
-{{ end }}
-
 {{ define "content" }}
-<section class="py-6 space-y-10">
-  <header>
-    <h1 class="text-2xl font-bold">{{ tlang $.Lang "nav.templates" }}</h1>
-    <p class="mt-2 text-gray-600">Reusable UI components with Tailwind variants.</p>
+<section class="py-6 space-y-8">
+  <header class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <div class="space-y-2">
+      <p class="text-xs uppercase tracking-wide text-indigo-500">Templates</p>
+      <h1 class="text-3xl font-bold text-gray-900">Template library</h1>
+      <p class="text-sm text-gray-600">Browse curated layouts and filter by script, shape, or registrability. Preview instantly before you start designing.</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      {{ template "c_button" (dict "Label" "Create from blank" "Href" "/design/new" "Variant" "primary") }}
+      {{ template "c_button" (dict "Label" "Workflow guide" "Href" "/guides/template-workflow" "Variant" "outline") }}
+    </div>
   </header>
 
-  <div>
-    <h2 class="text-lg font-semibold mb-3">Hero</h2>
-    {{ template "c_hero" (dict 
-      "Align" "center" 
-      "Bg" "muted" 
-      "Eyebrow" "Library"
-      "Title" "Composable components"
-      "Subtitle" "Build pages quickly with consistent UI primitives."
-      "Actions" (list (dict "Label" "Get Started" "Href" "/" "Variant" "primary") (dict "Label" "Docs" "Href" "/guides" "Variant" "outline"))
-    ) }}
-  </div>
+  {{ template "c_template_filters" (dict "Filters" (index $.Templates "Filters") "Options" (index $.Templates "Options") "Total" (index $.Templates "Total") "Per" (index $.Templates "Per")) }}
 
-  <div>
-    <h2 class="text-lg font-semibold mb-3">Buttons</h2>
-    {{ template "c_button_set" (dict "Align" "left" "Buttons" (list 
-      (dict "Label" "Primary" "Variant" "primary")
-      (dict "Label" "Secondary" "Variant" "secondary")
-      (dict "Label" "Outline" "Variant" "outline")
-      (dict "Label" "Ghost" "Variant" "ghost")
-      (dict "Label" "Danger" "Variant" "danger")
-    )) }}
-  </div>
+  {{ slot "frag_template_table" $.Templates }}
 
-  <div>
-    <h2 class="text-lg font-semibold mb-3">Modals</h2>
-    <div class="flex items-center gap-3">
-      <a href="#" class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-         hx-get="/modals/demo" hx-target="#modal-root" hx-swap="innerHTML">Open Demo Modal</a>
-    </div>
-    <p class="mt-2 text-sm text-gray-500">Opens into <code>#modal-root</code>. Close with ESC, overlay click, or the Close button.</p>
-  </div>
+  <div id="template-drawer-root"></div>
 
-  <div>
-    <h2 class="text-lg font-semibold mb-3">Cards</h2>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {{ template "c_card" (dict "Variant" "outlined" "Title" "Template #1" "Description" "Outlined card" "ContentTmpl" "demo_card_body" "ContentData" "Small, reusable composition.") }}
-      {{ template "c_card" (dict "Variant" "elevated" "Title" "Template #2" "Description" "Elevated card" "ContentTmpl" "demo_card_body" "ContentData" "Includes body + footer." "FooterTmpl" "demo_card_footer" "FooterData" nil) }}
-      {{ template "c_card" (dict "Variant" "plain" "Title" "Template #3" "Description" "Plain card" ) }}
-    </div>
-  </div>
-
-  <div>
-    <h2 class="text-lg font-semibold mb-3">Table</h2>
-    {{ $cols := (list (dict "Key" "id" "Label" "ID" "Align" "left") (dict "Key" "name" "Label" "Name" "Align" "left") (dict "Key" "price" "Label" "Price" "Align" "right")) }}
-    {{ $rows := (list (dict "id" "T-100" "name" "Classic Round" "price" "$12") (dict "id" "T-220" "name" "Square Logo" "price" "$18") (dict "id" "T-310" "name" "Business Seal" "price" "$24")) }}
-    {{ template "c_table" (dict "Columns" $cols "Rows" $rows "EmptyMessage" "No rows") }}
-  </div>
-
-  <div>
-    <h2 class="text-lg font-semibold mb-3">Forms</h2>
-    <form class="grid grid-cols-1 md:grid-cols-2 gap-4" action="#" method="post">
-      {{ template "c_input" (dict "Name" "full_name" "Label" "Full name" "Placeholder" "Taro Yamada" "Required" true) }}
-      {{ template "c_input" (dict "Name" "email" "Type" "email" "Label" "Email" "Placeholder" "you@example.com") }}
-      <div class="md:col-span-2">{{ template "c_textarea" (dict "Name" "notes" "Label" "Notes" "Placeholder" "Additional details...") }}</div>
-      <div class="md:col-span-2">{{ template "c_select" (dict "Name" "size" "Label" "Size" "Options" (list (dict "Value" "s" "Label" "Small") (dict "Value" "m" "Label" "Medium") (dict "Value" "l" "Label" "Large")) "Value" "m") }}</div>
-      <div class="md:col-span-2">{{ template "c_button" (dict "Label" "Submit" "Variant" "primary" "Type" "submit") }}</div>
-    </form>
-  </div>
-
-  <div>
-    <h2 class="text-lg font-semibold mb-3">Skeletons</h2>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {{ template "c_skeleton_card" . }}
-      {{ template "c_skeleton_card" . }}
-      {{ template "c_skeleton_card" . }}
-    </div>
-    <div class="mt-6">
-      {{ template "c_skeleton_table" (dict "Cols" 4 "Rows" 4) }}
-    </div>
-  </div>
-
-  <div class="mt-8 text-sm text-gray-500">Path: {{ $.Path }}</div>
+  <div class="text-sm text-gray-500">Path: {{ $.Path }}</div>
 </section>
 {{ end }}

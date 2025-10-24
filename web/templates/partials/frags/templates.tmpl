@@ -1,0 +1,33 @@
+{{ define "frag_template_table" }}
+{{ if not .Append }}
+  <div id="template-results" class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+      <span class="font-medium text-gray-900">{{ .Total }} templates</span>
+      <span>Showing {{ .CountLoaded }} {{ if gt .Total .CountLoaded }}of {{ .Total }}{{ end }}</span>
+    </div>
+    <div id="template-results-list" class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+      {{ if .Empty }}
+        {{ template "c_template_empty_state" . }}
+      {{ else }}
+        {{ range .Templates }}
+          {{ template "c_template_card" (dict "Template" . "Lang" $.Lang) }}
+        {{ end }}
+        {{ if .HasMore }}
+          {{ template "c_template_waypoint_loader" (dict "NextURL" .NextURL) }}
+        {{ end }}
+      {{ end }}
+    </div>
+  </div>
+{{ else }}
+  {{ range .Templates }}
+    {{ template "c_template_card" (dict "Template" . "Lang" $.Lang) }}
+  {{ end }}
+  {{ if .HasMore }}
+    {{ template "c_template_waypoint_loader" (dict "NextURL" .NextURL) }}
+  {{ end }}
+{{ end }}
+{{ end }}
+
+{{ define "frag_template_drawer" }}
+{{ template "c_template_drawer" (dict "Detail" .Detail "Lang" .Lang) }}
+{{ end }}

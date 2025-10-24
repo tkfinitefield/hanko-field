@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -783,6 +784,8 @@ func main() {
 	r.Get("/products/{productID}/reviews/snippets", ProductReviewsSnippetFrag)
 	r.Get("/products/{productID}/tabs/{tab}", ProductTabFrag)
 	r.Get("/templates", TemplatesHandler)
+	r.Get("/templates/table", TemplatesTableFrag)
+	r.Get("/templates/{templateID}", TemplateDetailHandler)
 	r.Get("/guides", GuidesHandler)
 	r.Post("/cart/items", CartItemCreateHandler)
 	r.Get("/account", AccountHandler)
@@ -1564,11 +1567,91 @@ func TemplatesHandler(w http.ResponseWriter, r *http.Request) {
 	vm.Nav = nav.Build(vm.Path)
 	vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
 	vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+	brand := i18nOrDefault(lang, "brand.name", "Hanko Field")
+	vm.Templates = buildTemplateListProps(lang, r.URL.Query())
+	vm.SEO.Title = fmt.Sprintf("%s | %s", i18nOrDefault(lang, "nav.templates", "Templates"), brand)
+	vm.SEO.Description = "Browse tested seal layouts with script, shape, and registrability filters. Preview any template before starting a design."
 	vm.SEO.Canonical = absoluteURL(r)
 	vm.SEO.OG.URL = vm.SEO.Canonical
-	vm.SEO.OG.SiteName = i18nOrDefault(lang, "brand.name", "Hanko Field")
+	vm.SEO.OG.SiteName = brand
+	vm.SEO.OG.Title = vm.SEO.Title
+	vm.SEO.OG.Description = vm.SEO.Description
+	vm.SEO.OG.Type = "website"
+	vm.SEO.Twitter.Card = "summary_large_image"
 	vm.SEO.Alternates = buildAlternates(r)
 	renderPage(w, r, "templates", vm)
+}
+
+func TemplateDetailHandler(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	templateID := chi.URLParam(r, "templateID")
+	detail, ok := templateDetailFor(lang, templateID)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	if mw.IsHTMX(r.Context()) {
+		props := map[string]any{
+			"Lang":   lang,
+			"Detail": detail,
+		}
+		renderTemplate(w, r, "frag_template_drawer", props)
+		return
+	}
+
+	vm := handlersPkg.PageData{Title: detail.Template.Name, Lang: lang}
+	vm.Path = r.URL.Path
+	vm.Nav = nav.Build(vm.Path)
+	vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+	vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+	vm.Template = detail
+
+	brand := i18nOrDefault(lang, "brand.name", "Hanko Field")
+	pageTitle := detail.Template.Name
+	if pageTitle == "" {
+		pageTitle = i18nOrDefault(lang, "nav.templates", "Templates")
+	}
+	vm.SEO.Title = fmt.Sprintf("%s | %s", pageTitle, brand)
+	if detail.Lead != "" {
+		vm.SEO.Description = detail.Lead
+	} else if len(detail.Summary) > 0 {
+		vm.SEO.Description = detail.Summary[0]
+	} else {
+		vm.SEO.Description = "Template detail overview."
+	}
+	vm.SEO.Canonical = absoluteURL(r)
+	vm.SEO.OG.URL = vm.SEO.Canonical
+	vm.SEO.OG.SiteName = brand
+	vm.SEO.OG.Type = "article"
+	vm.SEO.OG.Title = vm.SEO.Title
+	vm.SEO.OG.Description = vm.SEO.Description
+	vm.SEO.Twitter.Card = "summary_large_image"
+	vm.SEO.Alternates = buildAlternates(r)
+
+	renderPage(w, r, "template_detail", vm)
+}
+
+func TemplatesTableFrag(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	props := buildTemplateListProps(lang, r.URL.Query())
+	if baseQS, ok := props["BaseQS"].(string); ok {
+		if page, ok2 := props["Page"].(int); ok2 {
+			push := "/templates"
+			query := baseQS
+			if page > 1 {
+				if query != "" {
+					query += "&"
+				}
+				query += "page=" + strconv.Itoa(page)
+			}
+			if query != "" {
+				push = "/templates?" + query
+			}
+			w.Header().Set("HX-Push-Url", push)
+		}
+	}
+	renderTemplate(w, r, "frag_template_table", props)
 }
 
 func GuidesHandler(w http.ResponseWriter, r *http.Request) {
@@ -1673,6 +1756,854 @@ func i18nOrDefault(lang, key, def string) string {
 		return def
 	}
 	return v
+}
+
+// --- Template catalog data & helpers ---
+
+type TemplateMeta struct {
+	ID                  string
+	Name                string
+	Summary             string
+	Script              string
+	ScriptLabel         string
+	Shape               string
+	ShapeLabel          string
+	Registrability      string
+	RegistrabilityLabel string
+	Category            string
+	CategoryLabel       string
+	Style               string
+	StyleLabel          string
+	Locale              string
+	LocaleLabel         string
+	Badge               string
+	PrimarySize         string
+	Preview             TemplatePreview
+	Usage               int
+	Favorites           int
+	Updated             time.Time
+	Tags                []string
+}
+
+type TemplatePreview struct {
+	Background string
+	Glyph      string
+	GlyphClass string
+	RingClass  string
+}
+
+type TemplateDetail struct {
+	Template         TemplateMeta
+	Lead             string
+	Summary          []string
+	RecommendedSizes []TemplateSize
+	Constraints      []TemplateConstraint
+	PreviewShots     []TemplatePreviewShot
+	Stats            TemplateStats
+	Metadata         []TemplateMetadataEntry
+	UseCases         []string
+	RecommendedInks  []string
+	Actions          []TemplateAction
+	Related          []TemplateMeta
+}
+
+type TemplateSize struct {
+	Label      string
+	Dimensions string
+	Usage      string
+}
+
+type TemplateConstraint struct {
+	Label       string
+	Description string
+}
+
+type TemplatePreviewShot struct {
+	Label      string
+	Background string
+	Glyph      string
+	GlyphClass string
+	RingClass  string
+	Caption    string
+}
+
+type TemplateStats struct {
+	Usage         int
+	Favorites     int
+	Satisfaction  int
+	AvgTurnaround string
+	LastUpdated   time.Time
+}
+
+type TemplateMetadataEntry struct {
+	Label string
+	Value string
+	Hint  string
+}
+
+type TemplateAction struct {
+	Label   string
+	Href    string
+	Variant string
+}
+
+type FilterOption struct {
+	Value    string
+	Label    string
+	Count    int
+	Selected bool
+}
+
+var (
+	templateScriptLabels = map[string]string{
+		"kanji":    "Kanji",
+		"kana":     "Kana",
+		"alphabet": "Alphabet",
+		"mixed":    "Mixed Script",
+	}
+	templateScriptOrder = []string{"kanji", "kana", "alphabet", "mixed"}
+
+	templateShapeLabels = map[string]string{
+		"round":  "Round",
+		"square": "Square",
+		"rect":   "Rectangular",
+	}
+	templateShapeOrder = []string{"round", "square", "rect"}
+
+	templateRegistrabilityLabels = map[string]string{
+		"official":   "Registrable",
+		"individual": "Personal Use",
+		"internal":   "Internal",
+		"informal":   "Informal",
+	}
+	templateRegistrabilityOrder = []string{"official", "individual", "internal", "informal"}
+
+	templateCategoryLabels = map[string]string{
+		"corporate":     "Corporate",
+		"brand":         "Brand",
+		"personal":      "Personal",
+		"operations":    "Operations",
+		"international": "International",
+		"events":        "Events",
+	}
+	templateCategoryOrder = []string{"corporate", "brand", "personal", "operations", "international", "events"}
+
+	templateStyleLabels = map[string]string{
+		"modern":  "Modern",
+		"classic": "Classic",
+		"minimal": "Minimal",
+		"playful": "Playful",
+		"bold":    "Bold",
+		"tech":    "Tech",
+	}
+	templateStyleOrder = []string{"modern", "classic", "minimal", "bold", "playful", "tech"}
+
+	templateLocaleLabels = map[string]string{
+		"ja":     "Japanese",
+		"en":     "English",
+		"hybrid": "Dual Locale",
+	}
+	templateLocaleOrder = []string{"ja", "en", "hybrid"}
+
+	templateCatalogSeed = []TemplateMeta{
+		{
+			ID:             "tpl-ring-corporate",
+			Name:           "Corporate Ring",
+			Summary:        "Compliant round seal tuned for legal filings and corporate paperwork.",
+			Script:         "kanji",
+			Shape:          "round",
+			Registrability: "official",
+			Category:       "corporate",
+			Style:          "modern",
+			Locale:         "ja",
+			Badge:          "Popular",
+			PrimarySize:    "18mm round",
+			Preview: TemplatePreview{
+				Background: "bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500",
+				Glyph:      "CR",
+				GlyphClass: "text-white text-2xl font-semibold tracking-[0.3em]",
+				RingClass:  "ring-4 ring-white/60",
+			},
+			Usage:     1286,
+			Favorites: 412,
+			Updated:   time.Date(2024, time.December, 18, 0, 0, 0, 0, time.UTC),
+			Tags:      []string{"compliance", "registration", "corporate"},
+		},
+		{
+			ID:             "tpl-square-brand",
+			Name:           "Brand Square Mark",
+			Summary:        "Offset corner square template for packaging and signage.",
+			Script:         "alphabet",
+			Shape:          "square",
+			Registrability: "informal",
+			Category:       "brand",
+			Style:          "bold",
+			Locale:         "en",
+			Badge:          "Trending",
+			PrimarySize:    "30mm square",
+			Preview: TemplatePreview{
+				Background: "bg-gradient-to-br from-orange-500 via-amber-400 to-yellow-300",
+				Glyph:      "BR",
+				GlyphClass: "text-white text-2xl font-semibold tracking-[0.2em]",
+				RingClass:  "ring-4 ring-white/50",
+			},
+			Usage:     956,
+			Favorites: 508,
+			Updated:   time.Date(2024, time.November, 20, 0, 0, 0, 0, time.UTC),
+			Tags:      []string{"packaging", "stores", "campaign"},
+		},
+		{
+			ID:             "tpl-rect-ledger",
+			Name:           "Ledger Header",
+			Summary:        "Rectangular ledger stamp with aligned columns for internal operations.",
+			Script:         "kanji",
+			Shape:          "rect",
+			Registrability: "internal",
+			Category:       "operations",
+			Style:          "minimal",
+			Locale:         "ja",
+			Badge:          "New",
+			PrimarySize:    "55x18mm",
+			Preview: TemplatePreview{
+				Background: "bg-gradient-to-br from-slate-900 via-slate-700 to-slate-500",
+				Glyph:      "LG",
+				GlyphClass: "text-teal-200 text-xl font-semibold tracking-[0.2em]",
+				RingClass:  "ring-2 ring-slate-400/40",
+			},
+			Usage:     468,
+			Favorites: 184,
+			Updated:   time.Date(2025, time.January, 4, 0, 0, 0, 0, time.UTC),
+			Tags:      []string{"ledger", "backoffice", "finance"},
+		},
+		{
+			ID:             "tpl-round-personal",
+			Name:           "Personal Script Round",
+			Summary:        "Gentle double ring layout for signature hanko and personal seals.",
+			Script:         "kana",
+			Shape:          "round",
+			Registrability: "individual",
+			Category:       "personal",
+			Style:          "classic",
+			Locale:         "ja",
+			Badge:          "Classic",
+			PrimarySize:    "16.5mm round",
+			Preview: TemplatePreview{
+				Background: "bg-gradient-to-br from-rose-500 via-fuchsia-500 to-violet-500",
+				Glyph:      "PS",
+				GlyphClass: "text-white text-xl font-semibold tracking-[0.25em]",
+				RingClass:  "ring-4 ring-white/40",
+			},
+			Usage:     782,
+			Favorites: 365,
+			Updated:   time.Date(2024, time.September, 12, 0, 0, 0, 0, time.UTC),
+			Tags:      []string{"signature", "gift", "calligraphy"},
+		},
+		{
+			ID:             "tpl-square-tech",
+			Name:           "Tech Grid Square",
+			Summary:        "Angular square template for product authentication and hardware packaging.",
+			Script:         "alphabet",
+			Shape:          "square",
+			Registrability: "official",
+			Category:       "corporate",
+			Style:          "tech",
+			Locale:         "en",
+			Badge:          "New",
+			PrimarySize:    "28mm square",
+			Preview: TemplatePreview{
+				Background: "bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-500",
+				Glyph:      "TX",
+				GlyphClass: "text-white text-2xl font-semibold tracking-[0.25em]",
+				RingClass:  "ring-4 ring-white/45",
+			},
+			Usage:     512,
+			Favorites: 230,
+			Updated:   time.Date(2024, time.December, 5, 0, 0, 0, 0, time.UTC),
+			Tags:      []string{"hardware", "certification", "qr-ready"},
+		},
+		{
+			ID:             "tpl-rect-export",
+			Name:           "Export Manifest",
+			Summary:        "Dual-language rectangular seal for customs and logistics paperwork.",
+			Script:         "mixed",
+			Shape:          "rect",
+			Registrability: "official",
+			Category:       "international",
+			Style:          "modern",
+			Locale:         "hybrid",
+			Badge:          "Dual",
+			PrimarySize:    "60x20mm",
+			Preview: TemplatePreview{
+				Background: "bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-400",
+				Glyph:      "EX",
+				GlyphClass: "text-white text-xl font-semibold tracking-[0.3em]",
+				RingClass:  "ring-2 ring-white/50",
+			},
+			Usage:     624,
+			Favorites: 298,
+			Updated:   time.Date(2024, time.October, 22, 0, 0, 0, 0, time.UTC),
+			Tags:      []string{"shipping", "customs", "documentation"},
+		},
+	}
+
+	templateDetailSeed = map[string]TemplateDetail{
+		"tpl-ring-corporate": {
+			Lead: "Compliant round seal tuned for corporate registration and notarized filings.",
+			Summary: []string{
+				"Double-ring layout maintains legal framing with comfortable counter space.",
+				"Optimized letterforms prevent fill-in during repeated vermilion impressions.",
+			},
+			RecommendedSizes: []TemplateSize{
+				{Label: "18mm default", Dimensions: "18mm outer / 12mm inner", Usage: "Company registration and tax office submissions"},
+				{Label: "21mm expansion", Dimensions: "21mm outer / 14mm inner", Usage: "Executive authorizations and embossed stationery"},
+			},
+			Constraints: []TemplateConstraint{
+				{Label: "Stroke width", Description: "Set primary strokes to at least 0.45mm to pass registry inspections."},
+				{Label: "Outer ring", Description: "Keep outer band between 1.1mm and 1.3mm for brass milling stability."},
+			},
+			PreviewShots: []TemplatePreviewShot{
+				{Label: "Positive impression", Background: "bg-gradient-to-br from-indigo-600 via-purple-600 to-rose-500", Glyph: "CR", GlyphClass: "text-white text-3xl font-semibold tracking-[0.35em]", RingClass: "ring-4 ring-white/60", Caption: "Vermilion ink on 90gsm washi stock"},
+				{Label: "Negative master", Background: "bg-white", Glyph: "CR", GlyphClass: "text-indigo-600 text-3xl font-semibold tracking-[0.35em]", RingClass: "ring-2 ring-indigo-200", Caption: "Laser-etched brass master for duplication"},
+			},
+			Stats: TemplateStats{
+				Usage:         1286,
+				Favorites:     412,
+				Satisfaction:  96,
+				AvgTurnaround: "48h engraving lead time",
+				LastUpdated:   time.Date(2024, time.December, 1, 0, 0, 0, 0, time.UTC),
+			},
+			Metadata: []TemplateMetadataEntry{
+				{Label: "Compatible materials", Value: "Brass, hardened steel, reinforced resin", Hint: "Validated for 3,500 impressions"},
+				{Label: "Grid system", Value: "Radial 12 axis grid", Hint: "Letter rotation locked at 30 degree increments"},
+				{Label: "Vector delivery", Value: "SVG + DXF outlines", Hint: "Includes outlined fallback for cross-platform export"},
+			},
+			UseCases: []string{
+				"Company registration filings",
+				"Corporate contracts and invoices",
+				"Board meeting minutes embossing",
+			},
+			RecommendedInks: []string{"Vermilion", "Deep navy", "Carbon black"},
+			Actions: []TemplateAction{
+				{Label: "Start design", Href: "/design?template=tpl-ring-corporate", Variant: "primary"},
+				{Label: "Download guide", Href: "/guides/corporate-ring", Variant: "outline"},
+			},
+		},
+		"tpl-square-brand": {
+			Lead: "Offset square layout for bold retail campaigns and packaging sleeves.",
+			Summary: []string{
+				"Supports alternate border weights for foil or ink applications.",
+				"Corner anchor grid keeps logotype balanced in responsive placements.",
+			},
+			RecommendedSizes: []TemplateSize{
+				{Label: "30mm base", Dimensions: "30mm x 30mm", Usage: "Packaging seals and swing tags"},
+				{Label: "40mm storefront", Dimensions: "40mm x 40mm", Usage: "Signage decals and window vinyl"},
+				{Label: "24mm compact", Dimensions: "24mm x 24mm", Usage: "Product authentication labels"},
+			},
+			Constraints: []TemplateConstraint{
+				{Label: "Corner radius", Description: "Maintain 2.4mm corner cuts for consistent die stamping."},
+				{Label: "Safe area", Description: "Keep typography inside 18mm square to preserve breathing room."},
+			},
+			PreviewShots: []TemplatePreviewShot{
+				{Label: "Foil mock", Background: "bg-gradient-to-br from-orange-500 via-amber-400 to-yellow-300", Glyph: "BR", GlyphClass: "text-white text-3xl font-semibold tracking-[0.25em]", RingClass: "ring-4 ring-white/45", Caption: "Gold foil on textured cardstock"},
+				{Label: "Ink transfer", Background: "bg-slate-900", Glyph: "BR", GlyphClass: "text-amber-300 text-3xl font-semibold tracking-[0.25em]", RingClass: "ring-2 ring-amber-400/60", Caption: "Soya ink on kraft label stock"},
+			},
+			Stats: TemplateStats{
+				Usage:         956,
+				Favorites:     508,
+				Satisfaction:  94,
+				AvgTurnaround: "72h vector refinement",
+				LastUpdated:   time.Date(2024, time.November, 20, 0, 0, 0, 0, time.UTC),
+			},
+			Metadata: []TemplateMetadataEntry{
+				{Label: "Typography", Value: "Inter Bold with outline layer", Hint: "Includes uppercase and numeric alternates"},
+				{Label: "Grid", Value: "8x8 modular grid", Hint: "Corner offsets locked to 4mm increments"},
+				{Label: "Export", Value: "SVG, PDF, PNG @ 1200px", Hint: "Includes transparent and solid backgrounds"},
+			},
+			UseCases: []string{
+				"Limited edition packaging seals",
+				"Storefront vinyl applications",
+				"Pop-up event collateral",
+			},
+			RecommendedInks: []string{"Carmine", "Gold", "Midnight blue"},
+			Actions: []TemplateAction{
+				{Label: "Start design", Href: "/design?template=tpl-square-brand", Variant: "primary"},
+				{Label: "Duplicate to workspace", Href: "/workspace/new?source=tpl-square-brand", Variant: "outline"},
+			},
+		},
+		"tpl-rect-ledger": {
+			Lead: "Ledger header with aligned columns for accounting and internal ops.",
+			Summary: []string{
+				"Column guides speed daily stamping on invoices and delivery receipts.",
+				"Baseline grid tuned for carbon copy paper to avoid ghosting.",
+			},
+			RecommendedSizes: []TemplateSize{
+				{Label: "55x18mm primary", Dimensions: "55mm x 18mm", Usage: "Delivery dockets and purchase orders"},
+				{Label: "60x20mm extended", Dimensions: "60mm x 20mm", Usage: "Receiving inspection sheets"},
+			},
+			Constraints: []TemplateConstraint{
+				{Label: "Column gutters", Description: "Gutter width must remain 3mm to preserve handwriting space."},
+				{Label: "Serial block", Description: "Keep serial label at 8pt to align with printed ledger boxes."},
+			},
+			PreviewShots: []TemplatePreviewShot{
+				{Label: "Ink ledger", Background: "bg-gradient-to-br from-slate-900 via-slate-700 to-slate-500", Glyph: "LG", GlyphClass: "text-teal-200 text-2xl font-semibold tracking-[0.25em]", RingClass: "ring-2 ring-teal-200/40", Caption: "Oil-based ink on NCR receipt pad"},
+				{Label: "Embossed brass", Background: "bg-white", Glyph: "LG", GlyphClass: "text-slate-700 text-2xl font-semibold tracking-[0.25em]", RingClass: "ring-2 ring-slate-400/60", Caption: "Embossed brass plate for repetitive use"},
+			},
+			Stats: TemplateStats{
+				Usage:         468,
+				Favorites:     184,
+				Satisfaction:  92,
+				AvgTurnaround: "36h milling window",
+				LastUpdated:   time.Date(2025, time.January, 4, 0, 0, 0, 0, time.UTC),
+			},
+			Metadata: []TemplateMetadataEntry{
+				{Label: "Columns", Value: "Date, department, signature", Hint: "Editable text layers for localization"},
+				{Label: "Alignment", Value: "Left baseline grid", Hint: "Matches A5 ledger baseline"},
+				{Label: "Inking", Value: "Low bleed rubber", Hint: "Ideal for duplicate forms"},
+			},
+			UseCases: []string{
+				"Accounting ledgers",
+				"Inventory receiving",
+				"Warehouse dispatch slips",
+			},
+			RecommendedInks: []string{"Graphite", "Deep green"},
+			Actions: []TemplateAction{
+				{Label: "Start design", Href: "/design?template=tpl-rect-ledger", Variant: "primary"},
+				{Label: "Download sample CSV", Href: "/downloads/tpl-rect-ledger.csv", Variant: "outline"},
+			},
+		},
+		"tpl-round-personal": {
+			Lead: "Soft double-ring signature template for personal correspondence.",
+			Summary: []string{
+				"Rounded letterforms pair with hand-script signatures and diaries.",
+				"Inner monogram cap height matches 13mm resin blanks for hobby engraving.",
+			},
+			RecommendedSizes: []TemplateSize{
+				{Label: "16.5mm default", Dimensions: "16.5mm outer / 11mm inner", Usage: "Daily signature hanko"},
+				{Label: "13.5mm compact", Dimensions: "13.5mm outer / 9mm inner", Usage: "Travel cases and notebooks"},
+			},
+			Constraints: []TemplateConstraint{
+				{Label: "Calligraphic stroke", Description: "Maintain 0.35mm stroke minimum to prevent ink pooling."},
+				{Label: "Monogram spacing", Description: "Keep initials centered with 0.8mm breathing room."},
+			},
+			PreviewShots: []TemplatePreviewShot{
+				{Label: "Vermilion impression", Background: "bg-gradient-to-br from-rose-500 via-fuchsia-500 to-violet-500", Glyph: "PS", GlyphClass: "text-white text-3xl font-semibold tracking-[0.3em]", RingClass: "ring-4 ring-white/40", Caption: "Water-based ink on diary paper"},
+				{Label: "Emboss preview", Background: "bg-white", Glyph: "PS", GlyphClass: "text-rose-500 text-3xl font-semibold tracking-[0.3em]", RingClass: "ring-2 ring-rose-300/60", Caption: "Resin die emboss test"},
+			},
+			Stats: TemplateStats{
+				Usage:         782,
+				Favorites:     365,
+				Satisfaction:  97,
+				AvgTurnaround: "24h laser prep",
+				LastUpdated:   time.Date(2024, time.September, 12, 0, 0, 0, 0, time.UTC),
+			},
+			Metadata: []TemplateMetadataEntry{
+				{Label: "Script model", Value: "Rounded gothic with alternates", Hint: "Includes three monogram sets"},
+				{Label: "Outer band", Value: "0.95mm", Hint: "Balanced for resin and wood handles"},
+				{Label: "Packaging", Value: "Gift-ready PDF insert", Hint: "Includes personalization instructions"},
+			},
+			UseCases: []string{
+				"Personal correspondence",
+				"Journal stamping",
+				"Gift personalization",
+			},
+			RecommendedInks: []string{"Vermilion", "Cherry blossom", "Slate"},
+			Actions: []TemplateAction{
+				{Label: "Start design", Href: "/design?template=tpl-round-personal", Variant: "primary"},
+				{Label: "Share preview", Href: "/share?template=tpl-round-personal", Variant: "outline"},
+			},
+		},
+		"tpl-square-tech": {
+			Lead: "Angular grid for high-tech authentication labels and device packaging.",
+			Summary: []string{
+				"Diagonal lattice allows microtext and QR anchoring inside safe zones.",
+				"Outlined glyph retains clarity on anodized aluminum and matte vinyl.",
+			},
+			RecommendedSizes: []TemplateSize{
+				{Label: "28mm base", Dimensions: "28mm x 28mm", Usage: "Device packaging seals"},
+				{Label: "18mm badge", Dimensions: "18mm x 18mm", Usage: "Component certification tags"},
+			},
+			Constraints: []TemplateConstraint{
+				{Label: "Microtext band", Description: "Reserve 1.6mm band at edges for serial microtext."},
+				{Label: "QR anchor", Description: "Keep anchor triangle aligned to 45 degree grid for scanning accuracy."},
+			},
+			PreviewShots: []TemplatePreviewShot{
+				{Label: "Holographic mock", Background: "bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-500", Glyph: "TX", GlyphClass: "text-white text-3xl font-semibold tracking-[0.3em]", RingClass: "ring-4 ring-white/45", Caption: "Holographic foil on matte box"},
+				{Label: "Tamper label", Background: "bg-slate-900", Glyph: "TX", GlyphClass: "text-cyan-300 text-3xl font-semibold tracking-[0.3em]", RingClass: "ring-2 ring-cyan-400/60", Caption: "Security sticker application"},
+			},
+			Stats: TemplateStats{
+				Usage:         512,
+				Favorites:     230,
+				Satisfaction:  93,
+				AvgTurnaround: "72h engraving and proof",
+				LastUpdated:   time.Date(2024, time.December, 5, 0, 0, 0, 0, time.UTC),
+			},
+			Metadata: []TemplateMetadataEntry{
+				{Label: "Grid system", Value: "12x12 diagonal grid", Hint: "Supports 45 degree anchors"},
+				{Label: "Format", Value: "SVG + EPS with live stroke", Hint: "Ideal for CNC milling"},
+				{Label: "Security layer", Value: "Optional microtext ring", Hint: "Editable for per-batch serials"},
+			},
+			UseCases: []string{
+				"Hardware compliance tags",
+				"Tamper-evident seals",
+				"Smart device packaging",
+			},
+			RecommendedInks: []string{"Cyan", "Silver", "Jet black"},
+			Actions: []TemplateAction{
+				{Label: "Start design", Href: "/design?template=tpl-square-tech", Variant: "primary"},
+				{Label: "Request approval kit", Href: "/inbox/new?subject=tpl-square-tech", Variant: "outline"},
+			},
+		},
+		"tpl-rect-export": {
+			Lead: "Dual-language export manifest template for customs and logistics workflows.",
+			Summary: []string{
+				"Bilingual layout balances Latin and Kanji scripts with equal emphasis.",
+				"Grid aligns with A4 shipping forms and accepts barcode overlays.",
+			},
+			RecommendedSizes: []TemplateSize{
+				{Label: "60x20mm default", Dimensions: "60mm x 20mm", Usage: "Export documentation primary seal"},
+				{Label: "70x22mm extended", Dimensions: "70mm x 22mm", Usage: "International certificates of origin"},
+			},
+			Constraints: []TemplateConstraint{
+				{Label: "Language pairing", Description: "Maintain Japanese script on left and English on right with center divider."},
+				{Label: "Barcode clearance", Description: "Leave 6mm bottom margin for barcode overlays."},
+			},
+			PreviewShots: []TemplatePreviewShot{
+				{Label: "Manifest proof", Background: "bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-400", Glyph: "EX", GlyphClass: "text-white text-3xl font-semibold tracking-[0.3em]", RingClass: "ring-2 ring-white/60", Caption: "Logistics manifest sample"},
+				{Label: "Steel die", Background: "bg-white", Glyph: "EX", GlyphClass: "text-emerald-600 text-3xl font-semibold tracking-[0.3em]", RingClass: "ring-2 ring-emerald-200/60", Caption: "Steel die finishing preview"},
+			},
+			Stats: TemplateStats{
+				Usage:         624,
+				Favorites:     298,
+				Satisfaction:  95,
+				AvgTurnaround: "96h bilingual QA",
+				LastUpdated:   time.Date(2024, time.October, 22, 0, 0, 0, 0, time.UTC),
+			},
+			Metadata: []TemplateMetadataEntry{
+				{Label: "Languages", Value: "Japanese / English", Hint: "Editable text layers for localization"},
+				{Label: "Document fit", Value: "A4 landscape grid", Hint: "Aligns with customs manifest layout"},
+				{Label: "Export bundle", Value: "SVG + PDF + DOCX", Hint: "Includes bilingual instructions"},
+			},
+			UseCases: []string{
+				"International shipping",
+				"Customs declarations",
+				"Freight forwarding documents",
+			},
+			RecommendedInks: []string{"Emerald", "Navy", "Charcoal"},
+			Actions: []TemplateAction{
+				{Label: "Start design", Href: "/design?template=tpl-rect-export", Variant: "primary"},
+				{Label: "Share bilingual brief", Href: "/share?template=tpl-rect-export", Variant: "outline"},
+			},
+		},
+	}
+)
+
+func templateData(lang string) []TemplateMeta {
+	out := make([]TemplateMeta, len(templateCatalogSeed))
+	copy(out, templateCatalogSeed)
+	for i := range out {
+		decorateTemplateMeta(&out[i])
+	}
+	return out
+}
+
+func templateDetailFor(lang, id string) (*TemplateDetail, bool) {
+	data := templateData(lang)
+	var meta TemplateMeta
+	for _, tpl := range data {
+		if tpl.ID == id {
+			meta = tpl
+			break
+		}
+	}
+	if meta.ID == "" {
+		return nil, false
+	}
+	seed, ok := templateDetailSeed[id]
+	if !ok {
+		return nil, false
+	}
+	detail := seed
+	detail.Template = meta
+	if detail.Stats.Usage == 0 {
+		detail.Stats.Usage = meta.Usage
+	}
+	if detail.Stats.Favorites == 0 {
+		detail.Stats.Favorites = meta.Favorites
+	}
+	if detail.Stats.LastUpdated.IsZero() {
+		detail.Stats.LastUpdated = meta.Updated
+	}
+	detail.Related = selectRelatedTemplates(meta, data)
+	return &detail, true
+}
+
+func buildTemplateListProps(lang string, q url.Values) map[string]any {
+	normalize := func(v string) string {
+		return strings.ToLower(strings.TrimSpace(v))
+	}
+	script := normalize(q.Get("script"))
+	shape := normalize(q.Get("shape"))
+	registrability := normalize(q.Get("registrability"))
+	category := normalize(q.Get("category"))
+	style := normalize(q.Get("style"))
+	locale := normalize(q.Get("locale"))
+	search := strings.TrimSpace(q.Get("q"))
+	page := 1
+	if v := strings.TrimSpace(q.Get("page")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			page = n
+		}
+	}
+	per := 9
+	if v := strings.TrimSpace(q.Get("per")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if n < 3 {
+				n = 3
+			}
+			if n > 24 {
+				n = 24
+			}
+			per = n
+		}
+	}
+
+	data := templateData(lang)
+	var filtered []TemplateMeta
+	searchLower := strings.ToLower(search)
+	for _, tpl := range data {
+		if script != "" && script != "all" && tpl.Script != script {
+			continue
+		}
+		if shape != "" && shape != "all" && tpl.Shape != shape {
+			continue
+		}
+		if registrability != "" && registrability != "all" && tpl.Registrability != registrability {
+			continue
+		}
+		if category != "" && category != "all" && tpl.Category != category {
+			continue
+		}
+		if style != "" && style != "all" && tpl.Style != style {
+			continue
+		}
+		if locale != "" && locale != "all" && tpl.Locale != locale {
+			continue
+		}
+		if searchLower != "" {
+			haystack := strings.ToLower(tpl.Name + " " + tpl.Summary + " " + strings.Join(tpl.Tags, " "))
+			if !strings.Contains(haystack, searchLower) {
+				continue
+			}
+		}
+		filtered = append(filtered, tpl)
+	}
+
+	sort.SliceStable(filtered, func(i, j int) bool {
+		if filtered[i].Badge == "New" && filtered[j].Badge != "New" {
+			return true
+		}
+		if filtered[j].Badge == "New" && filtered[i].Badge != "New" {
+			return false
+		}
+		if filtered[i].Usage == filtered[j].Usage {
+			return filtered[i].Updated.After(filtered[j].Updated)
+		}
+		return filtered[i].Usage > filtered[j].Usage
+	})
+
+	total := len(filtered)
+	if page < 1 {
+		page = 1
+	}
+	start := (page - 1) * per
+	if start > total {
+		start = total
+	}
+	end := start + per
+	if end > total {
+		end = total
+	}
+	window := filtered[start:end]
+	hasMore := end < total
+
+	base := make(url.Values)
+	if script != "" {
+		base.Set("script", script)
+	}
+	if shape != "" {
+		base.Set("shape", shape)
+	}
+	if registrability != "" {
+		base.Set("registrability", registrability)
+	}
+	if category != "" {
+		base.Set("category", category)
+	}
+	if style != "" {
+		base.Set("style", style)
+	}
+	if locale != "" {
+		base.Set("locale", locale)
+	}
+	if search != "" {
+		base.Set("q", search)
+	}
+	base.Set("per", strconv.Itoa(per))
+
+	options := map[string]any{
+		"Scripts":        buildFilterOptions(data, script, "All scripts", templateScriptLabels, templateScriptOrder, func(t TemplateMeta) string { return t.Script }),
+		"Shapes":         buildFilterOptions(data, shape, "All shapes", templateShapeLabels, templateShapeOrder, func(t TemplateMeta) string { return t.Shape }),
+		"Registrability": buildFilterOptions(data, registrability, "All registrability", templateRegistrabilityLabels, templateRegistrabilityOrder, func(t TemplateMeta) string { return t.Registrability }),
+		"Categories":     buildFilterOptions(data, category, "All categories", templateCategoryLabels, templateCategoryOrder, func(t TemplateMeta) string { return t.Category }),
+		"Styles":         buildFilterOptions(data, style, "All styles", templateStyleLabels, templateStyleOrder, func(t TemplateMeta) string { return t.Style }),
+		"Locales":        buildFilterOptions(data, locale, "All locales", templateLocaleLabels, templateLocaleOrder, func(t TemplateMeta) string { return t.Locale }),
+	}
+
+	nextURL := ""
+	if hasMore {
+		nextQS := base.Encode()
+		if nextQS != "" {
+			nextQS += "&"
+		}
+		nextQS += "page=" + strconv.Itoa(page+1)
+		nextURL = "/templates/table?" + nextQS
+	}
+
+	props := map[string]any{
+		"Lang":        lang,
+		"Templates":   window,
+		"Total":       total,
+		"CountLoaded": end,
+		"Page":        page,
+		"Per":         per,
+		"HasMore":     hasMore,
+		"NextPage":    page + 1,
+		"NextURL":     nextURL,
+		"Filters": map[string]string{
+			"Script":         script,
+			"Shape":          shape,
+			"Registrability": registrability,
+			"Category":       category,
+			"Style":          style,
+			"Locale":         locale,
+			"Query":          search,
+		},
+		"Options": options,
+		"BaseQS":  base.Encode(),
+		"Append":  page > 1,
+		"Empty":   total == 0,
+	}
+	return props
+}
+
+func decorateTemplateMeta(t *TemplateMeta) {
+	t.ScriptLabel = labelFor(templateScriptLabels, t.Script)
+	t.ShapeLabel = labelFor(templateShapeLabels, t.Shape)
+	t.RegistrabilityLabel = labelFor(templateRegistrabilityLabels, t.Registrability)
+	t.CategoryLabel = labelFor(templateCategoryLabels, t.Category)
+	t.StyleLabel = labelFor(templateStyleLabels, t.Style)
+	t.LocaleLabel = labelFor(templateLocaleLabels, t.Locale)
+}
+
+func buildFilterOptions(items []TemplateMeta, current, allLabel string, labels map[string]string, order []string, getter func(TemplateMeta) string) []FilterOption {
+	counts := make(map[string]int)
+	for _, item := range items {
+		key := getter(item)
+		counts[key]++
+	}
+
+	opts := make([]FilterOption, 0, len(counts)+1)
+	opts = append(opts, FilterOption{
+		Value:    "",
+		Label:    allLabel,
+		Count:    len(items),
+		Selected: current == "" || current == "all",
+	})
+
+	seen := make(map[string]struct{})
+	for _, key := range order {
+		if counts[key] == 0 {
+			continue
+		}
+		label := labelFor(labels, key)
+		opts = append(opts, FilterOption{
+			Value:    key,
+			Label:    label,
+			Count:    counts[key],
+			Selected: current == key,
+		})
+		seen[key] = struct{}{}
+	}
+
+	var leftover []string
+	for key := range counts {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		leftover = append(leftover, key)
+	}
+	sort.Strings(leftover)
+	for _, key := range leftover {
+		label := labelFor(labels, key)
+		opts = append(opts, FilterOption{
+			Value:    key,
+			Label:    label,
+			Count:    counts[key],
+			Selected: current == key,
+		})
+	}
+	return opts
+}
+
+func selectRelatedTemplates(current TemplateMeta, data []TemplateMeta) []TemplateMeta {
+	related := make([]TemplateMeta, 0, 3)
+	seen := map[string]struct{}{current.ID: {}}
+	for _, tpl := range data {
+		if tpl.ID == current.ID {
+			continue
+		}
+		if tpl.Category == current.Category {
+			related = append(related, tpl)
+			seen[tpl.ID] = struct{}{}
+			if len(related) == 3 {
+				return related
+			}
+		}
+	}
+	for _, tpl := range data {
+		if len(related) == 3 {
+			break
+		}
+		if _, ok := seen[tpl.ID]; ok {
+			continue
+		}
+		related = append(related, tpl)
+		seen[tpl.ID] = struct{}{}
+	}
+	return related
+}
+
+func labelFor(m map[string]string, key string) string {
+	if v, ok := m[key]; ok && v != "" {
+		return v
+	}
+	return titleCase(key)
+}
+
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	cleaned := strings.ReplaceAll(strings.ReplaceAll(s, "-", " "), "_", " ")
+	parts := strings.Fields(cleaned)
+	for i, p := range parts {
+		lower := strings.ToLower(p)
+		if len(lower) == 0 {
+			continue
+		}
+		parts[i] = strings.ToUpper(lower[:1]) + lower[1:]
+	}
+	return strings.Join(parts, " ")
 }
 
 // --- Fragments and supporting types ---

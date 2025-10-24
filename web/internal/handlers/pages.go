@@ -16,6 +16,8 @@ type PageData struct {
 	Breadcrumbs []nav.Crumb
 
 	// Optional per-page view model payloads
-	Shop    any
-	Product any
+	Shop      any
+	Product   any
+	Templates any
+	Template  any
 }
