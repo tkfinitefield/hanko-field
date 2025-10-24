@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"html/template"
@@ -16,7 +18,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
+	"finitefield.org/hanko-web/internal/cms"
 	"finitefield.org/hanko-web/internal/format"
 	handlersPkg "finitefield.org/hanko-web/internal/handlers"
 	"finitefield.org/hanko-web/internal/i18n"
@@ -25,6 +29,8 @@ import (
 	"finitefield.org/hanko-web/internal/seo"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/microcosm-cc/bluemonday"
+	"golang.org/x/net/html"
 )
 
 var (
@@ -73,6 +79,23 @@ var (
 			"large":  "21 × 60 mm",
 		},
 	}
+)
+
+var (
+	cmsClient *cms.Client
+
+	guidePersonaOrder  = []string{"maker", "manager", "newcomer", "creative"}
+	guideCategoryOrder = []string{"howto", "culture", "policy", "faq", "news", "other"}
+
+	guideHTMLPolicy = func() *bluemonday.Policy {
+		p := bluemonday.UGCPolicy()
+		p.AllowAttrs("class").OnElements("p", "pre", "code", "span", "a", "table", "thead", "tbody", "tr", "th", "td", "h2", "h3", "h4", "blockquote", "figure", "figcaption", "img", "ul", "ol", "li")
+		p.AllowAttrs("id").OnElements("h2", "h3", "h4")
+		p.AllowAttrs("href", "title", "target", "rel").OnElements("a")
+		p.AllowAttrs("src", "alt", "title", "width", "height", "loading").OnElements("img")
+		p.AllowURLSchemes("http", "https", "mailto", "tel")
+		return p
+	}()
 )
 
 func localizedLabel(table map[string]map[string]string, lang, key, fallback string) string {
@@ -741,6 +764,8 @@ func main() {
 		tmplCache = tc
 	}
 
+	cmsClient = cms.NewClient(os.Getenv("HANKO_WEB_API_BASE_URL"))
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	// If deployed behind a trusted reverse proxy/load balancer, RealIP will use
@@ -787,6 +812,7 @@ func main() {
 	r.Get("/templates/table", TemplatesTableFrag)
 	r.Get("/templates/{templateID}", TemplateDetailHandler)
 	r.Get("/guides", GuidesHandler)
+	r.Get("/guides/{slug}", GuideDetailHandler)
 	r.Post("/cart/items", CartItemCreateHandler)
 	r.Get("/account", AccountHandler)
 	// Fragment endpoints (htmx)
@@ -1656,16 +1682,702 @@ func TemplatesTableFrag(w http.ResponseWriter, r *http.Request) {
 
 func GuidesHandler(w http.ResponseWriter, r *http.Request) {
 	lang := mw.Lang(r)
-	vm := handlersPkg.PageData{Title: "Guides", Lang: lang}
+
+	title := i18nOrDefault(lang, "guides.title", "Guides")
+	subtitle := i18nOrDefault(lang, "guides.subtitle", "Step-by-step guides to master Hanko Field.")
+
+	vm := handlersPkg.PageData{Title: title, Lang: lang}
 	vm.Path = r.URL.Path
 	vm.Nav = nav.Build(vm.Path)
 	vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
 	vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
 	vm.SEO.Canonical = absoluteURL(r)
-	vm.SEO.OG.URL = vm.SEO.Canonical
-	vm.SEO.OG.SiteName = i18nOrDefault(lang, "brand.name", "Hanko Field")
 	vm.SEO.Alternates = buildAlternates(r)
+	vm.SEO.OG.URL = vm.SEO.Canonical
+
+	brand := i18nOrDefault(lang, "brand.name", "Hanko Field")
+	vm.SEO.Title = fmt.Sprintf("%s | %s", title, brand)
+	vm.SEO.Description = subtitle
+	vm.SEO.OG.SiteName = brand
+	vm.SEO.OG.Type = "website"
+	vm.SEO.OG.Title = vm.SEO.Title
+	vm.SEO.OG.Description = vm.SEO.Description
+	vm.SEO.Twitter.Card = "summary_large_image"
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	allGuides, err := cmsClient.ListGuides(ctx, cms.ListGuidesOptions{Lang: lang})
+	if err != nil {
+		log.Printf("guides: list: %v", err)
+	}
+
+	personaParam := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("persona")))
+	topicParam := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("topic")))
+	if topicParam == "" {
+		topicParam = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("category")))
+	}
+	searchParam := strings.TrimSpace(r.URL.Query().Get("q"))
+
+	filtered := filterGuidesForView(allGuides, personaParam, topicParam, searchParam)
+
+	cards := make([]GuideCard, 0, len(filtered))
+	for _, g := range filtered {
+		cards = append(cards, guideCardFromGuide(g, lang))
+	}
+	if len(cards) > 0 && vm.SEO.OG.Image == "" {
+		vm.SEO.OG.Image = cards[0].HeroImageURL
+		vm.SEO.Twitter.Image = vm.SEO.OG.Image
+	}
+
+	personaOptions := buildPersonaOptions(r, lang, allGuides, personaParam)
+	topicOptions := buildTopicOptions(r, lang, allGuides, topicParam)
+	activeFilters, clearAllURL := buildActiveGuideFilters(r, lang, personaParam, topicParam, searchParam)
+
+	listVM := GuidesListViewModel{
+		Items:          cards,
+		PersonaOptions: personaOptions,
+		TopicOptions:   topicOptions,
+		ActivePersona:  personaParam,
+		ActiveTopic:    topicParam,
+		Search:         searchParam,
+		Total:          len(filtered),
+		ActiveFilters:  activeFilters,
+		ClearAllURL:    clearAllURL,
+		SubscribeCopy:  i18nOrDefault(lang, "guides.subscribe.copy", "Stay updated with new guides each month."),
+		SubscribeCTA:   i18nOrDefault(lang, "guides.subscribe.cta", "Subscribe"),
+		SubscribeURL:   "/newsletter",
+		Empty:          len(filtered) == 0,
+	}
+	vm.Guides = listVM
+
+	if len(cards) > 0 {
+		vm.SEO.JSONLD = append(vm.SEO.JSONLD, seo.JSON(buildGuidesItemList(siteBaseURL(r), cards)))
+	}
+
 	renderPage(w, r, "guides", vm)
+}
+
+func GuideDetailHandler(w http.ResponseWriter, r *http.Request) {
+	lang := mw.Lang(r)
+	slug := strings.TrimSpace(chi.URLParam(r, "slug"))
+	if slug == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	guide, err := cmsClient.GetGuide(ctx, slug, lang)
+	if err != nil {
+		if errors.Is(err, cms.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		log.Printf("guides: detail: %v", err)
+		http.Error(w, "guides unavailable", http.StatusBadGateway)
+		return
+	}
+
+	vm := handlersPkg.PageData{Title: guide.Title, Lang: lang}
+	vm.Path = r.URL.Path
+	vm.Nav = nav.Build(vm.Path)
+	vm.Breadcrumbs = nav.Breadcrumbs(vm.Path)
+	vm.Analytics = handlersPkg.LoadAnalyticsFromEnv()
+	vm.SEO.Canonical = absoluteURL(r)
+	vm.SEO.Alternates = buildAlternates(r)
+	vm.SEO.OG.URL = vm.SEO.Canonical
+
+	brand := i18nOrDefault(lang, "brand.name", "Hanko Field")
+	title := guide.SEO.MetaTitle
+	if title == "" {
+		title = fmt.Sprintf("%s | %s", guide.Title, brand)
+	}
+	description := guide.SEO.MetaDescription
+	if description == "" {
+		if guide.Summary != "" {
+			description = guide.Summary
+		} else {
+			description = i18nOrDefault(lang, "guides.detail.description_fallback", "In-depth guide from Hanko Field.")
+		}
+	}
+
+	vm.SEO.Title = title
+	vm.SEO.Description = description
+	vm.SEO.OG.SiteName = brand
+	vm.SEO.OG.Type = "article"
+	vm.SEO.OG.Title = title
+	vm.SEO.OG.Description = description
+	vm.SEO.Twitter.Card = "summary_large_image"
+
+	hero := guideHeroURL(guide.Title, guide.HeroImageURL)
+	if guide.SEO.OGImage != "" {
+		vm.SEO.OG.Image = guide.SEO.OGImage
+	} else {
+		vm.SEO.OG.Image = hero
+	}
+	vm.SEO.Twitter.Image = vm.SEO.OG.Image
+
+	bodyHTML, toc := renderGuideBody(guide.Body)
+	detailVM := GuideDetailViewModel{
+		Title:         guide.Title,
+		Summary:       guide.Summary,
+		Body:          template.HTML(bodyHTML),
+		HeroImageURL:  hero,
+		CategoryLabel: guideCategoryLabel(lang, guide.Category),
+		Tags:          append([]string(nil), guide.Tags...),
+		TOC:           toc,
+		ShareLinks:    buildGuideShareLinks(lang, vm.SEO.Canonical, guide.Title),
+		Sources:       append([]string(nil), guide.Sources...),
+		Author:        guide.Author,
+	}
+	if len(guide.Personas) > 0 {
+		labels := make([]string, 0, len(guide.Personas))
+		for _, p := range guide.Personas {
+			labels = append(labels, guidePersonaLabel(lang, p))
+		}
+		detailVM.Personas = labels
+	}
+	if !guide.PublishAt.IsZero() {
+		detailVM.PublishDate = format.FmtDate(guide.PublishAt, lang)
+	}
+	detailVM.PublishISO = isoOr(guide.PublishAt, guide.UpdatedAt)
+	detailVM.ReadTime = guideReadingTimeLabel(lang, guide.ReadingTimeMinutes)
+	detailVM.DownloadURL = firstPDF(detailVM.Sources)
+
+	relatedPool, err := cmsClient.ListGuides(ctx, cms.ListGuidesOptions{Lang: lang})
+	if err != nil {
+		log.Printf("guides: related list: %v", err)
+	}
+	if len(relatedPool) > 0 {
+		detailVM.Related = buildRelatedGuides(guide, relatedPool, lang)
+	}
+
+	vm.Guide = detailVM
+
+	articleSchema := seo.Article(guide.Title, vm.SEO.Canonical, vm.SEO.OG.Image, guide.Author.Name, detailVM.PublishISO)
+	vm.SEO.JSONLD = append(vm.SEO.JSONLD, seo.JSON(articleSchema))
+	breadcrumbs := []seo.BreadcrumbItem{
+		{Name: i18nOrDefault(lang, "nav.home", "Home"), Item: siteBaseURL(r)},
+		{Name: i18nOrDefault(lang, "guides.title", "Guides"), Item: siteBaseURL(r) + "/guides"},
+		{Name: guide.Title, Item: vm.SEO.Canonical},
+	}
+	vm.SEO.JSONLD = append(vm.SEO.JSONLD, seo.JSON(seo.BreadcrumbList(breadcrumbs)))
+
+	renderPage(w, r, "guide_detail", vm)
+}
+
+func filterGuidesForView(all []cms.Guide, persona, category, search string) []cms.Guide {
+	persona = strings.ToLower(strings.TrimSpace(persona))
+	category = strings.ToLower(strings.TrimSpace(category))
+	search = strings.ToLower(strings.TrimSpace(search))
+	if persona == "" && category == "" && search == "" {
+		out := make([]cms.Guide, len(all))
+		copy(out, all)
+		return out
+	}
+	out := make([]cms.Guide, 0, len(all))
+	for _, g := range all {
+		if category != "" && strings.ToLower(g.Category) != category {
+			continue
+		}
+		if persona != "" && !containsFold(g.Personas, persona) {
+			continue
+		}
+		if search != "" {
+			hay := strings.ToLower(g.Title + " " + g.Summary + " " + strings.Join(g.Tags, " "))
+			if !strings.Contains(hay, search) {
+				continue
+			}
+		}
+		out = append(out, g)
+	}
+	return out
+}
+
+func guideCardFromGuide(g cms.Guide, lang string) GuideCard {
+	card := GuideCard{
+		Slug:          g.Slug,
+		Title:         g.Title,
+		Summary:       g.Summary,
+		Href:          "/guides/" + g.Slug,
+		CategoryLabel: guideCategoryLabel(lang, g.Category),
+		HeroImageURL:  guideHeroURL(g.Title, g.HeroImageURL),
+		ReadTime:      guideReadingTimeLabel(lang, g.ReadingTimeMinutes),
+		Tags:          append([]string(nil), g.Tags...),
+	}
+	if !g.PublishAt.IsZero() {
+		card.PublishDate = format.FmtDate(g.PublishAt, lang)
+		card.PublishISO = g.PublishAt.Format(time.RFC3339)
+	} else if !g.UpdatedAt.IsZero() {
+		card.PublishISO = g.UpdatedAt.Format(time.RFC3339)
+	}
+	return card
+}
+
+func guideHeroURL(title, existing string) string {
+	if strings.TrimSpace(existing) != "" {
+		return existing
+	}
+	text := strings.TrimSpace(title)
+	if text == "" {
+		text = "Guide"
+	}
+	return "https://placehold.co/960x600?text=" + url.QueryEscape(text)
+}
+
+func guideCategoryLabel(lang, category string) string {
+	key := strings.ToLower(strings.TrimSpace(category))
+	if key == "" {
+		key = "other"
+	}
+	return i18nOrDefault(lang, "guides.category."+key, guideFallbackLabel(key))
+}
+
+func guidePersonaLabel(lang, persona string) string {
+	key := strings.ToLower(strings.TrimSpace(persona))
+	if key == "" {
+		return i18nOrDefault(lang, "guides.persona.maker", "Maker")
+	}
+	return i18nOrDefault(lang, "guides.persona."+key, guideFallbackLabel(key))
+}
+
+func guideFallbackLabel(value string) string {
+	value = strings.ReplaceAll(value, "-", " ")
+	value = strings.ReplaceAll(value, "_", " ")
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	parts := strings.Fields(value)
+	for i, part := range parts {
+		parts[i] = titleCaseASCII(part)
+	}
+	return strings.Join(parts, " ")
+}
+
+func guideReadingTimeLabel(lang string, minutes int) string {
+	if minutes <= 0 {
+		return ""
+	}
+	pattern := i18nOrDefault(lang, "guides.reading_time", "%d min read")
+	return fmt.Sprintf(pattern, minutes)
+}
+
+func buildPersonaOptions(r *http.Request, lang string, guides []cms.Guide, current string) []GuideFilterOption {
+	counts := map[string]int{}
+	for _, g := range guides {
+		for _, p := range g.Personas {
+			key := strings.ToLower(strings.TrimSpace(p))
+			if key != "" {
+				counts[key]++
+			}
+		}
+	}
+	options := make([]GuideFilterOption, 0, len(counts)+1)
+	labelAll := i18nOrDefault(lang, "guides.filters.persona_all", i18nOrDefault(lang, "filter.all", "All"))
+	options = append(options, GuideFilterOption{
+		Value:    "",
+		Label:    labelAll,
+		Href:     buildGuideFilterURL(r, lang, map[string]string{"persona": ""}, []string{"page"}),
+		Selected: current == "",
+		Count:    len(guides),
+	})
+	seen := map[string]bool{}
+	for _, key := range guidePersonaOrder {
+		if count := counts[key]; count > 0 {
+			options = append(options, GuideFilterOption{
+				Value:    key,
+				Label:    guidePersonaLabel(lang, key),
+				Href:     buildGuideFilterURL(r, lang, map[string]string{"persona": key}, []string{"page"}),
+				Selected: current == key,
+				Count:    count,
+			})
+			seen[key] = true
+		}
+	}
+	extra := make([]string, 0)
+	for key := range counts {
+		if !seen[key] {
+			extra = append(extra, key)
+		}
+	}
+	sort.Strings(extra)
+	for _, key := range extra {
+		options = append(options, GuideFilterOption{
+			Value:    key,
+			Label:    guidePersonaLabel(lang, key),
+			Href:     buildGuideFilterURL(r, lang, map[string]string{"persona": key}, []string{"page"}),
+			Selected: current == key,
+			Count:    counts[key],
+		})
+	}
+	return options
+}
+
+func buildTopicOptions(r *http.Request, lang string, guides []cms.Guide, current string) []GuideFilterOption {
+	counts := map[string]int{}
+	for _, g := range guides {
+		key := strings.ToLower(strings.TrimSpace(g.Category))
+		if key != "" {
+			counts[key]++
+		}
+	}
+	options := make([]GuideFilterOption, 0, len(counts)+1)
+	labelAll := i18nOrDefault(lang, "guides.filters.topic_all", i18nOrDefault(lang, "filter.all", "All"))
+	options = append(options, GuideFilterOption{
+		Value:    "",
+		Label:    labelAll,
+		Href:     buildGuideFilterURL(r, lang, map[string]string{"topic": "", "category": ""}, []string{"page"}),
+		Selected: current == "",
+		Count:    len(guides),
+	})
+	seen := map[string]bool{}
+	for _, key := range guideCategoryOrder {
+		if count := counts[key]; count > 0 {
+			options = append(options, GuideFilterOption{
+				Value:    key,
+				Label:    guideCategoryLabel(lang, key),
+				Href:     buildGuideFilterURL(r, lang, map[string]string{"topic": key, "category": key}, []string{"page"}),
+				Selected: current == key,
+				Count:    count,
+			})
+			seen[key] = true
+		}
+	}
+	extra := make([]string, 0)
+	for key := range counts {
+		if !seen[key] {
+			extra = append(extra, key)
+		}
+	}
+	sort.Strings(extra)
+	for _, key := range extra {
+		options = append(options, GuideFilterOption{
+			Value:    key,
+			Label:    guideCategoryLabel(lang, key),
+			Href:     buildGuideFilterURL(r, lang, map[string]string{"topic": key, "category": key}, []string{"page"}),
+			Selected: current == key,
+			Count:    counts[key],
+		})
+	}
+	return options
+}
+
+func buildActiveGuideFilters(r *http.Request, lang, persona, topic, search string) ([]GuideActiveFilter, string) {
+	filters := make([]GuideActiveFilter, 0, 3)
+	if persona != "" {
+		label := fmt.Sprintf("%s: %s", i18nOrDefault(lang, "guides.filters.persona_label", "Persona"), guidePersonaLabel(lang, persona))
+		href := buildGuideFilterURL(r, lang, map[string]string{"persona": ""}, []string{"page"})
+		filters = append(filters, GuideActiveFilter{Label: label, Href: href})
+	}
+	if topic != "" {
+		label := fmt.Sprintf("%s: %s", i18nOrDefault(lang, "guides.filters.topic_label", "Topic"), guideCategoryLabel(lang, topic))
+		href := buildGuideFilterURL(r, lang, map[string]string{"topic": "", "category": ""}, []string{"page"})
+		filters = append(filters, GuideActiveFilter{Label: label, Href: href})
+	}
+	if strings.TrimSpace(search) != "" {
+		label := fmt.Sprintf("%s: %s", i18nOrDefault(lang, "guides.filters.search_label", "Search"), search)
+		href := buildGuideFilterURL(r, lang, map[string]string{"q": ""}, []string{"page"})
+		filters = append(filters, GuideActiveFilter{Label: label, Href: href})
+	}
+	clear := buildGuideFilterURL(r, lang, map[string]string{
+		"persona":  "",
+		"topic":    "",
+		"category": "",
+		"q":        "",
+	}, []string{"page"})
+	return filters, clear
+}
+
+func buildGuideFilterURL(r *http.Request, lang string, updates map[string]string, clears []string) string {
+	q := url.Values{}
+	for key, vals := range r.URL.Query() {
+		for _, v := range vals {
+			q.Add(key, v)
+		}
+	}
+	for _, key := range clears {
+		q.Del(key)
+	}
+	for key, value := range updates {
+		if strings.TrimSpace(value) == "" {
+			q.Del(key)
+		} else {
+			q.Set(key, value)
+		}
+	}
+	if lang != "" {
+		q.Set("hl", lang)
+	}
+	encoded := q.Encode()
+	if encoded == "" {
+		return r.URL.Path
+	}
+	return r.URL.Path + "?" + encoded
+}
+
+func buildGuidesItemList(base string, cards []GuideCard) map[string]any {
+	items := make([]map[string]any, 0, len(cards))
+	for i, card := range cards {
+		items = append(items, map[string]any{
+			"@type":    "ListItem",
+			"position": i + 1,
+			"name":     card.Title,
+			"url":      base + card.Href,
+		})
+	}
+	return map[string]any{
+		"@context":        "https://schema.org",
+		"@type":           "ItemList",
+		"itemListElement": items,
+	}
+}
+
+func buildGuideShareLinks(lang, canonical, title string) []GuideShareLink {
+	canonical = strings.TrimSpace(canonical)
+	if canonical == "" {
+		return nil
+	}
+	encodedURL := url.QueryEscape(canonical)
+	encodedTitle := url.QueryEscape(title)
+	return []GuideShareLink{
+		{
+			Icon:  "x",
+			Label: i18nOrDefault(lang, "guides.share.x", "Share on X"),
+			Href:  fmt.Sprintf("https://twitter.com/share?url=%s&text=%s", encodedURL, encodedTitle),
+		},
+		{
+			Icon:  "facebook",
+			Label: i18nOrDefault(lang, "guides.share.facebook", "Share on Facebook"),
+			Href:  fmt.Sprintf("https://www.facebook.com/sharer/sharer.php?u=%s", encodedURL),
+		},
+		{
+			Icon:  "line",
+			Label: i18nOrDefault(lang, "guides.share.line", "Share on LINE"),
+			Href:  fmt.Sprintf("https://social-plugins.line.me/lineit/share?url=%s", encodedURL),
+		},
+	}
+}
+
+func buildRelatedGuides(current cms.Guide, pool []cms.Guide, lang string) []GuideCard {
+	if len(pool) == 0 {
+		return nil
+	}
+	related := make([]cms.Guide, 0, 3)
+	for _, g := range pool {
+		if g.Slug == current.Slug {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(g.Category), strings.TrimSpace(current.Category)) {
+			related = append(related, g)
+		}
+		if len(related) == 3 {
+			break
+		}
+	}
+	if len(related) < 3 {
+		for _, g := range pool {
+			if g.Slug == current.Slug || containsGuideSlug(related, g.Slug) {
+				continue
+			}
+			related = append(related, g)
+			if len(related) == 3 {
+				break
+			}
+		}
+	}
+	cards := make([]GuideCard, 0, len(related))
+	for _, g := range related {
+		cards = append(cards, guideCardFromGuide(g, lang))
+	}
+	return cards
+}
+
+func containsGuideSlug(list []cms.Guide, slug string) bool {
+	for _, g := range list {
+		if g.Slug == slug {
+			return true
+		}
+	}
+	return false
+}
+
+func renderGuideBody(body string) (string, []GuideTOCEntry) {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return "", nil
+	}
+	sanitized := guideHTMLPolicy.Sanitize(body)
+	nodes, err := html.ParseFragment(strings.NewReader(sanitized), nil)
+	if err != nil {
+		return sanitized, nil
+	}
+	headings := make([]GuideTOCEntry, 0, 8)
+	seen := map[string]struct{}{}
+	for _, node := range nodes {
+		collectGuideHeadings(node, &headings, seen)
+	}
+	var buf bytes.Buffer
+	for _, node := range nodes {
+		if err := html.Render(&buf, node); err != nil {
+			continue
+		}
+	}
+	return buf.String(), headings
+}
+
+func collectGuideHeadings(n *html.Node, headings *[]GuideTOCEntry, seen map[string]struct{}) {
+	if n.Type == html.ElementNode && (n.Data == "h2" || n.Data == "h3" || n.Data == "h4") {
+		text := strings.TrimSpace(nodeText(n))
+		if text != "" {
+			id := extractHeadingID(n, text, len(*headings), seen)
+			level := headingLevel(n.Data)
+			*headings = append(*headings, GuideTOCEntry{ID: id, Text: text, Level: level})
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		collectGuideHeadings(c, headings, seen)
+	}
+}
+
+func extractHeadingID(n *html.Node, text string, index int, seen map[string]struct{}) string {
+	id := ""
+	for i := range n.Attr {
+		if n.Attr[i].Key == "id" {
+			id = strings.TrimSpace(n.Attr[i].Val)
+			break
+		}
+	}
+	if id == "" {
+		id = headingIDFromText(text, index)
+	}
+	original := id
+	if original == "" {
+		original = fmt.Sprintf("section-%d", index+1)
+	}
+	counter := 1
+	for {
+		if id != "" {
+			if _, exists := seen[id]; !exists {
+				break
+			}
+		}
+		counter++
+		id = fmt.Sprintf("%s-%d", original, counter)
+		if _, exists := seen[id]; !exists {
+			break
+		}
+	}
+	seen[id] = struct{}{}
+	updated := false
+	for i := range n.Attr {
+		if n.Attr[i].Key == "id" {
+			n.Attr[i].Val = id
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		n.Attr = append(n.Attr, html.Attribute{Key: "id", Val: id})
+	}
+	return id
+}
+
+func headingIDFromText(text string, index int) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return fmt.Sprintf("section-%d", index+1)
+	}
+	var b strings.Builder
+	var lastHyphen bool
+	lower := strings.ToLower(text)
+	for _, r := range lower {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+			lastHyphen = false
+		case r == ' ' || r == '-' || r == '_' || r == '\t' || r == '\n' || r == '\r':
+			if !lastHyphen && b.Len() > 0 {
+				b.WriteRune('-')
+				lastHyphen = true
+			}
+		default:
+			if unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana) {
+				b.WriteRune(r)
+				lastHyphen = false
+			}
+		}
+	}
+	id := strings.Trim(b.String(), "-")
+	if id == "" {
+		id = fmt.Sprintf("section-%d", index+1)
+	}
+	return id
+}
+
+func headingLevel(tag string) int {
+	switch tag {
+	case "h2":
+		return 2
+	case "h3":
+		return 3
+	case "h4":
+		return 4
+	default:
+		return 0
+	}
+}
+
+func nodeText(n *html.Node) string {
+	if n == nil {
+		return ""
+	}
+	if n.Type == html.TextNode {
+		return n.Data
+	}
+	var sb strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		sb.WriteString(nodeText(c))
+	}
+	return sb.String()
+}
+
+func containsFold(list []string, needle string) bool {
+	needle = strings.ToLower(strings.TrimSpace(needle))
+	if needle == "" {
+		return false
+	}
+	for _, v := range list {
+		if strings.ToLower(strings.TrimSpace(v)) == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func firstPDF(sources []string) string {
+	for _, src := range sources {
+		s := strings.TrimSpace(src)
+		if strings.HasSuffix(strings.ToLower(s), ".pdf") {
+			return s
+		}
+	}
+	if len(sources) > 0 {
+		return sources[0]
+	}
+	return ""
+}
+
+func isoOr(primary, secondary time.Time) string {
+	if !primary.IsZero() {
+		return primary.Format(time.RFC3339)
+	}
+	if !secondary.IsZero() {
+		return secondary.Format(time.RFC3339)
+	}
+	return ""
 }
 
 func AccountHandler(w http.ResponseWriter, r *http.Request) {
@@ -1852,6 +2564,79 @@ type FilterOption struct {
 	Label    string
 	Count    int
 	Selected bool
+}
+
+type GuideCard struct {
+	Slug          string
+	Title         string
+	Summary       string
+	Href          string
+	CategoryLabel string
+	HeroImageURL  string
+	ReadTime      string
+	PublishDate   string
+	PublishISO    string
+	Tags          []string
+}
+
+type GuideFilterOption struct {
+	Value    string
+	Label    string
+	Href     string
+	Selected bool
+	Count    int
+}
+
+type GuideActiveFilter struct {
+	Label string
+	Href  string
+}
+
+type GuidesListViewModel struct {
+	Items          []GuideCard
+	PersonaOptions []GuideFilterOption
+	TopicOptions   []GuideFilterOption
+	ActivePersona  string
+	ActiveTopic    string
+	Search         string
+	Total          int
+	ActiveFilters  []GuideActiveFilter
+	ClearAllURL    string
+	SubscribeCopy  string
+	SubscribeCTA   string
+	SubscribeURL   string
+	Empty          bool
+}
+
+type GuideShareLink struct {
+	Icon  string
+	Label string
+	Href  string
+}
+
+type GuideTOCEntry struct {
+	ID    string
+	Text  string
+	Level int
+}
+
+type GuideDetailViewModel struct {
+	Title         string
+	Summary       string
+	Body          template.HTML
+	HeroImageURL  string
+	PublishDate   string
+	PublishISO    string
+	ReadTime      string
+	CategoryLabel string
+	Tags          []string
+	Personas      []string
+	TOC           []GuideTOCEntry
+	ShareLinks    []GuideShareLink
+	Related       []GuideCard
+	Sources       []string
+	DownloadURL   string
+	Author        cms.Author
 }
 
 var (
@@ -2687,25 +3472,24 @@ func CompareSKUTableFrag(w http.ResponseWriter, r *http.Request) {
 // LatestGuidesFrag renders a small set of localized guide cards.
 func LatestGuidesFrag(w http.ResponseWriter, r *http.Request) {
 	lang := mw.Lang(r)
-	type Guide struct{ Title, URL, Excerpt, Date string }
-	// Seed localized guide list
-	var guides []Guide
-	if lang == "ja" {
-		guides = []Guide{
-			{Title: "はんこ素材の選び方", URL: "/guides/materials", Excerpt: "用途別に最適な素材を解説します。", Date: "2025-01-10"},
-			{Title: "印影デザインの基本", URL: "/guides/design-basics", Excerpt: "読みやすさと個性のバランスを学びます。", Date: "2025-01-05"},
-			{Title: "サイズ比較ガイド", URL: "/guides/size-guide", Excerpt: "丸・角・楕円のサイズ感を比較。", Date: "2024-12-20"},
-		}
-	} else {
-		guides = []Guide{
-			{Title: "How to Choose Materials", URL: "/guides/materials", Excerpt: "Pick the right material for your use.", Date: "2025-01-10"},
-			{Title: "Seal Design Basics", URL: "/guides/design-basics", Excerpt: "Balance legibility with personality.", Date: "2025-01-05"},
-			{Title: "Size Comparison Guide", URL: "/guides/size-guide", Excerpt: "Compare round, square, and rectangular.", Date: "2024-12-20"},
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	guides, err := cmsClient.ListGuides(ctx, cms.ListGuidesOptions{Lang: lang, Limit: 3})
+	if err != nil {
+		log.Printf("guides: latest: %v", err)
+	}
+	cards := make([]GuideCard, 0, len(guides))
+	hashParts := []string{lang}
+	for _, g := range guides {
+		cards = append(cards, guideCardFromGuide(g, lang))
+		hashParts = append(hashParts, g.Slug)
+		if !g.PublishAt.IsZero() {
+			hashParts = append(hashParts, g.PublishAt.Format(time.RFC3339))
 		}
 	}
 
-	// Simple 2-minute cache
-	etag := etagFor("guides:", lang)
+	etag := etagFor("guides:", hashParts...)
 	if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -2713,7 +3497,10 @@ func LatestGuidesFrag(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=120")
 	w.Header().Set("ETag", etag)
 
-	props := map[string]any{"Guides": guides}
+	props := map[string]any{
+		"Guides": cards,
+		"Lang":   lang,
+	}
 	renderTemplate(w, r, "frag_guides_latest", props)
 }
 

@@ -1,12 +1,26 @@
 {{ define "frag_guides_latest" }}
 <div id="guides-latest-frag">
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    {{ range .Guides }}
-      <a href="{{ .URL }}" class="block">
-        {{ template "c_card" (dict "Variant" "outlined" "Title" .Title "Description" .Excerpt) }}
-      </a>
-    {{ end }}
-  </div>
+  {{ if .Guides }}
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+      {{ range .Guides }}
+        <a href="{{ .Href }}" class="block overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-indigo-400 hover:shadow">
+          <div class="h-32 bg-gray-100">
+            <img src="{{ .HeroImageURL }}" alt="{{ .Title }}" class="h-32 w-full object-cover">
+          </div>
+          <div class="space-y-2 p-3">
+            <div class="flex items-center justify-between text-[11px] uppercase tracking-wide text-gray-500">
+              <span class="font-semibold text-indigo-600">{{ .CategoryLabel }}</span>
+              {{ if .PublishDate }}<time datetime="{{ .PublishISO }}">{{ .PublishDate }}</time>{{ end }}
+            </div>
+            <h3 class="text-base font-semibold text-gray-900 leading-snug">{{ .Title }}</h3>
+            <p class="text-sm text-gray-600">{{ .Summary }}</p>
+            {{ if .ReadTime }}<p class="text-xs text-gray-500">{{ .ReadTime }}</p>{{ end }}
+          </div>
+        </a>
+      {{ end }}
+    </div>
+  {{ else }}
+    <div class="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">{{ tlang $.Lang "guides.empty" }}</div>
+  {{ end }}
 </div>
 {{ end }}
-

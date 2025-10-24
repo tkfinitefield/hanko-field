@@ -20,4 +20,6 @@ type PageData struct {
 	Product   any
 	Templates any
 	Template  any
+	Guides    any
+	Guide     any
 }
