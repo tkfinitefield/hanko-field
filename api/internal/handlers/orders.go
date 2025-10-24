@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -94,6 +95,7 @@ func (h *OrderHandlers) Routes(r chi.Router) {
 		r.Use(h.authn.RequireFirebaseAuth())
 	}
 	r.Get("/", h.listOrders)
+	r.Get("/{orderID}/payments", h.listOrderPayments)
 	r.Get("/{orderID}", h.getOrder)
 	r.Post("/{orderID}:request-invoice", h.requestInvoice)
 	r.Post("/{orderID}:cancel", h.cancelOrder)
@@ -220,6 +222,44 @@ func (h *OrderHandlers) getOrder(w http.ResponseWriter, r *http.Request) {
 		Order: buildOrderPayload(order),
 	}
 	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+func (h *OrderHandlers) listOrderPayments(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.orders == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("order_service_unavailable", "order service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "order id is required", http.StatusBadRequest))
+		return
+	}
+
+	order, err := h.orders.GetOrder(ctx, orderID, services.OrderReadOptions{
+		IncludePayments: true,
+	})
+	if err != nil {
+		writeOrderError(ctx, w, err)
+		return
+	}
+
+	if !strings.EqualFold(strings.TrimSpace(order.UserID), strings.TrimSpace(identity.UID)) {
+		httpx.WriteError(ctx, w, httpx.NewError("order_not_found", "order not found", http.StatusNotFound))
+		return
+	}
+
+	response := orderPaymentHistoryResponse{
+		Payments: buildOrderPaymentHistory(order.Payments),
+	}
+	writeJSONResponse(w, http.StatusOK, response)
 }
 
 func (h *OrderHandlers) requestInvoice(w http.ResponseWriter, r *http.Request) {
@@ -555,6 +595,20 @@ type orderPaymentPayload struct {
 	UpdatedAt  string `json:"updated_at,omitempty"`
 }
 
+type orderPaymentHistoryResponse struct {
+	Payments []orderPaymentHistoryEntry `json:"payments"`
+}
+
+type orderPaymentHistoryEntry struct {
+	Provider       string `json:"provider"`
+	TransactionID  string `json:"transaction_id"`
+	Amount         int64  `json:"amount"`
+	Currency       string `json:"currency"`
+	Status         string `json:"status"`
+	CapturedAt     string `json:"captured_at,omitempty"`
+	RefundedAmount int64  `json:"refunded_amount"`
+}
+
 type orderShipmentPayload struct {
 	ID           string                   `json:"id"`
 	Carrier      string                   `json:"carrier"`
@@ -726,6 +780,39 @@ func buildOrderPaymentPayloads(payments []services.Payment) []orderPaymentPayloa
 	return result
 }
 
+func buildOrderPaymentHistory(payments []services.Payment) []orderPaymentHistoryEntry {
+	if len(payments) == 0 {
+		return []orderPaymentHistoryEntry{}
+	}
+
+	sorted := append([]services.Payment(nil), payments...)
+	slices.SortFunc(sorted, func(a, b services.Payment) int {
+		switch {
+		case a.CreatedAt.Before(b.CreatedAt):
+			return -1
+		case a.CreatedAt.After(b.CreatedAt):
+			return 1
+		default:
+			return strings.Compare(strings.TrimSpace(a.ID), strings.TrimSpace(b.ID))
+		}
+	})
+
+	result := make([]orderPaymentHistoryEntry, 0, len(sorted))
+	for _, payment := range sorted {
+		entry := orderPaymentHistoryEntry{
+			Provider:       strings.TrimSpace(payment.Provider),
+			TransactionID:  strings.TrimSpace(payment.IntentID),
+			Amount:         payment.Amount,
+			Currency:       strings.ToUpper(strings.TrimSpace(payment.Currency)),
+			Status:         strings.TrimSpace(payment.Status),
+			CapturedAt:     formatTime(pointerTime(payment.CapturedAt)),
+			RefundedAmount: extractRefundedAmount(payment),
+		}
+		result = append(result, entry)
+	}
+	return result
+}
+
 func buildOrderShipmentPayloads(shipments []services.Shipment) []orderShipmentPayload {
 	if len(shipments) == 0 {
 		return nil
@@ -754,6 +841,71 @@ func buildOrderShipmentPayloads(shipments []services.Shipment) []orderShipmentPa
 		result = append(result, payload)
 	}
 	return result
+}
+
+func extractRefundedAmount(payment services.Payment) int64 {
+	if len(payment.Raw) == 0 {
+		return 0
+	}
+
+	if amount := intFromAny(payment.Raw["refundedAmount"]); amount > 0 {
+		return amount
+	}
+	if amount := intFromAny(payment.Raw["refunded_amount"]); amount > 0 {
+		return amount
+	}
+
+	if latest, ok := payment.Raw["latest_charge"].(map[string]any); ok {
+		if amount := intFromAny(latest["amount_refunded"]); amount > 0 {
+			return amount
+		}
+	}
+
+	if charges, ok := payment.Raw["charges"].(map[string]any); ok {
+		if amount := intFromAny(charges["amount_refunded"]); amount > 0 {
+			return amount
+		}
+		if data, ok := charges["data"].([]any); ok {
+			for _, entry := range data {
+				charge, ok := entry.(map[string]any)
+				if !ok {
+					continue
+				}
+				if amount := intFromAny(charge["amount_refunded"]); amount > 0 {
+					return amount
+				}
+			}
+		}
+	}
+
+	return 0
+}
+
+func intFromAny(value any) int64 {
+	switch v := value.(type) {
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case float64:
+		return int64(v)
+	case json.Number:
+		if i, err := v.Int64(); err == nil {
+			return i
+		}
+		if f, err := v.Float64(); err == nil {
+			return int64(f)
+		}
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			return 0
+		}
+		if i, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
+			return i
+		}
+	}
+	return 0
 }
 
 func extractInvoiceRequestedAt(metadata map[string]any) string {

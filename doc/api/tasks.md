@@ -79,7 +79,7 @@
 - [x] [057 Implement order list/detail endpoints with pagination and user scoping.](./tasks/057-implement-order-list-detail-endpoints-with-pagination-and-user-scoping.md)
 - [x] [058 Implement order cancel endpoint enforcing status rules and triggering stock release.](./tasks/058-implement-order-cancel-endpoint-enforcing-status-rules-and-triggering-stock-rele.md)
 - [x] [059 Implement order invoice request endpoint producing task to generate PDF.](./tasks/059-implement-order-invoice-request-endpoint-producing-task-to-generate-pdf.md)
-- [ ] [060 Implement order payment history retrieval.](./tasks/060-implement-order-payment-history-retrieval.md)
+- [x] [060 Implement order payment history retrieval.](./tasks/060-implement-order-payment-history-retrieval.md)
 - [ ] [061 Implement order shipment list/detail endpoints including tracking events.](./tasks/061-implement-order-shipment-list-detail-endpoints-including-tracking-events.md)
 - [ ] [062 Implement production events retrieval endpoint exposing timeline.](./tasks/062-implement-production-events-retrieval-endpoint-exposing-timeline.md)
 - [ ] [063 Implement reorder endpoint cloning design snapshot and cart lines to new order draft.](./tasks/063-implement-reorder-endpoint-cloning-design-snapshot-and-cart-lines-to-new-order-d.md)

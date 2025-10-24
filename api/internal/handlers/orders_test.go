@@ -546,6 +546,161 @@ func TestOrderHandlersGetOrderServiceUnavailable(t *testing.T) {
 	}
 }
 
+func TestOrderHandlersListOrderPaymentsSuccess(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC)
+	earlier := now.Add(-30 * time.Minute)
+	capturedAt := now.Add(-15 * time.Minute)
+
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			if orderID != "ord_123" {
+				t.Fatalf("unexpected order id %s", orderID)
+			}
+			if !opts.IncludePayments {
+				t.Fatalf("expected IncludePayments true")
+			}
+			if opts.IncludeShipments || opts.IncludeProductionEvents {
+				t.Fatalf("expected only payments to be requested")
+			}
+			return services.Order{
+				ID:     "ord_123",
+				UserID: "user-1",
+				Payments: []services.Payment{
+					{
+						ID:         "pay_b",
+						OrderID:    "ord_123",
+						Provider:   "stripe",
+						IntentID:   "pi_b",
+						Status:     "refunded",
+						Amount:     4500,
+						Currency:   "jpy",
+						Captured:   true,
+						CapturedAt: &capturedAt,
+						CreatedAt:  now,
+						Raw: map[string]any{
+							"latest_charge": map[string]any{
+								"amount_refunded": float64(800),
+							},
+						},
+					},
+					{
+						ID:        "pay_a",
+						OrderID:   "ord_123",
+						Provider:  "stripe",
+						IntentID:  "pi_a",
+						Status:    "succeeded",
+						Amount:    5000,
+						Currency:  "jpy",
+						Captured:  true,
+						CreatedAt: earlier,
+					},
+				},
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_123/payments", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-1"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var resp orderPaymentHistoryResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(resp.Payments) != 2 {
+		t.Fatalf("expected 2 payments, got %d", len(resp.Payments))
+	}
+
+	first := resp.Payments[0]
+	if first.TransactionID != "pi_a" {
+		t.Fatalf("expected first transaction pi_a, got %s", first.TransactionID)
+	}
+	if first.Currency != "JPY" {
+		t.Fatalf("expected uppercase currency, got %s", first.Currency)
+	}
+	if first.RefundedAmount != 0 {
+		t.Fatalf("expected zero refunded amount for first payment, got %d", first.RefundedAmount)
+	}
+
+	second := resp.Payments[1]
+	if second.TransactionID != "pi_b" {
+		t.Fatalf("expected second transaction pi_b, got %s", second.TransactionID)
+	}
+	if second.CapturedAt == "" {
+		t.Fatalf("expected captured_at value")
+	}
+	expectedCaptured := capturedAt.UTC().Format(time.RFC3339Nano)
+	if second.CapturedAt != expectedCaptured {
+		t.Fatalf("expected captured_at %s, got %s", expectedCaptured, second.CapturedAt)
+	}
+	if second.RefundedAmount != 800 {
+		t.Fatalf("expected refunded amount 800, got %d", second.RefundedAmount)
+	}
+
+	var generic map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &generic); err != nil {
+		t.Fatalf("failed to decode generic response: %v", err)
+	}
+
+	paymentsAny, ok := generic["payments"].([]any)
+	if !ok {
+		t.Fatalf("expected payments array in response")
+	}
+	if len(paymentsAny) != 2 {
+		t.Fatalf("expected 2 payment entries, got %d", len(paymentsAny))
+	}
+
+	entry, ok := paymentsAny[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected payment entry to be a map")
+	}
+	if _, exists := entry["raw"]; exists {
+		t.Fatalf("raw metadata should not be exposed")
+	}
+	if _, exists := entry["intent_id"]; exists {
+		t.Fatalf("internal identifiers should not be exposed")
+	}
+}
+
+func TestOrderHandlersListOrderPaymentsDifferentUser(t *testing.T) {
+	service := &stubOrderService{
+		getFn: func(ctx context.Context, orderID string, opts services.OrderReadOptions) (services.Order, error) {
+			return services.Order{
+				ID:       "ord_123",
+				UserID:   "user-1",
+				Payments: []services.Payment{},
+			}, nil
+		},
+	}
+
+	handler := NewOrderHandlers(nil, service)
+	router := chi.NewRouter()
+	router.Route("/orders", handler.Routes)
+
+	req := httptest.NewRequest(http.MethodGet, "/orders/ord_123/payments", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "user-2"}))
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rr.Code)
+	}
+}
+
 func TestOrderHandlersCancelSuccess(t *testing.T) {
 	now := time.Date(2024, 6, 10, 12, 0, 0, 0, time.UTC)
 	reason := "changed mind"
