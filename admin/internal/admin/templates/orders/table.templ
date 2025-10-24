@@ -50,7 +50,7 @@ templ Table(data TableData) {
 						<th scope="col" class="px-4 py-3 text-left text-slate-600">
 							@components.SortableHeader(components.SortHeaderProps{
 								Label:            "ステータス",
-								SortKey:          "number",
+								SortKey:          "status",
 								ActiveValue:      data.Sort.Active,
 								DefaultDirection: components.SortDirectionAsc,
 								BasePath:         data.BasePath,

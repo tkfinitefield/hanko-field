@@ -502,6 +502,14 @@ func sortOrders(orders []Order, query Query) {
 			} else {
 				less = a.TotalMinor < b.TotalMinor
 			}
+		case "status":
+			ra := statusSortRank(a.Status)
+			rb := statusSortRank(b.Status)
+			if ra == rb {
+				less = strings.Compare(strings.ToLower(strings.TrimSpace(a.StatusLabel)), strings.ToLower(strings.TrimSpace(b.StatusLabel))) < 0
+			} else {
+				less = ra < rb
+			}
 		case "number":
 			less = a.Number < b.Number
 		default: // updated_at
@@ -576,16 +584,7 @@ func statusDistribution(orders []Order) []StatusCount {
 	for _, order := range orders {
 		counts[order.Status]++
 	}
-	allStatuses := []Status{
-		StatusPendingPayment,
-		StatusPaymentReview,
-		StatusInProduction,
-		StatusReadyToShip,
-		StatusShipped,
-		StatusDelivered,
-		StatusRefunded,
-		StatusCancelled,
-	}
+	allStatuses := orderedStatuses()
 
 	result := make([]StatusCount, 0, len(allStatuses))
 	for _, st := range allStatuses {
@@ -726,4 +725,26 @@ func defaultStatusTone(status Status) string {
 
 func int64Ptr(value int64) *int64 {
 	return &value
+}
+
+func orderedStatuses() []Status {
+	return []Status{
+		StatusPendingPayment,
+		StatusPaymentReview,
+		StatusInProduction,
+		StatusReadyToShip,
+		StatusShipped,
+		StatusDelivered,
+		StatusRefunded,
+		StatusCancelled,
+	}
+}
+
+func statusSortRank(status Status) int {
+	for idx, candidate := range orderedStatuses() {
+		if candidate == status {
+			return idx
+		}
+	}
+	return len(orderedStatuses())
 }

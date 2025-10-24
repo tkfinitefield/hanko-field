@@ -395,7 +395,7 @@ func parseSort(raw string) (string, adminorders.SortDirection, string) {
 	}
 
 	switch key {
-	case "total", "number", "updated_at":
+	case "total", "number", "updated_at", "status":
 		// OK
 	default:
 		key = "updated_at"
