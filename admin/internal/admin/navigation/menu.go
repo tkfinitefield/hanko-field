@@ -133,10 +133,10 @@ var defaultMenu = []Group{
 			},
 			{
 				Key:         "shipments",
-				Label:       "出荷追跡",
+				Label:       "出荷バッチ",
 				Icon:        "🚚",
 				Capability:  rbac.CapShipmentsMonitor,
-				Path:        "/shipments/tracking",
+				Path:        "/shipments/batches",
 				Pattern:     "/shipments",
 				MatchPrefix: true,
 			},

@@ -1,0 +1,406 @@
+package shipments
+
+import (
+	"fmt"
+
+	"finitefield.org/hanko-admin/internal/admin/templates/components"
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+	"finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
+
+templ Index(data PageData) {
+	@layouts.Base(data.Title, data.Breadcrumbs, pageBody(data))
+}
+
+templ pageBody(data PageData) {
+	<div class="space-y-6" data-shipments-root>
+		<section class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+			<div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+				<div class="space-y-2">
+					<h1 class="text-2xl font-semibold text-slate-900">{ data.Title }</h1>
+					<p class="text-sm text-slate-600">{ data.Description }</p>
+				</div>
+				<div class="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-2 xl:grid-cols-4">
+					for _, metric := range data.Metrics {
+						<div class="flex flex-col gap-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm">
+							<div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+								if metric.Icon != "" {
+									<span aria-hidden="true">{ metric.Icon }</span>
+								}
+								{ metric.Label }
+							</div>
+							<div class="text-xl font-semibold text-slate-900">{ metric.Value }</div>
+							if metric.SubText != "" {
+								<div class="text-xs text-slate-500">{ metric.SubText }</div>
+							}
+						</div>
+					}
+				</div>
+			</div>
+			<div class="mt-6 border-t border-slate-200 pt-4">
+				@filterToolbar(data)
+			</div>
+		</section>
+
+		<div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+			<section class="flex flex-col gap-4">
+				<div class="flex flex-wrap items-center justify-between gap-3">
+					<div class="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+						<span class="font-medium text-slate-500">バッチ操作:</span>
+						<form
+							hx-post={ joinBase(helpers.BasePath(ctx), "/shipments/batches") }
+							hx-target="#shipments-table"
+							hx-swap="none"
+							hx-indicator="#shipments-loading"
+						>
+							<button type="submit" class={ helpers.ButtonClass("primary", "sm", false, false) }>
+								新規バッチを作成
+							</button>
+						</form>
+						<form
+							hx-post={ joinBase(helpers.BasePath(ctx), "/shipments/batches/regenerate") }
+							hx-target="#shipments-table"
+							hx-swap="none"
+							hx-indicator="#shipments-loading"
+						>
+							<input type="hidden" name="batchID" value={ data.Query.Selected } data-shipments-selected />
+							<button type="submit" class={ helpers.ButtonClass("ghost", "sm", false, false) }>
+								選択バッチのラベル再生成
+							</button>
+						</form>
+					</div>
+					<div class="text-xs text-slate-400" id="shipments-loading">読み込み中…</div>
+				</div>
+				<div
+					id="shipments-table"
+					class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+					hx-target="this"
+					hx-swap="outerHTML"
+					data-shipments-table
+				>
+					@Table(data.Table)
+				</div>
+			</section>
+			<aside class="hidden xl:block">
+				<div class="sticky top-20 space-y-4">
+					<div
+						id="shipments-drawer"
+						hx-target="this"
+						hx-swap="outerHTML"
+					>
+						@DetailDrawer(data.Drawer)
+					</div>
+				</div>
+			</aside>
+		</div>
+	</div>
+}
+
+templ filterToolbar(data PageData) {
+	<form
+		class="flex flex-col gap-4"
+		method="get"
+		hx-get={ data.TableEndpoint }
+		hx-target="#shipments-table"
+		hx-push-url="true"
+		hx-indicator="#shipments-loading"
+	>
+		<input type="hidden" name="selected" value={ data.Query.Selected } />
+		<div class="flex flex-wrap items-start justify-between gap-4">
+			<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="バッチステータス">
+				<label class={ statusChipClass(data.Query.Status == "") }>
+					<input type="radio" name="status" value="" class="sr-only" checked?={ data.Query.Status == "" } />
+					<span class="inline-flex items-center gap-1 text-sm">すべて</span>
+				</label>
+				for _, option := range data.Filters.Statuses {
+					<label class={ statusChipTone(option.Tone, option.Active) }>
+						<input
+							type="radio"
+							name="status"
+							value={ option.Value }
+							class="sr-only"
+							checked?={ option.Active }
+						/>
+						<span class="inline-flex items-center gap-1 text-sm">
+							{ option.Label }
+							if option.Count > 0 {
+								<span class="text-xs text-slate-400">({ option.Count })</span>
+							}
+						</span>
+					</label>
+				}
+			</div>
+			<div class="flex items-center gap-3">
+				<button type="submit" class={ helpers.ButtonClass("primary", "sm", false, false) }>適用</button>
+				<a href={ joinBase(helpers.BasePath(ctx), "/shipments/batches") } class={ helpers.ButtonClass("secondary", "sm", false, false) }>リセット</a>
+			</div>
+		</div>
+		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			<div class="flex flex-col gap-2">
+				<label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="shipments-carrier">キャリア</label>
+				<select
+					id="shipments-carrier"
+					name="carrier"
+					class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				>
+					<option value="">すべて</option>
+					for _, option := range data.Filters.Carriers {
+						<option value={ option.Value } selected?={ option.Active }>
+							if option.Count > 0 {
+								{ option.Label } ({ option.Count })
+							} else {
+								{ option.Label }
+							}
+						</option>
+					}
+				</select>
+			</div>
+			<div class="flex flex-col gap-2">
+				<label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="shipments-facility">拠点</label>
+				<select
+					id="shipments-facility"
+					name="facility"
+					class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				>
+					<option value="">すべて</option>
+					for _, option := range data.Filters.Facilities {
+						<option value={ option.Value } selected?={ option.Active }>
+							if option.Count > 0 {
+								{ option.Label } ({ option.Count })
+							} else {
+								{ option.Label }
+							}
+						</option>
+					}
+				</select>
+			</div>
+			<div class="flex flex-col gap-2">
+				<label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="shipments-start">作成日(開始)</label>
+				<input
+					id="shipments-start"
+					name="start"
+					type="date"
+					value={ data.Query.Start }
+					class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				/>
+			</div>
+			<div class="flex flex-col gap-2">
+				<label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="shipments-end">作成日(終了)</label>
+				<input
+					id="shipments-end"
+					name="end"
+					type="date"
+					value={ data.Query.End }
+					class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				/>
+			</div>
+		</div>
+	</form>
+}
+
+templ DetailDrawer(data DrawerData) {
+	<section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-shipments-drawer>
+		if data.Empty {
+			<div class="space-y-2 text-sm text-slate-600">
+				<p class="text-base font-semibold text-slate-900">バッチを選択してください</p>
+				<p>左の一覧からバッチを選択すると、ここに進捗と履歴が表示されます。</p>
+			</div>
+			return
+		}
+
+		<div class="space-y-4">
+			<header class="space-y-2">
+				<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{ data.Reference }</p>
+				<div class="flex items-center justify-between gap-3">
+					<h2 class="text-xl font-semibold text-slate-900">{ data.Carrier } / { data.ServiceLevel }</h2>
+					<span class={ helpers.BadgeClass(data.StatusTone) }>{ data.StatusLabel }</span>
+				</div>
+				<div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+					<span>拠点: { data.Facility }</span>
+					<span aria-hidden="true">•</span>
+					<span>作成: { data.CreatedLabel }</span>
+					<span class="text-slate-400">({ data.CreatedRelative })</span>
+				</div>
+			</header>
+
+			<section class="space-y-2 rounded-xl bg-slate-50 p-4">
+				<h3 class="text-sm font-semibold text-slate-700">ジョブ状況</h3>
+				<div class="flex flex-col gap-2">
+					<div class="flex items-center justify-between text-sm">
+						<span class="text-slate-600">状態</span>
+						<span class={ helpers.BadgeClass(data.Job.StateTone) }>{ data.Job.StateLabel }</span>
+					</div>
+					if data.Job.Message != "" {
+						<p class="text-sm text-slate-600">{ data.Job.Message }</p>
+					}
+					<div>
+						<div class="flex items-center justify-between text-xs text-slate-500">
+							<span>進捗</span>
+							<span>{ data.Job.Progress }%</span>
+						</div>
+						<div class="mt-1 h-2 rounded-full bg-slate-200">
+							<div class="h-2 rounded-full bg-brand-500 transition-all" style={ fmt.Sprintf("width:%d%%", data.Job.Progress) }></div>
+						</div>
+					</div>
+					<div class="grid grid-cols-2 gap-2 text-xs text-slate-500">
+						<div>
+							<p class="font-semibold text-slate-600">開始</p>
+							<p>{ data.Job.StartLabel }</p>
+						</div>
+						<div>
+							<p class="font-semibold text-slate-600">完了</p>
+							<p>{ data.Job.EndLabel }</p>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<section class="space-y-3">
+				<div class="flex items-center justify-between">
+					<h3 class="text-sm font-semibold text-slate-700">担当者</h3>
+					if data.Operator.Email != "" {
+						<a
+							href={ fmt.Sprintf("mailto:%s", data.Operator.Email) }
+							class="text-xs font-medium text-brand-600 hover:underline"
+						>
+							メール
+						</a>
+					}
+				</div>
+				<div class="space-y-1 text-sm text-slate-600">
+					<p class="font-medium text-slate-700">{ data.Operator.Name }</p>
+					if data.Operator.Shift != "" {
+						<p>{ data.Operator.Shift }</p>
+					}
+					if data.Operator.Email != "" {
+						<p class="text-xs text-slate-500">{ data.Operator.Email }</p>
+					}
+				</div>
+			</section>
+
+			if len(data.OrderSummary) > 0 {
+				<section class="space-y-3">
+					<div class="flex items-center justify-between">
+						<h3 class="text-sm font-semibold text-slate-700">含まれる注文</h3>
+						if data.LabelURL != "" {
+							@components.ButtonWith("ラベルをダウンロード", components.ButtonOptions{
+								Variant: "secondary",
+								Size:    "sm",
+								Href:    data.LabelURL,
+							})
+						}
+					</div>
+					<ul class="space-y-2">
+						for _, order := range data.OrderSummary {
+							<li class="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+								<div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+									<div>
+										<p class="font-semibold text-slate-700">注文 #{ order.OrderNumber }</p>
+										<p class="text-xs text-slate-500">{ order.Customer } ・ { order.Destination }</p>
+									</div>
+									<span class={ helpers.BadgeClass(order.LabelTone) }>{ order.LabelStatus }</span>
+								</div>
+								<p class="mt-1 text-xs text-slate-500">{ order.Service }</p>
+								if order.LabelURL != "" {
+									<a href={ order.LabelURL } class="mt-1 inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+										ラベルを開く
+									</a>
+								} else if order.OrderID != "" {
+									<form
+										class="mt-2"
+										hx-post={ joinBase(helpers.BasePath(ctx), "/orders/"+order.OrderID+"/shipments") }
+										hx-target="#shipments-table"
+										hx-swap="none"
+										hx-indicator="#shipments-loading"
+									>
+										<button type="submit" class={ helpers.ButtonClass("ghost", "xs", false, false) }>
+											ラベル生成を開始
+										</button>
+									</form>
+								}
+							</li>
+						}
+					</ul>
+				</section>
+			}
+
+			if len(data.Timeline) > 0 {
+				<section class="space-y-3">
+					<h3 class="text-sm font-semibold text-slate-700">進捗タイムライン</h3>
+					<ol class="relative border-l border-slate-200 pl-4">
+						for _, event := range data.Timeline {
+							<li class="mb-4 last:mb-0">
+								<div class="absolute -left-1.5 h-3 w-3 rounded-full border border-white bg-slate-300"></div>
+								<div class="flex items-center gap-2 text-xs text-slate-500">
+									if event.Icon != "" {
+										<span aria-hidden="true">{ event.Icon }</span>
+									}
+									<span>{ event.Timestamp }</span>
+								</div>
+								<p class="mt-1 text-sm font-medium text-slate-700">{ event.Title }</p>
+								if event.Description != "" {
+									<p class="text-xs text-slate-500">{ event.Description }</p>
+								}
+							</li>
+						}
+					</ol>
+				</section>
+			}
+
+			if len(data.PrintHistory) > 0 {
+				<section class="space-y-3">
+					<h3 class="text-sm font-semibold text-slate-700">印刷履歴</h3>
+					<ul class="space-y-2 text-sm text-slate-600">
+						for _, record := range data.PrintHistory {
+							<li class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+								<div>
+									<p class="font-medium text-slate-700">{ record.Label }</p>
+									<p class="text-xs text-slate-500">{ record.Actor } ・ { record.Channel }</p>
+								</div>
+								<div class="text-right text-xs text-slate-500">
+									<p>{ record.Timestamp }</p>
+									<p>{ record.Count } 枚</p>
+								</div>
+							</li>
+						}
+					</ul>
+				</section>
+			}
+
+			if data.ManifestURL != "" {
+				<section>
+					<a
+						href={ data.ManifestURL }
+						class={ helpers.ButtonClass("ghost", "sm", true, false) }
+					>
+						マニフェストをダウンロード
+					</a>
+				</section>
+			}
+		</div>
+	</section>
+}
+
+func statusChipClass(active bool) string {
+	return statusChipTone("info", active)
+}
+
+func statusChipTone(tone string, active bool) string {
+	base := []string{
+		"inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2",
+	}
+	if active {
+		base = append(base, "border-brand-400 bg-brand-50 text-brand-600")
+	} else {
+		base = append(base, "border-slate-300 bg-white text-slate-600 hover:border-slate-400")
+	}
+	switch tone {
+	case "success":
+		base = append(base, "data-[tone]:border-emerald-400 data-[tone]:bg-emerald-50 data-[tone]:text-emerald-600")
+	case "warning":
+		base = append(base, "data-[tone]:border-amber-400 data-[tone]:bg-amber-50 data-[tone]:text-amber-600")
+	case "danger":
+		base = append(base, "data-[tone]:border-red-400 data-[tone]:bg-red-50 data-[tone]:text-red-600")
+	}
+	return helpers.ClassList(base...)
+}

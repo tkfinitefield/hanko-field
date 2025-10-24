@@ -18,6 +18,7 @@ import (
 	"finitefield.org/hanko-admin/internal/admin/profile"
 	"finitefield.org/hanko-admin/internal/admin/search"
 	appsession "finitefield.org/hanko-admin/internal/admin/session"
+	adminshipments "finitefield.org/hanko-admin/internal/admin/shipments"
 	"finitefield.org/hanko-admin/public"
 )
 
@@ -32,6 +33,7 @@ type Config struct {
 	SearchService        search.Service
 	NotificationsService adminnotifications.Service
 	OrdersService        adminorders.Service
+	ShipmentsService     adminshipments.Service
 	Session              SessionConfig
 	SessionStore         custommw.SessionStore
 	CSRFCookieName       string
@@ -99,6 +101,7 @@ func New(cfg Config) *http.Server {
 		SearchService:        cfg.SearchService,
 		NotificationsService: cfg.NotificationsService,
 		OrdersService:        cfg.OrdersService,
+		ShipmentsService:     cfg.ShipmentsService,
 	})
 
 	mountAdminRoutes(router, basePath, routeOptions{
@@ -198,6 +201,14 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 				or.Get("/{orderID}/modal/refund", uiHandlers.OrdersRefundModal)
 				or.Post("/{orderID}/payments:refund", uiHandlers.OrdersSubmitRefund)
 				or.Get("/{orderID}/modal/invoice", uiHandlers.OrdersInvoiceModal)
+				or.Post("/{orderID}/shipments", uiHandlers.ShipmentsCreateOrderShipment)
+			})
+			protected.Route("/shipments", func(sr chi.Router) {
+				sr.Get("/batches", uiHandlers.ShipmentsBatchesPage)
+				sr.Get("/batches/table", uiHandlers.ShipmentsBatchesTable)
+				sr.Get("/batches/{batchID}/drawer", uiHandlers.ShipmentsBatchDrawer)
+				sr.Post("/batches", uiHandlers.ShipmentsCreateBatch)
+				sr.Post("/batches/regenerate", uiHandlers.ShipmentsRegenerateLabels)
 			})
 			protected.Post("/invoices:issue", uiHandlers.InvoicesIssue)
 			protected.Get("/invoices/jobs/{jobID}", uiHandlers.InvoiceJobStatus)

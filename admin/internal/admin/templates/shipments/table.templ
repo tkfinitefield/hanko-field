@@ -1,0 +1,209 @@
+package shipments
+
+import (
+	"fmt"
+	"strings"
+
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+)
+
+templ Table(data TableData) {
+	<div class="space-y-4" data-shipments-table-fragment>
+		if data.Error != "" {
+			<div class="rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">
+				{ data.Error }
+			</div>
+		}
+
+		<table class="min-w-full divide-y divide-slate-200">
+			<thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+				<tr>
+					<th class="px-4 py-3">バッチ</th>
+					<th class="px-4 py-3">キャリア / サービス</th>
+					<th class="px-4 py-3">拠点 / 件数</th>
+					<th class="px-4 py-3">進捗</th>
+					<th class="px-4 py-3">SLA</th>
+					<th class="px-4 py-3 text-right">操作</th>
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-slate-200 text-sm text-slate-700">
+				if len(data.Rows) == 0 {
+					<tr>
+						<td colspan="6" class="px-4 py-6 text-center text-sm text-slate-500">
+							{ data.EmptyMessage }
+						</td>
+					</tr>
+				} else {
+					for _, row := range data.Rows {
+						<tr
+							class={ rowClass(row.Selected) }
+							data-shipments-row
+							data-batch-id={ row.ID }
+							data-selected?={ row.Selected }
+							aria-selected?={ row.Selected }
+							hx-get={ row.DetailURL }
+							hx-target="#shipments-drawer"
+							hx-swap="outerHTML"
+							hx-vals={ fmt.Sprintf("{\"selected\":\"%s\"}", row.ID) }
+							hx-indicator="#shipments-loading"
+							hx-push-url="true"
+						>
+							<td class="px-4 py-4 align-top">
+								<div class="flex flex-col gap-1">
+									<p class="text-sm font-semibold text-slate-900">{ row.Reference }</p>
+									<p class="text-xs text-slate-500">
+										{ row.CreatedLabel }
+										<span class="text-slate-400">({ row.CreatedRelative })</span>
+									</p>
+									if row.BadgeLabel != "" {
+										<span class={ helpers.BadgeClass(row.BadgeTone) }>
+											if row.BadgeIcon != "" {
+												<span aria-hidden="true" class="mr-1">{ row.BadgeIcon }</span>
+											}
+											{ row.BadgeLabel }
+										</span>
+									}
+								</div>
+							</td>
+							<td class="px-4 py-4 align-top">
+								<div class="space-y-1">
+									<p class="font-medium text-slate-900">{ row.CarrierLabel }</p>
+									<p class="text-xs text-slate-500">{ row.ServiceLevel }</p>
+								</div>
+							</td>
+							<td class="px-4 py-4 align-top">
+								<div class="space-y-1">
+									<p class="font-medium text-slate-900">{ row.FacilityLabel }</p>
+									<p class="text-xs text-slate-500">{ row.OrderStats }</p>
+								</div>
+							</td>
+							<td class="px-4 py-4 align-top">
+								<div class="space-y-1">
+									<div class="flex items-center justify-between text-xs text-slate-500">
+										<span>{ row.ProgressLabel }</span>
+										<span class={ helpers.BadgeClass(row.StatusTone) }>{ row.StatusLabel }</span>
+									</div>
+									<div class="h-2 w-full rounded-full bg-slate-200">
+										<div class="h-2 rounded-full bg-brand-500 transition-all" style={ fmt.Sprintf("width:%d%%", row.ProgressPercent) }></div>
+									</div>
+								</div>
+							</td>
+							<td class="px-4 py-4 align-top">
+								<span class={ helpers.BadgeClass(row.SLATone) }>{ row.SLAStatus }</span>
+							</td>
+							<td class="px-4 py-4 align-top">
+								<div class="flex flex-col items-end gap-2">
+									if row.LabelURL != "" {
+										<a href={ row.LabelURL } class="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+											📄 ラベル
+										</a>
+									}
+									if row.ManifestURL != "" {
+										<a href={ row.ManifestURL } class="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+											📦 マニフェスト
+										</a>
+									}
+									<button
+										type="button"
+										class="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-brand-600"
+										data-shipments-row-action
+										data-batch-id={ row.ID }
+									>
+										🔁 ラベル再生成
+									</button>
+								</div>
+							</td>
+						</tr>
+					}
+				}
+			</tbody>
+		</table>
+
+		@paginationControls(data)
+	</div>
+}
+
+templ paginationControls(data TableData) {
+	if data.Pagination.Total <= data.Pagination.PageSize && data.Pagination.Next == nil && data.Pagination.Prev == nil {
+		return
+	}
+	<nav class="flex items-center justify-between text-sm text-slate-600">
+		<div>
+			ページ { data.Pagination.Page } / { totalPages(data.Pagination.Total, data.Pagination.PageSize) }
+		</div>
+		<div class="flex items-center gap-2">
+			if data.Pagination.Prev != nil {
+				<a
+					href={ paginationURL(data.BasePath, data.FragmentPath, data.Pagination.RawQuery, *data.Pagination.Prev) }
+					class={ helpers.ButtonClass("ghost", "xs", false, false) }
+					hx-get={ paginationURL(data.BasePath, data.FragmentPath, data.Pagination.RawQuery, *data.Pagination.Prev) }
+					hx-target="#shipments-table"
+					hx-push-url="true"
+					hx-indicator="#shipments-loading"
+				>
+					前へ
+				</a>
+			} else {
+				<span class="inline-flex items-center rounded-md bg-slate-100 px-3 py-1 text-xs text-slate-400">前へ</span>
+			}
+			if data.Pagination.Next != nil {
+				<a
+					href={ paginationURL(data.BasePath, data.FragmentPath, data.Pagination.RawQuery, *data.Pagination.Next) }
+					class={ helpers.ButtonClass("ghost", "xs", false, false) }
+					hx-get={ paginationURL(data.BasePath, data.FragmentPath, data.Pagination.RawQuery, *data.Pagination.Next) }
+					hx-target="#shipments-table"
+					hx-push-url="true"
+					hx-indicator="#shipments-loading"
+				>
+					次へ
+				</a>
+			} else {
+				<span class="inline-flex items-center rounded-md bg-slate-100 px-3 py-1 text-xs text-slate-400">次へ</span>
+			}
+		</div>
+	</nav>
+}
+
+func rowClass(selected bool) string {
+	base := []string{"cursor-pointer transition hover:bg-slate-50"}
+	if selected {
+		base = append(base, "bg-brand-50")
+	}
+	return helpers.ClassList(base...)
+}
+
+func totalPages(total, size int) int {
+	if size <= 0 {
+		return 1
+	}
+	if total <= 0 {
+		return 1
+	}
+	pages := total / size
+	if total%size != 0 {
+		pages++
+	}
+	if pages == 0 {
+		pages = 1
+	}
+	return pages
+}
+
+func paginationURL(_ string, fragment, raw string, page int) string {
+	if page < 1 {
+		page = 1
+	}
+	query := helpers.SetRawQuery(raw, "page", fmt.Sprintf("%d", page))
+	return fragmentWithQuery(fragment, query)
+}
+
+func fragmentWithQuery(path, query string) string {
+	if query == "" {
+		return path
+	}
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	return fmt.Sprintf("%s%s%s", path, sep, query)
+}

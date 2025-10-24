@@ -480,6 +480,111 @@ const initNotificationsSelection = () => {
   }
 };
 
+const initShipmentsModule = () => {
+  const root = document.querySelector("[data-shipments-root]");
+  if (!(root instanceof HTMLElement)) {
+    return;
+  }
+
+  const getTable = (scope) => {
+    if (!scope) {
+      return null;
+    }
+    if (scope.matches && scope.matches("[data-shipments-table]")) {
+      return scope;
+    }
+    return scope.querySelector?.("[data-shipments-table]") || null;
+  };
+
+  const updateSelectedInputs = (id) => {
+    const value = typeof id === "string" ? id : "";
+    root.querySelectorAll("input[name='selected']").forEach((input) => {
+      if (input instanceof HTMLInputElement) {
+        input.value = value;
+      }
+    });
+    root.querySelectorAll("[data-shipments-selected]").forEach((input) => {
+      if (input instanceof HTMLInputElement) {
+        input.value = value;
+        const form = input.form;
+        if (form instanceof HTMLFormElement) {
+          const button = form.querySelector("button[type='submit']");
+          if (button instanceof HTMLButtonElement) {
+            const disabled = value === "";
+            button.disabled = disabled;
+            button.classList.toggle("opacity-60", disabled);
+            button.classList.toggle("pointer-events-none", disabled);
+          }
+        }
+      }
+    });
+  };
+
+  const highlightRows = (table, id) => {
+    if (!(table instanceof HTMLElement)) {
+      return;
+    }
+    const selectedID = typeof id === "string" ? id : "";
+    table.querySelectorAll("[data-shipments-row]").forEach((row) => {
+      if (!(row instanceof HTMLElement)) {
+        return;
+      }
+      const matches = selectedID !== "" && row.getAttribute("data-batch-id") === selectedID;
+      if (matches) {
+        row.dataset.selected = "true";
+        row.classList.add("bg-brand-50");
+        row.setAttribute("aria-selected", "true");
+      } else {
+        delete row.dataset.selected;
+        row.classList.remove("bg-brand-50");
+        row.removeAttribute("aria-selected");
+      }
+    });
+  };
+
+  const applySelection = (scope) => {
+    const table = getTable(scope);
+    if (!(table instanceof HTMLElement)) {
+      return;
+    }
+    const selectedRow =
+      table.querySelector("[data-shipments-row][data-selected='true']") ||
+      table.querySelector("[data-shipments-row]");
+    const id = selectedRow instanceof HTMLElement ? selectedRow.getAttribute("data-batch-id") || "" : "";
+    highlightRows(table, id);
+    updateSelectedInputs(id);
+  };
+
+  if (root.dataset.shipmentsBound === "true") {
+    applySelection(root);
+    return;
+  }
+  root.dataset.shipmentsBound = "true";
+
+  const handleSelectionEvent = (event) => {
+    const detail = event instanceof CustomEvent ? event.detail || {} : {};
+    const id = typeof detail.id === "string" ? detail.id.trim() : "";
+    const table = getTable(root);
+    highlightRows(table, id);
+    updateSelectedInputs(id);
+  };
+
+  applySelection(root);
+  document.body.addEventListener("shipments:select", handleSelectionEvent);
+
+  if (window.htmx) {
+    document.body.addEventListener("htmx:afterSwap", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (target.matches("[data-shipments-table]") || target.querySelector?.("[data-shipments-table]")) {
+        applySelection(target);
+      }
+    });
+  }
+};
+
 const initDashboardRefresh = () => {
   const parseTargets = (value) => {
     if (typeof value !== "string" || value.trim() === "") {
@@ -1973,6 +2078,7 @@ window.hankoAdmin = window.hankoAdmin || {
     initSearchShortcut(modalRoot);
     initNotificationsBadge();
     initNotificationsSelection();
+    initShipmentsModule();
     initDashboardRefresh();
     initHXTriggerHandlers();
     const toast = initToastStack();
@@ -1986,6 +2092,7 @@ window.hankoAdmin = window.hankoAdmin || {
           return;
         }
         initOrdersInteractions(event.target);
+        initShipmentsModule();
       });
     }
 
