@@ -15,7 +15,7 @@
 - [x] [Implement secure storage, crash reporting (Sentry/Firebase Crashlytics), and analytics instrumentation.](doc/app/tasks/010-implement-secure-storage-crash-reporting-sentry-firebase-crashlytics-and-analytics-instrum.md)
 
 ## 2. Core Infrastructure & Shared Components
-- [ ] [Implement networking layer with HTTP client, interceptors (auth, logging), retries, and response parsing.](doc/app/tasks/011-implement-networking-layer-with-http-client-interceptors-auth-logging-retries-and-response.md)
+- [x] [Implement networking layer with HTTP client, interceptors (auth, logging), retries, and response parsing.](doc/app/tasks/011-implement-networking-layer-with-http-client-interceptors-auth-logging-retries-and-response.md)
 - [ ] [Build API data models, DTOs, and repository interfaces for users, designs, catalog, orders, promotions, content.](doc/app/tasks/012-build-api-data-models-dtos-and-repository-interfaces-for-users-designs-catalog-orders-prom.md)
 - [ ] [Implement local persistence (Hive/Isar/shared_preferences) for caching, offline screen data, and onboarding state.](doc/app/tasks/013-implement-local-persistence-hive-isar-shared-preferences-for-caching-offline-screen-data-a.md)
 - [ ] [Create shared widgets (buttons, form fields, modals, cards, list skeletons) following design system.](doc/app/tasks/014-create-shared-widgets-buttons-form-fields-modals-cards-list-skeletons-following-design-sys.md)
