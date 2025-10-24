@@ -85,7 +85,7 @@
 - [x] [063 Implement reorder endpoint cloning design snapshot and cart lines to new order draft.](./tasks/063-implement-reorder-endpoint-cloning-design-snapshot-and-cart-lines-to-new-order-d.md)
 
 ### 5.6 Reviews
-- [ ] [064 Implement review creation endpoint validating order ownership and completion.](./tasks/064-implement-review-creation-endpoint-validating-order-ownership-and-completion.md)
+- [x] [064 Implement review creation endpoint validating order ownership and completion.](./tasks/064-implement-review-creation-endpoint-validating-order-ownership-and-completion.md)
 - [ ] [065 Implement review retrieval endpoint scoped to requesting user/order.](./tasks/065-implement-review-retrieval-endpoint-scoped-to-requesting-user-order.md)
 
 ### 5.7 Assets

@@ -24,6 +24,7 @@ type routerConfig struct {
 	designs  RouteRegistrar
 	nameMaps RouteRegistrar
 	cart     RouteRegistrar
+	reviews  RouteRegistrar
 	orders   RouteRegistrar
 	admin    RouteRegistrar
 	webhooks RouteRegistrar
@@ -107,6 +108,7 @@ func NewRouter(opts ...Option) chi.Router {
 			registerNotImplementedRoute(api, "/name-mappings/{mappingId}:select", "nameMappings")
 		}
 		mount("/cart", cfg.cart, "cart", nil)
+		mount("/reviews", cfg.reviews, "reviews", nil)
 		mount("/orders", cfg.orders, "orders", nil)
 		mount("/admin", cfg.admin, "admin", nil)
 		mount("/webhooks", cfg.webhooks, "webhooks", cfg.webhookMiddlewares)
@@ -168,6 +170,13 @@ func WithNameMappingRoutes(reg RouteRegistrar) Option {
 func WithCartRoutes(reg RouteRegistrar) Option {
 	return func(cfg *routerConfig) {
 		cfg.cart = reg
+	}
+}
+
+// WithReviewRoutes configures the registrar responsible for review endpoints.
+func WithReviewRoutes(reg RouteRegistrar) Option {
+	return func(cfg *routerConfig) {
+		cfg.reviews = reg
 	}
 }
 
