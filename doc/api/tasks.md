@@ -77,7 +77,7 @@
 
 ### 5.5 Orders / Payments / Shipments
 - [x] [057 Implement order list/detail endpoints with pagination and user scoping.](./tasks/057-implement-order-list-detail-endpoints-with-pagination-and-user-scoping.md)
-- [ ] [058 Implement order cancel endpoint enforcing status rules and triggering stock release.](./tasks/058-implement-order-cancel-endpoint-enforcing-status-rules-and-triggering-stock-rele.md)
+- [x] [058 Implement order cancel endpoint enforcing status rules and triggering stock release.](./tasks/058-implement-order-cancel-endpoint-enforcing-status-rules-and-triggering-stock-rele.md)
 - [ ] [059 Implement order invoice request endpoint producing task to generate PDF.](./tasks/059-implement-order-invoice-request-endpoint-producing-task-to-generate-pdf.md)
 - [ ] [060 Implement order payment history retrieval.](./tasks/060-implement-order-payment-history-retrieval.md)
 - [ ] [061 Implement order shipment list/detail endpoints including tracking events.](./tasks/061-implement-order-shipment-list-detail-endpoints-including-tracking-events.md)
