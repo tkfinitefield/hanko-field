@@ -67,6 +67,56 @@
     <path d="M10 20a2 2 0 012-2" />
     <circle cx="20" cy="4" r="2" />
     <path d="M20 6v14" />
+  {{- else if eq $name "queue-list" -}}
+    <path d="M4 6h12" />
+    <path d="M4 12h12" />
+    <path d="M4 18h12" />
+    <path d="M20 6h.01" />
+    <path d="M20 12h.01" />
+    <path d="M20 18h.01" />
+  {{- else if eq $name "clock" -}}
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  {{- else if eq $name "bolt" -}}
+    <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" />
+  {{- else if eq $name "pause" -}}
+    <path d="M8 5h3v14H8z" />
+    <path d="M13 5h3v14h-3z" />
+  {{- else if eq $name "play" -}}
+    <path d="M8 5l10 7-10 7z" />
+  {{- else if eq $name "arrow-uturn-left" -}}
+    <path d="M9 10l-4 4 4 4" />
+    <path d="M5 14h9a5 5 0 000-10h-1" />
+  {{- else if eq $name "chevron-right" -}}
+    <path d="M9 6l6 6-6 6" />
+  {{- else if eq $name "user-group" -}}
+    <circle cx="9" cy="8" r="4" />
+    <path d="M17 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
+    <circle cx="19" cy="11" r="3" />
+    <path d="M22 21v-1.5a3.5 3.5 0 00-2.5-3.35" />
+  {{- else if eq $name "status-online" -}}
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9 12l2 2 4-4" />
+  {{- else if eq $name "arrows-right-left" -}}
+    <path d="M16 3l5 5-5 5" />
+    <path d="M21 8H10" />
+    <path d="M8 21l-5-5 5-5" />
+    <path d="M3 16h11" />
+  {{- else if eq $name "minus" -}}
+    <path d="M5 12h14" />
+  {{- else if eq $name "cursor-arrow-rays" -}}
+    <path d="M3 3l7 18 2-8 8-2L3 3z" />
+    <path d="M16 4l2-2" />
+    <path d="M19 9h3" />
+    <path d="M14 20l2 2" />
+  {{- else if eq $name "thumb-up" -}}
+    <path d="M7 11V21H3V11z" />
+    <path d="M7 11h8l1-5a2 2 0 00-2-2h-1L11 8l-4 3z" />
+    <path d="M17 11h3a2 2 0 012 2 10 10 0 01-3 6h-6" />
+  {{- else if eq $name "thumb-down" -}}
+    <path d="M17 13V3h4v10z" />
+    <path d="M17 13H9l-1 5a2 2 0 002 2h1l2-4 4-3z" />
+    <path d="M7 13H4a2 2 0 01-2-2 10 10 0 013-6h6" />
   {{- else -}}
     <circle cx="12" cy="12" r="9" />
   {{- end }}

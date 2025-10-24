@@ -25,4 +25,5 @@ type PageData struct {
 	Content   any
 	Status    any
 	Design    any
+	DesignAI  any
 }

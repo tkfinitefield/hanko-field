@@ -1,0 +1,262 @@
+{{ define "content" }}
+{{ $view := $.DesignAI }}
+<section class="py-6 space-y-6">
+  <header class="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:flex-row lg:items-start lg:justify-between">
+    <div class="space-y-3">
+      <p class="text-xs uppercase tracking-wide text-indigo-500">AI suggestions</p>
+      <h1 class="text-3xl font-bold text-gray-900 leading-tight">Review and adopt AI proposals</h1>
+      <p class="text-sm text-gray-600 leading-6">Monitor the live queue of AI-generated layouts, compare highlights, and accept the best proposal into your design editor.</p>
+      <div class="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+        <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-700">
+          {{ template "icon" (dict "Name" "queue-list" "Class" "h-4 w-4") }}
+          Queue: {{ $view.Queue.Pending }} waiting · {{ $view.Queue.Processing }} processing
+        </span>
+        <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-700">
+          {{ template "icon" (dict "Name" "clock" "Class" "h-4 w-4") }}
+          Avg {{ $view.Queue.AvgSeconds }}s turnaround
+        </span>
+        <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-700">
+          {{ template "icon" (dict "Name" "bolt" "Class" "h-4 w-4") }}
+          {{ $view.Queue.UpdatedAgo }}
+        </span>
+      </div>
+    </div>
+    <div class="flex flex-col items-start gap-4">
+      {{ template "c_inline_notice" (dict "ID" "design-ai-poll-indicator" "Message" (safe (printf "Next refresh in <span id='design-ai-countdown'>%d</span>s" $view.Poll.CountdownSeconds))) }}
+      <button id="design-ai-poll-toggle"
+              type="button"
+              class="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-indigo-300 hover:text-indigo-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              aria-pressed="true"
+              data-poll-state="running">
+        {{ template "icon" (dict "Name" "pause" "Class" "h-4 w-4") }}
+        Pause auto refresh
+      </button>
+    </div>
+  </header>
+
+  {{ template "c_ai_stats_bar" (dict "Stats" $view.Stats) }}
+
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+    <div class="space-y-6">
+      <form id="design-ai-filters"
+            class="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+            hx-get="/design/ai/table"
+            hx-target="#design-ai-table"
+            hx-swap="outerHTML"
+            hx-include="#design-ai-filters"
+            hx-push-url="true"
+            hx-trigger="change delay:250ms, submit">
+        <div class="space-y-3">
+          <div class="flex items-center justify-between gap-4">
+            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Statuses</span>
+            <span class="text-xs text-gray-400">Filters update without leaving the page</span>
+          </div>
+          <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Filter suggestions by status">
+            {{ range $view.StatusFilters }}
+              <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:border-indigo-300 hover:text-indigo-600 focus-within:ring-2 focus-within:ring-indigo-500">
+                <input type="radio"
+                       name="status"
+                       value="{{ .Value }}"
+                       class="sr-only"
+                       {{ if eq $view.ActiveStatus .Value }}checked{{ end }}>
+                <span>{{ .Label }}</span>
+                <span class="text-xs text-gray-400">{{ .Count }}</span>
+              </label>
+            {{ end }}
+          </div>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-2">
+            <label for="design-ai-persona" class="text-xs font-semibold uppercase tracking-wide text-gray-500">Persona</label>
+            <select id="design-ai-persona"
+                    name="persona"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              {{ range $view.PersonaOptions }}
+                <option value="{{ .Value }}" {{ if .Active }}selected{{ end }}>{{ .Label }}</option>
+              {{ end }}
+            </select>
+          </div>
+          <div class="space-y-2">
+            <label for="design-ai-sort" class="text-xs font-semibold uppercase tracking-wide text-gray-500">Sort</label>
+            <select id="design-ai-sort"
+                    name="sort"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              {{ range $view.SortOptions }}
+                <option value="{{ .Value }}" {{ if .Active }}selected{{ end }}>{{ .Label }}</option>
+              {{ end }}
+            </select>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 text-xs text-gray-500">
+          <span>Showing {{ len $view.Suggestions }} of {{ (index $view.StatusFilters 0).Count }} suggestions</span>
+          <a href="/design/editor" class="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:underline">
+            {{ template "icon" (dict "Name" "arrow-uturn-left" "Class" "h-4 w-4") }}
+            Back to editor
+          </a>
+        </div>
+      </form>
+
+      {{ template "frag_design_ai_table" $view }}
+    </div>
+
+    <aside id="design-ai-preview" class="lg:sticky lg:top-24">
+      {{ template "frag_design_ai_preview" $view.SelectedSuggestion }}
+    </aside>
+  </div>
+
+  <div class="text-xs text-gray-500">Path: {{ $.Path }}</div>
+</section>
+
+<script>
+(function(){
+  var polling = true;
+  var timer = null;
+
+  function $(selector){ return document.querySelector(selector); }
+  function $all(selector){ return Array.prototype.slice.call(document.querySelectorAll(selector)); }
+
+  function getTable(){
+    return document.getElementById('design-ai-table');
+  }
+
+  function getPreviewContainer(){
+    return document.getElementById('design-ai-preview');
+  }
+
+  function updateCountdown(display){
+    var el = document.getElementById('design-ai-countdown');
+    if (!el) { return; }
+    el.textContent = display;
+  }
+
+  function formatCountdown(secs){
+    if (secs <= 0) { return '0'; }
+    return secs.toString();
+  }
+
+  function triggerRefresh(){
+    var table = getTable();
+    if (!table) { return; }
+    if (!polling) { return; }
+    htmx.trigger(table, 'design-ai:refresh');
+  }
+
+  function stopTimer(){
+    if (timer) {
+      window.clearInterval(timer);
+      timer = null;
+    }
+  }
+
+  function applyActiveState(){
+    var preview = getPreviewContainer();
+    if (!preview) { return; }
+    var activeId = null;
+    var firstChild = preview.firstElementChild;
+    if (firstChild) {
+      activeId = firstChild.getAttribute('data-suggestion-id');
+    }
+    $all('[data-suggestion-card]').forEach(function(card){
+      var isActive = activeId && card.getAttribute('data-suggestion-card') === activeId;
+      card.setAttribute('data-active', isActive ? 'true' : 'false');
+      card.classList.remove('ring-2', 'ring-indigo-200');
+      if (isActive) {
+        card.classList.add('ring-2', 'ring-indigo-200');
+      }
+    });
+  }
+
+  function refreshTimer(){
+    stopTimer();
+    var table = getTable();
+    if (!table) {
+      updateCountdown('--');
+      return;
+    }
+    var interval = parseInt(table.getAttribute('data-poll-interval') || '12', 10);
+    var remaining = interval;
+    updateCountdown(formatCountdown(remaining));
+    if (!polling) { return; }
+    timer = window.setInterval(function(){
+      remaining -= 1;
+      if (remaining <= 0) {
+        triggerRefresh();
+        remaining = interval;
+      }
+      updateCountdown(formatCountdown(remaining));
+    }, 1000);
+  }
+
+  var pollToggle = document.getElementById('design-ai-poll-toggle');
+  if (pollToggle) {
+    pollToggle.addEventListener('click', function(){
+      polling = !polling;
+      pollToggle.setAttribute('aria-pressed', polling ? 'true' : 'false');
+      pollToggle.setAttribute('data-poll-state', polling ? 'running' : 'paused');
+      pollToggle.innerHTML = polling
+        ? '{{ template "icon" (dict "Name" "pause" "Class" "h-4 w-4") }} Pause auto refresh'
+        : '{{ template "icon" (dict "Name" "play" "Class" "h-4 w-4") }} Resume auto refresh';
+      refreshTimer();
+    });
+  }
+
+  document.body.addEventListener('design-ai:suggestion-accepted', function(evt){
+    var detail = (evt && evt.detail) || {};
+    var id = detail.id;
+    if (!id) { return; }
+    updateCardStatus(id, detail.label || 'Accepted', detail.tone || 'success');
+    triggerRefresh();
+  });
+
+  document.body.addEventListener('design-ai:suggestion-rejected', function(evt){
+    var detail = (evt && evt.detail) || {};
+    var id = detail.id;
+    if (!id) { return; }
+    updateCardStatus(id, detail.label || 'Rejected', detail.tone || 'muted');
+  });
+
+  function updateCardStatus(id, label, tone){
+    var card = document.querySelector('[data-suggestion-card=\"' + id + '\"]');
+    if (!card) { return; }
+    card.setAttribute('data-status', tone === 'success' ? 'accepted' : 'rejected');
+    var pill = card.querySelector('[data-status-label]');
+    if (pill) {
+      ['bg-emerald-50','text-emerald-700','bg-amber-50','text-amber-700','bg-sky-50','text-sky-700','bg-gray-100','text-gray-600','text-gray-700'].forEach(function(cls){
+        pill.classList.remove(cls);
+      });
+      if (tone === 'success') {
+        pill.classList.add('bg-emerald-50','text-emerald-700');
+      } else if (tone === 'warning') {
+        pill.classList.add('bg-amber-50','text-amber-700');
+      } else if (tone === 'info') {
+        pill.classList.add('bg-sky-50','text-sky-700');
+      } else if (tone === 'muted') {
+        pill.classList.add('bg-gray-100','text-gray-600');
+      } else {
+        pill.classList.add('bg-gray-100','text-gray-700');
+      }
+      var span = pill.querySelector('span');
+      if (span) {
+        span.textContent = label;
+      }
+    }
+  }
+
+  document.addEventListener('htmx:afterSwap', function(evt){
+    if (!evt || !evt.target) { return; }
+    if (evt.target.id === 'design-ai-table') {
+      refreshTimer();
+      applyActiveState();
+    }
+    if (evt.target.id === 'design-ai-preview') {
+      applyActiveState();
+    }
+  });
+
+  applyActiveState();
+  refreshTimer();
+})();
+</script>
+{{ end }}

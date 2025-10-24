@@ -203,6 +203,100 @@ func TestSessionMiddlewareSetsCookie(t *testing.T) {
 	}
 }
 
+func TestDesignAISuggestionsPageRenders(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/design/ai", DesignAISuggestionsHandler)
+		r.Get("/design/ai/table", DesignAISuggestionTableFrag)
+		r.Get("/design/ai/preview", DesignAISuggestionPreviewFrag)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/design/ai", nil)
+	req.Header.Set("Accept-Language", "en")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "design-ai-table") {
+		t.Fatalf("expected design ai table markup in body; body=%s", body)
+	}
+	if !strings.Contains(body, "design-ai-preview") {
+		t.Fatalf("expected preview container in body; body=%s", body)
+	}
+}
+
+func TestDesignAISuggestionsTableFragment(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/design/ai/table", DesignAISuggestionTableFrag)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/design/ai/table?status=ready", nil)
+	req.Header.Set("Accept-Language", "en")
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Push-Url"); got == "" || !strings.HasPrefix(got, "/design/ai") {
+		t.Fatalf("expected HX-Push-Url header, got %q", got)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "data-suggestion-card") {
+		t.Fatalf("expected suggestion cards in fragment; body=%s", body)
+	}
+}
+
+func TestDesignAISuggestionAccept(t *testing.T) {
+	srv := newTestRouter(t, func(r chi.Router) {
+		r.Get("/design/ai", DesignAISuggestionsHandler)
+		r.Get("/design/ai/table", DesignAISuggestionTableFrag)
+		r.Get("/design/ai/preview", DesignAISuggestionPreviewFrag)
+		r.MethodFunc(http.MethodPost, "/design/ai/suggestions/{suggestionID}/accept", DesignAISuggestionAcceptHandler)
+	})
+
+	// prime session + CSRF
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/design/ai", nil)
+	req.Header.Set("Accept-Language", "en")
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /design/ai expected 200, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	var csrfCookie, sessionCookie string
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "csrf_token" {
+			csrfCookie = c.Value
+		}
+		if c.Name == "HANKO_WEB_SESSION" {
+			sessionCookie = c.Value
+		}
+	}
+	if csrfCookie == "" || sessionCookie == "" {
+		t.Fatalf("expected csrf and session cookies, got csrf=%q session=%q", csrfCookie, sessionCookie)
+	}
+
+	postRec := httptest.NewRecorder()
+	postReq := httptest.NewRequest(http.MethodPost, "/design/ai/suggestions/sg-401/accept", nil)
+	postReq.Header.Set("HX-Request", "true")
+	postReq.Header.Set("X-CSRF-Token", csrfCookie)
+	postReq.Header.Set("Cookie", "csrf_token="+csrfCookie+"; HANKO_WEB_SESSION="+sessionCookie)
+	srv.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 accept response, got %d; body=%s", postRec.Code, postRec.Body.String())
+	}
+	trigger := postRec.Header().Get("HX-Trigger")
+	if trigger == "" || !strings.Contains(trigger, "design-ai:suggestion-accepted") {
+		t.Fatalf("expected HX-Trigger for acceptance, got %q", trigger)
+	}
+	body := postRec.Body.String()
+	if !strings.Contains(body, "Applied to design editor preview") {
+		t.Fatalf("expected acceptance note in response body; body=%s", body)
+	}
+	if !strings.Contains(body, "data-action=\"accept\"") {
+		t.Fatalf("expected accept button markup present; body=%s", body)
+	}
+}
+
 func setupStaticTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	cmsClient = cms.NewClient("")
