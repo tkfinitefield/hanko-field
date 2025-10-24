@@ -2,14 +2,19 @@ package orders
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
 // StaticService provides deterministic order data suitable for local development and tests.
 type StaticService struct {
-	orders []Order
+	mu        sync.RWMutex
+	orders    []Order
+	timelines map[string][]TimelineEvent
+	audit     AuditLogger
 }
 
 // NewStaticService returns a StaticService populated with representative orders.
@@ -380,12 +385,55 @@ func NewStaticService() *StaticService {
 		}),
 	}
 
-	return &StaticService{orders: orders}
+	timelines := make(map[string][]TimelineEvent, len(orders))
+	for _, order := range orders {
+		timelines[order.ID] = seedTimeline(order)
+	}
+
+	return &StaticService{
+		orders:    orders,
+		timelines: timelines,
+		audit:     noopAuditLogger{},
+	}
+}
+
+func (s *StaticService) snapshotOrders() []Order {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	copy := make([]Order, len(s.orders))
+	for i, order := range s.orders {
+		copy[i] = cloneOrder(order)
+	}
+	return copy
+}
+
+func cloneOrder(order Order) Order {
+	result := order
+	if len(order.Tags) > 0 {
+		result.Tags = append([]string(nil), order.Tags...)
+	}
+	if len(order.Badges) > 0 {
+		result.Badges = append([]Badge(nil), order.Badges...)
+	}
+	if len(order.Notes) > 0 {
+		result.Notes = append([]string(nil), order.Notes...)
+	}
+	return result
+}
+
+func cloneTimeline(events []TimelineEvent) []TimelineEvent {
+	if len(events) == 0 {
+		return nil
+	}
+	cloned := make([]TimelineEvent, len(events))
+	copy(cloned, events)
+	return cloned
 }
 
 // List implements the orders Service interface.
 func (s *StaticService) List(_ context.Context, _ string, query Query) (ListResult, error) {
-	withStatus := s.filterOrders(query, true)
+	orders := s.snapshotOrders()
+	withStatus := filterOrders(orders, query, true)
 
 	sortOrders(withStatus, query)
 
@@ -428,7 +476,7 @@ func (s *StaticService) List(_ context.Context, _ string, query Query) (ListResu
 
 	summary := buildSummary(withStatus)
 
-	filters := s.buildFilterSummary(query)
+	filters := buildFilterSummary(orders, query)
 
 	return ListResult{
 		Orders:     pageOrders,
@@ -438,8 +486,207 @@ func (s *StaticService) List(_ context.Context, _ string, query Query) (ListResu
 	}, nil
 }
 
-func (s *StaticService) filterOrders(query Query, includeStatus bool) []Order {
-	results := make([]Order, 0, len(s.orders))
+// StatusModal assembles modal data for the specified order.
+func (s *StaticService) StatusModal(_ context.Context, _ string, orderID string) (StatusModal, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	_, order := s.findOrderLocked(orderID)
+	if order == nil {
+		return StatusModal{}, ErrOrderNotFound
+	}
+
+	orderCopy := cloneOrder(*order)
+	choices := buildStatusChoices(orderCopy.Status)
+	events := cloneTimeline(s.timelines[orderID])
+	if len(events) > 5 {
+		events = events[len(events)-5:]
+	}
+
+	return StatusModal{
+		Order:          orderCopy,
+		Choices:        choices,
+		LatestTimeline: events,
+	}, nil
+}
+
+// UpdateStatus mutates the order status with optimistic local data for development use.
+func (s *StaticService) UpdateStatus(ctx context.Context, _ string, orderID string, req StatusUpdateRequest) (StatusUpdateResult, error) {
+	requested := strings.TrimSpace(string(req.Status))
+	if requested == "" {
+		return StatusUpdateResult{}, &StatusTransitionError{From: Status(""), To: req.Status, Reason: "ステータスを選択してください"}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx, order := s.findOrderLocked(orderID)
+	if order == nil {
+		return StatusUpdateResult{}, ErrOrderNotFound
+	}
+
+	current := order.Status
+	if current == req.Status {
+		return StatusUpdateResult{}, &StatusTransitionError{From: current, To: req.Status, Reason: "すでにこのステータスです"}
+	}
+	if !isTransitionAllowed(current, req.Status) {
+		reason := fmt.Sprintf("「%s」から「%s」への変更は許可されていません", defaultStatusLabel(current), defaultStatusLabel(req.Status))
+		return StatusUpdateResult{}, &StatusTransitionError{From: current, To: req.Status, Reason: reason}
+	}
+
+	note := strings.TrimSpace(req.Note)
+	now := time.Now()
+
+	order.Status = req.Status
+	order.StatusLabel = defaultStatusLabel(req.Status)
+	order.StatusTone = defaultStatusTone(req.Status)
+	order.UpdatedAt = now
+
+	if note != "" {
+		formatted := note
+		actor := strings.TrimSpace(req.ActorEmail)
+		if actor != "" {
+			formatted = actor + ": " + note
+		}
+		order.Notes = append([]string{formatted}, order.Notes...)
+	}
+
+	if req.Status == StatusRefunded {
+		order.HasRefundRequest = true
+		order.Payment.Status = "返金済み"
+		order.Payment.StatusTone = "info"
+	}
+
+	switch req.Status {
+	case StatusInProduction:
+		order.Fulfillment.SLAStatus = "制作進行中"
+		order.Fulfillment.SLAStatusTone = "info"
+	case StatusReadyToShip:
+		order.Fulfillment.SLAStatus = "集荷待ち"
+		order.Fulfillment.SLAStatusTone = "info"
+	case StatusShipped:
+		order.Fulfillment.DispatchedAt = timePtr(now)
+		order.Fulfillment.SLAStatus = "配送中"
+		order.Fulfillment.SLAStatusTone = "info"
+	case StatusDelivered:
+		order.Fulfillment.DeliveredAt = timePtr(now)
+		order.Fulfillment.SLAStatus = "納品済み"
+		order.Fulfillment.SLAStatusTone = "success"
+	case StatusCancelled:
+		order.Fulfillment.SLAStatus = "キャンセル済み"
+		order.Fulfillment.SLAStatusTone = "muted"
+	}
+
+	s.orders[idx] = *order
+
+	actor := strings.TrimSpace(req.ActorEmail)
+	if actor == "" {
+		actor = "オペレーター"
+	}
+
+	description := buildTimelineDescription(note, req.NotifyCustomer)
+	event := TimelineEvent{
+		ID:          fmt.Sprintf("%s-%d", orderID, now.UnixNano()),
+		Status:      req.Status,
+		Title:       fmt.Sprintf("ステータスを「%s」に更新", defaultStatusLabel(req.Status)),
+		Description: description,
+		Actor:       actor,
+		OccurredAt:  now,
+	}
+	s.timelines[orderID] = append(s.timelines[orderID], event)
+
+	if s.audit != nil {
+		_ = s.audit.Record(ctx, AuditLogEntry{
+			OrderID:     order.ID,
+			OrderNumber: order.Number,
+			Action:      "orders.status.transition",
+			ActorID:     strings.TrimSpace(req.ActorID),
+			ActorEmail:  strings.TrimSpace(req.ActorEmail),
+			FromStatus:  current,
+			ToStatus:    req.Status,
+			Note:        note,
+			OccurredAt:  now,
+		})
+	}
+
+	updated := cloneOrder(*order)
+	timeline := cloneTimeline(s.timelines[orderID])
+
+	return StatusUpdateResult{Order: updated, Timeline: timeline}, nil
+}
+
+func (s *StaticService) findOrderLocked(orderID string) (int, *Order) {
+	for i := range s.orders {
+		if s.orders[i].ID == orderID {
+			return i, &s.orders[i]
+		}
+	}
+	return -1, nil
+}
+
+func buildStatusChoices(current Status) []StatusTransitionOption {
+	allowed := map[Status]bool{}
+	for _, next := range statusTransitionGraph[current] {
+		allowed[next] = true
+	}
+
+	choices := make([]StatusTransitionOption, 0, len(orderedStatuses()))
+	for _, candidate := range orderedStatuses() {
+		choice := StatusTransitionOption{
+			Value:       candidate,
+			Label:       defaultStatusLabel(candidate),
+			Description: StatusDescription(candidate),
+			Selected:    candidate == current,
+		}
+		if candidate == current {
+			choice.Disabled = true
+			choice.DisabledReason = "現在のステータスです"
+		} else if !allowed[candidate] {
+			choice.Disabled = true
+			choice.DisabledReason = fmt.Sprintf("「%s」から「%s」へは遷移できません", defaultStatusLabel(current), defaultStatusLabel(candidate))
+		}
+		choices = append(choices, choice)
+	}
+	return choices
+}
+
+func isTransitionAllowed(from, to Status) bool {
+	if from == to {
+		return false
+	}
+	for _, candidate := range statusTransitionGraph[from] {
+		if candidate == to {
+			return true
+		}
+	}
+	return false
+}
+
+func buildTimelineDescription(note string, notify bool) string {
+	parts := []string{}
+	trimmed := strings.TrimSpace(note)
+	if trimmed != "" {
+		parts = append(parts, trimmed)
+	}
+	if notify {
+		parts = append(parts, "顧客に通知を送信しました")
+	}
+	return strings.Join(parts, " / ")
+}
+
+var statusTransitionGraph = map[Status][]Status{
+	StatusPendingPayment: {StatusPaymentReview, StatusInProduction, StatusCancelled},
+	StatusPaymentReview:  {StatusInProduction, StatusCancelled},
+	StatusInProduction:   {StatusReadyToShip, StatusCancelled},
+	StatusReadyToShip:    {StatusShipped, StatusCancelled},
+	StatusShipped:        {StatusDelivered, StatusRefunded},
+	StatusDelivered:      {StatusRefunded},
+	StatusCancelled:      {StatusRefunded},
+	StatusRefunded:       {},
+}
+
+func filterOrders(orders []Order, query Query, includeStatus bool) []Order {
+	results := make([]Order, 0, len(orders))
 
 	statusSet := map[Status]bool{}
 	if includeStatus && len(query.Statuses) > 0 {
@@ -448,14 +695,16 @@ func (s *StaticService) filterOrders(query Query, includeStatus bool) []Order {
 		}
 	}
 
-	for _, order := range s.orders {
+	trimmedCurrency := strings.TrimSpace(query.Currency)
+
+	for _, order := range orders {
 		if includeStatus && len(statusSet) > 0 && !statusSet[order.Status] {
 			continue
 		}
 		if query.Since != nil && order.UpdatedAt.Before(*query.Since) {
 			continue
 		}
-		if strings.TrimSpace(query.Currency) != "" && !strings.EqualFold(order.Currency, strings.TrimSpace(query.Currency)) {
+		if trimmedCurrency != "" && !strings.EqualFold(order.Currency, trimmedCurrency) {
 			continue
 		}
 		if query.AmountMin != nil && order.TotalMinor < *query.AmountMin {
@@ -614,8 +863,8 @@ func primaryCurrency(orders []Order) string {
 	return best
 }
 
-func (s *StaticService) buildFilterSummary(query Query) FilterSummary {
-	withoutStatus := s.filterOrders(query, false)
+func buildFilterSummary(orders []Order, query Query) FilterSummary {
+	withoutStatus := filterOrders(orders, query, false)
 
 	statusCounts := map[Status]int{}
 	for _, order := range withoutStatus {
@@ -723,8 +972,66 @@ func defaultStatusTone(status Status) string {
 	}
 }
 
+func seedTimeline(order Order) []TimelineEvent {
+	statuses := orderedStatuses()
+	index := len(statuses) - 1
+	for i, st := range statuses {
+		if st == order.Status {
+			index = i
+			break
+		}
+	}
+
+	base := order.CreatedAt
+	if base.IsZero() {
+		base = time.Now().Add(-48 * time.Hour)
+	}
+	step := 3 * time.Hour
+	current := base
+
+	events := make([]TimelineEvent, 0, index+2)
+	events = append(events, TimelineEvent{
+		ID:          fmt.Sprintf("%s-created", order.ID),
+		Status:      StatusPendingPayment,
+		Title:       "注文を作成",
+		Description: fmt.Sprintf("注文 #%s を受け付けました", strings.TrimSpace(order.Number)),
+		Actor:       "システム",
+		OccurredAt:  base,
+	})
+
+	for i := 0; i <= index && i < len(statuses); i++ {
+		current = current.Add(step)
+		status := statuses[i]
+		events = append(events, TimelineEvent{
+			ID:          fmt.Sprintf("%s-%s-%d", order.ID, status, i),
+			Status:      status,
+			Title:       fmt.Sprintf("ステータスを「%s」に更新", defaultStatusLabel(status)),
+			Description: StatusDescription(status),
+			Actor:       "システム",
+			OccurredAt:  current,
+		})
+	}
+
+	if len(events) > 0 {
+		final := &events[len(events)-1]
+		if !order.UpdatedAt.IsZero() {
+			final.OccurredAt = order.UpdatedAt
+		}
+	}
+
+	return events
+}
+
+type noopAuditLogger struct{}
+
+func (noopAuditLogger) Record(_ context.Context, _ AuditLogEntry) error { return nil }
+
 func int64Ptr(value int64) *int64 {
 	return &value
+}
+
+func timePtr(t time.Time) *time.Time {
+	return &t
 }
 
 func orderedStatuses() []Status {

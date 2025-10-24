@@ -1,0 +1,160 @@
+package orders
+
+import (
+	"finitefield.org/hanko-admin/internal/admin/templates/components"
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+	"finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
+
+templ StatusCell(data StatusCellData) {
+	<div id={ data.ContainerID } class="flex flex-col gap-2" data-order-status-cell>
+		@statusCellContent(data)
+	</div>
+}
+
+templ StatusCellOOB(data StatusCellData) {
+	<div id={ data.ContainerID } class="flex flex-col gap-2" data-order-status-cell hx-swap-oob="true">
+		@statusCellContent(data)
+	</div>
+}
+
+templ statusCellContent(data StatusCellData) {
+	<div class="flex items-center gap-2">
+		<span class={ helpers.BadgeClass(data.StatusTone) }>{ data.StatusLabel }</span>
+		<button
+			type="button"
+			class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-brand-600 hover:bg-slate-200"
+			hx-get={ data.ModalURL }
+			hx-target="#modal"
+			hx-swap="innerHTML"
+		>
+			変更
+		</button>
+	</div>
+	if data.PaymentLabel != "" {
+		<span class={ helpers.BadgeClass(data.PaymentTone) }>{ data.PaymentLabel }</span>
+		if data.PaymentDue != "" {
+			<p class="text-xs text-slate-500">期限: { data.PaymentDue }</p>
+		}
+	}
+	if data.SLAStatus != "" {
+		<p class={ helpers.ClassList("text-xs font-medium", slaToneClass(data.SLAStatusTone)) }>{ data.SLAStatus }</p>
+	}
+}
+
+templ StatusTimeline(data StatusTimelineData) {
+	<div id={ data.ContainerID } class="space-y-3">
+		@statusTimelineContent(data)
+	</div>
+}
+
+templ StatusTimelineOOB(data StatusTimelineData) {
+	<div id={ data.ContainerID } class="space-y-3" hx-swap-oob="true">
+		@statusTimelineContent(data)
+	</div>
+}
+
+templ statusTimelineContent(data StatusTimelineData) {
+	if len(data.Events) == 0 {
+		<p class="text-sm text-slate-500">まだ更新履歴はありません。</p>
+	} else {
+		<ol class="relative border-l border-slate-200 pl-4 text-sm text-slate-600">
+			for _, event := range data.Events {
+				<li class="mb-4 last:mb-0">
+					<div class="absolute -left-1.5 h-3 w-3 rounded-full border border-white bg-slate-300"></div>
+					<p class="flex items-center gap-2 text-xs text-slate-400">
+						<span>{ event.Relative }</span>
+						<span>· { event.Actor }</span>
+					</p>
+					<p class="mt-1 font-medium text-slate-800">{ event.Title }</p>
+					if event.Body != "" {
+						<p class="mt-1 text-slate-600">{ event.Body }</p>
+					}
+					<p class="mt-1 text-xs text-slate-400">{ event.Timestamp }</p>
+				</li>
+			}
+		</ol>
+	}
+}
+
+templ StatusUpdateSuccess(data StatusUpdateSuccessData) {
+	@StatusCellOOB(data.Cell)
+	@StatusTimelineOOB(data.Timeline)
+	<div
+		id="modal"
+		class="modal hidden"
+		hx-swap-oob="true"
+		aria-hidden="true"
+		data-modal-open="false"
+		data-modal-state="closed"
+	></div>
+}
+
+templ StatusModal(data StatusModalData) {
+	@layouts.Modal("ステータスを更新", statusModalBody(data))
+}
+
+templ statusModalBody(data StatusModalData) {
+	<div class="space-y-6 text-sm text-slate-700">
+		<form
+			hx-put={ data.ActionURL }
+			hx-target="#modal"
+			hx-swap="innerHTML"
+			class="space-y-4"
+		>
+			<input type="hidden" name="csrf_token" value={ data.CSRFToken } />
+			<div>
+				<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">注文番号</p>
+				<p class="mt-1 text-lg font-semibold text-slate-900">#{ data.OrderNumber }</p>
+				<p class="text-xs text-slate-500">現在: { data.CurrentLabel }</p>
+			</div>
+			<div class="space-y-2">
+				<label for="status" class="text-xs font-semibold uppercase tracking-wide text-slate-500">次のステータス</label>
+				<select
+					id="status"
+					name="status"
+					class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+					required
+				>
+					for _, option := range data.Options {
+						<option
+							value={ option.Value }
+							disabled?={ option.Disabled }
+							selected?={ option.Selected }
+							title={ option.DisabledReason }
+						>
+							{ option.Label }
+						</option>
+					}
+				</select>
+				<p class="text-xs text-slate-500">許可されていないステータスは選択できません。</p>
+			</div>
+			<div class="space-y-2">
+				<label for="status-note" class="text-xs font-semibold uppercase tracking-wide text-slate-500">メモ</label>
+				<textarea
+					id="status-note"
+					name="note"
+					rows="3"
+					class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				>{ data.Note }</textarea>
+				<p class="text-xs text-slate-500">チームへの共有事項や顧客連絡内容を記録します。</p>
+			</div>
+			<label class="inline-flex items-center gap-2 text-sm text-slate-600">
+				<input type="checkbox" name="notifyCustomer" value="true" checked?={ data.NotifyCustomer } class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+				<span>顧客に通知メールを送る</span>
+			</label>
+			if data.Error != "" {
+				<p class="text-sm text-rose-600">{ data.Error }</p>
+			}
+			@components.ButtonWith("更新する", components.ButtonOptions{
+				Type:     "submit",
+				Variant:  "primary",
+				FullWidth: true,
+			})
+		</form>
+		<div class="space-y-3">
+			<h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">最近の更新</h3>
+			@StatusTimeline(data.Timeline)
+		</div>
+	</div>
+}

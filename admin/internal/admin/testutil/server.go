@@ -7,6 +7,7 @@ import (
 	"finitefield.org/hanko-admin/internal/admin/dashboard"
 	"finitefield.org/hanko-admin/internal/admin/httpserver"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
+	adminorders "finitefield.org/hanko-admin/internal/admin/orders"
 	"finitefield.org/hanko-admin/internal/admin/profile"
 )
 
@@ -41,6 +42,13 @@ func WithDashboardService(service dashboard.Service) ServerOption {
 	}
 }
 
+// WithOrdersService wires a custom orders service implementation.
+func WithOrdersService(service adminorders.Service) ServerOption {
+	return func(cfg *httpserver.Config) {
+		cfg.OrdersService = service
+	}
+}
+
 // NewServer constructs an httptest server running the admin HTTP stack with sensible defaults.
 func NewServer(t testing.TB, opts ...ServerOption) *httptest.Server {
 	t.Helper()
@@ -54,6 +62,7 @@ func NewServer(t testing.TB, opts ...ServerOption) *httptest.Server {
 		Authenticator:    middleware.DefaultAuthenticator(),
 		DashboardService: dashboard.NewStaticService(),
 		ProfileService:   profile.NewStaticService(nil),
+		OrdersService:    adminorders.NewStaticService(),
 	}
 
 	for _, opt := range opts {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -396,6 +397,66 @@ func TestLoginRejectsExternalNextParameter(t *testing.T) {
 	resp.Body.Close()
 	require.Equal(t, http.StatusSeeOther, resp.StatusCode)
 	require.Equal(t, "/admin", resp.Header.Get("Location"))
+}
+
+func TestOrdersStatusUpdateFlow(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "orders-token"}
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth))
+	client := noRedirectClient(t)
+
+	// Seed CSRF cookie by loading the orders page.
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/orders", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+auth.Token)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	csrf := findCSRFCookie(t, client.Jar, ts.URL+"/admin")
+	require.NotEmpty(t, csrf)
+
+	// Fetch the status modal via htmx request.
+	modalReq, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/orders/order-1052/modal/status", nil)
+	require.NoError(t, err)
+	modalReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	modalReq.Header.Set("HX-Request", "true")
+	modalReq.Header.Set("HX-Target", "modal")
+	modalResp, err := client.Do(modalReq)
+	require.NoError(t, err)
+	body, err := io.ReadAll(modalResp.Body)
+	modalResp.Body.Close()
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, modalResp.StatusCode)
+	modalHTML := string(body)
+	require.Contains(t, modalHTML, `hx-put="/admin/orders/order-1052:status"`)
+
+	// Submit the status update.
+	form := url.Values{}
+	form.Set("status", "ready_to_ship")
+	form.Set("note", "包装確認済み")
+	form.Set("notifyCustomer", "true")
+	updateReq, err := http.NewRequest(http.MethodPut, ts.URL+"/admin/orders/order-1052:status", strings.NewReader(form.Encode()))
+	require.NoError(t, err)
+	updateReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	updateReq.Header.Set("HX-Request", "true")
+	updateReq.Header.Set("HX-Target", "modal")
+	updateReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	updateReq.Header.Set("X-CSRF-Token", csrf)
+	updateResp, err := client.Do(updateReq)
+	require.NoError(t, err)
+	updateBody, err := io.ReadAll(updateResp.Body)
+	updateResp.Body.Close()
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, updateResp.StatusCode)
+	require.Equal(t, `{"toast":{"message":"ステータスを更新しました。","tone":"success"},"modal:close":true}`, updateResp.Header.Get("HX-Trigger"))
+
+	updateHTML := string(updateBody)
+	require.Contains(t, updateHTML, "hx-swap-oob")
+	require.Contains(t, updateHTML, "出荷待ち")
+	require.Contains(t, updateHTML, "包装確認済み")
 }
 
 type dashboardStub struct {

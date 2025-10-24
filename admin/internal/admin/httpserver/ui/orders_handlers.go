@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/go-chi/chi/v5"
 
 	custommw "finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	adminorders "finitefield.org/hanko-admin/internal/admin/orders"
@@ -130,6 +132,110 @@ func (h *Handlers) OrdersBulkExport(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("HX-Trigger", `{"toast":{"message":"エクスポートを開始しました。完了後に通知します。","tone":"info"}}`)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// OrdersStatusModal renders the status update modal for a specific order.
+func (h *Handlers) OrdersStatusModal(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		http.Error(w, "注文IDが不正です。", http.StatusBadRequest)
+		return
+	}
+
+	modal, err := h.orders.StatusModal(ctx, user.Token, orderID)
+	if err != nil {
+		if errors.Is(err, adminorders.ErrOrderNotFound) {
+			http.Error(w, "指定された注文が見つかりません。", http.StatusNotFound)
+			return
+		}
+		log.Printf("orders: fetch status modal failed: %v", err)
+		http.Error(w, "ステータス更新モーダルの取得に失敗しました。", http.StatusBadGateway)
+		return
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	csrf := custommw.CSRFTokenFromContext(ctx)
+	data := orderstpl.StatusModalPayload(basePath, modal, csrf, "", true, "")
+
+	templ.Handler(orderstpl.StatusModal(data)).ServeHTTP(w, r)
+}
+
+// OrdersStatusUpdate handles status transition submissions for a single order.
+func (h *Handlers) OrdersStatusUpdate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		http.Error(w, "注文IDが不正です。", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "リクエストの解析に失敗しました。", http.StatusBadRequest)
+		return
+	}
+
+	statusValue := strings.TrimSpace(r.FormValue("status"))
+	note := strings.TrimSpace(r.FormValue("note"))
+	notify := parseCheckbox(r.FormValue("notifyCustomer"))
+
+	updateReq := adminorders.StatusUpdateRequest{
+		Status:         adminorders.Status(statusValue),
+		Note:           note,
+		NotifyCustomer: notify,
+		ActorID:        user.UID,
+		ActorEmail:     user.Email,
+	}
+
+	result, err := h.orders.UpdateStatus(ctx, user.Token, orderID, updateReq)
+	if err != nil {
+		var transitionErr *adminorders.StatusTransitionError
+		if errors.Is(err, adminorders.ErrOrderNotFound) {
+			http.Error(w, "指定された注文が見つかりません。", http.StatusNotFound)
+			return
+		}
+		if errors.As(err, &transitionErr) {
+			modal, modalErr := h.orders.StatusModal(ctx, user.Token, orderID)
+			if modalErr != nil {
+				log.Printf("orders: reload status modal after error failed: %v", modalErr)
+				http.Error(w, "ステータス更新に失敗しました。", http.StatusBadGateway)
+				return
+			}
+			basePath := custommw.BasePathFromContext(ctx)
+			csrf := custommw.CSRFTokenFromContext(ctx)
+			message := transitionErr.Reason
+			if strings.TrimSpace(message) == "" {
+				message = "ステータスを変更できません。"
+			}
+			data := orderstpl.StatusModalPayload(basePath, modal, csrf, note, notify, message)
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			templ.Handler(orderstpl.StatusModal(data)).ServeHTTP(w, r)
+			return
+		}
+		log.Printf("orders: status update failed: %v", err)
+		http.Error(w, "ステータス更新に失敗しました。", http.StatusBadGateway)
+		return
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	cell := orderstpl.StatusCellPayload(basePath, result.Order)
+	timeline := orderstpl.StatusTimelinePayload(result.Order.ID, result.Timeline)
+	success := orderstpl.StatusUpdateSuccessPayload(cell, timeline)
+
+	w.Header().Set("HX-Trigger", `{"toast":{"message":"ステータスを更新しました。","tone":"success"},"modal:close":true}`)
+	templ.Handler(orderstpl.StatusUpdateSuccess(success)).ServeHTTP(w, r)
 }
 
 type ordersRequest struct {
@@ -291,6 +397,15 @@ func normalizeStatus(value string) string {
 		return string(adminorders.StatusCancelled)
 	default:
 		return ""
+	}
+}
+
+func parseCheckbox(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true", "1", "yes", "on":
+		return true
+	default:
+		return false
 	}
 }
 

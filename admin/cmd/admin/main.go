@@ -16,6 +16,7 @@ import (
 
 	"finitefield.org/hanko-admin/internal/admin/httpserver"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
+	adminorders "finitefield.org/hanko-admin/internal/admin/orders"
 	"finitefield.org/hanko-admin/internal/admin/profile"
 	"finitefield.org/hanko-admin/internal/admin/search"
 )
@@ -28,6 +29,7 @@ func main() {
 		Authenticator:  buildAuthenticator(rootCtx),
 		ProfileService: buildProfileService(),
 		SearchService:  buildSearchService(),
+		OrdersService:  buildOrdersService(),
 		Environment:    getEnv("ADMIN_ENVIRONMENT", "Development"),
 		Session: httpserver.SessionConfig{
 			CookieName:       getEnv("ADMIN_SESSION_COOKIE_NAME", ""),
@@ -175,4 +177,8 @@ func buildSearchService() search.Service {
 		log.Printf("admin: ADMIN_SEARCH_API_BASE_URL is set (%s) but no HTTP client is implemented yet; using static search dataset", base)
 	}
 	return search.NewStaticService()
+}
+
+func buildOrdersService() adminorders.Service {
+	return adminorders.NewStaticService()
 }

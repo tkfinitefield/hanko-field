@@ -2,6 +2,8 @@ package orders
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 )
 
@@ -9,6 +11,12 @@ import (
 type Service interface {
 	// List returns a paginated set of orders that match the provided query.
 	List(ctx context.Context, token string, query Query) (ListResult, error)
+
+	// StatusModal loads metadata required to render the status update modal for an order.
+	StatusModal(ctx context.Context, token, orderID string) (StatusModal, error)
+
+	// UpdateStatus attempts to transition an order to the provided status and returns the updated order state.
+	UpdateStatus(ctx context.Context, token, orderID string, req StatusUpdateRequest) (StatusUpdateResult, error)
 }
 
 // Status represents the canonical lifecycle state of an order.
@@ -41,6 +49,13 @@ const (
 	SortDirectionAsc SortDirection = "asc"
 	// SortDirectionDesc sorts descending.
 	SortDirectionDesc SortDirection = "desc"
+)
+
+var (
+	// ErrOrderNotFound is returned when an order does not exist.
+	ErrOrderNotFound = errors.New("order not found")
+	// ErrInvalidTransition is returned when a requested status change is not permitted.
+	ErrInvalidTransition = errors.New("invalid status transition")
 )
 
 // Query captures filters and pagination arguments for listing orders.
@@ -151,6 +166,109 @@ type Order struct {
 	SalesChannel     string
 	Integration      string
 	HasRefundRequest bool
+}
+
+// StatusModal represents data necessary to render the status update modal.
+type StatusModal struct {
+	Order          Order
+	Choices        []StatusTransitionOption
+	LatestTimeline []TimelineEvent
+}
+
+// StatusTransitionOption describes an available status transition choice.
+type StatusTransitionOption struct {
+	Value          Status
+	Label          string
+	Description    string
+	Disabled       bool
+	DisabledReason string
+	Selected       bool
+}
+
+// StatusUpdateRequest encapsulates desired transition parameters.
+type StatusUpdateRequest struct {
+	Status         Status
+	Note           string
+	NotifyCustomer bool
+	ActorID        string
+	ActorEmail     string
+}
+
+// StatusUpdateResult returns updated order state with enriched fragments.
+type StatusUpdateResult struct {
+	Order    Order
+	Timeline []TimelineEvent
+}
+
+// TimelineEvent captures a single history entry for an order.
+type TimelineEvent struct {
+	ID          string
+	Status      Status
+	Title       string
+	Description string
+	Actor       string
+	OccurredAt  time.Time
+}
+
+// AuditLogger records audit trail entries for order operations.
+type AuditLogger interface {
+	Record(ctx context.Context, entry AuditLogEntry) error
+}
+
+// AuditLogEntry describes a structured audit record for an order status change.
+type AuditLogEntry struct {
+	OrderID     string
+	OrderNumber string
+	Action      string
+	ActorID     string
+	ActorEmail  string
+	FromStatus  Status
+	ToStatus    Status
+	Note        string
+	OccurredAt  time.Time
+}
+
+// StatusTransitionError represents a validation failure for a requested status change.
+type StatusTransitionError struct {
+	From   Status
+	To     Status
+	Reason string
+}
+
+// Error implements the error interface.
+func (e *StatusTransitionError) Error() string {
+	if e == nil {
+		return ErrInvalidTransition.Error()
+	}
+	reason := e.Reason
+	if strings.TrimSpace(reason) == "" {
+		reason = "transition not permitted"
+	}
+	return "order status transition from " + string(e.From) + " to " + string(e.To) + ": " + reason
+}
+
+// StatusDescription returns a human friendly description for a status value.
+func StatusDescription(status Status) string {
+	switch status {
+	case StatusPendingPayment:
+		return "支払い確認を待っています"
+	case StatusPaymentReview:
+		return "決済チームが支払いを確認中です"
+	case StatusInProduction:
+		return "制作工程で作業が進行中です"
+	case StatusReadyToShip:
+		return "出荷準備が完了し、集荷待ちです"
+	case StatusShipped:
+		return "配送業者に引き渡され輸送中です"
+	case StatusDelivered:
+		return "お客様への納品が完了しました"
+	case StatusRefunded:
+		return "返金処理が完了しました"
+	case StatusCancelled:
+		return "注文はキャンセルされました"
+	default:
+		return ""
+	}
 }
 
 // Customer contains primary customer display information.

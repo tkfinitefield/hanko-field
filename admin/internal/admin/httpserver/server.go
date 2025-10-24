@@ -14,6 +14,7 @@ import (
 	custommw "finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/ui"
 	adminnotifications "finitefield.org/hanko-admin/internal/admin/notifications"
+	adminorders "finitefield.org/hanko-admin/internal/admin/orders"
 	"finitefield.org/hanko-admin/internal/admin/profile"
 	"finitefield.org/hanko-admin/internal/admin/search"
 	appsession "finitefield.org/hanko-admin/internal/admin/session"
@@ -30,6 +31,7 @@ type Config struct {
 	ProfileService       profile.Service
 	SearchService        search.Service
 	NotificationsService adminnotifications.Service
+	OrdersService        adminorders.Service
 	Session              SessionConfig
 	SessionStore         custommw.SessionStore
 	CSRFCookieName       string
@@ -96,6 +98,7 @@ func New(cfg Config) *http.Server {
 		ProfileService:       cfg.ProfileService,
 		SearchService:        cfg.SearchService,
 		NotificationsService: cfg.NotificationsService,
+		OrdersService:        cfg.OrdersService,
 	})
 
 	mountAdminRoutes(router, basePath, routeOptions{
@@ -189,6 +192,8 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 				or.Post("/bulk/status", uiHandlers.OrdersBulkStatus)
 				or.Post("/bulk/labels", uiHandlers.OrdersBulkLabels)
 				or.Post("/bulk/export", uiHandlers.OrdersBulkExport)
+				or.Get("/{orderID}/modal/status", uiHandlers.OrdersStatusModal)
+				or.Put("/{orderID}:status", uiHandlers.OrdersStatusUpdate)
 			})
 			// Future admin routes will be registered here.
 		})

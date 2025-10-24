@@ -143,22 +143,9 @@ templ Table(data TableData) {
 								<td class="px-4 py-4 text-right align-top font-semibold text-slate-900">
 									{ row.Total }
 								</td>
-								<td class="px-4 py-4 align-top">
-									<div class="flex flex-col gap-2">
-										<span class={ helpers.BadgeClass(row.StatusTone) }>{ row.StatusLabel }</span>
-										if row.PaymentLabel != "" {
-											<span class={ helpers.BadgeClass(row.PaymentTone) }>{ row.PaymentLabel }</span>
-											if row.PaymentDue != "" {
-												<p class="text-xs text-slate-500">期限: { row.PaymentDue }</p>
-											}
-										}
-										if row.SLAStatus != "" {
-											<p class={ helpers.ClassList("text-xs font-medium", slaToneClass(row.SLAStatusTone)) }>
-												{ row.SLAStatus }
-											</p>
-										}
-									</div>
-								</td>
+				<td class="px-4 py-4 align-top">
+					@StatusCell(row.StatusCell)
+				</td>
 								<td class="px-4 py-4 align-top">
 									<div class="flex flex-col gap-1 text-xs text-slate-500">
 										<p>

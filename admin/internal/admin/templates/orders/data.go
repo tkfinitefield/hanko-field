@@ -145,6 +145,70 @@ type TableRow struct {
 	Integration        string
 	PromisedAtLabel    string
 	PromisedAtRelative string
+	StatusCell         StatusCellData
+}
+
+// StatusCellData represents the badge stack rendered within the status column.
+type StatusCellData struct {
+	OrderID       string
+	ModalURL      string
+	StatusLabel   string
+	StatusTone    string
+	PaymentLabel  string
+	PaymentTone   string
+	PaymentDue    string
+	SLAStatus     string
+	SLAStatusTone string
+	ContainerID   string
+}
+
+// StatusModalData provides context for the status update modal.
+type StatusModalData struct {
+	OrderID        string
+	OrderNumber    string
+	CurrentStatus  string
+	CurrentLabel   string
+	ActionURL      string
+	CSRFToken      string
+	Options        []StatusModalOption
+	Note           string
+	NotifyCustomer bool
+	Error          string
+	Timeline       StatusTimelineData
+}
+
+// StatusModalOption describes a selectable status transition.
+type StatusModalOption struct {
+	Value          string
+	Label          string
+	Description    string
+	Disabled       bool
+	DisabledReason string
+	Selected       bool
+}
+
+// StatusTimelineData captures a concise list of recent timeline entries.
+type StatusTimelineData struct {
+	OrderID     string
+	ContainerID string
+	Events      []StatusTimelineItem
+}
+
+// StatusTimelineItem represents a single timeline entry view.
+type StatusTimelineItem struct {
+	ID        string
+	Title     string
+	Body      string
+	Actor     string
+	Timestamp string
+	Relative  string
+	Tone      string
+}
+
+// StatusUpdateSuccessData bundles fragments to update after a successful transition.
+type StatusUpdateSuccessData struct {
+	Cell     StatusCellData
+	Timeline StatusTimelineData
 }
 
 // BadgeView describes a badge to render for a row.
@@ -288,9 +352,107 @@ func toTableRows(basePath string, orders []adminorders.Order) []TableRow {
 			row.PromisedAtRelative = helpers.Relative(*order.Fulfillment.PromisedDate)
 		}
 
+		row.StatusCell = buildStatusCell(basePath, order)
+
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+func buildStatusCell(basePath string, order adminorders.Order) StatusCellData {
+	return StatusCellData{
+		OrderID:       order.ID,
+		ModalURL:      joinBase(basePath, "/orders/"+strings.TrimSpace(order.ID)+"/modal/status"),
+		StatusLabel:   order.StatusLabel,
+		StatusTone:    order.StatusTone,
+		PaymentLabel:  paymentLabel(order.Payment),
+		PaymentTone:   paymentTone(order.Payment),
+		PaymentDue:    paymentDue(order.Payment),
+		SLAStatus:     order.Fulfillment.SLAStatus,
+		SLAStatusTone: order.Fulfillment.SLAStatusTone,
+		ContainerID:   fmt.Sprintf("order-status-%s", strings.TrimSpace(order.ID)),
+	}
+}
+
+// StatusCellPayload converts an order into a status cell fragment payload.
+func StatusCellPayload(basePath string, order adminorders.Order) StatusCellData {
+	return buildStatusCell(basePath, order)
+}
+
+// StatusModalPayload prepares data for rendering the status update modal.
+func StatusModalPayload(basePath string, modal adminorders.StatusModal, csrfToken, note string, notify bool, errMsg string) StatusModalData {
+	options := make([]StatusModalOption, 0, len(modal.Choices))
+	for _, choice := range modal.Choices {
+		options = append(options, StatusModalOption{
+			Value:          string(choice.Value),
+			Label:          choice.Label,
+			Description:    choice.Description,
+			Disabled:       choice.Disabled,
+			DisabledReason: choice.DisabledReason,
+			Selected:       choice.Selected,
+		})
+	}
+
+	return StatusModalData{
+		OrderID:        modal.Order.ID,
+		OrderNumber:    modal.Order.Number,
+		CurrentStatus:  string(modal.Order.Status),
+		CurrentLabel:   modal.Order.StatusLabel,
+		ActionURL:      joinBase(basePath, "/orders/"+strings.TrimSpace(modal.Order.ID)+":status"),
+		CSRFToken:      csrfToken,
+		Options:        options,
+		Note:           note,
+		NotifyCustomer: notify,
+		Error:          errMsg,
+		Timeline:       StatusTimelinePayload(modal.Order.ID, modal.LatestTimeline),
+	}
+}
+
+// StatusTimelinePayload converts timeline entries into template items.
+func StatusTimelinePayload(orderID string, events []adminorders.TimelineEvent) StatusTimelineData {
+	items := make([]StatusTimelineItem, 0, len(events))
+	for i := len(events) - 1; i >= 0; i-- {
+		event := events[i]
+		title := strings.TrimSpace(event.Title)
+		if title == "" {
+			title = "ステータス更新"
+		}
+		body := strings.TrimSpace(event.Description)
+		actor := strings.TrimSpace(event.Actor)
+		if actor == "" {
+			actor = "システム"
+		}
+		items = append(items, StatusTimelineItem{
+			ID:        event.ID,
+			Title:     title,
+			Body:      body,
+			Actor:     actor,
+			Timestamp: helpers.Date(event.OccurredAt, "2006-01-02 15:04"),
+			Relative:  helpers.Relative(event.OccurredAt),
+			Tone:      statusToneForStatus(event.Status),
+		})
+	}
+	return StatusTimelineData{OrderID: orderID, ContainerID: fmt.Sprintf("order-timeline-%s", strings.TrimSpace(orderID)), Events: items}
+}
+
+func statusToneForStatus(status adminorders.Status) string {
+	switch status {
+	case adminorders.StatusPendingPayment, adminorders.StatusPaymentReview:
+		return "warning"
+	case adminorders.StatusInProduction, adminorders.StatusReadyToShip, adminorders.StatusShipped:
+		return "info"
+	case adminorders.StatusDelivered:
+		return "success"
+	case adminorders.StatusRefunded, adminorders.StatusCancelled:
+		return "muted"
+	default:
+		return "info"
+	}
+}
+
+// StatusUpdateSuccessPayload creates the combined fragment payload for OOB swaps.
+func StatusUpdateSuccessPayload(cell StatusCellData, timeline StatusTimelineData) StatusUpdateSuccessData {
+	return StatusUpdateSuccessData{Cell: cell, Timeline: timeline}
 }
 
 func paymentLabel(p adminorders.Payment) string {
