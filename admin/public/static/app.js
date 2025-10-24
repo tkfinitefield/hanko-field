@@ -1798,6 +1798,110 @@ const initGlobalSearchInteractions = () => {
   }
 };
 
+// Utility initialisers for the orders index interactions.
+const initOrdersFilter = () => {
+  const form = document.getElementById("orders-filter");
+  if (!(form instanceof HTMLFormElement) || form.dataset.ordersFilterInit === "true") {
+    return;
+  }
+  form.dataset.ordersFilterInit = "true";
+  const minInput = form.querySelector("input[name='amountMin']");
+  const maxInput = form.querySelector("input[name='amountMax']");
+  form.querySelectorAll("[data-orders-preset]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (!(button instanceof HTMLElement)) {
+        return;
+      }
+      const min = typeof button.dataset.min === "string" ? button.dataset.min : "";
+      const max = typeof button.dataset.max === "string" ? button.dataset.max : "";
+      if (minInput instanceof HTMLInputElement) {
+        minInput.value = min;
+      }
+      if (maxInput instanceof HTMLInputElement) {
+        maxInput.value = max;
+      }
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit();
+      } else {
+        form.submit();
+      }
+    });
+  });
+};
+
+const initOrdersTable = (scope) => {
+  const container = scope instanceof Element ? scope : document;
+  const fragment = container.querySelector("[data-orders-table-fragment]");
+  if (!(fragment instanceof HTMLElement) || fragment.dataset.ordersTableInit === "true") {
+    return;
+  }
+  fragment.dataset.ordersTableInit = "true";
+
+  const master = fragment.querySelector("[data-orders-master]");
+  const checkboxes = Array.from(fragment.querySelectorAll("[data-orders-checkbox]")).filter(
+    (el) => el instanceof HTMLInputElement,
+  );
+  const toolbar = fragment.querySelector("[data-orders-bulk-toolbar]");
+  const countEl = toolbar && toolbar.querySelector("[data-orders-bulk-count]");
+  const actionButtons = toolbar
+    ? Array.from(toolbar.querySelectorAll("[data-orders-bulk-action]")).filter((el) => el instanceof HTMLButtonElement)
+    : [];
+  const clearButton = toolbar && toolbar.querySelector("[data-orders-bulk-clear]");
+
+  const updateState = () => {
+    const selected = checkboxes.filter((input) => input.checked);
+    const count = selected.length;
+    if (countEl instanceof HTMLElement) {
+      countEl.textContent = String(count);
+    }
+    if (toolbar instanceof HTMLElement) {
+      toolbar.classList.toggle("hidden", count === 0);
+    }
+    actionButtons.forEach((button) => {
+      button.disabled = count === 0;
+    });
+    if (master instanceof HTMLInputElement) {
+      master.checked = count > 0 && count === checkboxes.length;
+      master.indeterminate = count > 0 && count < checkboxes.length;
+    }
+  };
+
+  if (master instanceof HTMLInputElement) {
+    master.addEventListener("change", () => {
+      checkboxes.forEach((input) => {
+        input.checked = master.checked;
+      });
+      updateState();
+    });
+  }
+
+  checkboxes.forEach((input) => {
+    input.addEventListener("change", updateState);
+  });
+
+  if (clearButton instanceof HTMLElement) {
+    clearButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      checkboxes.forEach((input) => {
+        input.checked = false;
+      });
+      if (master instanceof HTMLInputElement) {
+        master.checked = false;
+        master.indeterminate = false;
+      }
+      updateState();
+    });
+  }
+
+  updateState();
+};
+
+const initOrdersInteractions = (scope) => {
+  initOrdersFilter();
+  initOrdersTable(scope);
+};
+
 // Expose a hook for future htmx/alpine wiring without blocking initial scaffold.
 window.hankoAdmin = window.hankoAdmin || {
   init() {
@@ -1874,6 +1978,16 @@ window.hankoAdmin = window.hankoAdmin || {
     const toast = initToastStack();
     initUserMenu();
     initGlobalSearchInteractions();
+    initOrdersInteractions(document);
+
+    if (window.htmx) {
+      document.body.addEventListener("htmx:afterSwap", (event) => {
+        if (!(event.target instanceof Element)) {
+          return;
+        }
+        initOrdersInteractions(event.target);
+      });
+    }
 
     window.hankoAdmin.modal = modal;
     window.hankoAdmin.toast = toast;

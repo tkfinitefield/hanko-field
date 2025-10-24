@@ -174,7 +174,7 @@ func pageHeader(data PageData) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(AvatarInitial(data.DisplayName, data.UserEmail, data.UserName))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 56, Col: 69}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 56, Col: 69}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -187,7 +187,7 @@ func pageHeader(data PageData) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(data.DisplayName)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 59, Col: 73}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 59, Col: 73}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -205,7 +205,7 @@ func pageHeader(data PageData) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(data.UserEmail)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 61, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 61, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -224,7 +224,7 @@ func pageHeader(data PageData) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(formatTimestamp(data.Security.UpdatedAt))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 64, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 64, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -305,7 +305,7 @@ func profileSummaryCard(data PageData) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(data.UserEmail)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 103, Col: 22}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 103, Col: 22}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -324,7 +324,7 @@ func profileSummaryCard(data PageData) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(data.UserName)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 111, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 111, Col: 61}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -342,7 +342,7 @@ func profileSummaryCard(data PageData) templ.Component {
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(data.Security.Phone)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 116, Col: 58}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 116, Col: 58}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -361,7 +361,7 @@ func profileSummaryCard(data PageData) templ.Component {
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(formatTimestamp(*data.LastLogin))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 123, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 123, Col: 40}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -400,7 +400,7 @@ func profileSummaryCard(data PageData) templ.Component {
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(len(data.Security.APIKeys))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 142, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 142, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -581,7 +581,7 @@ func accountTab(data PageData) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(data.DisplayName)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 217, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 217, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 		if templ_7745c5c3_Err != nil {
@@ -595,7 +595,7 @@ func accountTab(data PageData) templ.Component {
 			var templ_7745c5c3_Var19 string
 			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(data.UserEmail)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 223, Col: 23}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 223, Col: 23}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 			if templ_7745c5c3_Err != nil {
@@ -619,7 +619,7 @@ func accountTab(data PageData) templ.Component {
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(data.Security.Phone)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 232, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 232, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
@@ -796,7 +796,7 @@ func featureFlagsTab(data PageData) templ.Component {
 				var templ_7745c5c3_Var24 string
 				templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(flag.Key)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 308, Col: 65}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 308, Col: 65}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 				if templ_7745c5c3_Err != nil {
@@ -863,7 +863,7 @@ func flashMessage(message string) templ.Component {
 		var templ_7745c5c3_Var26 string
 		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(message)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 327, Col: 11}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 327, Col: 11}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 		if templ_7745c5c3_Err != nil {
@@ -905,7 +905,7 @@ func alertCard(alert AlertContent) templ.Component {
 		var templ_7745c5c3_Var28 string
 		templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(alert.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 333, Col: 66}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 333, Col: 66}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 		if templ_7745c5c3_Err != nil {
@@ -918,7 +918,7 @@ func alertCard(alert AlertContent) templ.Component {
 		var templ_7745c5c3_Var29 string
 		templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(alert.Body)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 334, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 334, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 		if templ_7745c5c3_Err != nil {
@@ -936,7 +936,7 @@ func alertCard(alert AlertContent) templ.Component {
 			var templ_7745c5c3_Var30 templ.SafeURL
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinURLErrs(alert.LinkHref)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 337, Col: 25}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 337, Col: 25}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 			if templ_7745c5c3_Err != nil {
@@ -949,7 +949,7 @@ func alertCard(alert AlertContent) templ.Component {
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(alert.LinkText)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 342, Col: 20}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 342, Col: 20}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
@@ -1047,7 +1047,7 @@ func mfaCardBody(state *profilemodel.SecurityState, csrf string) templ.Component
 			var templ_7745c5c3_Var34 string
 			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(formatTimestamp(*state.MFA.LastConfirmed))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 366, Col: 99}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 366, Col: 99}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 			if templ_7745c5c3_Err != nil {
@@ -1095,7 +1095,7 @@ func mfaCardBody(state *profilemodel.SecurityState, csrf string) templ.Component
 				var templ_7745c5c3_Var35 string
 				templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(method.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 388, Col: 65}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 388, Col: 65}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 				if templ_7745c5c3_Err != nil {
@@ -1108,7 +1108,7 @@ func mfaCardBody(state *profilemodel.SecurityState, csrf string) templ.Component
 				var templ_7745c5c3_Var36 string
 				templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(string(method.Kind))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 389, Col: 81}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 389, Col: 81}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 				if templ_7745c5c3_Err != nil {
@@ -1131,7 +1131,7 @@ func mfaCardBody(state *profilemodel.SecurityState, csrf string) templ.Component
 				var templ_7745c5c3_Var37 string
 				templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(formatTimestamp(method.CreatedAt))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 395, Col: 54}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 395, Col: 54}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 				if templ_7745c5c3_Err != nil {
@@ -1149,7 +1149,7 @@ func mfaCardBody(state *profilemodel.SecurityState, csrf string) templ.Component
 					var templ_7745c5c3_Var38 string
 					templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(formatTimestamp(*method.LastUsedAt))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 397, Col: 63}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 397, Col: 63}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 					if templ_7745c5c3_Err != nil {
@@ -1178,7 +1178,7 @@ func mfaCardBody(state *profilemodel.SecurityState, csrf string) templ.Component
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(len(state.MFA.RecoveryCodes))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 405, Col: 90}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 405, Col: 90}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 			if templ_7745c5c3_Err != nil {
@@ -1201,7 +1201,7 @@ func mfaCardBody(state *profilemodel.SecurityState, csrf string) templ.Component
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(csrf)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 416, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 416, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 			if templ_7745c5c3_Err != nil {
@@ -1231,7 +1231,7 @@ func mfaCardBody(state *profilemodel.SecurityState, csrf string) templ.Component
 			var templ_7745c5c3_Var41 string
 			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(csrf)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 430, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 430, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 			if templ_7745c5c3_Err != nil {
@@ -1348,7 +1348,7 @@ func apiKeysBody(state *profilemodel.SecurityState, csrf string) templ.Component
 				var templ_7745c5c3_Var44 string
 				templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(key.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 476, Col: 62}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 476, Col: 62}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 				if templ_7745c5c3_Err != nil {
@@ -1361,7 +1361,7 @@ func apiKeysBody(state *profilemodel.SecurityState, csrf string) templ.Component
 				var templ_7745c5c3_Var45 string
 				templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(formatTimestamp(key.CreatedAt))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 477, Col: 85}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 477, Col: 85}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 				if templ_7745c5c3_Err != nil {
@@ -1379,7 +1379,7 @@ func apiKeysBody(state *profilemodel.SecurityState, csrf string) templ.Component
 					var templ_7745c5c3_Var46 string
 					templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(formatTimestamp(*key.ExpiresAt))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 479, Col: 87}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 479, Col: 87}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
 					if templ_7745c5c3_Err != nil {
@@ -1417,7 +1417,7 @@ func apiKeysBody(state *profilemodel.SecurityState, csrf string) templ.Component
 				var templ_7745c5c3_Var47 string
 				templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(formatOptionalTime(key.LastUsed))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 491, Col: 79}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 491, Col: 79}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 				if templ_7745c5c3_Err != nil {
@@ -1435,7 +1435,7 @@ func apiKeysBody(state *profilemodel.SecurityState, csrf string) templ.Component
 					var templ_7745c5c3_Var48 string
 					templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs("/admin/profile/api-keys/" + key.ID + "/revoke")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 495, Col: 68}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 495, Col: 68}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 					if templ_7745c5c3_Err != nil {
@@ -1448,7 +1448,7 @@ func apiKeysBody(state *profilemodel.SecurityState, csrf string) templ.Component
 					var templ_7745c5c3_Var49 string
 					templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(csrf)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 500, Col: 62}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 500, Col: 62}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 					if templ_7745c5c3_Err != nil {
@@ -1566,7 +1566,7 @@ func sessionsBody(state *profilemodel.SecurityState, csrf string) templ.Componen
 				var templ_7745c5c3_Var52 string
 				templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(session.UserAgent)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 544, Col: 70}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 544, Col: 70}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 				if templ_7745c5c3_Err != nil {
@@ -1579,7 +1579,7 @@ func sessionsBody(state *profilemodel.SecurityState, csrf string) templ.Componen
 				var templ_7745c5c3_Var53 string
 				templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(formatTimestamp(session.CreatedAt))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 545, Col: 89}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 545, Col: 89}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 				if templ_7745c5c3_Err != nil {
@@ -1602,7 +1602,7 @@ func sessionsBody(state *profilemodel.SecurityState, csrf string) templ.Componen
 				var templ_7745c5c3_Var54 string
 				templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.JoinStringErrs(session.IPAddress)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 551, Col: 31}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 551, Col: 31}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var54))
 				if templ_7745c5c3_Err != nil {
@@ -1620,7 +1620,7 @@ func sessionsBody(state *profilemodel.SecurityState, csrf string) templ.Componen
 					var templ_7745c5c3_Var55 string
 					templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.JoinStringErrs(session.Location)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 553, Col: 62}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 553, Col: 62}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var55))
 					if templ_7745c5c3_Err != nil {
@@ -1638,7 +1638,7 @@ func sessionsBody(state *profilemodel.SecurityState, csrf string) templ.Componen
 				var templ_7745c5c3_Var56 string
 				templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(formatTimestamp(session.LastSeenAt))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 556, Col: 82}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 556, Col: 82}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
 				if templ_7745c5c3_Err != nil {
@@ -1656,7 +1656,7 @@ func sessionsBody(state *profilemodel.SecurityState, csrf string) templ.Componen
 					var templ_7745c5c3_Var57 string
 					templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.JoinStringErrs("/admin/profile/sessions/" + session.ID + "/revoke")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 560, Col: 72}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 560, Col: 72}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var57))
 					if templ_7745c5c3_Err != nil {
@@ -1669,7 +1669,7 @@ func sessionsBody(state *profilemodel.SecurityState, csrf string) templ.Componen
 					var templ_7745c5c3_Var58 string
 					templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(csrf)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 565, Col: 62}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 565, Col: 62}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var58))
 					if templ_7745c5c3_Err != nil {
@@ -1783,7 +1783,7 @@ func totpModalBody(data TOTPModalData) templ.Component {
 			var templ_7745c5c3_Var61 string
 			templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.JoinStringErrs(data.Enrollment.QRCodePNG)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 597, Col: 39}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 597, Col: 39}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var61))
 			if templ_7745c5c3_Err != nil {
@@ -1801,7 +1801,7 @@ func totpModalBody(data TOTPModalData) templ.Component {
 		var templ_7745c5c3_Var62 string
 		templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(data.Enrollment.Secret)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 600, Col: 27}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 600, Col: 27}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
 		if templ_7745c5c3_Err != nil {
@@ -1814,7 +1814,7 @@ func totpModalBody(data TOTPModalData) templ.Component {
 		var templ_7745c5c3_Var63 string
 		templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFToken)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 608, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 608, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
 		if templ_7745c5c3_Err != nil {
@@ -1843,7 +1843,7 @@ func totpModalBody(data TOTPModalData) templ.Component {
 			var templ_7745c5c3_Var64 string
 			templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(data.Error)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 618, Col: 49}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 618, Col: 49}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 			if templ_7745c5c3_Err != nil {
@@ -1923,7 +1923,7 @@ func apiKeyFormBody(data APIKeyFormData) templ.Component {
 		var templ_7745c5c3_Var67 string
 		templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFToken)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 637, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 637, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var67))
 		if templ_7745c5c3_Err != nil {
@@ -1952,7 +1952,7 @@ func apiKeyFormBody(data APIKeyFormData) templ.Component {
 			var templ_7745c5c3_Var68 string
 			templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinStringErrs(data.Error)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 647, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 647, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var68))
 			if templ_7745c5c3_Err != nil {
@@ -2046,7 +2046,7 @@ func apiKeySecretBody(secret *profilemodel.APIKeySecret, message string) templ.C
 			var templ_7745c5c3_Var71 string
 			templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.JoinStringErrs(message)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 667, Col: 89}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 667, Col: 89}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var71))
 			if templ_7745c5c3_Err != nil {
@@ -2064,7 +2064,7 @@ func apiKeySecretBody(secret *profilemodel.APIKeySecret, message string) templ.C
 		var templ_7745c5c3_Var72 string
 		templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.JoinStringErrs(secret.Secret)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/admin/templates/profile/index.templ`, Line: 671, Col: 109}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile/index.templ`, Line: 671, Col: 109}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var72))
 		if templ_7745c5c3_Err != nil {

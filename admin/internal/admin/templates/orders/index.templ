@@ -1,0 +1,195 @@
+package orders
+
+import (
+	"strconv"
+
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+	"finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
+
+templ Index(data PageData) {
+	@layouts.Base(data.Title, data.Breadcrumbs, pageBody(data))
+}
+
+templ pageBody(data PageData) {
+	<div class="space-y-6" data-orders-root>
+		<section class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+			<div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+				<div class="space-y-2">
+					<h1 class="text-2xl font-semibold text-slate-900">{ data.Title }</h1>
+					<p class="text-sm text-slate-600">{ data.Description }</p>
+					if data.LastUpdated != "" {
+						<p class="text-xs text-slate-400">
+							最終更新: { data.LastUpdated }
+							if data.LastRelative != "" {
+								<span class="ml-2">({ data.LastRelative })</span>
+							}
+						</p>
+					}
+				</div>
+				<div class="grid w-full gap-3 sm:grid-cols-3 lg:w-auto lg:flex lg:flex-row">
+					for _, metric := range data.Metrics {
+						<div class="flex flex-col gap-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm">
+							<div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+								if metric.Icon != "" {
+									<span aria-hidden="true">{ metric.Icon }</span>
+								}
+								{ metric.Label }
+							</div>
+							<div class="text-xl font-semibold text-slate-900">{ metric.Value }</div>
+							if metric.SubText != "" {
+								<div class="text-xs text-slate-500">{ metric.SubText }</div>
+							}
+						</div>
+					}
+				</div>
+			</div>
+			<div class="mt-6 border-t border-slate-200 pt-4">
+				@filterForm(data)
+			</div>
+		</section>
+
+		<div
+			id="orders-table"
+			hx-target="this"
+			hx-swap="outerHTML"
+			data-orders-table-root
+		>
+			@Table(data.Table)
+		</div>
+	</div>
+}
+
+templ filterForm(data PageData) {
+	<form
+		id="orders-filter"
+		class="space-y-4"
+		method="get"
+		hx-get={ data.TableEndpoint }
+		hx-target="#orders-table"
+		hx-push-url="true"
+		hx-indicator="#orders-loading"
+	>
+		<input type="hidden" name="sort" value={ data.Query.Sort } />
+		<input type="hidden" name="pageSize" value={ strconv.Itoa(data.Query.PageSize) } />
+
+		<div class="grid gap-4 md:grid-cols-4 lg:grid-cols-6">
+			<div class="flex flex-col gap-2">
+				<label for="orders-status" class="text-xs font-semibold uppercase tracking-wide text-slate-500">ステータス</label>
+				<select
+					id="orders-status"
+					name="status"
+					class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				>
+					for _, option := range data.Filters.StatusOptions {
+						<option value={ option.Value } selected?={ option.Active }>
+							if option.Count > 0 {
+								{ option.Label } ({ option.Count })
+							} else {
+								{ option.Label }
+							}
+						</option>
+					}
+				</select>
+			</div>
+			<div class="flex flex-col gap-2">
+				<label for="orders-since" class="text-xs font-semibold uppercase tracking-wide text-slate-500">更新日（以降）</label>
+				<input
+					id="orders-since"
+					name="since"
+					type="date"
+					value={ data.Query.Since }
+					class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				/>
+			</div>
+			<div class="flex flex-col gap-2">
+				<label for="orders-currency" class="text-xs font-semibold uppercase tracking-wide text-slate-500">通貨</label>
+				<select
+					id="orders-currency"
+					name="currency"
+					class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				>
+					for _, option := range data.Filters.CurrencyOptions {
+						<option value={ option.Value } selected?={ option.Selected }>{ option.Label }</option>
+					}
+				</select>
+			</div>
+			<div class="flex flex-col gap-2">
+				<label for="orders-amount-min" class="text-xs font-semibold uppercase tracking-wide text-slate-500">金額最小</label>
+				<input
+					id="orders-amount-min"
+					name="amountMin"
+					type="number"
+					min="0"
+					value={ data.Query.AmountMin }
+					placeholder="例) 10000"
+					class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				/>
+			</div>
+			<div class="flex flex-col gap-2">
+				<label for="orders-amount-max" class="text-xs font-semibold uppercase tracking-wide text-slate-500">金額最大</label>
+				<input
+					id="orders-amount-max"
+					name="amountMax"
+					type="number"
+					min="0"
+					value={ data.Query.AmountMax }
+					placeholder="例) 30000"
+					class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				/>
+			</div>
+			<div class="flex flex-col gap-2">
+				<label for="orders-has-refund" class="text-xs font-semibold uppercase tracking-wide text-slate-500">返金</label>
+				<select
+					id="orders-has-refund"
+					name="hasRefund"
+					class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				>
+					for _, option := range data.Filters.RefundOptions {
+						<option value={ option.Value } selected?={ option.Selected }>{ option.Label }</option>
+					}
+				</select>
+			</div>
+		</div>
+
+		if len(data.Filters.AmountPresets) > 0 {
+			<div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+				<span class="font-semibold uppercase tracking-wide text-slate-500">金額プリセット:</span>
+				for _, preset := range data.Filters.AmountPresets {
+					<button
+						type="button"
+						class={ helpers.ClassList("rounded-full px-3 py-1 text-xs font-medium transition", presetButtonClasses(preset.Active)) }
+						data-orders-preset
+						data-min={ preset.Min }
+						data-max={ preset.Max }
+					>
+						{ preset.Label }
+					</button>
+				}
+			</div>
+		}
+
+		<div class="flex flex-wrap items-center gap-3">
+			<button
+				type="submit"
+				class={ helpers.ButtonClass("primary", "sm", false, false) }
+			>
+				適用
+			</button>
+			<a
+				href={ joinBase(helpers.BasePath(ctx), "/orders") }
+				class={ helpers.ButtonClass("ghost", "sm", false, false) }
+			>
+				リセット
+			</a>
+			<div id="orders-loading" class="htmx-indicator text-xs text-slate-400">読み込み中…</div>
+		</div>
+	</form>
+}
+
+func presetButtonClasses(active bool) string {
+	if active {
+		return "bg-brand-100 text-brand-700 ring-1 ring-brand-200"
+	}
+	return "bg-slate-100 text-slate-600 hover:bg-slate-200"
+}

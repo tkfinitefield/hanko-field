@@ -1,0 +1,291 @@
+package orders
+
+import (
+	"strconv"
+	"strings"
+
+	"finitefield.org/hanko-admin/internal/admin/templates/components"
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+)
+
+templ Table(data TableData) {
+	<div class="space-y-4" data-orders-table-fragment>
+		if data.Error != "" {
+			<div class="rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">
+				{ data.Error }
+			</div>
+		}
+
+		<form id="orders-selection" class="space-y-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" method="post">
+			<table class="min-w-full divide-y divide-slate-200">
+				<thead class="bg-slate-50">
+					<tr class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+						<th scope="col" class="w-12 px-4 py-3">
+							<input
+								type="checkbox"
+								class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+								data-orders-master
+								aria-label="全ての注文を選択"
+							/>
+						</th>
+						<th scope="col" class="px-4 py-3 text-left text-slate-600">注文</th>
+						<th scope="col" class="px-4 py-3 text-left text-slate-600">顧客</th>
+						<th scope="col" class="px-4 py-3 text-right text-slate-600">
+							@components.SortableHeader(components.SortHeaderProps{
+								Label:            "合計",
+								SortKey:          "total",
+								ActiveValue:      data.Sort.Active,
+								DefaultDirection: components.SortDirectionDesc,
+								BasePath:         data.BasePath,
+								FragmentPath:     data.FragmentPath,
+								RawQuery:         data.Sort.RawQuery,
+								Param:            data.Sort.Param,
+								ResetPage:        true,
+								PageParam:        data.Sort.PageParam,
+								HxTarget:         data.HxTarget,
+								HxSwap:           data.HxSwap,
+								HxPushURL:        data.Sort.HxPushURL,
+							})
+						</th>
+						<th scope="col" class="px-4 py-3 text-left text-slate-600">
+							@components.SortableHeader(components.SortHeaderProps{
+								Label:            "ステータス",
+								SortKey:          "number",
+								ActiveValue:      data.Sort.Active,
+								DefaultDirection: components.SortDirectionAsc,
+								BasePath:         data.BasePath,
+								FragmentPath:     data.FragmentPath,
+								RawQuery:         data.Sort.RawQuery,
+								Param:            data.Sort.Param,
+								ResetPage:        true,
+								PageParam:        data.Sort.PageParam,
+								HxTarget:         data.HxTarget,
+								HxSwap:           data.HxSwap,
+								HxPushURL:        data.Sort.HxPushURL,
+							})
+						</th>
+						<th scope="col" class="px-4 py-3 text-left text-slate-600">
+							@components.SortableHeader(components.SortHeaderProps{
+								Label:            "更新日時",
+								SortKey:          "updated_at",
+								ActiveValue:      data.Sort.Active,
+								DefaultDirection: components.SortDirectionDesc,
+								BasePath:         data.BasePath,
+								FragmentPath:     data.FragmentPath,
+								RawQuery:         data.Sort.RawQuery,
+								Param:            data.Sort.Param,
+								ResetPage:        true,
+								PageParam:        data.Sort.PageParam,
+								HxTarget:         data.HxTarget,
+								HxSwap:           data.HxSwap,
+								HxPushURL:        data.Sort.HxPushURL,
+							})
+						</th>
+						<th scope="col" class="px-4 py-3 text-left text-slate-600">バッジ</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-slate-200 text-sm text-slate-700">
+					if len(data.Rows) == 0 {
+						<tr>
+							<td colspan="7" class="px-4 py-8 text-center text-sm text-slate-500">
+								if data.EmptyMessage != "" {
+									{ data.EmptyMessage }
+								} else {
+									表示する注文がありません。
+								}
+							</td>
+						</tr>
+					} else {
+				for _, row := range data.Rows {
+					<tr
+						class="hover:bg-slate-50"
+						data-order-id={ row.ID }
+					>
+						<td class="px-4 py-4 align-top">
+							<input
+								type="checkbox"
+								class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+								name="orderID"
+								value={ row.ID }
+								data-orders-checkbox
+								data-order-number={ row.Number }
+								aria-label={ "注文 " + row.Number + " を選択" }
+							/>
+							<span class="hidden" aria-hidden="true" data-order-index>{ strconv.Itoa(row.Index) }</span>
+						</td>
+								<td class="px-4 py-4 align-top">
+									<div class="flex flex-col gap-1">
+										<a href={ row.URL } class="font-semibold text-slate-900 hover:text-brand-600">
+											# { row.Number }
+										</a>
+										if row.ItemsSummary != "" {
+											<p class="text-xs text-slate-500">{ row.ItemsSummary }</p>
+										}
+										if len(row.Notes) > 0 {
+											<ul class="space-y-1 text-xs text-slate-500">
+												for _, note := range row.Notes {
+													<li>📝 { note }</li>
+												}
+											</ul>
+										}
+									</div>
+								</td>
+								<td class="px-4 py-4 align-top">
+									<div class="space-y-1">
+										<p class="font-medium text-slate-900">{ row.CustomerName }</p>
+										if row.CustomerMeta != "" {
+											<p class="text-xs text-slate-500">{ row.CustomerMeta }</p>
+										} else if row.CustomerEmail != "" {
+											<p class="text-xs text-slate-500">{ row.CustomerEmail }</p>
+										}
+									</div>
+								</td>
+								<td class="px-4 py-4 text-right align-top font-semibold text-slate-900">
+									{ row.Total }
+								</td>
+								<td class="px-4 py-4 align-top">
+									<div class="flex flex-col gap-2">
+										<span class={ helpers.BadgeClass(row.StatusTone) }>{ row.StatusLabel }</span>
+										if row.PaymentLabel != "" {
+											<span class={ helpers.BadgeClass(row.PaymentTone) }>{ row.PaymentLabel }</span>
+											if row.PaymentDue != "" {
+												<p class="text-xs text-slate-500">期限: { row.PaymentDue }</p>
+											}
+										}
+										if row.SLAStatus != "" {
+											<p class={ helpers.ClassList("text-xs font-medium", slaToneClass(row.SLAStatusTone)) }>
+												{ row.SLAStatus }
+											</p>
+										}
+									</div>
+								</td>
+								<td class="px-4 py-4 align-top">
+									<div class="flex flex-col gap-1 text-xs text-slate-500">
+										<p>
+											<span class="font-medium text-slate-600">{ row.UpdatedLabel }</span>
+											<span class="ml-1 text-slate-400">({ row.UpdatedRelative })</span>
+										</p>
+										if row.PromisedAtLabel != "" {
+											<p>約束日時: { row.PromisedAtLabel }</p>
+										}
+									</div>
+								</td>
+								<td class="px-4 py-4 align-top">
+									<div class="flex flex-wrap gap-2">
+										for _, badge := range row.Badges {
+											<span
+												class={ helpers.BadgeClass(badge.Tone) }
+												if badge.Title != "" {
+													title={ badge.Title }
+												}
+											>
+												if badge.Icon != "" {
+													<span aria-hidden="true" class="mr-1">{ badge.Icon }</span>
+												}
+												{ badge.Label }
+											</span>
+										}
+										if row.HasRefundRequest {
+											<span class={ helpers.BadgeClass("warning") }>返金申請</span>
+										}
+										for _, tag := range row.Tags {
+											<span class="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">#{ tag }</span>
+										}
+									</div>
+								</td>
+							</tr>
+						}
+					}
+				</tbody>
+			</table>
+		</form>
+
+		<div
+			id="orders-bulk-toolbar"
+			class="hidden items-center justify-between rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-slate-900 shadow-sm md:flex"
+			data-orders-bulk-toolbar
+			data-orders-total={ strconv.Itoa(data.Pagination.Total) }
+		>
+			<div class="flex items-center gap-3">
+				<span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold text-white" data-orders-bulk-count>
+					0
+				</span>
+				<div class="space-y-1">
+					<p class="text-sm font-semibold text-slate-900">選択中の注文</p>
+					<button type="button" class="text-xs font-semibold text-brand-600 hover:text-brand-700" data-orders-bulk-clear>選択を解除</button>
+				</div>
+			</div>
+			<div class="flex flex-wrap items-center gap-2">
+				<button
+					type="button"
+					class={ helpers.ButtonClass("primary", "sm", false, false) }
+					data-orders-bulk-action="status"
+					disabled
+					hx-post={ joinBase(helpers.BasePath(ctx), "/orders/bulk/status") }
+					hx-include="#orders-selection,#orders-filter"
+					hx-target="#orders-table"
+					hx-swap="none"
+				>
+					ステータス更新
+				</button>
+				<button
+					type="button"
+					class={ helpers.ButtonClass("secondary", "sm", false, false) }
+					data-orders-bulk-action="labels"
+					disabled
+					hx-post={ joinBase(helpers.BasePath(ctx), "/orders/bulk/labels") }
+					hx-include="#orders-selection,#orders-filter"
+					hx-target="#orders-table"
+					hx-swap="none"
+				>
+					出荷ラベル生成
+				</button>
+				<button
+					type="button"
+					class={ helpers.ButtonClass("secondary", "sm", false, false) }
+					data-orders-bulk-action="export"
+					disabled
+					hx-post={ joinBase(helpers.BasePath(ctx), "/orders/bulk/export") }
+					hx-include="#orders-selection,#orders-filter"
+					hx-target="#orders-table"
+					hx-swap="none"
+				>
+					CSVエクスポート
+				</button>
+			</div>
+		</div>
+
+		@components.Pagination(components.PaginationProps{
+			Info: components.PageInfo{
+				PageSize:   data.Pagination.PageSize,
+				Current:    data.Pagination.Page,
+				Count:      data.Pagination.Total,
+				TotalItems: data.Pagination.TotalPtr,
+				Next:       data.Pagination.Next,
+				Prev:       data.Pagination.Prev,
+			},
+			BasePath:      data.BasePath,
+			RawQuery:      data.Sort.RawQuery,
+			FragmentPath:  data.FragmentPath,
+			FragmentQuery: data.Sort.RawQuery,
+			Param:         "page",
+			SizeParam:     "pageSize",
+			HxTarget:      data.HxTarget,
+			HxSwap:        data.HxSwap,
+			HxPushURL:     true,
+		})
+	</div>
+}
+
+func slaToneClass(tone string) string {
+	switch strings.ToLower(strings.TrimSpace(tone)) {
+	case "danger":
+		return "text-danger-600"
+	case "warning":
+		return "text-warning-600"
+	case "success":
+		return "text-success-600"
+	default:
+		return "text-slate-500"
+	}
+}

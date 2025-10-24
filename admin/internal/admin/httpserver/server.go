@@ -183,6 +183,13 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 				nr.Get("/table", uiHandlers.NotificationsTable)
 				nr.Get("/badge", uiHandlers.NotificationsBadge)
 			})
+			protected.Route("/orders", func(or chi.Router) {
+				or.Get("/", uiHandlers.OrdersPage)
+				or.Get("/table", uiHandlers.OrdersTable)
+				or.Post("/bulk/status", uiHandlers.OrdersBulkStatus)
+				or.Post("/bulk/labels", uiHandlers.OrdersBulkLabels)
+				or.Post("/bulk/export", uiHandlers.OrdersBulkExport)
+			})
 			// Future admin routes will be registered here.
 		})
 	})
