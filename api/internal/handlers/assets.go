@@ -40,6 +40,7 @@ func (h *AssetHandlers) Routes(r chi.Router) {
 		group = group.With(h.authn.RequireFirebaseAuth())
 	}
 	group.Post("/assets:signed-upload", h.issueSignedUpload)
+	group.Post("/assets/{assetId}:signed-download", h.issueSignedDownload)
 }
 
 func (h *AssetHandlers) issueSignedUpload(w http.ResponseWriter, r *http.Request) {
@@ -162,4 +163,66 @@ func firstNonEmptyTrimmed(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func (h *AssetHandlers) issueSignedDownload(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.assets == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("asset_service_unavailable", "asset service is unavailable", http.StatusServiceUnavailable))
+		return
+	}
+
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+
+	assetID := strings.TrimSpace(chi.URLParam(r, "assetId"))
+	if assetID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "assetId path parameter is required", http.StatusBadRequest))
+		return
+	}
+
+	response, err := h.assets.IssueSignedDownload(ctx, services.SignedDownloadCommand{
+		ActorID: identity.UID,
+		AssetID: assetID,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrAssetInvalidInput):
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		case errors.Is(err, services.ErrAssetForbidden):
+			httpx.WriteError(ctx, w, httpx.NewError("forbidden", "insufficient permissions for asset", http.StatusForbidden))
+		case errors.Is(err, services.ErrAssetUnavailable):
+			httpx.WriteError(ctx, w, httpx.NewError("asset_unavailable", "asset is not ready for download", http.StatusConflict))
+		case errors.Is(err, services.ErrAssetNotFound):
+			httpx.WriteError(ctx, w, httpx.NewError("asset_not_found", "asset not found", http.StatusNotFound))
+		case errors.Is(err, services.ErrAssetRepositoryUnavailable):
+			httpx.WriteError(ctx, w, httpx.NewError("asset_service_unavailable", "asset repository unavailable", http.StatusServiceUnavailable))
+		default:
+			httpx.WriteError(ctx, w, httpx.NewError("asset_service_error", err.Error(), http.StatusBadGateway))
+		}
+		return
+	}
+
+	payload := signedDownloadResponse{
+		URL:    response.URL,
+		Method: response.Method,
+	}
+	if !response.ExpiresAt.IsZero() {
+		payload.ExpiresAt = response.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	if len(response.Headers) > 0 {
+		payload.Headers = response.Headers
+	}
+
+	writeJSONResponse(w, http.StatusOK, payload)
+}
+
+type signedDownloadResponse struct {
+	URL       string            `json:"url"`
+	Method    string            `json:"method,omitempty"`
+	ExpiresAt string            `json:"expires_at,omitempty"`
+	Headers   map[string]string `json:"headers,omitempty"`
 }

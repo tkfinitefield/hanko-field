@@ -89,8 +89,8 @@
 - [x] [065 Implement review retrieval endpoint scoped to requesting user/order.](./tasks/065-implement-review-retrieval-endpoint-scoped-to-requesting-user-order.md)
 
 ### 5.7 Assets
-- [ ] [066 Implement signed upload endpoint validating asset kind/purpose and returning pre-signed URL + metadata record.](./tasks/066-implement-signed-upload-endpoint-validating-asset-kind-purpose-and-returning-pre.md)
-- [ ] [067 Implement signed download endpoint verifying ownership/permission before issuing link.](./tasks/067-implement-signed-download-endpoint-verifying-ownership-permission-before-issuing.md)
+- [x] [066 Implement signed upload endpoint validating asset kind/purpose and returning pre-signed URL + metadata record.](./tasks/066-implement-signed-upload-endpoint-validating-asset-kind-purpose-and-returning-pre.md)
+- [x] [067 Implement signed download endpoint verifying ownership/permission before issuing link.](./tasks/067-implement-signed-download-endpoint-verifying-ownership-permission-before-issuing.md)
 
 ## 6. Admin / Staff Endpoints
 ### 6.1 Catalog & CMS

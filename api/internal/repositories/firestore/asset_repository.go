@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"mime"
+	"net/url"
 	"strings"
 	"time"
 
@@ -11,25 +13,36 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	domain "github.com/hanko-field/api/internal/domain"
+	"github.com/hanko-field/api/internal/platform/auth"
 	pfirestore "github.com/hanko-field/api/internal/platform/firestore"
 	pstorage "github.com/hanko-field/api/internal/platform/storage"
 	"github.com/hanko-field/api/internal/repositories"
 )
 
 const (
-	assetsCollection         = "assets"
-	defaultAssetIDPrefix     = "asset_"
-	assetStatusPendingUpload = "pending_upload"
-	defaultAssetUploadTTL    = 15 * time.Minute
+	assetsCollection           = "assets"
+	defaultAssetIDPrefix       = "asset_"
+	assetStatusPendingUpload   = "pending_upload"
+	assetStatusReady           = "ready"
+	defaultAssetUploadTTL      = 15 * time.Minute
+	defaultAssetDownloadTTL    = 5 * time.Minute
+	defaultDownloadCacheMaxAge = 60 * time.Second
 )
+
+type signedURLGenerator interface {
+	SignedURL(ctx context.Context, bucket, object string, opts pstorage.SignedURLOptions) (pstorage.SignedURLResult, error)
+}
+
+type assetDocumentFetcher func(ctx context.Context, id string) (pfirestore.Document[assetDocument], error)
 
 // AssetRepository persists asset metadata and coordinates signed URL issuance.
 type AssetRepository struct {
 	base    *pfirestore.BaseRepository[assetDocument]
-	storage *pstorage.Client
+	storage signedURLGenerator
 	bucket  string
 	clock   func() time.Time
 	newID   func() string
+	getDoc  assetDocumentFetcher
 }
 
 // AssetRepositoryOption customises the repository behaviour.
@@ -76,6 +89,11 @@ func NewAssetRepository(provider *pfirestore.Provider, storageClient *pstorage.C
 		newID: func() string {
 			return ulid.Make().String()
 		},
+	}
+
+	// Reuse the instantiated base repository within the fetcher.
+	repo.getDoc = func(ctx context.Context, id string) (pfirestore.Document[assetDocument], error) {
+		return repo.base.Get(ctx, id)
 	}
 
 	for _, opt := range opts {
@@ -174,9 +192,90 @@ func (r *AssetRepository) CreateSignedUpload(ctx context.Context, cmd repositori
 	}, nil
 }
 
-// CreateSignedDownload currently not implemented.
-func (r *AssetRepository) CreateSignedDownload(context.Context, repositories.SignedDownloadRecord) (domain.SignedAssetResponse, error) {
-	return domain.SignedAssetResponse{}, errors.New("asset repository: signed download not implemented")
+// CreateSignedDownload issues a signed URL for downloading an uploaded asset after validating ownership and status.
+func (r *AssetRepository) CreateSignedDownload(ctx context.Context, cmd repositories.SignedDownloadRecord) (domain.SignedAssetResponse, error) {
+	if r == nil || r.storage == nil || r.getDoc == nil {
+		return domain.SignedAssetResponse{}, errors.New("asset repository: not initialised")
+	}
+
+	actorID := strings.TrimSpace(cmd.ActorID)
+	if actorID == "" {
+		return domain.SignedAssetResponse{}, errors.New("asset repository: actor id is required")
+	}
+
+	assetID := strings.TrimSpace(cmd.AssetID)
+	if assetID == "" {
+		return domain.SignedAssetResponse{}, errors.New("asset repository: asset id is required")
+	}
+
+	document, err := r.getDoc(ctx, assetID)
+	if err != nil {
+		return domain.SignedAssetResponse{}, err
+	}
+
+	asset := document.Data
+	if !strings.EqualFold(asset.Status, assetStatusReady) {
+		return domain.SignedAssetResponse{}, repositories.ErrAssetNotReady
+	}
+	if asset.DeletedAt != nil && !asset.DeletedAt.IsZero() {
+		return domain.SignedAssetResponse{}, repositories.ErrAssetSoftDeleted
+	}
+
+	identity, _ := auth.IdentityFromContext(ctx)
+	ownerID := strings.TrimSpace(asset.OwnerUID)
+
+	if identity == nil {
+		return domain.SignedAssetResponse{}, pstorage.ErrPermissionDenied
+	}
+
+	if identity.UID != actorID && !identity.HasAnyRole(auth.RoleStaff, auth.RoleAdmin) {
+		return domain.SignedAssetResponse{}, pstorage.ErrPermissionDenied
+	}
+
+	if ownerID != "" && ownerID != identity.UID && !identity.HasAnyRole(auth.RoleStaff, auth.RoleAdmin) {
+		return domain.SignedAssetResponse{}, pstorage.ErrPermissionDenied
+	}
+	if ownerID == "" && !identity.HasAnyRole(auth.RoleStaff, auth.RoleAdmin) {
+		return domain.SignedAssetResponse{}, pstorage.ErrPermissionDenied
+	}
+
+	bucket := strings.TrimSpace(asset.Bucket)
+	if bucket == "" {
+		bucket = r.bucket
+	}
+	objectPath := strings.TrimSpace(asset.ObjectPath)
+	if bucket == "" || objectPath == "" {
+		return domain.SignedAssetResponse{}, errors.New("asset repository: asset storage location missing")
+	}
+
+	disposition := buildContentDisposition(asset.FileName)
+	cacheControl := "private"
+	if defaultDownloadCacheMaxAge > 0 {
+		cacheControl = fmt.Sprintf("private, max-age=%d", int(defaultDownloadCacheMaxAge.Seconds()))
+	}
+
+	signed, err := r.storage.SignedURL(ctx, bucket, objectPath, pstorage.SignedURLOptions{
+		Download: &pstorage.DownloadOptions{
+			Method:       "GET",
+			ExpiresIn:    defaultAssetDownloadTTL,
+			Disposition:  disposition,
+			CacheControl: cacheControl,
+			ResponseType: strings.TrimSpace(asset.ContentType),
+			OwnerID:      ownerID,
+			Identity:     identity,
+		},
+	})
+	if err != nil {
+		return domain.SignedAssetResponse{}, fmt.Errorf("asset repository: sign download url: %w", err)
+	}
+
+	return domain.SignedAssetResponse{
+		AssetID:   assetID,
+		URL:       signed.URL,
+		Method:    signed.Method,
+		ExpiresAt: signed.ExpiresAt,
+		Headers:   signed.Headers,
+	}, nil
 }
 
 // MarkUploaded updates the asset status to uploaded and merges metadata.
@@ -191,7 +290,7 @@ func (r *AssetRepository) MarkUploaded(ctx context.Context, assetID string, acto
 	now := r.clock()
 
 	updates := []firestore.Update{
-		{Path: "status", Value: "uploaded"},
+		{Path: "status", Value: assetStatusReady},
 		{Path: "updatedAt", Value: now},
 	}
 
@@ -226,6 +325,7 @@ type assetDocument struct {
 	UploadExpiresAt   time.Time      `firestore:"uploadExpiresAt"`
 	UploadCompletedBy string         `firestore:"uploadCompletedBy,omitempty"`
 	UploadCompletedAt *time.Time     `firestore:"uploadCompletedAt,omitempty"`
+	DeletedAt         *time.Time     `firestore:"deletedAt,omitempty"`
 	CreatedAt         time.Time      `firestore:"createdAt"`
 	UpdatedAt         time.Time      `firestore:"updatedAt"`
 }
@@ -239,4 +339,47 @@ func ensureAssetID(candidate string) string {
 		return trimmed
 	}
 	return defaultAssetIDPrefix + trimmed
+}
+
+func buildContentDisposition(fileName string) string {
+	name := strings.TrimSpace(fileName)
+	if name == "" {
+		return ""
+	}
+	name = strings.ReplaceAll(name, "\r", " ")
+	name = strings.ReplaceAll(name, "\n", " ")
+
+	asciiName := sanitizeASCII(name)
+	params := map[string]string{}
+	if asciiName != "" {
+		params["filename"] = asciiName
+	}
+
+	disposition := mime.FormatMediaType("attachment", params)
+	if disposition == "" {
+		disposition = "attachment"
+	}
+
+	if asciiName != name {
+		escaped := url.PathEscape(name)
+		if escaped != "" {
+			disposition = fmt.Sprintf("%s; filename*=UTF-8''%s", disposition, escaped)
+		}
+	}
+	return disposition
+}
+
+func sanitizeASCII(value string) string {
+	var builder strings.Builder
+	for _, r := range value {
+		if r < 32 || r == '"' || r == '\\' {
+			continue
+		}
+		if r > 126 {
+			builder.WriteRune('?')
+			continue
+		}
+		builder.WriteRune(r)
+	}
+	return strings.TrimSpace(builder.String())
 }

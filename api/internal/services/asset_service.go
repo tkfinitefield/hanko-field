@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	pstorage "github.com/hanko-field/api/internal/platform/storage"
 	"github.com/hanko-field/api/internal/repositories"
 )
 
@@ -18,6 +19,7 @@ const (
 	maxAudioAssetSize          = int64(30 * 1024 * 1024)  // 30 MiB
 	assetLoggerEventValidation = "asset.upload.validate"
 	assetLoggerEventIssued     = "asset.upload.issued"
+	assetLoggerEventDownload   = "asset.download.issued"
 )
 
 var (
@@ -27,6 +29,12 @@ var (
 	ErrAssetRepositoryUnavailable = errors.New("asset: repository unavailable")
 	// ErrAssetRepositoryFailure wraps unexpected repository failures.
 	ErrAssetRepositoryFailure = errors.New("asset: repository failure")
+	// ErrAssetForbidden indicates the caller lacks permission to access the asset.
+	ErrAssetForbidden = errors.New("asset: forbidden")
+	// ErrAssetNotFound indicates the asset does not exist or is no longer available.
+	ErrAssetNotFound = errors.New("asset: not found")
+	// ErrAssetUnavailable indicates the asset exists but is not ready for download.
+	ErrAssetUnavailable = errors.New("asset: unavailable")
 )
 
 // AssetServiceDeps wires dependencies for the asset service implementation.
@@ -149,7 +157,33 @@ func (s *assetService) IssueSignedUpload(ctx context.Context, cmd SignedUploadCo
 }
 
 func (s *assetService) IssueSignedDownload(ctx context.Context, cmd SignedDownloadCommand) (SignedAssetResponse, error) {
-	return SignedAssetResponse{}, errors.New("asset service: signed download not implemented")
+	actorID := strings.TrimSpace(cmd.ActorID)
+	if actorID == "" {
+		return SignedAssetResponse{}, fmt.Errorf("%w: actor id is required", ErrAssetInvalidInput)
+	}
+
+	assetID := strings.TrimSpace(cmd.AssetID)
+	if assetID == "" {
+		return SignedAssetResponse{}, fmt.Errorf("%w: asset id is required", ErrAssetInvalidInput)
+	}
+
+	response, err := s.repo.CreateSignedDownload(ctx, repositories.SignedDownloadRecord{
+		ActorID: actorID,
+		AssetID: assetID,
+	})
+	if err != nil {
+		return SignedAssetResponse{}, s.mapDownloadError(err)
+	}
+
+	if s.logger != nil {
+		s.logger(ctx, assetLoggerEventDownload, map[string]any{
+			"actorId":   actorID,
+			"assetId":   response.AssetID,
+			"expiresAt": response.ExpiresAt,
+		})
+	}
+
+	return response, nil
 }
 
 type uploadParams struct {
@@ -233,6 +267,38 @@ func (s *assetService) mapRepositoryError(err error) error {
 			return fmt.Errorf("%w: %v", ErrAssetRepositoryFailure, err)
 		}
 	}
+	return fmt.Errorf("%w: %v", ErrAssetRepositoryFailure, err)
+}
+
+func (s *assetService) mapDownloadError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, pstorage.ErrPermissionDenied):
+		return ErrAssetForbidden
+	case errors.Is(err, repositories.ErrAssetNotReady):
+		return ErrAssetUnavailable
+	case errors.Is(err, repositories.ErrAssetSoftDeleted):
+		return ErrAssetNotFound
+	}
+
+	var repoErr repositories.RepositoryError
+	if errors.As(err, &repoErr) {
+		switch {
+		case repoErr.IsNotFound():
+			return ErrAssetNotFound
+		case repoErr.IsUnavailable():
+			return fmt.Errorf("%w: %v", ErrAssetRepositoryUnavailable, err)
+		default:
+			return fmt.Errorf("%w: %v", ErrAssetRepositoryFailure, err)
+		}
+	}
+
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+
 	return fmt.Errorf("%w: %v", ErrAssetRepositoryFailure, err)
 }
 
