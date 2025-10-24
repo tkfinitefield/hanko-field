@@ -251,8 +251,26 @@ func appendUnique(list []string, s string) []string {
 }
 
 var (
-	legacyKanjiReplacer     = strings.NewReplacer("辺", "邊", "沢", "澤", "斉", "齊", "広", "廣", "崎", "﨑", "国", "國", "高", "髙")
-	simplifiedKanjiReplacer = strings.NewReplacer("邊", "辺", "澤", "沢", "齊", "斉", "廣", "広", "﨑", "崎", "國", "国", "髙", "高")
+	legacyKanjiReplacer = strings.NewReplacer(
+		"辺", "邊",
+		"沢", "澤",
+		"斉", "齊",
+		"斎", "齋",
+		"広", "廣",
+		"崎", "﨑",
+		"国", "國",
+		"高", "髙",
+	)
+	simplifiedKanjiReplacer = strings.NewReplacer(
+		"邊", "辺",
+		"澤", "沢",
+		"齊", "斉",
+		"齋", "斎",
+		"廣", "広",
+		"﨑", "崎",
+		"國", "国",
+		"髙", "高",
+	)
 )
 
 func kanjiMappingCandidates(lang, name string) []KanjiMappingCandidate {
