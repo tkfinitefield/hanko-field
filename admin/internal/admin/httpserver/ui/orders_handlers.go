@@ -238,6 +238,179 @@ func (h *Handlers) OrdersStatusUpdate(w http.ResponseWriter, r *http.Request) {
 	templ.Handler(orderstpl.StatusUpdateSuccess(success)).ServeHTTP(w, r)
 }
 
+// OrdersRefundModal renders the refund modal for a specific order.
+func (h *Handlers) OrdersRefundModal(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		http.Error(w, "注文IDが不正です。", http.StatusBadRequest)
+		return
+	}
+
+	modal, err := h.orders.RefundModal(ctx, user.Token, orderID)
+	if err != nil {
+		if errors.Is(err, adminorders.ErrOrderNotFound) {
+			http.Error(w, "指定された注文が見つかりません。", http.StatusNotFound)
+			return
+		}
+		log.Printf("orders: fetch refund modal failed: %v", err)
+		http.Error(w, "返金モーダルの取得に失敗しました。", http.StatusBadGateway)
+		return
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	csrf := custommw.CSRFTokenFromContext(ctx)
+	data := orderstpl.RefundModalPayload(basePath, modal, csrf, orderstpl.RefundFormState{
+		PaymentID:      "",
+		Amount:         "",
+		Reason:         "",
+		NotifyCustomer: true,
+	}, "", nil)
+
+	templ.Handler(orderstpl.RefundModal(data)).ServeHTTP(w, r)
+}
+
+// OrdersSubmitRefund processes refund submissions for a specific order payment.
+func (h *Handlers) OrdersSubmitRefund(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		http.Error(w, "注文IDが不正です。", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "リクエストの解析に失敗しました。", http.StatusBadRequest)
+		return
+	}
+
+	paymentID := strings.TrimSpace(r.FormValue("paymentID"))
+	amountStr := strings.TrimSpace(r.FormValue("amount"))
+	reason := strings.TrimSpace(r.FormValue("reason"))
+	notify := parseCheckbox(r.FormValue("notifyCustomer"))
+
+	formState := orderstpl.RefundFormState{
+		PaymentID:      paymentID,
+		Amount:         amountStr,
+		Reason:         reason,
+		NotifyCustomer: notify,
+	}
+
+	fieldErrors := map[string]string{}
+	if paymentID == "" {
+		fieldErrors["paymentID"] = "返金対象の支払いを選択してください。"
+	}
+
+	amountMinor, parsed := parseAmountMinor(amountStr)
+	if !parsed {
+		fieldErrors["amount"] = "返金金額を正しく入力してください。"
+	}
+
+	if strings.TrimSpace(reason) == "" {
+		fieldErrors["reason"] = "返金理由を入力してください。"
+	}
+
+	if len(fieldErrors) > 0 {
+		h.renderRefundModalError(w, r, user, orderID, formState, "入力内容を確認してください。", fieldErrors, http.StatusUnprocessableEntity)
+		return
+	}
+
+	req := adminorders.RefundRequest{
+		PaymentID:      paymentID,
+		AmountMinor:    amountMinor,
+		Reason:         reason,
+		NotifyCustomer: notify,
+		ActorID:        user.UID,
+		ActorEmail:     user.Email,
+	}
+
+	_, err := h.orders.SubmitRefund(ctx, user.Token, orderID, req)
+	if err != nil {
+		if errors.Is(err, adminorders.ErrOrderNotFound) {
+			http.Error(w, "指定された注文が見つかりません。", http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, adminorders.ErrPaymentNotFound) {
+			fieldErrors["paymentID"] = "選択した支払いが見つかりません。"
+			h.renderRefundModalError(w, r, user, orderID, formState, "返金対象の支払いが存在しません。", fieldErrors, http.StatusUnprocessableEntity)
+			return
+		}
+		var valErr *adminorders.RefundValidationError
+		if errors.As(err, &valErr) {
+			fieldErrors = mergeFieldErrors(fieldErrors, valErr.FieldErrors)
+			message := strings.TrimSpace(valErr.Message)
+			if message == "" {
+				message = "返金処理に失敗しました。入力内容を確認してください。"
+			}
+			h.renderRefundModalError(w, r, user, orderID, formState, message, fieldErrors, http.StatusUnprocessableEntity)
+			return
+		}
+		if errors.Is(err, adminorders.ErrRefundFailed) {
+			h.renderRefundModalError(w, r, user, orderID, formState, "返金処理に失敗しました。時間を置いて再度お試しください。", fieldErrors, http.StatusUnprocessableEntity)
+			return
+		}
+		log.Printf("orders: submit refund failed: %v", err)
+		http.Error(w, "返金処理に失敗しました。", http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("HX-Trigger", `{"toast":{"message":"返金を登録しました。","tone":"success"},"modal:close":true,"refresh:fragment":{"targets":["[data-order-payments]","[data-order-summary]"]}}`)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) renderRefundModalError(w http.ResponseWriter, r *http.Request, user *custommw.User, orderID string, form orderstpl.RefundFormState, message string, fieldErrors map[string]string, status int) {
+	ctx := r.Context()
+	modal, err := h.orders.RefundModal(ctx, user.Token, orderID)
+	if err != nil {
+		if errors.Is(err, adminorders.ErrOrderNotFound) {
+			http.Error(w, "指定された注文が見つかりません。", http.StatusNotFound)
+			return
+		}
+		log.Printf("orders: reload refund modal after error failed: %v", err)
+		http.Error(w, "返金モーダルの再取得に失敗しました。", http.StatusBadGateway)
+		return
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	csrf := custommw.CSRFTokenFromContext(ctx)
+	data := orderstpl.RefundModalPayload(basePath, modal, csrf, form, message, fieldErrors)
+
+	if status > 0 {
+		w.WriteHeader(status)
+	} else {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	}
+	templ.Handler(orderstpl.RefundModal(data)).ServeHTTP(w, r)
+}
+
+func mergeFieldErrors(base map[string]string, extra map[string]string) map[string]string {
+	result := map[string]string{}
+	for key, value := range base {
+		result[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	}
+	for key, value := range extra {
+		k := strings.TrimSpace(key)
+		v := strings.TrimSpace(value)
+		if v == "" {
+			continue
+		}
+		result[k] = v
+	}
+	return result
+}
+
 type ordersRequest struct {
 	query adminorders.Query
 	state orderstpl.QueryState

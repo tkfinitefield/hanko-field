@@ -1,0 +1,164 @@
+package orders
+
+import (
+	"finitefield.org/hanko-admin/internal/admin/templates/components"
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+	"finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
+
+templ RefundModal(data RefundModalData) {
+	@layouts.Modal("返金を登録", refundModalBody(data))
+}
+
+templ refundModalBody(data RefundModalData) {
+	<div class="space-y-6 text-sm text-slate-700">
+		<form
+			hx-post={ data.ActionURL }
+			hx-target="#modal"
+			hx-swap="innerHTML"
+			class="space-y-4"
+		>
+			<input type="hidden" name="csrf_token" value={ data.CSRFToken } />
+			<div class="space-y-1">
+				<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">注文番号</p>
+				<p class="text-lg font-semibold text-slate-900">#{ data.OrderNumber }</p>
+				if data.CustomerName != "" {
+					<p class="text-xs text-slate-500">{ data.CustomerName }</p>
+				}
+				<p class="text-xs text-slate-500">
+					合計 { data.Total }
+					if data.PaymentStatus != "" {
+						<span class="ml-2 inline-flex items-center gap-1">
+							<span class={ helpers.BadgeClass(data.PaymentTone) }>{ data.PaymentStatus }</span>
+						</span>
+					}
+				</p>
+				if data.Outstanding != "" {
+					<p class="text-xs text-amber-600">未処理: { data.Outstanding }</p>
+				}
+			</div>
+			<div class="space-y-2">
+				<label for="refund-payment" class="text-xs font-semibold uppercase tracking-wide text-slate-500">支払い</label>
+				<select
+					id="refund-payment"
+					name="paymentID"
+					class={ data.PaymentClass }
+					required
+				>
+					if len(data.Payments) == 0 {
+						<option value="">返金可能な支払いがありません</option>
+					} else {
+						for _, option := range data.Payments {
+							<option
+								value={ option.ID }
+								selected?={ option.Selected }
+								disabled?={ option.Disabled }
+							>
+								{ option.Label }
+							</option>
+						}
+					}
+				</select>
+				if msg := data.FieldErrors["paymentID"]; msg != "" {
+					<p class="text-xs text-rose-600">{ msg }</p>
+				} else {
+					<p class="text-xs text-slate-500">返金する決済を選択してください。</p>
+				}
+			</div>
+			<div class="space-y-2">
+				<label for="refund-amount" class="text-xs font-semibold uppercase tracking-wide text-slate-500">金額 ({ data.Currency })</label>
+				<input
+					id="refund-amount"
+					name="amount"
+					type="text"
+					inputmode="decimal"
+					placeholder="例) 12000"
+					value={ data.AmountInput }
+					class={ data.AmountClass }
+					required
+				/>
+				if data.SupportsPartial {
+					<p class="text-xs text-slate-500">部分返金に対応しています。返金可能額を超えないよう入力してください。</p>
+				} else {
+					<p class="text-xs text-slate-500">全額返金のみ対応しています。</p>
+				}
+				if msg := data.FieldErrors["amount"]; msg != "" {
+					<p class="text-xs text-rose-600">{ msg }</p>
+				}
+			</div>
+			<div class="space-y-2">
+				<label for="refund-reason" class="text-xs font-semibold uppercase tracking-wide text-slate-500">理由</label>
+				<textarea
+					id="refund-reason"
+					name="reason"
+					rows="3"
+					class={ data.ReasonClass }
+					placeholder="例) サイズ違いによる返品"
+					required
+				>{ data.Reason }</textarea>
+				if msg := data.FieldErrors["reason"]; msg != "" {
+					<p class="text-xs text-rose-600">{ msg }</p>
+				} else {
+					<p class="text-xs text-slate-500">顧客や会計チームに共有する概要を記録します。</p>
+				}
+			</div>
+			<label class="inline-flex items-center gap-2 text-sm text-slate-600">
+				<input type="checkbox" name="notifyCustomer" value="true" checked?={ data.NotifyCustomer } class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+				<span>顧客に返金通知メールを送信する</span>
+			</label>
+			if data.Error != "" {
+				<p class="text-sm text-rose-600">{ data.Error }</p>
+			}
+			@components.ButtonWith("返金を登録", components.ButtonOptions{
+				Type:     "submit",
+				Variant:  "primary",
+				FullWidth: true,
+			})
+		</form>
+		if len(data.Payments) > 0 {
+			<div class="space-y-3">
+				<h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">支払いの内訳</h3>
+				<ul class="divide-y divide-slate-200 rounded-lg border border-slate-200">
+					for _, option := range data.Payments {
+						<li class="space-y-2 p-3">
+							<div class="flex items-center justify-between gap-2">
+								<p class="font-medium text-slate-800">{ option.Label }</p>
+								<span class={ helpers.BadgeClass(option.StatusTone) }>{ option.Status }</span>
+							</div>
+							if option.Caption != "" {
+								<p class="text-xs text-slate-500">{ option.Caption }</p>
+							}
+							<p class="text-xs text-slate-500">売上: { option.Captured } / 返金済み: { option.Refunded }</p>
+							<p class="text-xs font-semibold text-slate-600">返金可能額: { option.Available }</p>
+						</li>
+					}
+				</ul>
+			</div>
+		}
+		if len(data.Refunds) > 0 {
+			<div class="space-y-3">
+				<h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">最近の返金</h3>
+				<ul class="space-y-2">
+					for _, refund := range data.Refunds {
+						<li class="space-y-1 rounded-lg border border-slate-200 p-3">
+							<div class="flex items-center justify-between gap-2">
+								<p class="font-medium text-slate-800">{ refund.Amount }</p>
+								<span class={ helpers.BadgeClass(refund.StatusTone) }>{ refund.Status }</span>
+							</div>
+							if refund.Reason != "" {
+								<p class="text-sm text-slate-600">{ refund.Reason }</p>
+							}
+							<p class="text-xs text-slate-400">{ refund.Processed } ({ refund.Relative })</p>
+							if refund.Actor != "" {
+								<p class="text-xs text-slate-500">担当: { refund.Actor }</p>
+							}
+							if refund.Reference != "" {
+								<p class="text-xs text-slate-500">ID: { refund.Reference }</p>
+							}
+						</li>
+					}
+				</ul>
+			</div>
+		}
+	</div>
+}

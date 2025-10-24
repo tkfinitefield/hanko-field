@@ -25,6 +25,78 @@ func NewStaticService() *StaticService {
 		return &t
 	}
 
+	makePaymentDetail := func(id, provider, method, last4, reference, status, tone, currency string, authorized, captured, refunded int64, capturedAt *time.Time) PaymentDetail {
+		if strings.TrimSpace(provider) == "" {
+			provider = "Stripe"
+		}
+		if strings.TrimSpace(method) == "" {
+			method = "クレジットカード"
+		}
+		if strings.TrimSpace(reference) == "" {
+			reference = id
+		}
+		if strings.TrimSpace(status) == "" {
+			status = "支払い済み"
+		}
+		if strings.TrimSpace(currency) == "" {
+			currency = "JPY"
+		}
+		if authorized < captured {
+			authorized = captured
+		}
+		available := captured - refunded
+		if available < 0 {
+			available = 0
+		}
+		if refunded < 0 {
+			refunded = 0
+		}
+		return PaymentDetail{
+			ID:               strings.TrimSpace(id),
+			Provider:         strings.TrimSpace(provider),
+			Method:           strings.TrimSpace(method),
+			Last4:            strings.TrimSpace(last4),
+			Reference:        strings.TrimSpace(reference),
+			Status:           strings.TrimSpace(status),
+			StatusTone:       strings.TrimSpace(tone),
+			Currency:         strings.TrimSpace(currency),
+			AmountAuthorized: authorized,
+			AmountCaptured:   captured,
+			AmountRefunded:   refunded,
+			AmountAvailable:  available,
+			CapturedAt:       capturedAt,
+		}
+	}
+
+	makeRefundRecord := func(id, paymentID string, amount int64, currency, reason, status, actor string, processed time.Time) RefundRecord {
+		if strings.TrimSpace(id) == "" {
+			id = fmt.Sprintf("refund_%s_%d", paymentID, processed.Unix())
+		}
+		if processed.IsZero() {
+			processed = time.Now()
+		}
+		if strings.TrimSpace(status) == "" {
+			status = "succeeded"
+		}
+		if strings.TrimSpace(currency) == "" {
+			currency = "JPY"
+		}
+		if strings.TrimSpace(actor) == "" {
+			actor = "オペレーター"
+		}
+		return RefundRecord{
+			ID:          strings.TrimSpace(id),
+			PaymentID:   strings.TrimSpace(paymentID),
+			AmountMinor: amount,
+			Currency:    strings.TrimSpace(currency),
+			Reason:      strings.TrimSpace(reason),
+			Status:      strings.TrimSpace(status),
+			ProcessedAt: processed,
+			Actor:       strings.TrimSpace(actor),
+			Reference:   fmt.Sprintf("%s-ref", strings.TrimSpace(id)),
+		}
+	}
+
 	makeOrder := func(base Order) Order {
 		// Ensure derived fields like status label/tone are populated when omitted.
 		if strings.TrimSpace(base.StatusLabel) == "" {
@@ -59,6 +131,22 @@ func NewStaticService() *StaticService {
 				StatusTone: "success",
 				CapturedAt: ptrTime(now.Add(-8 * time.Hour)),
 			},
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1052",
+					"Stripe",
+					"クレジットカード",
+					"4242",
+					"pay_1052",
+					"支払い済み",
+					"success",
+					"JPY",
+					3200000,
+					3200000,
+					0,
+					ptrTime(now.Add(-8*time.Hour)),
+				),
+			},
 			Tags:         []string{"刻印リング", "B2C"},
 			Badges:       []Badge{{Label: "優先制作", Tone: "warning", Icon: "⚡"}, {Label: "VIP顧客", Tone: "info", Icon: "👑"}},
 			ItemsSummary: "刻印リング（18K） × 2 / カスタム刻印",
@@ -87,6 +175,22 @@ func NewStaticService() *StaticService {
 				Status:     "支払い済み",
 				StatusTone: "success",
 				CapturedAt: ptrTime(now.Add(-10 * time.Hour)),
+			},
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1051",
+					"Stripe",
+					"クレジットカード",
+					"1881",
+					"pay_1051",
+					"支払い済み",
+					"success",
+					"JPY",
+					1280000,
+					1280000,
+					0,
+					ptrTime(now.Add(-10*time.Hour)),
+				),
 			},
 			Tags:         []string{"ネックレス", "在庫"},
 			Badges:       []Badge{{Label: "ギフト包装", Tone: "info", Icon: "🎁"}},
@@ -117,6 +221,22 @@ func NewStaticService() *StaticService {
 				Status:     "支払い済み",
 				StatusTone: "success",
 				CapturedAt: ptrTime(now.Add(-28 * time.Hour)),
+			},
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1050",
+					"Stripe",
+					"クレジットカード",
+					"5210",
+					"pay_1050",
+					"支払い済み",
+					"success",
+					"JPY",
+					1840000,
+					1840000,
+					0,
+					ptrTime(now.Add(-28*time.Hour)),
+				),
 			},
 			Tags:         []string{"在庫", "標準"},
 			Badges:       []Badge{{Label: "要配送フォロー", Tone: "warning", Icon: "📦"}},
@@ -151,6 +271,22 @@ func NewStaticService() *StaticService {
 				PastDue:       false,
 				PastDueReason: "",
 			},
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1049",
+					"Stripe",
+					"銀行振込",
+					"",
+					"pay_1049",
+					"請求済み",
+					"info",
+					"JPY",
+					5480000,
+					5480000,
+					0,
+					ptrTime(now.Add(-40*time.Hour)),
+				),
+			},
 			Tags:         []string{"カスタム", "高額"},
 			Badges:       []Badge{{Label: "制作完了", Tone: "success", Icon: "✅"}},
 			ItemsSummary: "特注シグネットリング × 1 / 付属ケース",
@@ -179,6 +315,22 @@ func NewStaticService() *StaticService {
 				DueAt:         ptrTime(now.Add(-1 * time.Hour)),
 				PastDue:       true,
 				PastDueReason: "オフライン決済確認待ち",
+			},
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1048",
+					"オフライン決済",
+					"銀行振込",
+					"",
+					"pay_1048",
+					"審査中",
+					"warning",
+					"JPY",
+					2680000,
+					0,
+					0,
+					nil,
+				),
 			},
 			Tags:             []string{"オフライン決済", "制作前"},
 			Badges:           []Badge{{Label: "要支払いフォロー", Tone: "danger", Icon: "⚠️"}},
@@ -210,11 +362,40 @@ func NewStaticService() *StaticService {
 				StatusTone: "success",
 				CapturedAt: ptrTime(now.Add(-44 * time.Hour)),
 			},
-			Tags:         []string{"海外", "USD"},
-			Badges:       []Badge{{Label: "国際送料計算済み", Tone: "info", Icon: "🌐"}},
-			ItemsSummary: "Custom Signet Ring × 1 / Gift Wrap",
-			SalesChannel: "Etsy",
-			Integration:  "Etsy",
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1047",
+					"Stripe",
+					"クレジットカード",
+					"7788",
+					"pay_1047",
+					"支払い済み",
+					"success",
+					"USD",
+					4525000,
+					4525000,
+					625000,
+					ptrTime(now.Add(-44*time.Hour)),
+				),
+			},
+			Refunds: []RefundRecord{
+				makeRefundRecord(
+					"refund-1047-1",
+					"pay-1047",
+					625000,
+					"USD",
+					"サイズ再調整の差額返金",
+					"succeeded",
+					"support@hanko.example",
+					now.Add(-12*time.Hour),
+				),
+			},
+			Tags:             []string{"海外", "USD"},
+			Badges:           []Badge{{Label: "国際送料計算済み", Tone: "info", Icon: "🌐"}},
+			ItemsSummary:     "Custom Signet Ring × 1 / Gift Wrap",
+			SalesChannel:     "Etsy",
+			Integration:      "Etsy",
+			HasRefundRequest: true,
 		}),
 		makeOrder(Order{
 			ID:          "order-1046",
@@ -237,6 +418,22 @@ func NewStaticService() *StaticService {
 				DueAt:         ptrTime(now.Add(12 * time.Hour)),
 				PastDue:       false,
 				PastDueReason: "",
+			},
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1046",
+					"Stripe",
+					"クレジットカード",
+					"3005",
+					"pay_1046",
+					"未払い",
+					"warning",
+					"JPY",
+					980000,
+					0,
+					0,
+					nil,
+				),
 			},
 			Tags:         []string{"オンライン", "要フォロー"},
 			Badges:       []Badge{{Label: "SMSリマインド予定", Tone: "info", Icon: "📱"}},
@@ -263,6 +460,34 @@ func NewStaticService() *StaticService {
 				Status:     "返金済み",
 				StatusTone: "info",
 				CapturedAt: ptrTime(now.Add(-90 * time.Hour)),
+			},
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1045",
+					"Stripe",
+					"クレジットカード",
+					"9900",
+					"pay_1045",
+					"返金済み",
+					"info",
+					"JPY",
+					3880000,
+					3880000,
+					3880000,
+					ptrTime(now.Add(-90*time.Hour)),
+				),
+			},
+			Refunds: []RefundRecord{
+				makeRefundRecord(
+					"refund-1045-1",
+					"pay-1045",
+					3880000,
+					"JPY",
+					"顧客キャンセルによる全額返金",
+					"succeeded",
+					"finance@hanko.example",
+					now.Add(-6*time.Hour),
+				),
 			},
 			Tags:             []string{"キャンセル"},
 			Badges:           []Badge{{Label: "返金済み", Tone: "info", Icon: "↩︎"}},
@@ -291,6 +516,34 @@ func NewStaticService() *StaticService {
 				Status:     "支払い済み",
 				StatusTone: "success",
 				CapturedAt: ptrTime(now.Add(-39 * time.Hour)),
+			},
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1044",
+					"Stripe",
+					"クレジットカード",
+					"5561",
+					"pay_1044",
+					"支払い済み",
+					"success",
+					"JPY",
+					2150000,
+					2150000,
+					500000,
+					ptrTime(now.Add(-39*time.Hour)),
+				),
+			},
+			Refunds: []RefundRecord{
+				makeRefundRecord(
+					"refund-1044-1",
+					"pay-1044",
+					500000,
+					"JPY",
+					"SLA遅延による補償",
+					"processing",
+					"support@hanko.example",
+					now.Add(-2*time.Hour),
+				),
 			},
 			Tags:             []string{"要フォロー", "返金申請"},
 			Badges:           []Badge{{Label: "要優先対応", Tone: "danger", Icon: "🚩"}},
@@ -322,6 +575,22 @@ func NewStaticService() *StaticService {
 				StatusTone: "success",
 				CapturedAt: ptrTime(now.Add(-16 * time.Hour)),
 			},
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1043",
+					"Stripe",
+					"クレジットカード",
+					"4431",
+					"pay_1043",
+					"支払い済み",
+					"success",
+					"USD",
+					2755000,
+					2755000,
+					0,
+					ptrTime(now.Add(-16*time.Hour)),
+				),
+			},
 			Tags:         []string{"海外", "法人"},
 			Badges:       []Badge{{Label: "商用インボイス必要", Tone: "warning", Icon: "📄"}},
 			ItemsSummary: "Corporate Bulk Order × 5",
@@ -346,6 +615,22 @@ func NewStaticService() *StaticService {
 			Payment: Payment{
 				Status:     "未請求",
 				StatusTone: "muted",
+			},
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1042",
+					"Stripe",
+					"クレジットカード",
+					"2210",
+					"pay_1042",
+					"未請求",
+					"muted",
+					"JPY",
+					1350000,
+					0,
+					0,
+					nil,
+				),
 			},
 			Tags:         []string{"顧客都合"},
 			Badges:       []Badge{{Label: "キャンセル", Tone: "muted", Icon: "✕"}},
@@ -376,6 +661,22 @@ func NewStaticService() *StaticService {
 				Status:     "支払い済み",
 				StatusTone: "success",
 				CapturedAt: ptrTime(now.Add(-4 * 24 * time.Hour)),
+			},
+			Payments: []PaymentDetail{
+				makePaymentDetail(
+					"pay-1041",
+					"Stripe",
+					"クレジットカード",
+					"6622",
+					"pay_1041",
+					"支払い済み",
+					"success",
+					"JPY",
+					2980000,
+					2980000,
+					0,
+					ptrTime(now.Add(-4*24*time.Hour)),
+				),
 			},
 			Tags:         []string{"在庫", "通常"},
 			Badges:       []Badge{{Label: "レビュー依頼済み", Tone: "info", Icon: "⭐"}},
@@ -417,6 +718,12 @@ func cloneOrder(order Order) Order {
 	}
 	if len(order.Notes) > 0 {
 		result.Notes = append([]string(nil), order.Notes...)
+	}
+	if len(order.Payments) > 0 {
+		result.Payments = append([]PaymentDetail(nil), order.Payments...)
+	}
+	if len(order.Refunds) > 0 {
+		result.Refunds = append([]RefundRecord(nil), order.Refunds...)
 	}
 	return result
 }
@@ -507,6 +814,62 @@ func (s *StaticService) StatusModal(_ context.Context, _ string, orderID string)
 		Order:          orderCopy,
 		Choices:        choices,
 		LatestTimeline: events,
+	}, nil
+}
+
+// RefundModal assembles refund modal data for the specified order.
+func (s *StaticService) RefundModal(_ context.Context, _ string, orderID string) (RefundModal, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	_, order := s.findOrderLocked(orderID)
+	if order == nil {
+		return RefundModal{}, ErrOrderNotFound
+	}
+
+	cloned := cloneOrder(*order)
+
+	options := make([]RefundPaymentOption, 0, len(cloned.Payments))
+	for _, payment := range cloned.Payments {
+		options = append(options, toRefundPaymentOption(payment))
+	}
+
+	supportsPartial := false
+	for _, option := range options {
+		if option.AvailableMinor > 0 {
+			supportsPartial = true
+			break
+		}
+	}
+
+	existing := make([]RefundRecord, 0, len(cloned.Refunds))
+	copy(existing, cloned.Refunds)
+
+	outstanding := ""
+	if cloned.Payment.PastDue {
+		outstanding = strings.TrimSpace(cloned.Payment.PastDueReason)
+		if outstanding == "" {
+			outstanding = "支払い確認中"
+		}
+	}
+
+	summary := RefundOrderSummary{
+		ID:             cloned.ID,
+		Number:         cloned.Number,
+		CustomerName:   cloned.Customer.Name,
+		TotalMinor:     cloned.TotalMinor,
+		Currency:       cloned.Currency,
+		PaymentStatus:  cloned.Payment.Status,
+		PaymentTone:    cloned.Payment.StatusTone,
+		OutstandingDue: outstanding,
+	}
+
+	return RefundModal{
+		Order:           summary,
+		Payments:        options,
+		ExistingRefunds: existing,
+		SupportsPartial: supportsPartial,
+		Currency:        cloned.Currency,
 	}, nil
 }
 
@@ -615,6 +978,144 @@ func (s *StaticService) UpdateStatus(ctx context.Context, _ string, orderID stri
 	return StatusUpdateResult{Order: updated, Timeline: timeline}, nil
 }
 
+// SubmitRefund mutates the payment state with a simulated refund.
+func (s *StaticService) SubmitRefund(ctx context.Context, _ string, orderID string, req RefundRequest) (RefundResult, error) {
+	paymentID := strings.TrimSpace(req.PaymentID)
+	if paymentID == "" {
+		return RefundResult{}, &RefundValidationError{
+			Message:     "返金対象の支払いを選択してください。",
+			FieldErrors: map[string]string{"paymentID": "返金対象の支払いを選択してください。"},
+		}
+	}
+	if req.AmountMinor <= 0 {
+		return RefundResult{}, &RefundValidationError{
+			Message:     "返金金額を正しく入力してください。",
+			FieldErrors: map[string]string{"amount": "1円以上の金額を入力してください。"},
+		}
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		return RefundResult{}, &RefundValidationError{
+			Message:     "返金理由を入力してください。",
+			FieldErrors: map[string]string{"reason": "返金理由を入力してください。"},
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx, order := s.findOrderLocked(orderID)
+	if order == nil {
+		return RefundResult{}, ErrOrderNotFound
+	}
+
+	payment := findPayment(order, paymentID)
+	if payment == nil {
+		return RefundResult{}, ErrPaymentNotFound
+	}
+
+	if payment.AmountCaptured <= 0 {
+		return RefundResult{}, &RefundValidationError{
+			Message:     "この支払いはまだ確定していないため返金できません。",
+			FieldErrors: map[string]string{"paymentID": "この支払いは返金できません。"},
+		}
+	}
+	if payment.AmountAvailable <= 0 {
+		return RefundResult{}, &RefundValidationError{
+			Message:     "返金可能な金額がありません。",
+			FieldErrors: map[string]string{"amount": "返金可能な金額がありません。"},
+		}
+	}
+	if req.AmountMinor > payment.AmountAvailable {
+		return RefundResult{}, &RefundValidationError{
+			Message:     "返金可能額を超えています。",
+			FieldErrors: map[string]string{"amount": "返金可能額を超えています。"},
+		}
+	}
+
+	now := time.Now()
+	payment.AmountRefunded += req.AmountMinor
+	if payment.AmountRefunded > payment.AmountCaptured {
+		payment.AmountRefunded = payment.AmountCaptured
+	}
+	payment.AmountAvailable = payment.AmountCaptured - payment.AmountRefunded
+	if payment.AmountAvailable < 0 {
+		payment.AmountAvailable = 0
+	}
+
+	currency := strings.TrimSpace(req.Currency)
+	if currency == "" {
+		if payment.Currency != "" {
+			currency = payment.Currency
+		} else {
+			currency = order.Currency
+		}
+	}
+
+	actor := strings.TrimSpace(req.ActorEmail)
+	if actor == "" {
+		actor = "オペレーター"
+	}
+
+	refID := fmt.Sprintf("refund_%s_%d", payment.ID, now.UnixNano())
+	refund := RefundRecord{
+		ID:          refID,
+		PaymentID:   payment.ID,
+		AmountMinor: req.AmountMinor,
+		Currency:    currency,
+		Reason:      reason,
+		Status:      "succeeded",
+		ProcessedAt: now,
+		Actor:       actor,
+		Reference:   refID,
+	}
+	order.Refunds = append([]RefundRecord{refund}, order.Refunds...)
+
+	order.HasRefundRequest = true
+	order.Payment.StatusTone = "info"
+	if payment.AmountAvailable == 0 {
+		order.Payment.Status = "返金済み"
+	} else {
+		order.Payment.Status = "一部返金"
+	}
+	order.UpdatedAt = now
+
+	if reason != "" {
+		formatted := reason
+		if actor != "" {
+			formatted = actor + ": " + reason
+		}
+		order.Notes = append([]string{formatted}, order.Notes...)
+	}
+
+	if s.timelines != nil {
+		description := fmt.Sprintf("%s を返金 (%s)", formatMinorAmount(req.AmountMinor, currency), reason)
+		event := TimelineEvent{
+			ID:          fmt.Sprintf("%s-refund-%d", orderID, now.UnixNano()),
+			Status:      order.Status,
+			Title:       "返金を登録",
+			Description: strings.TrimSpace(description),
+			Actor:       actor,
+			OccurredAt:  now,
+		}
+		s.timelines[orderID] = append(s.timelines[orderID], event)
+	}
+
+	paymentOption := toRefundPaymentOption(*payment)
+	paymentOptions := make([]RefundPaymentOption, 0, len(order.Payments))
+	for _, p := range order.Payments {
+		paymentOptions = append(paymentOptions, toRefundPaymentOption(p))
+	}
+
+	s.orders[idx] = *order
+
+	return RefundResult{
+		Refund:   refund,
+		Payment:  paymentOption,
+		Payments: paymentOptions,
+	}, nil
+}
+
 func (s *StaticService) findOrderLocked(orderID string) (int, *Order) {
 	for i := range s.orders {
 		if s.orders[i].ID == orderID {
@@ -622,6 +1123,71 @@ func (s *StaticService) findOrderLocked(orderID string) (int, *Order) {
 		}
 	}
 	return -1, nil
+}
+
+func findPayment(order *Order, paymentID string) *PaymentDetail {
+	if order == nil {
+		return nil
+	}
+	for i := range order.Payments {
+		if order.Payments[i].ID == paymentID {
+			return &order.Payments[i]
+		}
+	}
+	return nil
+}
+
+func toRefundPaymentOption(payment PaymentDetail) RefundPaymentOption {
+	return RefundPaymentOption{
+		ID:              payment.ID,
+		Label:           buildPaymentLabel(payment),
+		Method:          payment.Method,
+		Reference:       payment.Reference,
+		Status:          payment.Status,
+		StatusTone:      payment.StatusTone,
+		Currency:        payment.Currency,
+		CapturedMinor:   payment.AmountCaptured,
+		RefundedMinor:   payment.AmountRefunded,
+		AvailableMinor:  payment.AmountAvailable,
+		CapturedAt:      payment.CapturedAt,
+		SupportsRefunds: payment.AmountAvailable > 0,
+	}
+}
+
+func buildPaymentLabel(payment PaymentDetail) string {
+	parts := []string{}
+	if trimmed := strings.TrimSpace(payment.Provider); trimmed != "" {
+		parts = append(parts, trimmed)
+	}
+	if method := strings.TrimSpace(payment.Method); method != "" {
+		parts = append(parts, method)
+	}
+	if last4 := strings.TrimSpace(payment.Last4); last4 != "" {
+		if !strings.HasPrefix(last4, "****") && len(last4) <= 4 {
+			parts = append(parts, "****"+last4)
+		} else {
+			parts = append(parts, last4)
+		}
+	}
+	if len(parts) == 0 {
+		return "支払い"
+	}
+	return strings.Join(parts, " ")
+}
+
+func formatMinorAmount(amount int64, currency string) string {
+	sign := ""
+	if amount < 0 {
+		sign = "-"
+		amount = -amount
+	}
+	major := amount / 100
+	minor := amount % 100
+	code := strings.ToUpper(strings.TrimSpace(currency))
+	if code == "" {
+		return fmt.Sprintf("%s%d.%02d", sign, major, minor)
+	}
+	return fmt.Sprintf("%s%d.%02d %s", sign, major, minor, code)
 }
 
 func buildStatusChoices(current Status) []StatusTransitionOption {

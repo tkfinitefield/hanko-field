@@ -194,6 +194,8 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 				or.Post("/bulk/export", uiHandlers.OrdersBulkExport)
 				or.Get("/{orderID}/modal/status", uiHandlers.OrdersStatusModal)
 				or.Put("/{orderID}:status", uiHandlers.OrdersStatusUpdate)
+				or.Get("/{orderID}/modal/refund", uiHandlers.OrdersRefundModal)
+				or.Post("/{orderID}/payments:refund", uiHandlers.OrdersSubmitRefund)
 			})
 			// Future admin routes will be registered here.
 		})

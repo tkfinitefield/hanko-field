@@ -459,6 +459,81 @@ func TestOrdersStatusUpdateFlow(t *testing.T) {
 	require.Contains(t, updateHTML, "包装確認済み")
 }
 
+func TestOrdersRefundFlow(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "refund-token"}
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth))
+	client := noRedirectClient(t)
+
+	// Seed CSRF cookie by loading the orders page.
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/orders", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+auth.Token)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	csrf := findCSRFCookie(t, client.Jar, ts.URL+"/admin")
+	require.NotEmpty(t, csrf)
+
+	// Load the refund modal.
+	modalReq, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/orders/order-1052/modal/refund", nil)
+	require.NoError(t, err)
+	modalReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	modalReq.Header.Set("HX-Request", "true")
+	modalReq.Header.Set("HX-Target", "modal")
+	modalResp, err := client.Do(modalReq)
+	require.NoError(t, err)
+	modalBody, err := io.ReadAll(modalResp.Body)
+	modalResp.Body.Close()
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, modalResp.StatusCode)
+	modalHTML := string(modalBody)
+	require.Contains(t, modalHTML, `hx-post="/admin/orders/order-1052/payments:refund"`)
+
+	// Submit an invalid refund that exceeds the available amount.
+	form := url.Values{}
+	form.Set("paymentID", "pay-1052")
+	form.Set("amount", "4000000") // ¥4,000,000 > ¥3,200,000 available
+	form.Set("reason", "テスト返金")
+	form.Set("notifyCustomer", "true")
+
+	invalidReq, err := http.NewRequest(http.MethodPost, ts.URL+"/admin/orders/order-1052/payments:refund", strings.NewReader(form.Encode()))
+	require.NoError(t, err)
+	invalidReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	invalidReq.Header.Set("HX-Request", "true")
+	invalidReq.Header.Set("HX-Target", "modal")
+	invalidReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	invalidReq.Header.Set("X-CSRF-Token", csrf)
+	invalidResp, err := client.Do(invalidReq)
+	require.NoError(t, err)
+	invalidBody, err := io.ReadAll(invalidResp.Body)
+	invalidResp.Body.Close()
+	require.NoError(t, err)
+	require.Equal(t, http.StatusUnprocessableEntity, invalidResp.StatusCode)
+	require.Contains(t, string(invalidBody), "返金可能額を超えています。")
+
+	// Submit a valid refund.
+	form.Set("amount", "5000")
+	validReq, err := http.NewRequest(http.MethodPost, ts.URL+"/admin/orders/order-1052/payments:refund", strings.NewReader(form.Encode()))
+	require.NoError(t, err)
+	validReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	validReq.Header.Set("HX-Request", "true")
+	validReq.Header.Set("HX-Target", "modal")
+	validReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	validReq.Header.Set("X-CSRF-Token", csrf)
+	validResp, err := client.Do(validReq)
+	require.NoError(t, err)
+	validBody, err := io.ReadAll(validResp.Body)
+	validResp.Body.Close()
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, validResp.StatusCode)
+	require.Empty(t, validBody)
+	require.Equal(t, `{"toast":{"message":"返金を登録しました。","tone":"success"},"modal:close":true,"refresh:fragment":{"targets":["[data-order-payments]","[data-order-summary]"]}}`, validResp.Header.Get("HX-Trigger"))
+}
+
 type dashboardStub struct {
 	kpis        []admindashboard.KPI
 	alerts      []admindashboard.Alert

@@ -17,6 +17,12 @@ type Service interface {
 
 	// UpdateStatus attempts to transition an order to the provided status and returns the updated order state.
 	UpdateStatus(ctx context.Context, token, orderID string, req StatusUpdateRequest) (StatusUpdateResult, error)
+
+	// RefundModal loads metadata required to render the refund modal for an order.
+	RefundModal(ctx context.Context, token, orderID string) (RefundModal, error)
+
+	// SubmitRefund attempts to create a refund for the specified order payment.
+	SubmitRefund(ctx context.Context, token, orderID string, req RefundRequest) (RefundResult, error)
 }
 
 // Status represents the canonical lifecycle state of an order.
@@ -56,6 +62,10 @@ var (
 	ErrOrderNotFound = errors.New("order not found")
 	// ErrInvalidTransition is returned when a requested status change is not permitted.
 	ErrInvalidTransition = errors.New("invalid status transition")
+	// ErrPaymentNotFound indicates the provided payment reference does not exist for the order.
+	ErrPaymentNotFound = errors.New("payment not found")
+	// ErrRefundFailed indicates the PSP refund attempt failed for reasons other than validation.
+	ErrRefundFailed = errors.New("refund failed")
 )
 
 // Query captures filters and pagination arguments for listing orders.
@@ -166,6 +176,8 @@ type Order struct {
 	SalesChannel     string
 	Integration      string
 	HasRefundRequest bool
+	Payments         []PaymentDetail
+	Refunds          []RefundRecord
 }
 
 // StatusModal represents data necessary to render the status update modal.
@@ -301,10 +313,114 @@ type Payment struct {
 	PastDueReason string
 }
 
+// PaymentDetail represents a single payment attempt that can be refunded.
+type PaymentDetail struct {
+	ID               string
+	Provider         string
+	Method           string
+	Last4            string
+	Reference        string
+	Status           string
+	StatusTone       string
+	Currency         string
+	AmountAuthorized int64
+	AmountCaptured   int64
+	AmountRefunded   int64
+	AmountAvailable  int64
+	CapturedAt       *time.Time
+	ExpiresAt        *time.Time
+}
+
 // Badge renders a small inline badge.
 type Badge struct {
 	Label string
 	Tone  string
 	Icon  string
 	Title string
+}
+
+// RefundModal provides information required to render the refund UI for an order.
+type RefundModal struct {
+	Order           RefundOrderSummary
+	Payments        []RefundPaymentOption
+	ExistingRefunds []RefundRecord
+	SupportsPartial bool
+	Currency        string
+}
+
+// RefundOrderSummary gives contextual order details for the refund modal.
+type RefundOrderSummary struct {
+	ID             string
+	Number         string
+	CustomerName   string
+	TotalMinor     int64
+	Currency       string
+	PaymentStatus  string
+	PaymentTone    string
+	OutstandingDue string
+}
+
+// RefundPaymentOption represents a selectable payment source to refund against.
+type RefundPaymentOption struct {
+	ID              string
+	Label           string
+	Method          string
+	Reference       string
+	Status          string
+	StatusTone      string
+	Currency        string
+	CapturedMinor   int64
+	RefundedMinor   int64
+	AvailableMinor  int64
+	CapturedAt      *time.Time
+	SupportsRefunds bool
+}
+
+// RefundRecord describes an existing refund associated with an order.
+type RefundRecord struct {
+	ID          string
+	PaymentID   string
+	AmountMinor int64
+	Currency    string
+	Reason      string
+	Status      string
+	ProcessedAt time.Time
+	Actor       string
+	Reference   string
+}
+
+// RefundRequest contains parameters for creating a refund.
+type RefundRequest struct {
+	PaymentID      string
+	AmountMinor    int64
+	Currency       string
+	Reason         string
+	NotifyCustomer bool
+	ActorID        string
+	ActorEmail     string
+}
+
+// RefundResult returns information about the processed refund and updated payment state.
+type RefundResult struct {
+	Refund   RefundRecord
+	Payment  RefundPaymentOption
+	Payments []RefundPaymentOption
+}
+
+// RefundValidationError indicates validation issues with the refund request.
+type RefundValidationError struct {
+	Message     string
+	FieldErrors map[string]string
+}
+
+// Error implements the error interface.
+func (e *RefundValidationError) Error() string {
+	if e == nil {
+		return "invalid refund request"
+	}
+	msg := strings.TrimSpace(e.Message)
+	if msg == "" {
+		msg = "invalid refund request"
+	}
+	return msg
 }

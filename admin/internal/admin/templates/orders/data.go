@@ -211,6 +211,68 @@ type StatusUpdateSuccessData struct {
 	Timeline StatusTimelineData
 }
 
+// RefundModalData describes the refund modal view model.
+type RefundModalData struct {
+	OrderID         string
+	OrderNumber     string
+	CustomerName    string
+	Total           string
+	Currency        string
+	PaymentStatus   string
+	PaymentTone     string
+	Outstanding     string
+	SupportsPartial bool
+	ActionURL       string
+	CSRFToken       string
+	SelectedPayment string
+	AmountInput     string
+	Reason          string
+	NotifyCustomer  bool
+	PaymentClass    string
+	AmountClass     string
+	ReasonClass     string
+	Error           string
+	FieldErrors     map[string]string
+	Payments        []RefundPaymentOptionData
+	Refunds         []RefundRecordData
+}
+
+// RefundPaymentOptionData represents a selectable payment in the modal.
+type RefundPaymentOptionData struct {
+	ID             string
+	Label          string
+	Caption        string
+	Status         string
+	StatusTone     string
+	Captured       string
+	Refunded       string
+	Available      string
+	AvailableMinor int64
+	Selected       bool
+	Disabled       bool
+}
+
+// RefundRecordData summarises previously issued refunds.
+type RefundRecordData struct {
+	ID         string
+	Status     string
+	StatusTone string
+	Amount     string
+	Reason     string
+	Actor      string
+	Reference  string
+	Processed  string
+	Relative   string
+}
+
+// RefundFormState stores user input when re-rendering the modal.
+type RefundFormState struct {
+	PaymentID      string
+	Amount         string
+	Reason         string
+	NotifyCustomer bool
+}
+
 // BadgeView describes a badge to render for a row.
 type BadgeView struct {
 	Label string
@@ -453,6 +515,185 @@ func statusToneForStatus(status adminorders.Status) string {
 // StatusUpdateSuccessPayload creates the combined fragment payload for OOB swaps.
 func StatusUpdateSuccessPayload(cell StatusCellData, timeline StatusTimelineData) StatusUpdateSuccessData {
 	return StatusUpdateSuccessData{Cell: cell, Timeline: timeline}
+}
+
+// RefundModalPayload prepares the refund modal payload from service data.
+func RefundModalPayload(basePath string, modal adminorders.RefundModal, csrfToken string, form RefundFormState, errMsg string, fieldErrors map[string]string) RefundModalData {
+	order := modal.Order
+
+	selected := strings.TrimSpace(form.PaymentID)
+	if selected == "" {
+		selected = defaultRefundPayment(modal.Payments)
+	}
+
+	amountInput := strings.TrimSpace(form.Amount)
+	if amountInput == "" {
+		if payment := findRefundPayment(modal.Payments, selected); payment != nil && payment.AvailableMinor > 0 {
+			value := payment.AvailableMinor
+			amountInput = formatMajorUnits(&value)
+		}
+	}
+
+	payments := make([]RefundPaymentOptionData, 0, len(modal.Payments))
+	for _, payment := range modal.Payments {
+		payments = append(payments, buildRefundPaymentOption(payment, selected))
+	}
+
+	refunds := make([]RefundRecordData, 0, len(modal.ExistingRefunds))
+	for _, record := range modal.ExistingRefunds {
+		currency := strings.TrimSpace(record.Currency)
+		if currency == "" {
+			currency = strings.TrimSpace(modal.Currency)
+		}
+		if currency == "" {
+			currency = strings.TrimSpace(order.Currency)
+		}
+		refunds = append(refunds, RefundRecordData{
+			ID:         record.ID,
+			Status:     safeText(record.Status, "処理中"),
+			StatusTone: refundStatusTone(record.Status),
+			Amount:     helpers.Currency(record.AmountMinor, currency),
+			Reason:     strings.TrimSpace(record.Reason),
+			Actor:      strings.TrimSpace(record.Actor),
+			Reference:  strings.TrimSpace(record.Reference),
+			Processed:  helpers.Date(record.ProcessedAt, "2006-01-02 15:04"),
+			Relative:   helpers.Relative(record.ProcessedAt),
+		})
+	}
+
+	var errs map[string]string
+	if len(fieldErrors) > 0 {
+		errs = make(map[string]string, len(fieldErrors))
+		for key, value := range fieldErrors {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			errs[strings.TrimSpace(key)] = value
+		}
+	}
+
+	currency := strings.TrimSpace(modal.Currency)
+	if currency == "" {
+		currency = strings.TrimSpace(order.Currency)
+	}
+
+	baseClass := "w-full rounded-lg border px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+	defaultClass := helpers.ClassList(baseClass, "border-slate-300")
+	errorClass := helpers.ClassList(baseClass, "border-rose-400 focus:border-rose-500 focus:ring-rose-200")
+
+	paymentClass := defaultClass
+	if errs != nil && errs["paymentID"] != "" {
+		paymentClass = errorClass
+	}
+	amountClass := defaultClass
+	if errs != nil && errs["amount"] != "" {
+		amountClass = errorClass
+	}
+	reasonClass := defaultClass
+	if errs != nil && errs["reason"] != "" {
+		reasonClass = errorClass
+	}
+
+	return RefundModalData{
+		OrderID:         strings.TrimSpace(order.ID),
+		OrderNumber:     strings.TrimSpace(order.Number),
+		CustomerName:    strings.TrimSpace(order.CustomerName),
+		Total:           helpers.Currency(order.TotalMinor, order.Currency),
+		Currency:        currency,
+		PaymentStatus:   strings.TrimSpace(order.PaymentStatus),
+		PaymentTone:     strings.TrimSpace(order.PaymentTone),
+		Outstanding:     strings.TrimSpace(order.OutstandingDue),
+		SupportsPartial: modal.SupportsPartial,
+		ActionURL:       joinBase(basePath, "/orders/"+strings.TrimSpace(order.ID)+"/payments:refund"),
+		CSRFToken:       csrfToken,
+		SelectedPayment: selected,
+		AmountInput:     amountInput,
+		Reason:          strings.TrimSpace(form.Reason),
+		NotifyCustomer:  form.NotifyCustomer,
+		PaymentClass:    paymentClass,
+		AmountClass:     amountClass,
+		ReasonClass:     reasonClass,
+		Error:           strings.TrimSpace(errMsg),
+		FieldErrors:     errs,
+		Payments:        payments,
+		Refunds:         refunds,
+	}
+}
+
+func defaultRefundPayment(payments []adminorders.RefundPaymentOption) string {
+	for _, payment := range payments {
+		if payment.SupportsRefunds && payment.AvailableMinor > 0 {
+			return payment.ID
+		}
+	}
+	if len(payments) > 0 {
+		return payments[0].ID
+	}
+	return ""
+}
+
+func findRefundPayment(payments []adminorders.RefundPaymentOption, id string) *adminorders.RefundPaymentOption {
+	for i, payment := range payments {
+		if payment.ID == id {
+			return &payments[i]
+		}
+	}
+	return nil
+}
+
+func buildRefundPaymentOption(payment adminorders.RefundPaymentOption, selected string) RefundPaymentOptionData {
+	label := strings.TrimSpace(payment.Label)
+	if label == "" {
+		label = "支払い"
+	}
+	if ref := strings.TrimSpace(payment.Reference); ref != "" {
+		label = label + " (" + ref + ")"
+	}
+
+	captionParts := []string{}
+	if method := strings.TrimSpace(payment.Method); method != "" {
+		captionParts = append(captionParts, method)
+	}
+	if captured := payment.CapturedMinor; captured > 0 {
+		captionParts = append(captionParts, "売上 "+helpers.Currency(captured, payment.Currency))
+	}
+	caption := strings.Join(captionParts, " · ")
+
+	return RefundPaymentOptionData{
+		ID:             payment.ID,
+		Label:          label,
+		Caption:        caption,
+		Status:         safeText(payment.Status, "処理中"),
+		StatusTone:     strings.TrimSpace(payment.StatusTone),
+		Captured:       helpers.Currency(payment.CapturedMinor, payment.Currency),
+		Refunded:       helpers.Currency(payment.RefundedMinor, payment.Currency),
+		Available:      helpers.Currency(payment.AvailableMinor, payment.Currency),
+		AvailableMinor: payment.AvailableMinor,
+		Selected:       strings.TrimSpace(payment.ID) == strings.TrimSpace(selected),
+		Disabled:       !payment.SupportsRefunds || payment.AvailableMinor <= 0,
+	}
+}
+
+func refundStatusTone(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "succeeded", "success", "completed":
+		return "success"
+	case "pending", "processing":
+		return "info"
+	case "failed", "error", "declined":
+		return "danger"
+	default:
+		return "info"
+	}
+}
+
+func safeText(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func paymentLabel(p adminorders.Payment) string {
