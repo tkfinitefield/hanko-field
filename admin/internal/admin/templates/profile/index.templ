@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"strings"
 	"time"
 
 	profilemodel "finitefield.org/hanko-admin/internal/admin/profile"
@@ -10,74 +11,310 @@ import (
 )
 
 templ Index(data PageData) {
+	if strings.TrimSpace(data.DisplayName) == "" {
+		data.DisplayName = data.UserName
+	}
+	if data.UserEmail == "" && data.Security != nil && data.Security.UserEmail != "" {
+		data.UserEmail = data.Security.UserEmail
+	}
+	if data.ActiveTab == "" {
+		data.ActiveTab = "security"
+	}
 	@layouts.Base(helpers.I18N("admin.profile.title"), breadcrumbItems(), pageBody(data))
 }
 
 templ pageBody(data PageData) {
 	<div class="space-y-8">
-		<header class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
-			<div class="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-				<div>
-					<h1 class="text-2xl font-semibold text-slate-900">プロフィール</h1>
-					<p class="mt-2 text-sm text-slate-600">自分の多要素認証や API キー、アクティブセッションを管理できます。</p>
-					<dl class="mt-6 grid grid-cols-1 gap-4 text-sm text-slate-600 sm:grid-cols-3">
-						<div>
-							<dt class="font-medium text-slate-500">メールアドレス</dt>
-							<dd class="mt-1 font-semibold text-slate-900">
-								if data.UserEmail != "" {
-									{ data.UserEmail }
-								} else {
-									<span class="text-slate-500">未登録</span>
-								}
-							</dd>
-						</div>
-						<div>
-							<dt class="font-medium text-slate-500">UID</dt>
-							<dd class="mt-1 text-slate-900">{ data.UserName }</dd>
-						</div>
-						if data.Security != nil && data.Security.Phone != "" {
-							<div>
-								<dt class="font-medium text-slate-500">電話番号</dt>
-								<dd class="mt-1 text-slate-900">{ data.Security.Phone }</dd>
-							</div>
-						}
-					</dl>
+		@pageHeader(data)
+		<div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+			<div class="flex flex-col gap-6">
+				@profileSummaryCard(data)
+				<div id="profile-flash">
+					if data.Flash != "" {
+						@flashMessage(data.Flash)
+					}
+				</div>
+				<div id="profile-tabs" class="space-y-4">
+					@profileTabs(data)
 				</div>
 			</div>
-		</header>
+			<aside class="space-y-4">
+				@supportPanel()
+				<div class="space-y-4">
+					for _, alert := range securityAlerts() {
+						@alertCard(alert)
+					}
+				</div>
+			</aside>
+		</div>
+	</div>
+}
 
-		<div id="profile-flash">
-			if data.Flash != "" {
-				@flashMessage(data.Flash)
+templ pageHeader(data PageData) {
+	<header class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+			<div class="flex items-center gap-4">
+				<div class="flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100 text-2xl font-semibold text-indigo-700">
+					{ AvatarInitial(data.DisplayName, data.UserEmail, data.UserName) }
+				</div>
+				<div>
+					<h1 class="text-2xl font-semibold text-slate-900">{ data.DisplayName }</h1>
+					if data.UserEmail != "" {
+						<p class="text-sm text-slate-600">{ data.UserEmail }</p>
+					}
+					if data.Security != nil && !data.Security.UpdatedAt.IsZero() {
+						<p class="mt-1 text-xs text-slate-400">最終更新 { formatTimestamp(data.Security.UpdatedAt) }</p>
+					}
+				</div>
+			</div>
+			<div class="flex flex-wrap items-center gap-2">
+				if len(data.Roles) == 0 {
+					@components.Badge("ロール未設定", "warning")
+				} else {
+					for _, role := range data.Roles {
+						@components.Badge(role, "info")
+					}
+				}
+			</div>
+		</div>
+	</header>
+}
+
+templ profileSummaryCard(data PageData) {
+	<section class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+		<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+			<div>
+				<h2 class="text-base font-semibold text-slate-900">プロフィール概要</h2>
+				<p class="mt-2 text-sm text-slate-600">連絡先、MFA、API キーなどのセキュリティ状況を確認できます。</p>
+			</div>
+			@components.ButtonWith("Firebase Console を開く", components.ButtonOptions{
+				Variant: "secondary",
+				Size:    "sm",
+				Href:    "https://console.firebase.google.com/",
+				Attrs: templ.Attributes{
+					"target": "_blank",
+					"rel":    "noreferrer",
+				},
+			})
+		</div>
+		<dl class="mt-6 grid grid-cols-1 gap-4 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
+			<div>
+				<dt class="font-medium text-slate-500">メールアドレス</dt>
+				<dd class="mt-1 font-semibold text-slate-900">
+					if data.UserEmail != "" {
+						{ data.UserEmail }
+					} else {
+						<span class="text-slate-400">未登録</span>
+					}
+				</dd>
+			</div>
+			<div>
+				<dt class="font-medium text-slate-500">ユーザー ID</dt>
+				<dd class="mt-1 font-mono text-slate-900">{ data.UserName }</dd>
+			</div>
+			if data.Security != nil && data.Security.Phone != "" {
+				<div>
+					<dt class="font-medium text-slate-500">電話番号</dt>
+					<dd class="mt-1 text-slate-900">{ data.Security.Phone }</dd>
+				</div>
+			}
+			<div>
+				<dt class="font-medium text-slate-500">最終ログイン</dt>
+				<dd class="mt-1 text-slate-900">
+					if data.LastLogin != nil {
+						{ formatTimestamp(*data.LastLogin) }
+					} else {
+						<span class="text-slate-400">記録なし</span>
+					}
+				</dd>
+			</div>
+			if data.Security != nil {
+				<div>
+					<dt class="font-medium text-slate-500">MFA</dt>
+					<dd class="mt-1">
+						if data.Security.MFA.Enabled {
+							@components.Badge("有効", "success")
+						} else {
+							@components.Badge("未設定", "muted")
+						}
+					</dd>
+				</div>
+				<div>
+					<dt class="font-medium text-slate-500">API キー</dt>
+					<dd class="mt-1 text-slate-900">{ len(data.Security.APIKeys) } 件</dd>
+				</div>
+			}
+		</dl>
+	</section>
+}
+
+templ supportPanel() {
+	<section class="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
+		<h2 class="text-base font-semibold text-slate-900">セキュリティ運用</h2>
+		<p class="mt-2 text-sm text-slate-600">疑問やインシデントが発生した場合は、以下のリソースからガイドラインを参照してください。</p>
+		<ul class="mt-4 space-y-3 text-sm">
+			<li>
+				<a
+					href="https://cloud.google.com/security/best-practices-for-enterprises"
+					target="_blank"
+					rel="noreferrer"
+					class="inline-flex items-center gap-2 font-medium text-indigo-600 hover:text-indigo-500"
+				>
+					Google Cloud セキュリティガイド
+				</a>
+			</li>
+			<li>
+				<a
+					href="mailto:security@hanko-field.dev"
+					class="inline-flex items-center gap-2 font-medium text-indigo-600 hover:text-indigo-500"
+				>
+					security@hanko-field.dev
+				</a>
+			</li>
+		</ul>
+	</section>
+}
+
+templ profileTabs(data PageData) {
+	@components.UnderlineTabs(components.UnderlineTabsProps{
+		Tabs: []components.UnderlineTab{
+			{ID: "account", Label: "アカウント", Href: "/admin/profile?tab=account", Active: data.ActiveTab == "account"},
+			{ID: "security", Label: "セキュリティ", Href: "/admin/profile?tab=security", Active: data.ActiveTab == "security"},
+			{ID: "sessions", Label: "セッション", Href: "/admin/profile?tab=sessions", Active: data.ActiveTab == "sessions"},
+			{ID: "flags", Label: "機能フラグ", Href: "/admin/profile?tab=flags", Active: data.ActiveTab == "flags"},
+		},
+		HxTarget:  "#profile-tabs",
+		HxSwap:    "outerHTML",
+		HxPushURL: true,
+	})
+	<div class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+		<div class="space-y-6 px-6 py-6">
+			if data.ActiveTab == "account" {
+				@accountTab(data)
+			} else if data.ActiveTab == "sessions" {
+				@sessionsTab(data)
+			} else if data.ActiveTab == "flags" {
+				@featureFlagsTab(data)
+			} else {
+				@securityTab(data)
 			}
 		</div>
+	</div>
+}
 
-		<section class="grid gap-4 md:grid-cols-2">
-			for _, alert := range securityAlerts() {
-				@alertCard(alert)
-			}
+templ accountTab(data PageData) {
+	<div class="space-y-6">
+		<section class="space-y-3">
+			<h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">連絡先</h3>
+			<p class="text-sm text-slate-600">スタッフプロフィールは Firebase Auth を信頼ソースとして同期されています。</p>
+			<dl class="grid grid-cols-1 gap-4 text-sm text-slate-600 sm:grid-cols-2">
+				<div>
+					<dt class="font-medium text-slate-500">表示名</dt>
+					<dd class="mt-1 text-slate-900">{ data.DisplayName }</dd>
+				</div>
+				<div>
+					<dt class="font-medium text-slate-500">メールアドレス</dt>
+					<dd class="mt-1">
+						if data.UserEmail != "" {
+							{ data.UserEmail }
+						} else {
+							<span class="text-slate-400">未登録</span>
+						}
+					</dd>
+				</div>
+				if data.Security != nil && data.Security.Phone != "" {
+					<div>
+						<dt class="font-medium text-slate-500">電話番号</dt>
+						<dd class="mt-1 text-slate-900">{ data.Security.Phone }</dd>
+					</div>
+				}
+				<div>
+					<dt class="font-medium text-slate-500">所属ロール</dt>
+					<dd class="mt-1 flex flex-wrap gap-2">
+						if len(data.Roles) == 0 {
+							<span class="text-slate-400">割り当てなし</span>
+						} else {
+							for _, role := range data.Roles {
+								@components.Badge(role, "info")
+							}
+						}
+					</dd>
+				</div>
+			</dl>
 		</section>
+		<section class="space-y-3">
+			<h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">パスワード管理</h3>
+			<p class="text-sm text-slate-600">Hanko Admin は Firebase Auth を利用しており、パスワードの変更は認証プロバイダで実施します。</p>
+			<div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+				<p>Firebase Console → Authentication → Users からユーザーを選択し、"Reset password" を実行してください。</p>
+				<div class="mt-3">
+					@components.ButtonWith("Firebase Console を開く", components.ButtonOptions{
+						Variant: "secondary",
+						Size:    "sm",
+						Href:    "https://console.firebase.google.com/project/_/authentication/users",
+						Attrs: templ.Attributes{
+							"target": "_blank",
+							"rel":    "noreferrer",
+						},
+					})
+				</div>
+			</div>
+		</section>
+	</div>
+}
 
+templ securityTab(data PageData) {
+	<div class="space-y-6">
+		<p class="text-sm text-slate-600">Authenticator アプリやメールによる MFA を有効化し、API キーは最小権限で管理してください。</p>
 		<section id="mfa-card">
 			@mfaCard(data.Security, data.CSRFToken)
 		</section>
-
 		<section id="api-keys-card">
 			@apiKeysCard(data.Security, data.CSRFToken)
 		</section>
+	</div>
+}
 
+templ sessionsTab(data PageData) {
+	<div class="space-y-4">
 		<section id="sessions-card">
 			@sessionsCard(data.Security, data.CSRFToken)
 		</section>
+		<p class="text-xs text-slate-500">すべてのセッションを失効すると、次回ログイン時に MFA が再認証されます。</p>
+	</div>
+}
 
-		<section class="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5 text-sm text-amber-900">
-			<h2 class="text-base font-semibold">運用上の注意</h2>
-			<ul class="mt-3 list-disc space-y-2 pl-5">
-				<li>復旧コードはオフラインで保管し、共有しないでください。</li>
-				<li>API キーは必要最小限の権限で発行し、ローテーション計画を立ててください。</li>
-				<li>不審なセッションがある場合はすべてのセッションを失効し、MFA を再設定してください。</li>
-			</ul>
-		</section>
+templ featureFlagsTab(data PageData) {
+	<div class="space-y-4">
+		<p class="text-sm text-slate-600">機能フラグは段階的リリースや運用中の実験機能のトグルに使用されます。</p>
+		if len(data.FeatureFlags) == 0 {
+			<p class="rounded-lg border border-dashed border-slate-300 px-4 py-4 text-sm text-slate-500">割り当てられた機能フラグはありません。</p>
+		} else {
+			<div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+				<table class="min-w-full divide-y divide-slate-200 text-sm">
+					<thead class="bg-slate-50 text-xs uppercase text-slate-500">
+						<tr>
+							<th class="px-4 py-3 text-left font-medium">キー</th>
+							<th class="px-4 py-3 text-left font-medium">状態</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-slate-200">
+						for _, flag := range data.FeatureFlags {
+							<tr>
+								<td class="px-4 py-3 font-mono text-slate-900">{ flag.Key }</td>
+								<td class="px-4 py-3">
+									if flag.Enabled {
+										@components.Badge("有効", "success")
+									} else {
+										@components.Badge("無効", "muted")
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
 	</div>
 }
 
@@ -209,7 +446,7 @@ templ apiKeysBody(state *profilemodel.SecurityState, csrf string) {
 				Variant: "primary",
 				Attrs: templ.Attributes{
 					"hx-get":   "/admin/profile/api-keys/new",
-				"hx-target": "#modal",
+					"hx-target": "#modal",
 					"hx-swap": "innerHTML",
 				},
 			})
@@ -360,7 +597,7 @@ templ totpModalBody(data TOTPModalData) {
 		</div>
 		<form
 			hx-post="/admin/profile/mfa/totp"
-	hx-target="#modal"
+			hx-target="#modal"
 			hx-swap="innerHTML"
 			class="space-y-3"
 		>
@@ -389,7 +626,7 @@ templ APIKeyFormModal(data APIKeyFormData) {
 templ apiKeyFormBody(data APIKeyFormData) {
 	<form
 		hx-post="/admin/profile/api-keys"
-	hx-target="#modal"
+		hx-target="#modal"
 		hx-swap="innerHTML"
 		class="space-y-4"
 	>

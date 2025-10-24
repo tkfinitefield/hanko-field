@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
 )
@@ -32,6 +33,58 @@ templ ButtonSlot(content templ.Component, options ButtonOptions) {
 
 templ ButtonWith(label string, options ButtonOptions) {
 	@renderButton(helpers.TextComponent(label), options)
+}
+
+type UnderlineTab struct {
+	ID         string
+	Label      string
+	Href       string
+	Active     bool
+	Badge      templ.Component
+	Attributes templ.Attributes
+}
+
+type UnderlineTabsProps struct {
+	Tabs      []UnderlineTab
+	HxTarget  string
+	HxSwap    string
+	HxPushURL bool
+}
+
+templ UnderlineTabs(props UnderlineTabsProps) {
+	if len(props.Tabs) == 0 {
+		return
+	}
+	<div class="border-b border-slate-200">
+		<nav class="flex flex-wrap items-center gap-2" aria-label="セクションタブ">
+			for _, tab := range props.Tabs {
+				<a
+					href={ underlineTabHref(tab) }
+					class={ underlineTabClass(tab.Active) }
+					aria-current?={ tab.Active }
+					data-tab={ tab.ID }
+					if props.HxTarget != "" {
+						hx-get={ underlineTabHref(tab) }
+						hx-target={ props.HxTarget }
+						hx-swap={ underlineSwapValue(props.HxSwap) }
+						if props.HxPushURL {
+							hx-push-url="true"
+						}
+					}
+					if tab.Attributes != nil {
+						{ tab.Attributes... }
+					}
+				>
+					<span>{ tab.Label }</span>
+					if tab.Badge != nil {
+						<span class="text-xs">
+							@tab.Badge
+						</span>
+					}
+				</a>
+			}
+		</nav>
+	</div>
 }
 
 templ Text(value string) {
@@ -80,6 +133,35 @@ templ renderButtonContent(content templ.Component, options ButtonOptions) {
 			@options.Trailing
 		</span>
 	}
+}
+
+func underlineTabClass(active bool) string {
+	base := []string{
+		"inline-flex items-center gap-2 rounded-md border-b-2 px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2",
+	}
+	if active {
+		base = append(base, "border-brand-500 text-brand-600")
+	} else {
+		base = append(base, "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-900")
+	}
+	return helpers.ClassList(base...)
+}
+
+func underlineTabHref(tab UnderlineTab) string {
+	if strings.TrimSpace(tab.Href) != "" {
+		return tab.Href
+	}
+	if strings.TrimSpace(tab.ID) != "" {
+		return "#" + tab.ID
+	}
+	return "#"
+}
+
+func underlineSwapValue(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "outerHTML"
+	}
+	return value
 }
 
 templ Badge(label string, tone string) {

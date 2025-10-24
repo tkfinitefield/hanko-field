@@ -183,13 +183,48 @@ func (h *Handlers) renderProfilePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	email := strings.TrimSpace(user.Email)
+	if email == "" && state != nil {
+		email = strings.TrimSpace(state.UserEmail)
+	}
+
+	displayName := strings.TrimSpace(user.UID)
+	if state != nil && strings.TrimSpace(state.UserName) != "" {
+		displayName = strings.TrimSpace(state.UserName)
+	}
+
+	roles := append([]string(nil), user.Roles...)
+	lastLogin := profiletpl.MostRecentSessionAt(state)
+	featureFlags := profiletpl.FeatureFlagsFromMap(user.FeatureFlags)
+	activeTab := normalizeProfileTab(r.URL.Query().Get("tab"))
+
 	payload := profiletpl.PageData{
-		UserEmail: user.Email,
-		UserName:  user.UID,
-		Security:  state,
-		CSRFToken: custommw.CSRFTokenFromContext(r.Context()),
+		UserEmail:    email,
+		UserName:     user.UID,
+		DisplayName:  displayName,
+		Roles:        roles,
+		LastLogin:    lastLogin,
+		Security:     state,
+		FeatureFlags: featureFlags,
+		ActiveTab:    activeTab,
+		CSRFToken:    custommw.CSRFTokenFromContext(r.Context()),
 	}
 
 	component := profiletpl.Index(payload)
 	templ.Handler(component).ServeHTTP(w, r)
+}
+
+func normalizeProfileTab(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "account":
+		return "account"
+	case "sessions":
+		return "sessions"
+	case "flags":
+		return "flags"
+	case "security":
+		fallthrough
+	default:
+		return "security"
+	}
 }
