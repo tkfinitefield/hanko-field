@@ -334,20 +334,60 @@ class NetworkClient {
 
   Uri _resolveUri(String path, Map<String, dynamic>? queryParameters) {
     final baseUri = Uri.parse(_config.baseUrl);
-    final resolved = baseUri.resolve(path);
-    if (queryParameters == null || queryParameters.isEmpty) {
-      return resolved;
+    final requestUri = Uri.parse(path);
+
+    if (requestUri.hasScheme || requestUri.hasAuthority) {
+      final mergedQuery = <String, String>{...requestUri.queryParameters};
+      if (queryParameters != null) {
+        queryParameters.forEach((key, value) {
+          final dynamicValue = value;
+          if (dynamicValue != null) {
+            mergedQuery[key] = dynamicValue.toString();
+          }
+        });
+      }
+      return requestUri.replace(
+        queryParameters: mergedQuery.isEmpty ? null : mergedQuery,
+      );
     }
-    final query = <String, String>{};
-    queryParameters.forEach((key, value) {
-      final dynamicValue = value;
-      if (dynamicValue == null) {
+
+    final combinedSegments = <String>[];
+
+    void pushSegment(String segment) {
+      if (segment.isEmpty || segment == '.') {
         return;
       }
-      query[key] = dynamicValue.toString();
-    });
-    return resolved.replace(
-      queryParameters: {...resolved.queryParameters, ...query},
+      if (segment == '..') {
+        if (combinedSegments.isNotEmpty) {
+          combinedSegments.removeLast();
+        }
+        return;
+      }
+      combinedSegments.add(segment);
+    }
+
+    for (final segment in baseUri.pathSegments) {
+      pushSegment(segment);
+    }
+    for (final segment in requestUri.pathSegments) {
+      pushSegment(segment);
+    }
+
+    final mergedQuery = <String, String>{...baseUri.queryParameters};
+    mergedQuery.addAll(requestUri.queryParameters);
+    if (queryParameters != null) {
+      queryParameters.forEach((key, value) {
+        final dynamicValue = value;
+        if (dynamicValue != null) {
+          mergedQuery[key] = dynamicValue.toString();
+        }
+      });
+    }
+
+    return baseUri.replace(
+      pathSegments: combinedSegments,
+      queryParameters: mergedQuery.isEmpty ? null : mergedQuery,
+      fragment: requestUri.fragment.isEmpty ? null : requestUri.fragment,
     );
   }
 
