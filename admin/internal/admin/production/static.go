@@ -127,6 +127,7 @@ func (s *StaticService) AppendEvent(_ context.Context, _ string, orderID string,
 	record.card.BlockedReason = ""
 	record.card.Notes = appendUnique(record.card.Notes, event.Note)
 	record.card.Timeline = append([]ProductionEvent(nil), record.timeline...)
+	s.workorders[record.card.ID] = s.buildWorkOrder(record)
 
 	return AppendEventResult{
 		Event: event,
