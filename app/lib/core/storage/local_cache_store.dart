@@ -36,13 +36,42 @@ class LocalCacheStore {
   Future<void>? _initialization;
 
   Future<void> ensureInitialized() {
-    return _initialization ??= _init();
+    final pending = _initialization;
+    if (pending != null) {
+      return pending;
+    }
+    final future = _guardedInit();
+    _initialization = future;
+    return future;
+  }
+
+  Future<void> _guardedInit() async {
+    try {
+      await _init();
+    } catch (error) {
+      _initialization = null;
+      rethrow;
+    }
   }
 
   Future<void> _init() async {
-    await _initializeHive(_hive);
-    for (final bucket in CacheBucket.values) {
-      _boxes[bucket] = await _openBox(bucket);
+    final opened = <CacheBucket, Box<dynamic>>{};
+    try {
+      await _initializeHive(_hive);
+      for (final bucket in CacheBucket.values) {
+        final box = await _openBox(bucket);
+        opened[bucket] = box;
+      }
+      _boxes
+        ..clear()
+        ..addAll(opened);
+    } catch (error) {
+      for (final box in opened.values) {
+        if (box.isOpen) {
+          await box.close();
+        }
+      }
+      rethrow;
     }
   }
 
@@ -68,9 +97,22 @@ class LocalCacheStore {
     if (existing != null) {
       return Uint8List.fromList(base64Decode(existing));
     }
-    final bytes = List<int>.generate(32, (_) => _random.nextInt(256));
-    await _secureStorage.write(key: storageKey, value: base64Encode(bytes));
-    return Uint8List.fromList(bytes);
+    final bytes = Uint8List.fromList(
+      List<int>.generate(32, (_) => _random.nextInt(256)),
+    );
+    final encoded = base64Encode(bytes);
+    try {
+      await _secureStorage.write(key: storageKey, value: encoded);
+    } catch (error) {
+      throw StateError(
+        'Failed to persist encryption key for ${bucket.boxName}: $error',
+      );
+    }
+    final verification = await _secureStorage.read(key: storageKey);
+    if (verification == null) {
+      throw StateError('Failed to verify encryption key for ${bucket.boxName}');
+    }
+    return Uint8List.fromList(base64Decode(verification));
   }
 
   Future<CacheReadResult<T>> read<T>({

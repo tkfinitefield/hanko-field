@@ -392,12 +392,12 @@ class OnboardingFlags {
       for (final entry in rawSteps.entries)
         _parseStep(entry.key): entry.value as bool? ?? false,
     };
-    return OnboardingFlags(
-      steps: steps,
-      updatedAt: json['updatedAt'] == null
-          ? null
-          : DateTime.parse(json['updatedAt'] as String),
-    );
+    final updatedAtRaw = json['updatedAt'] as String?;
+    final updatedAt = updatedAtRaw == null
+        ? DateTime.fromMillisecondsSinceEpoch(0)
+        : DateTime.tryParse(updatedAtRaw) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+    return OnboardingFlags(steps: steps, updatedAt: updatedAt);
   }
 
   final Map<OnboardingStep, bool> stepCompletion;

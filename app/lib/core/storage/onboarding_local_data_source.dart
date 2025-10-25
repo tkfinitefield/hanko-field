@@ -18,9 +18,7 @@ class OnboardingLocalDataSource {
   Future<OnboardingFlags> load() async {
     final raw = _preferences.getString(_prefsKey);
     if (raw != null) {
-      return OnboardingFlags.fromJson(
-        Map<String, dynamic>.from(jsonDecode(raw) as Map),
-      );
+      return _decodeFlags(raw);
     }
     final cached = await _cacheRepository.readOnboardingFlags();
     if (cached.hasValue) {
@@ -50,7 +48,26 @@ class OnboardingLocalDataSource {
 
   Future<void> _persist(OnboardingFlags flags) async {
     final json = jsonEncode(flags.toJson());
-    await _preferences.setString(_prefsKey, json);
-    await _cacheRepository.writeOnboardingFlags(flags);
+    final previous = _preferences.getString(_prefsKey);
+    final wrote = await _preferences.setString(_prefsKey, json);
+    if (!wrote) {
+      throw StateError('Failed to persist onboarding flags to preferences');
+    }
+    try {
+      await _cacheRepository.writeOnboardingFlags(flags);
+    } catch (error) {
+      if (previous == null) {
+        await _preferences.remove(_prefsKey);
+      } else {
+        await _preferences.setString(_prefsKey, previous);
+      }
+      rethrow;
+    }
+  }
+
+  OnboardingFlags _decodeFlags(String raw) {
+    return OnboardingFlags.fromJson(
+      Map<String, dynamic>.from(jsonDecode(raw) as Map),
+    );
   }
 }
