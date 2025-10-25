@@ -6,6 +6,7 @@ import 'package:app/core/firebase/firebase_providers.dart';
 import 'package:app/core/monitoring/analytics_controller.dart';
 import 'package:app/core/monitoring/analytics_events.dart';
 import 'package:app/core/monitoring/crash_reporting_controller.dart';
+import 'package:app/core/storage/storage_providers.dart';
 import 'package:app/core/theme/app_theme.dart';
 import 'package:app/l10n/gen/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final container = ProviderContainer();
+  await container.read(localCacheStoreInitializedProvider.future);
+  await container.read(sharedPreferencesProvider.future);
   await container.read(firebaseInitializedProvider.future);
   await container.read(crashReportingControllerProvider.future);
   await container.read(analyticsControllerProvider.future);
