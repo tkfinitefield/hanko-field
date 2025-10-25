@@ -106,7 +106,7 @@ func CheckoutPaymentConfirmHandler(w http.ResponseWriter, r *http.Request) {
 	methodID := strings.TrimSpace(r.FormValue("method_id"))
 	provider := strings.TrimSpace(r.FormValue("provider"))
 	if sessionID == "" && methodID != "" {
-		sessionID = "pm_" + methodID
+		sessionID = methodID
 	}
 	if sessionID == "" {
 		renderCheckoutPaymentStatus(w, r, lang, "error", paymentErrorTitle(lang), missingSessionCopy(lang), http.StatusUnprocessableEntity)
