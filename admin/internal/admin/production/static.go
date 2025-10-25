@@ -14,6 +14,7 @@ type StaticService struct {
 	mu           sync.RWMutex
 	queues       map[string]Queue
 	cards        map[string]*cardRecord
+	workorders   map[string]WorkOrder
 	laneDefs     []laneDefinition
 	defaultQueue string
 }
@@ -37,8 +38,9 @@ type laneDefinition struct {
 // NewStaticService returns a production service seeded with representative data.
 func NewStaticService() *StaticService {
 	svc := &StaticService{
-		queues: make(map[string]Queue),
-		cards:  make(map[string]*cardRecord),
+		queues:     make(map[string]Queue),
+		cards:      make(map[string]*cardRecord),
+		workorders: make(map[string]WorkOrder),
 		laneDefs: []laneDefinition{
 			{stage: StageQueued, label: "待機", description: "支給待ち / 図面確認", capacity: 10, slaLabel: "平均6h", slaTone: "info"},
 			{stage: StageEngraving, label: "刻印", description: "CNC + ハンドエングレーブ", capacity: 8, slaLabel: "平均9h", slaTone: "info"},
@@ -130,6 +132,23 @@ func (s *StaticService) AppendEvent(_ context.Context, _ string, orderID string,
 		Event: event,
 		Card:  cloneCard(record.card),
 	}, nil
+}
+
+// WorkOrder implements Service.
+func (s *StaticService) WorkOrder(_ context.Context, _ string, orderID string) (WorkOrder, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	orderID = strings.TrimSpace(orderID)
+	if orderID == "" {
+		return WorkOrder{}, ErrWorkOrderNotFound
+	}
+
+	work, ok := s.workorders[orderID]
+	if !ok {
+		return WorkOrder{}, ErrWorkOrderNotFound
+	}
+	return cloneWorkOrder(work), nil
 }
 
 func (s *StaticService) seed() {
@@ -333,6 +352,7 @@ func (s *StaticService) seed() {
 		}
 		record.card.Timeline = append([]ProductionEvent(nil), timeline...)
 		s.cards[record.card.ID] = record
+		s.workorders[record.card.ID] = s.buildWorkOrder(record)
 		if queue, ok := s.queues[record.card.QueueID]; ok {
 			queue.Load++
 			s.queues[record.card.QueueID] = queue
@@ -591,6 +611,227 @@ func cloneFlags(src []CardFlag) []CardFlag {
 	out := make([]CardFlag, len(src))
 	copy(out, src)
 	return out
+}
+
+func (s *StaticService) buildWorkOrder(record *cardRecord) WorkOrder {
+	card := cloneCard(record.card)
+	timeline := append([]ProductionEvent(nil), record.timeline...)
+	now := time.Now()
+
+	work := WorkOrder{
+		Card:            card,
+		ResponsibleTeam: fmt.Sprintf("%s 制作チーム", strings.TrimSpace(card.QueueName)),
+		CustomerNote:    strings.Join(card.Notes, " / "),
+		Materials:       workOrderMaterials(card),
+		Assets:          workOrderAssets(card, now),
+		Instructions:    workInstructions(card),
+		Checklist:       workChecklist(card, timeline),
+		Safety:          workOrderNotices(card),
+		Activity:        timeline,
+		PDFURL:          fmt.Sprintf("/public/static/workorders/%s.pdf", card.ID),
+		LastPrintedAt:   now.Add(-45 * time.Minute),
+	}
+	return work
+}
+
+func workOrderMaterials(card Card) []WorkOrderMaterial {
+	source := "青山資材庫"
+	if strings.Contains(strings.ToLower(card.QueueID), "kyoto") {
+		source = "京都資材庫"
+	}
+	return []WorkOrderMaterial{
+		{
+			Name:     "地金",
+			Detail:   fmt.Sprintf("%s / %s", card.ProductLine, card.Design),
+			Quantity: "1本",
+			Source:   source,
+			Status:   "準備完了",
+		},
+		{
+			Name:     "石材・加飾",
+			Detail:   "1.5mm VS-FG x12 / 漆黒エナメル",
+			Quantity: "セット",
+			Source:   "宝飾棚B",
+			Status:   "ピック済",
+		},
+		{
+			Name:     "消耗材",
+			Detail:   "研磨ペースト F-800 / LUX 布バフ",
+			Quantity: "適量",
+			Source:   "仕上げラック",
+			Status:   "常備",
+		},
+	}
+}
+
+func workOrderAssets(card Card, now time.Time) []WorkOrderAsset {
+	slug := strings.ReplaceAll(strings.ToLower(card.ID), " ", "-")
+	return []WorkOrderAsset{
+		{
+			ID:          slug + "-cad",
+			Name:        fmt.Sprintf("%s CAD", card.Design),
+			Kind:        "CAD",
+			PreviewURL:  card.PreviewURL,
+			DownloadURL: fmt.Sprintf("/public/static/assets/%s-cad.zip", slug),
+			Size:        "4.2MB",
+			UpdatedAt:   now.Add(-6 * time.Hour),
+			Description: "最新版CADデータ（.step/.svg 同梱）",
+		},
+		{
+			ID:          slug + "-render",
+			Name:        "顧客共有レンダー",
+			Kind:        "Render",
+			PreviewURL:  "/public/static/previews/render-default.png",
+			DownloadURL: fmt.Sprintf("/public/static/assets/%s-render.png", slug),
+			Size:        "1.1MB",
+			UpdatedAt:   now.Add(-22 * time.Hour),
+			Description: "Notion ブリーフ添付済の PNG レンダリング",
+		},
+		{
+			ID:          slug + "-qc",
+			Name:        "QC 測定シート",
+			Kind:        "QC",
+			PreviewURL:  "/public/static/previews/qc-sheet.png",
+			DownloadURL: fmt.Sprintf("/public/static/assets/%s-qc.pdf", slug),
+			Size:        "320KB",
+			UpdatedAt:   now.Add(-3 * time.Hour),
+			Description: "寸法・刻印深さのチェックリスト",
+		},
+	}
+}
+
+func workInstructions(card Card) []WorkInstruction {
+	notes := strings.Join(card.Notes, " / ")
+	return []WorkInstruction{
+		{
+			ID:          "prep-brief",
+			Title:       "図面・支給品の確認",
+			Description: fmt.Sprintf("Notion ブリーフと Firestore 上の顧客指示を突き合わせ、支給品・寸法を記録します。備考: %s", strings.TrimSpace(notes)),
+			Stage:       StageQueued,
+			StageLabel:  StageLabel(StageQueued),
+			Duration:    "15分",
+			Tools:       []string{"Notion Brief", "ノギス", "顧客写真"},
+		},
+		{
+			ID:          "engrave-setup",
+			Title:       "刻印セットアップ",
+			Description: "CNC-02 でフォント設定（S-12 or 指定フォント）を読み込み、試印を実施。深さ 0.25mm 以内に収めること。",
+			Stage:       StageEngraving,
+			StageLabel:  StageLabel(StageEngraving),
+			Duration:    "40分",
+			Tools:       []string{"CNC-02", "Gravograph", "吸引カバー"},
+		},
+		{
+			ID:          "polish-finish",
+			Title:       "研磨・仕上げ",
+			Description: "バフ→ミラー仕上げ。ダイヤ加飾がある場合は F-800 で軽く整えてから超音波洗浄。",
+			Stage:       StagePolishing,
+			StageLabel:  StageLabel(StagePolishing),
+			Duration:    "25分",
+			Tools:       []string{"POL-01", "超音波洗浄", "ルーペ 10x"},
+		},
+		{
+			ID:          "qc-hand-off",
+			Title:       "QC 連携 & 梱包",
+			Description: "QC シートに測定値を記入し、写真添付。問題なければ付属品と一緒に梱包担当へ引き渡し。",
+			Stage:       StageQC,
+			StageLabel:  StageLabel(StageQC),
+			Duration:    "20分",
+			Tools:       []string{"QC-02", "測定シート", "付属品リスト"},
+		},
+	}
+}
+
+func workChecklist(card Card, timeline []ProductionEvent) []WorkChecklistItem {
+	items := []WorkChecklistItem{
+		{ID: "prep", Label: "段取り完了", Description: "支給品照合・材料ピック", Stage: StageQueued},
+		{ID: "engrave", Label: "刻印完了", Description: "CNC/手彫りの仕上がり確認", Stage: StageEngraving},
+		{ID: "polish", Label: "研磨完了", Description: "表面処理と洗浄", Stage: StagePolishing},
+		{ID: "qc", Label: "QC合格", Description: "寸法/刻印深さ記録、写真添付", Stage: StageQC},
+		{ID: "pack", Label: "梱包完了", Description: "付属品セット・伝票添付", Stage: StagePacked},
+	}
+	for i := range items {
+		items[i].StageLabel = StageLabel(items[i].Stage)
+		items[i].Completed = stageReached(card.Stage, items[i].Stage)
+		if items[i].Completed {
+			items[i].CompletedAt = stageCompletionTime(timeline, items[i].Stage)
+		}
+	}
+	return items
+}
+
+func workOrderNotices(card Card) []WorkOrderNotice {
+	return []WorkOrderNotice{
+		{
+			Title: "レーザー刻印の安全対策",
+			Body:  "CNC/レーザー稼働中は必ず防護カバーを閉じ、排気ファンをオンにしてください。",
+			Tone:  "warning",
+			Icon:  "⚠️",
+		},
+		{
+			Title: "QC ダブルチェック",
+			Body:  "VIP/特急案件は寸法記録と刻印写真を Slack #production-qc にアップロードしてから梱包へ回します。",
+			Tone:  "info",
+			Icon:  "🧪",
+		},
+	}
+}
+
+func stageReached(current Stage, target Stage) bool {
+	return stageWeight(current) >= stageWeight(target)
+}
+
+func stageWeight(stage Stage) int {
+	switch stage {
+	case StageQueued:
+		return 0
+	case StageEngraving:
+		return 1
+	case StagePolishing:
+		return 2
+	case StageQC:
+		return 3
+	case StagePacked:
+		return 4
+	default:
+		return -1
+	}
+}
+
+func stageCompletionTime(events []ProductionEvent, stage Stage) time.Time {
+	for _, event := range events {
+		if event.Stage == stage {
+			return event.OccurredAt
+		}
+	}
+	return time.Time{}
+}
+
+func cloneWorkOrder(src WorkOrder) WorkOrder {
+	clone := WorkOrder{
+		Card:            cloneCard(src.Card),
+		ResponsibleTeam: src.ResponsibleTeam,
+		CustomerNote:    src.CustomerNote,
+		PDFURL:          src.PDFURL,
+		LastPrintedAt:   src.LastPrintedAt,
+	}
+	clone.Materials = append([]WorkOrderMaterial(nil), src.Materials...)
+	clone.Assets = append([]WorkOrderAsset(nil), src.Assets...)
+	clone.Safety = append([]WorkOrderNotice(nil), src.Safety...)
+	clone.Activity = append([]ProductionEvent(nil), src.Activity...)
+
+	if len(src.Instructions) > 0 {
+		clone.Instructions = make([]WorkInstruction, len(src.Instructions))
+		for i, instr := range src.Instructions {
+			clone.Instructions[i] = instr
+			clone.Instructions[i].Tools = append([]string(nil), instr.Tools...)
+		}
+	}
+	if len(src.Checklist) > 0 {
+		clone.Checklist = make([]WorkChecklistItem, len(src.Checklist))
+		copy(clone.Checklist, src.Checklist)
+	}
+	return clone
 }
 
 func appendUnique(list []string, value string) []string {

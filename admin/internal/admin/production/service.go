@@ -12,6 +12,8 @@ type Service interface {
 	Board(ctx context.Context, token string, query BoardQuery) (BoardResult, error)
 	// AppendEvent appends a production workflow event for the specified order/card.
 	AppendEvent(ctx context.Context, token, orderID string, req AppendEventRequest) (AppendEventResult, error)
+	// WorkOrder returns a detailed production brief for the specified order.
+	WorkOrder(ctx context.Context, token, orderID string) (WorkOrder, error)
 }
 
 var (
@@ -21,6 +23,8 @@ var (
 	ErrCardNotFound = errors.New("production order not found")
 	// ErrStageInvalid indicates the requested stage is unsupported.
 	ErrStageInvalid = errors.New("production stage is invalid")
+	// ErrWorkOrderNotFound indicates no work order data exists for the id.
+	ErrWorkOrderNotFound = errors.New("work order not found")
 )
 
 // Stage represents a workflow step on the production board.
@@ -212,6 +216,72 @@ type DrawerCard struct {
 type DrawerDetail struct {
 	Label string
 	Value string
+}
+
+// WorkOrder aggregates the contextual data rendered in the work order view.
+type WorkOrder struct {
+	Card            Card
+	ResponsibleTeam string
+	CustomerNote    string
+	Materials       []WorkOrderMaterial
+	Assets          []WorkOrderAsset
+	Instructions    []WorkInstruction
+	Checklist       []WorkChecklistItem
+	Safety          []WorkOrderNotice
+	Activity        []ProductionEvent
+	PDFURL          string
+	LastPrintedAt   time.Time
+}
+
+// WorkOrderMaterial describes a required material/spec for the job.
+type WorkOrderMaterial struct {
+	Name     string
+	Detail   string
+	Quantity string
+	Source   string
+	Status   string
+}
+
+// WorkOrderAsset represents a downloadable design artifact.
+type WorkOrderAsset struct {
+	ID          string
+	Name        string
+	Kind        string
+	PreviewURL  string
+	DownloadURL string
+	Size        string
+	UpdatedAt   time.Time
+	Description string
+}
+
+// WorkInstruction enumerates step-by-step guidance for operators.
+type WorkInstruction struct {
+	ID          string
+	Title       string
+	Description string
+	Stage       Stage
+	StageLabel  string
+	Duration    string
+	Tools       []string
+}
+
+// WorkChecklistItem powers actionable step buttons in the UI.
+type WorkChecklistItem struct {
+	ID          string
+	Label       string
+	Description string
+	Stage       Stage
+	StageLabel  string
+	Completed   bool
+	CompletedAt time.Time
+}
+
+// WorkOrderNotice renders inline safety/quality callouts.
+type WorkOrderNotice struct {
+	Title string
+	Body  string
+	Tone  string
+	Icon  string
 }
 
 // ProductionEvent stores timeline events for a card.

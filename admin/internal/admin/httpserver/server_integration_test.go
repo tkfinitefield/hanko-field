@@ -832,6 +832,8 @@ type productionStub struct {
 	appendErr    error
 	lastOrderID  string
 	appendCalls  []adminproduction.AppendEventRequest
+	workOrder    adminproduction.WorkOrder
+	workErr      error
 }
 
 func (s *productionStub) Board(ctx context.Context, token string, query adminproduction.BoardQuery) (adminproduction.BoardResult, error) {
@@ -852,6 +854,35 @@ func (s *productionStub) AppendEvent(ctx context.Context, token, orderID string,
 		res.Card.ID = orderID
 	}
 	return res, nil
+}
+
+func (s *productionStub) WorkOrder(ctx context.Context, token, orderID string) (adminproduction.WorkOrder, error) {
+	if s.workErr != nil {
+		return adminproduction.WorkOrder{}, s.workErr
+	}
+	if s.workOrder.Card.ID != "" {
+		work := s.workOrder
+		if work.Card.ID == "" {
+			work.Card.ID = orderID
+		}
+		return work, nil
+	}
+	if len(s.boardResult.Lanes) > 0 {
+		for _, lane := range s.boardResult.Lanes {
+			if len(lane.Cards) > 0 {
+				return adminproduction.WorkOrder{
+					Card: lane.Cards[0],
+				}, nil
+			}
+		}
+	}
+	return adminproduction.WorkOrder{
+		Card: adminproduction.Card{
+			ID:          orderID,
+			OrderNumber: orderID,
+			Customer:    "テスト顧客",
+		},
+	}, nil
 }
 
 type dashboardStub struct {

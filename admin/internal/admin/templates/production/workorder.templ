@@ -1,0 +1,417 @@
+package production
+
+import (
+	"fmt"
+
+	"finitefield.org/hanko-admin/internal/admin/templates/components"
+	"finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
+
+templ WorkOrder(data WorkOrderPageData) {
+	@layouts.Base(data.Title, data.Breadcrumbs, workOrderBody(data))
+}
+
+templ workOrderBody(data WorkOrderPageData) {
+	<div class="space-y-6">
+		@workOrderHeader(data)
+		<section class="rounded-2xl bg-white px-6 py-4 shadow-sm ring-1 ring-slate-200">
+			@workOrderTabs(data)
+		</section>
+		@workOrderOverviewSection(data)
+		@workOrderAssetsSection(data)
+		@workOrderInstructionSection(data)
+		@workOrderActivitySection(data)
+	</div>
+}
+
+templ workOrderHeader(data WorkOrderPageData) {
+	<section class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+		<div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+			<div class="space-y-3">
+				<div class="text-xs font-semibold uppercase tracking-wide text-slate-500">作業指示書</div>
+				<h1 class="text-3xl font-semibold text-slate-900">#{ data.Header.OrderNumber }</h1>
+				<div class="flex flex-wrap items-center gap-2">
+					@components.Badge(data.Header.StageLabel, data.Header.StageTone)
+					@components.Badge(data.Header.PriorityLabel, data.Header.PriorityTone)
+				</div>
+				<dl class="mt-4 grid gap-4 text-sm text-slate-600 sm:grid-cols-2">
+					<div>
+						<dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">顧客</dt>
+						<dd class="mt-1 font-medium text-slate-900">{ data.Header.Customer }</dd>
+					</div>
+					<div>
+						<dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">納期</dt>
+						<dd class={ deadlineToneClass(data.Header.DueTone) }>{ fallback(data.Header.DueLabel, "未設定") }</dd>
+					</div>
+					<div>
+						<dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">担当ライン</dt>
+						<dd class="mt-1 font-medium text-slate-900">{ data.Header.Queue }</dd>
+					</div>
+					<div>
+						<dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">責任チーム</dt>
+						<dd class="mt-1 font-medium text-slate-900">{ data.Header.Responsible }</dd>
+					</div>
+					if data.Header.ProductLine != "" {
+						<div>
+							<dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">プロダクトライン</dt>
+							<dd class="mt-1 text-slate-900">{ data.Header.ProductLine }</dd>
+						</div>
+					}
+					if data.Header.LastPrinted != "" {
+						<div>
+							<dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">最終印刷</dt>
+							<dd class="mt-1 text-slate-600">{ data.Header.LastPrinted }</dd>
+						</div>
+					}
+				</dl>
+			</div>
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+				if data.PrimaryAction != nil {
+					@components.ButtonWith(data.PrimaryAction.Label, components.ButtonOptions{
+						Variant: "primary",
+						Attrs: templ.Attributes{
+							"hx-post": data.ActionEndpoint,
+							"hx-vals": fmt.Sprintf("{\"type\":\"%s\"}", data.PrimaryAction.Stage),
+							"hx-swap": "none",
+						},
+					})
+				} else {
+					@components.ButtonWith("更新不可", components.ButtonOptions{Variant: "primary", Disabled: true})
+				}
+				if data.Header.PrintURL != "" {
+					@components.ButtonWith("PDFダウンロード", components.ButtonOptions{
+						Variant: "secondary",
+						Href:    data.Header.PrintURL,
+						Attrs: templ.Attributes{
+							"target": "_blank",
+							"rel":    "noreferrer",
+						},
+					})
+				}
+			</div>
+		</div>
+	</section>
+}
+
+templ workOrderTabs(data WorkOrderPageData) {
+	if len(data.Tabs) == 0 {
+		return
+	}
+	@components.UnderlineTabs(components.UnderlineTabsProps{
+		Tabs: func() []components.UnderlineTab {
+			result := make([]components.UnderlineTab, 0, len(data.Tabs))
+			for _, tab := range data.Tabs {
+				result = append(result, components.UnderlineTab{
+					ID:     tab.ID,
+					Label:  tab.Label,
+					Href:   tab.Href,
+					Active: tab.Active,
+				})
+			}
+			return result
+		}(),
+	})
+}
+
+templ workOrderOverviewSection(data WorkOrderPageData) {
+	<section id="overview" class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+		<div class="flex flex-col gap-6 lg:flex-row">
+			<div class="flex-1 space-y-5">
+				<div>
+					<h2 class="text-xl font-semibold text-slate-900">概要</h2>
+					<p class="text-sm text-slate-600">顧客情報と作業メモ、重要な申し送り事項をまとめています。</p>
+				</div>
+				<dl class="grid gap-4 text-sm text-slate-600 sm:grid-cols-2">
+					<div>
+						<dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">顧客</dt>
+						<dd class="mt-1 text-slate-900">{ fallback(data.Overview.Customer, "-") }</dd>
+					</div>
+					<div>
+						<dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">デザイン</dt>
+						<dd class="mt-1 text-slate-900">{ data.Overview.Design }</dd>
+					</div>
+					<div>
+						<dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">プロダクトライン</dt>
+						<dd class="mt-1 text-slate-900">{ data.Overview.ProductLine }</dd>
+					</div>
+					<div>
+						<dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">ワークステーション</dt>
+						<dd class="mt-1 text-slate-900">{ fallback(data.Overview.Workstation, "未割当") }</dd>
+					</div>
+				</dl>
+				if len(data.Overview.Notes) > 0 {
+					<div class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+						<h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">備考</h3>
+						<ul class="mt-2 space-y-1 list-disc pl-4">
+							for _, note := range data.Overview.Notes {
+								<li>{ note }</li>
+							}
+						</ul>
+					</div>
+				}
+				if data.Overview.CustomerNote != "" {
+					<div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+						<p class="font-semibold text-amber-900">顧客指示</p>
+						<p class="mt-1 whitespace-pre-wrap">{ data.Overview.CustomerNote }</p>
+					</div>
+				}
+			</div>
+			<div class="lg:w-80">
+				<h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">材料・支給品</h3>
+				if len(data.Overview.Materials) == 0 {
+					<p class="mt-3 text-sm text-slate-500">登録された材料はありません。</p>
+				} else {
+					<ul class="mt-4 space-y-3">
+						for _, material := range data.Overview.Materials {
+							<li class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+								<div class="flex items-center justify-between">
+									<p class="font-medium text-slate-900">{ material.Name }</p>
+									if material.Status != "" {
+										@components.Badge(material.Status, "muted")
+									}
+								</div>
+								if material.Detail != "" {
+									<p class="text-sm text-slate-600">{ material.Detail }</p>
+								}
+								<dl class="mt-2 grid gap-2 text-xs text-slate-500">
+									<div class="flex justify-between">
+										<span>数量</span>
+										<span class="font-semibold text-slate-900">{ material.Quantity }</span>
+									</div>
+									<div class="flex justify-between">
+										<span>保管場所</span>
+										<span class="font-semibold text-slate-900">{ material.Source }</span>
+									</div>
+								</dl>
+							</li>
+						}
+					</ul>
+				}
+			</div>
+		</div>
+	</section>
+}
+
+templ workOrderAssetsSection(data WorkOrderPageData) {
+	<section id="assets" class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+		<div class="flex flex-col gap-2">
+			<h2 class="text-xl font-semibold text-slate-900">デザイン資産</h2>
+			<p class="text-sm text-slate-600">刻印データ、レンダー、QCシートなどの支給ファイル。</p>
+		</div>
+		if len(data.Assets) == 0 {
+			<p class="mt-4 text-sm text-slate-500">表示できる資産がありません。</p>
+		} else {
+			<div class="mt-6 grid gap-4 md:grid-cols-2">
+				for _, asset := range data.Assets {
+					<article class="flex flex-col rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
+						if asset.PreviewURL != "" {
+							<img src={ asset.PreviewURL } alt={ asset.Name } class="h-48 w-full rounded-t-2xl object-cover" />
+						} else {
+							<div class="h-48 w-full rounded-t-2xl bg-slate-200"></div>
+						}
+						<div class="flex flex-1 flex-col gap-3 px-5 py-4">
+							<div class="flex items-center justify-between">
+								<div>
+									<p class="text-sm font-semibold text-slate-900">{ asset.Name }</p>
+									<p class="text-xs uppercase tracking-wide text-slate-500">{ asset.Kind }</p>
+								</div>
+								<span class="text-xs text-slate-500">{ asset.Size }</span>
+							</div>
+							if asset.Description != "" {
+								<p class="text-sm text-slate-600">{ asset.Description }</p>
+							}
+							<p class="text-xs text-slate-500">更新 { asset.UpdatedAt }</p>
+							<div class="mt-auto pt-2">
+								@components.ButtonWith("ダウンロード", components.ButtonOptions{
+									Variant: "ghost",
+									Size:    "sm",
+									Href:    asset.DownloadURL,
+									Attrs: templ.Attributes{
+										"target": "_blank",
+										"rel":    "noreferrer",
+									},
+								})
+							</div>
+						</div>
+					</article>
+				}
+			</div>
+		}
+	</section>
+}
+
+templ workOrderInstructionSection(data WorkOrderPageData) {
+	<section id="instructions" class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+		<div class="flex flex-col gap-2">
+			<h2 class="text-xl font-semibold text-slate-900">作業手順</h2>
+			<p class="text-sm text-slate-600">各ステージでの具体的な進行手順と安全留意点。</p>
+		</div>
+		<div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+			<div class="space-y-4">
+				if len(data.Instructions) == 0 {
+					<p class="text-sm text-slate-500">登録された手順がありません。</p>
+				} else {
+					for _, instruction := range data.Instructions {
+						<article class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+							<div class="flex items-center justify-between gap-4">
+								<div>
+									<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{ instruction.StageLabel }</p>
+									<h3 class="text-base font-semibold text-slate-900">{ instruction.Title }</h3>
+								</div>
+								if instruction.Duration != "" {
+									<span class="text-xs font-medium text-slate-500">所要 { instruction.Duration }</span>
+								}
+							</div>
+							if instruction.Description != "" {
+								<p class="mt-3 text-sm text-slate-700 whitespace-pre-line">{ instruction.Description }</p>
+							}
+							if len(instruction.Tools) > 0 {
+								<div class="mt-3 flex flex-wrap gap-2">
+									for _, tool := range instruction.Tools {
+										<span class="rounded-full bg-white/60 px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">{ tool }</span>
+									}
+								</div>
+							}
+						</article>
+					}
+				}
+			</div>
+			<div class="space-y-4">
+				@workOrderChecklist(data)
+				@workOrderSafetyNotices(data)
+			</div>
+		</div>
+	</section>
+}
+
+templ workOrderChecklist(data WorkOrderPageData) {
+	<div class="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
+		<h3 class="text-base font-semibold text-slate-900">進行チェックリスト</h3>
+		<p class="text-sm text-slate-600">ステージ更新は制作イベントとして記録されます。</p>
+		if len(data.Checklist) == 0 {
+			<p class="mt-3 text-sm text-slate-500">チェックポイントが設定されていません。</p>
+		} else {
+			<ul class="mt-4 space-y-3">
+				for _, item := range data.Checklist {
+					<li class="flex items-start justify-between gap-3 rounded-xl border border-slate-100 px-3 py-3">
+						<div class="flex-1">
+							<div class="flex items-center gap-2">
+								<span class={ checklistBadgeClass(item.Completed) } aria-hidden="true">
+									if item.Completed {
+										✓
+									}
+								</span>
+								<p class="font-semibold text-slate-900">{ item.Label }</p>
+							</div>
+							<p class="text-sm text-slate-600">{ item.Description }</p>
+							<p class="text-xs text-slate-500">{ item.StageLabel }</p>
+							if item.Completed && item.CompletedAt != "" {
+								<p class="text-xs text-slate-400">完了 { item.CompletedAt }</p>
+							}
+						</div>
+						if !item.Completed {
+							@components.ButtonWith("完了を記録", components.ButtonOptions{
+								Variant: "ghost",
+								Size:    "sm",
+								Attrs: templ.Attributes{
+									"hx-post": data.ActionEndpoint,
+									"hx-vals": fmt.Sprintf("{\"type\":\"%s\"}", item.Stage),
+									"hx-swap": "none",
+								},
+							})
+						}
+					</li>
+				}
+			</ul>
+		}
+	</div>
+}
+
+templ workOrderSafetyNotices(data WorkOrderPageData) {
+	if len(data.Safety) == 0 {
+		return
+	}
+	<div class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-5 shadow-sm">
+		<h3 class="text-base font-semibold text-slate-900">安全・品質メモ</h3>
+		<div class="mt-4 space-y-3">
+			for _, notice := range data.Safety {
+				<div class={ noticeToneClass(notice.Tone) }>
+					<div class="flex items-start gap-3">
+						if notice.Icon != "" {
+							<span class="text-lg">{ notice.Icon }</span>
+						}
+						<div>
+							<p class="font-semibold">{ notice.Title }</p>
+							<p class="text-sm">{ notice.Body }</p>
+						</div>
+					</div>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+templ workOrderActivitySection(data WorkOrderPageData) {
+	<section id="activity" class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+		<div class="flex flex-col gap-2">
+			<h2 class="text-xl font-semibold text-slate-900">アクティビティ</h2>
+			<p class="text-sm text-slate-600">制作イベントとQCログの履歴。</p>
+		</div>
+		if len(data.Activity) == 0 {
+			<p class="mt-4 text-sm text-slate-500">記録されたアクティビティはありません。</p>
+		} else {
+			<ol class="mt-6 space-y-4">
+				for _, event := range data.Activity {
+					<li class="flex gap-4">
+						<div class="flex flex-col items-center">
+							<span class="h-3 w-3 rounded-full bg-brand-500"></span>
+							<span class="flex-1 w-px bg-slate-200"></span>
+						</div>
+						<div class="flex-1 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+							<div class="flex flex-wrap items-center justify-between gap-3">
+								<div class="flex items-center gap-2">
+									@components.Badge(event.StageLabel, event.Tone)
+									<p class="text-sm font-semibold text-slate-900">{ event.Description }</p>
+								</div>
+								<span class="text-xs text-slate-500">{ event.Timestamp }</span>
+							</div>
+							<p class="mt-1 text-sm text-slate-600">担当: { event.Actor }</p>
+							if event.Note != "" {
+								<p class="mt-1 rounded-lg bg-white px-3 py-2 text-sm text-slate-700">メモ: { event.Note }</p>
+							}
+						</div>
+					</li>
+				}
+			</ol>
+		}
+	</section>
+}
+
+func deadlineToneClass(tone string) string {
+	switch tone {
+	case "danger":
+		return "mt-1 font-semibold text-rose-600"
+	case "warning":
+		return "mt-1 font-semibold text-amber-600"
+	default:
+		return "mt-1 font-semibold text-slate-900"
+	}
+}
+
+func checklistBadgeClass(done bool) string {
+	if done {
+		return "inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white"
+	}
+	return "inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300"
+}
+
+func noticeToneClass(tone string) string {
+	switch tone {
+	case "warning":
+		return "rounded-xl border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+	case "danger":
+		return "rounded-xl border-l-4 border-rose-400 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+	default:
+		return "rounded-xl border-l-4 border-sky-400 bg-sky-50 px-4 py-3 text-sm text-sky-900"
+	}
+}

@@ -50,7 +50,7 @@
 
 ### 5.3 Production & Workshop
 - [x] [Implement production kanban page (`/admin/production/queues`) with board fragment (`/admin/production/queues/board`) and drag-and-drop updates posting production events.](doc/admin/tasks/034-implement-production-kanban-page-admin-production-queues-with-board-fragment-admin-product.md)
-- [ ] [Create work order view (`/admin/production/workorders/{orderId}`) summarizing design assets, instructions, and tasks.](doc/admin/tasks/035-create-work-order-view-admin-production-workorders-orderid-summarizing-design-assets-instr.md)
+- [x] [Create work order view (`/admin/production/workorders/{orderId}`) summarizing design assets, instructions, and tasks.](doc/admin/tasks/035-create-work-order-view-admin-production-workorders-orderid-summarizing-design-assets-instr.md)
 - [ ] [Build QC page (`/admin/production/qc`) to record pass/fail events and trigger rework flows.](doc/admin/tasks/036-build-qc-page-admin-production-qc-to-record-pass-fail-events-and-trigger-rework-flows.md)
 
 ## 6. Catalog Management

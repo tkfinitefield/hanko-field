@@ -67,6 +67,38 @@ func (h *Handlers) ProductionQueuesBoard(w http.ResponseWriter, r *http.Request)
 	templ.Handler(productiontpl.Board(board)).ServeHTTP(w, r)
 }
 
+// ProductionWorkOrderPage renders the detailed work order view for a single order.
+func (h *Handlers) ProductionWorkOrderPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	orderID := strings.TrimSpace(chi.URLParam(r, "orderID"))
+	if orderID == "" {
+		http.Error(w, "注文IDが不正です。", http.StatusBadRequest)
+		return
+	}
+
+	workOrder, err := h.production.WorkOrder(ctx, user.Token, orderID)
+	if err != nil {
+		if errors.Is(err, adminproduction.ErrWorkOrderNotFound) || errors.Is(err, adminproduction.ErrCardNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		log.Printf("production: fetch work order failed: %v", err)
+		http.Error(w, "作業指示書の取得に失敗しました。", http.StatusBadGateway)
+		return
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	data := productiontpl.BuildWorkOrderPage(basePath, workOrder)
+
+	templ.Handler(productiontpl.WorkOrder(data)).ServeHTTP(w, r)
+}
+
 // OrdersProductionEvent handles drag-and-drop submissions from the kanban board.
 func (h *Handlers) OrdersProductionEvent(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

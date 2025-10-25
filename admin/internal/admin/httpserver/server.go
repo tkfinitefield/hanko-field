@@ -219,6 +219,7 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 			protected.Route("/production", func(pr chi.Router) {
 				pr.Get("/queues", uiHandlers.ProductionQueuesPage)
 				RegisterFragment(pr, "/queues/board", uiHandlers.ProductionQueuesBoard)
+				pr.Get("/workorders/{orderID}", uiHandlers.ProductionWorkOrderPage)
 			})
 			protected.Post("/invoices:issue", uiHandlers.InvoicesIssue)
 			protected.Get("/invoices/jobs/{jobID}", uiHandlers.InvoiceJobStatus)
