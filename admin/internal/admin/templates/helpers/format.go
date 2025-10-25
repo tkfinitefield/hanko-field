@@ -163,6 +163,14 @@ func TextComponent(value string) templ.Component {
 	})
 }
 
+// MinInt returns the smaller of two integers.
+func MinInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // TableRows converts [][]string to [][]templ.Component for tables.
 func TableRows(rows [][]string) [][]templ.Component {
 	result := make([][]templ.Component, 0, len(rows))

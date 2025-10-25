@@ -1040,22 +1040,3 @@ func normalizeBoolInput(value string) string {
 		return "any"
 	}
 }
-
-func joinBasePath(basePath, suffix string) string {
-	base := strings.TrimSpace(basePath)
-	if base == "" {
-		base = "/admin"
-	}
-	if !strings.HasPrefix(base, "/") {
-		base = "/" + base
-	}
-	base = strings.TrimRight(base, "/")
-	path := strings.TrimSpace(suffix)
-	if path == "" {
-		return base
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return base + path
-}

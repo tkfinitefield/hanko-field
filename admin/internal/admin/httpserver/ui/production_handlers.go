@@ -92,6 +92,10 @@ func (h *Handlers) OrdersProductionEvent(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "ステージが指定されていません。", http.StatusBadRequest)
 		return
 	}
+	if !isValidStage(stageValue) {
+		http.Error(w, "指定されたステージに移動できません。", http.StatusBadRequest)
+		return
+	}
 
 	req := adminproduction.AppendEventRequest{
 		Stage:    adminproduction.Stage(stageValue),
@@ -160,12 +164,18 @@ func canonicalProductionURL(basePath string, req productionBoardRequest) string 
 }
 
 func rebuildRawQuery(values url.Values) string {
-	clone := url.Values{}
-	for key, list := range values {
-		if len(list) == 0 {
-			continue
-		}
-		clone[key] = append([]string(nil), list...)
+	return values.Encode()
+}
+
+func isValidStage(stage string) bool {
+	switch adminproduction.Stage(stage) {
+	case adminproduction.StageQueued,
+		adminproduction.StageEngraving,
+		adminproduction.StagePolishing,
+		adminproduction.StageQC,
+		adminproduction.StagePacked:
+		return true
+	default:
+		return false
 	}
-	return clone.Encode()
 }
