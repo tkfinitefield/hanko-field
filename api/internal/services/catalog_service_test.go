@@ -422,6 +422,13 @@ func TestCatalogServiceDeleteTemplate(t *testing.T) {
 		t.Fatalf("expected delete audit action, got %#v", audit.records)
 	}
 
+	repo.getTemplate = domain.Template{}
+	repo.getErr = stubRepositoryError{notFound: true}
+	repo.deleteErr = stubRepositoryError{notFound: true}
+	if err := svc.DeleteTemplate(context.Background(), DeleteTemplateCommand{TemplateID: "tpl_missing"}); err != nil {
+		t.Fatalf("expected not found deletes to be idempotent, got %v", err)
+	}
+
 	if err := svc.DeleteTemplate(context.Background(), DeleteTemplateCommand{}); err == nil {
 		t.Fatalf("expected error when id empty")
 	}
@@ -618,6 +625,18 @@ func (s *stubCatalogRepository) UpsertProduct(context.Context, domain.ProductSum
 func (s *stubCatalogRepository) DeleteProduct(context.Context, string) error {
 	return errors.New("not implemented")
 }
+
+type stubRepositoryError struct {
+	notFound    bool
+	conflict    bool
+	unavailable bool
+}
+
+func (e stubRepositoryError) Error() string { return "catalog repository error" }
+
+func (e stubRepositoryError) IsNotFound() bool    { return e.notFound }
+func (e stubRepositoryError) IsConflict() bool    { return e.conflict }
+func (e stubRepositoryError) IsUnavailable() bool { return e.unavailable }
 
 type stubTemplateCache struct {
 	calls [][]string

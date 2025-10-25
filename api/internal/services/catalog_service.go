@@ -198,6 +198,10 @@ func (s *catalogService) DeleteTemplate(ctx context.Context, cmd DeleteTemplateC
 	}
 
 	if err := s.repo.DeleteTemplate(ctx, templateID); err != nil {
+		var repoErr repositories.RepositoryError
+		if errors.As(err, &repoErr) && repoErr.IsNotFound() {
+			return nil
+		}
 		return err
 	}
 
@@ -349,9 +353,6 @@ func (s *catalogService) recordTemplateAudit(ctx context.Context, action string,
 		"isPublished": template.IsPublished,
 	}
 	for k, v := range extra {
-		if metadata == nil {
-			metadata = make(map[string]any, len(extra))
-		}
 		metadata[k] = v
 	}
 	record := AuditLogRecord{
