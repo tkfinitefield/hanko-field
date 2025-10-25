@@ -95,7 +95,7 @@
 ## 6. Admin / Staff Endpoints
 ### 6.1 Catalog & CMS
 - [x] [068 Implement admin CRUD for templates with versioning and publishing workflow.](./tasks/068-implement-admin-crud-for-templates-with-versioning-and-publishing-workflow.md)
-- [ ] [069 Implement admin CRUD for fonts including licensing data.](./tasks/069-implement-admin-crud-for-fonts-including-licensing-data.md)
+- [x] [069 Implement admin CRUD for fonts including licensing data.](./tasks/069-implement-admin-crud-for-fonts-including-licensing-data.md)
 - [ ] [070 Implement admin CRUD for materials capturing stock and supplier info.](./tasks/070-implement-admin-crud-for-materials-capturing-stock-and-supplier-info.md)
 - [ ] [071 Implement admin CRUD for products including SKU configuration and price tiers.](./tasks/071-implement-admin-crud-for-products-including-sku-configuration-and-price-tiers.md)
 - [ ] [072 Implement admin CRUD for content guides including localization and category tagging.](./tasks/072-implement-admin-crud-for-content-guides-including-localization-and-category-tagg.md)
