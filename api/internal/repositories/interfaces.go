@@ -117,6 +117,7 @@ type InventoryRepository interface {
 	Release(ctx context.Context, req InventoryReleaseRequest) (InventoryReleaseResult, error)
 	GetReservation(ctx context.Context, reservationID string) (domain.InventoryReservation, error)
 	ListLowStock(ctx context.Context, query InventoryLowStockQuery) (domain.CursorPage[domain.InventoryStock], error)
+	ConfigureSafetyStock(ctx context.Context, cfg InventorySafetyStockConfig) (domain.InventoryStock, error)
 }
 
 // InventoryReserveRequest encapsulates reservation creation metadata for the repository.
@@ -162,6 +163,14 @@ type InventoryLowStockQuery struct {
 	Threshold int
 	PageSize  int
 	PageToken string
+}
+
+// InventorySafetyStockConfig updates or creates a stock document with a new safety threshold.
+type InventorySafetyStockConfig struct {
+	SKU         string
+	ProductRef  string
+	SafetyStock int
+	Now         time.Time
 }
 
 // OrderRepository persists order headers and provides query helpers for users and admins.

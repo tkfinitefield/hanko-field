@@ -72,6 +72,8 @@ type (
 	MaterialSummary           = domain.MaterialSummary
 	MaterialTranslation       = domain.MaterialTranslation
 	MaterialSustainability    = domain.MaterialSustainability
+	MaterialProcurement       = domain.MaterialProcurement
+	MaterialInventory         = domain.MaterialInventory
 	Product                   = domain.Product
 	ProductSummary            = domain.ProductSummary
 	ProductPriceTier          = domain.ProductPriceTier
@@ -235,6 +237,7 @@ type InventoryService interface {
 	CommitReservation(ctx context.Context, cmd InventoryCommitCommand) (InventoryReservation, error)
 	ReleaseReservation(ctx context.Context, cmd InventoryReleaseCommand) (InventoryReservation, error)
 	ListLowStock(ctx context.Context, filter InventoryLowStockFilter) (domain.CursorPage[InventorySnapshot], error)
+	ConfigureSafetyStock(ctx context.Context, cmd ConfigureSafetyStockCommand) (InventoryStock, error)
 }
 
 // ContentService provides read/write access to CMS content for public and admin usage.
@@ -261,7 +264,7 @@ type CatalogService interface {
 	ListMaterials(ctx context.Context, filter MaterialFilter) (domain.CursorPage[MaterialSummary], error)
 	GetMaterial(ctx context.Context, materialID string) (Material, error)
 	UpsertMaterial(ctx context.Context, cmd UpsertMaterialCommand) (MaterialSummary, error)
-	DeleteMaterial(ctx context.Context, materialID string) error
+	DeleteMaterial(ctx context.Context, cmd DeleteMaterialCommand) error
 	ListProducts(ctx context.Context, filter ProductFilter) (domain.CursorPage[ProductSummary], error)
 	GetProduct(ctx context.Context, productID string) (Product, error)
 	UpsertProduct(ctx context.Context, cmd UpsertProductCommand) (ProductSummary, error)
@@ -821,6 +824,12 @@ type InventoryLowStockFilter struct {
 	Pagination Pagination
 }
 
+type ConfigureSafetyStockCommand struct {
+	SKU         string
+	ProductRef  string
+	SafetyStock int
+}
+
 type ContentGuideFilter struct {
 	Category       *string
 	Slug           *string
@@ -883,6 +892,11 @@ type MaterialFilter struct {
 type UpsertMaterialCommand struct {
 	Material MaterialSummary
 	ActorID  string
+}
+
+type DeleteMaterialCommand struct {
+	MaterialID string
+	ActorID    string
 }
 
 type ProductFilter struct {

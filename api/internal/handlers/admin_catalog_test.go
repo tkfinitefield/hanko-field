@@ -319,3 +319,114 @@ func TestAdminCatalogHandlers_DeleteFontErrors(t *testing.T) {
 		t.Fatalf("expected 400, got %d", resp.Code)
 	}
 }
+
+func TestAdminCatalogHandlers_CreateMaterial(t *testing.T) {
+	svc := &stubCatalogService{}
+	now := time.Date(2024, time.July, 1, 12, 0, 0, 0, time.UTC)
+	svc.adminMaterialUpsertResp = services.MaterialSummary{
+		ID:           "mat_wood",
+		Name:         "Maple",
+		Category:     "wood",
+		IsAvailable:  true,
+		LeadTimeDays: 7,
+		Inventory: services.MaterialInventory{
+			SKU:         "MAT-WOOD",
+			SafetyStock: 3,
+		},
+		Procurement: services.MaterialProcurement{SupplierRef: "sup-1", UnitCostCents: 1200, Currency: "JPY"},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	handler := NewAdminCatalogHandlers(nil, svc)
+	router := chi.NewRouter()
+	handler.Routes(router)
+	body := map[string]any{
+		"id":                 "mat_wood",
+		"name":               "Maple",
+		"category":           "wood",
+		"is_available":       true,
+		"lead_time_days":     7,
+		"preview_image_path": "materials/maple.png",
+		"procurement": map[string]any{
+			"supplier_ref":    "sup-1",
+			"unit_cost_cents": 1200,
+			"currency":        "JPY",
+		},
+		"inventory": map[string]any{
+			"sku":          "MAT-WOOD",
+			"safety_stock": 3,
+		},
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/catalog/materials", bytes.NewReader(payload))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "admin", Roles: []string{auth.RoleAdmin}}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201 got %d", resp.Code)
+	}
+	if svc.adminMaterialUpsertCmd.ActorID != "admin" {
+		t.Fatalf("expected actor admin got %s", svc.adminMaterialUpsertCmd.ActorID)
+	}
+	if svc.adminMaterialUpsertCmd.Material.ID != "mat_wood" {
+		t.Fatalf("expected material id mat_wood got %s", svc.adminMaterialUpsertCmd.Material.ID)
+	}
+	var decoded adminMaterialResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if decoded.Inventory == nil || decoded.Inventory.SKU != "MAT-WOOD" {
+		t.Fatalf("expected inventory payload, got %#v", decoded.Inventory)
+	}
+}
+
+func TestAdminCatalogHandlers_UpdateMaterialUsesPathID(t *testing.T) {
+	svc := &stubCatalogService{}
+	handler := NewAdminCatalogHandlers(nil, svc)
+	router := chi.NewRouter()
+	handler.Routes(router)
+	body := map[string]any{
+		"id":           "mat_other",
+		"name":         "Maple",
+		"category":     "wood",
+		"is_available": true,
+		"inventory": map[string]any{
+			"sku":          "MAT-WOOD",
+			"safety_stock": 1,
+		},
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPut, "/catalog/materials/mat_wood", bytes.NewReader(payload))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "editor", Roles: []string{auth.RoleAdmin}}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", resp.Code)
+	}
+	if svc.adminMaterialUpsertCmd.Material.ID != "mat_wood" {
+		t.Fatalf("expected path to override id got %s", svc.adminMaterialUpsertCmd.Material.ID)
+	}
+}
+
+func TestAdminCatalogHandlers_DeleteMaterialRequiresIdentity(t *testing.T) {
+	svc := &stubCatalogService{}
+	handler := NewAdminCatalogHandlers(nil, svc)
+	router := chi.NewRouter()
+	handler.Routes(router)
+	req := httptest.NewRequest(http.MethodDelete, "/catalog/materials/mat_wood", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 when identity missing got %d", resp.Code)
+	}
+	req = httptest.NewRequest(http.MethodDelete, "/catalog/materials/mat_wood", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "admin", Roles: []string{auth.RoleAdmin}}))
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 got %d", resp.Code)
+	}
+	if svc.adminMaterialDeleteCmd.MaterialID != "mat_wood" {
+		t.Fatalf("expected delete command for mat_wood got %s", svc.adminMaterialDeleteCmd.MaterialID)
+	}
+}

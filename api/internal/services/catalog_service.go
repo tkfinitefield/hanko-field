@@ -27,17 +27,19 @@ type TemplateCacheInvalidator interface {
 
 // CatalogServiceDeps bundles constructor inputs for the catalog service.
 type CatalogServiceDeps struct {
-	Catalog repositories.CatalogRepository
-	Audit   AuditLogService
-	Cache   TemplateCacheInvalidator
-	Clock   func() time.Time
+	Catalog   repositories.CatalogRepository
+	Audit     AuditLogService
+	Cache     TemplateCacheInvalidator
+	Inventory InventoryService
+	Clock     func() time.Time
 }
 
 type catalogService struct {
-	repo  repositories.CatalogRepository
-	audit AuditLogService
-	cache TemplateCacheInvalidator
-	clock func() time.Time
+	repo      repositories.CatalogRepository
+	audit     AuditLogService
+	cache     TemplateCacheInvalidator
+	inventory InventoryService
+	clock     func() time.Time
 }
 
 var (
@@ -61,10 +63,11 @@ func NewCatalogService(deps CatalogServiceDeps) (CatalogService, error) {
 		clock = time.Now
 	}
 	return &catalogService{
-		repo:  deps.Catalog,
-		audit: deps.Audit,
-		cache: deps.Cache,
-		clock: func() time.Time { return clock().UTC() },
+		repo:      deps.Catalog,
+		audit:     deps.Audit,
+		cache:     deps.Cache,
+		inventory: deps.Inventory,
+		clock:     func() time.Time { return clock().UTC() },
 	}, nil
 }
 
@@ -372,18 +375,106 @@ func (s *catalogService) UpsertMaterial(ctx context.Context, cmd UpsertMaterialC
 	if s.repo == nil {
 		return MaterialSummary{}, ErrCatalogRepositoryMissing
 	}
-	return s.repo.UpsertMaterial(ctx, cmd.Material)
+	material := normalizeMaterialSummary(cmd.Material)
+	actorID := strings.TrimSpace(cmd.ActorID)
+	if err := validateMaterialInput(material); err != nil {
+		return MaterialSummary{}, fmt.Errorf("%w: %s", ErrCatalogInvalidInput, err)
+	}
+	now := s.clock()
+	var existing Material
+	current, err := s.repo.GetMaterial(ctx, material.ID)
+	if err != nil && !isCatalogRepositoryNotFound(err) {
+		return MaterialSummary{}, err
+	}
+	if err == nil {
+		existing = Material(current)
+	}
+	if material.CreatedAt.IsZero() {
+		if existing.CreatedAt.IsZero() {
+			material.CreatedAt = now
+		} else {
+			material.CreatedAt = existing.CreatedAt
+		}
+	} else {
+		material.CreatedAt = material.CreatedAt.UTC()
+	}
+	material.UpdatedAt = now
+	savedDomain, err := s.repo.UpsertMaterial(ctx, domain.MaterialSummary(material))
+	if err != nil {
+		return MaterialSummary{}, err
+	}
+	saved := MaterialSummary(savedDomain)
+	if err := s.syncMaterialSafetyStock(ctx, saved); err != nil {
+		return MaterialSummary{}, err
+	}
+	action := "catalog.material.update"
+	occurredAt := saved.UpdatedAt
+	if existing.ID == "" {
+		action = "catalog.material.create"
+		occurredAt = saved.CreatedAt
+	}
+	diff := map[string]AuditLogDiff{}
+	if existing.ID != "" {
+		if existing.IsAvailable != saved.IsAvailable {
+			diff["isAvailable"] = AuditLogDiff{Before: existing.IsAvailable, After: saved.IsAvailable}
+		}
+		if strings.TrimSpace(existing.Inventory.SKU) != strings.TrimSpace(saved.Inventory.SKU) {
+			diff["inventory.sku"] = AuditLogDiff{Before: strings.TrimSpace(existing.Inventory.SKU), After: strings.TrimSpace(saved.Inventory.SKU)}
+		}
+		if existing.Inventory.SafetyStock != saved.Inventory.SafetyStock {
+			diff["inventory.safetyStock"] = AuditLogDiff{Before: existing.Inventory.SafetyStock, After: saved.Inventory.SafetyStock}
+		}
+	}
+	if len(diff) == 0 {
+		diff = nil
+	}
+	s.recordMaterialAudit(ctx, action, saved, actorID, occurredAt, diff, nil)
+	if existing.ID == "" && saved.IsAvailable {
+		s.recordMaterialAudit(ctx, "catalog.material.publish", saved, actorID, occurredAt, nil, nil)
+	}
+	if existing.ID != "" && existing.IsAvailable != saved.IsAvailable {
+		stateAction := "catalog.material.publish"
+		if saved.IsAvailable {
+			s.recordMaterialAudit(ctx, stateAction, saved, actorID, occurredAt, nil, nil)
+		} else {
+			s.recordMaterialAudit(ctx, "catalog.material.unpublish", saved, actorID, occurredAt, nil, nil)
+			s.flagMaterialProducts(ctx, saved.ID, actorID, "material_unavailable")
+		}
+	}
+	return saved, nil
 }
 
-func (s *catalogService) DeleteMaterial(ctx context.Context, materialID string) error {
+func (s *catalogService) DeleteMaterial(ctx context.Context, cmd DeleteMaterialCommand) error {
 	if s.repo == nil {
 		return ErrCatalogRepositoryMissing
 	}
-	materialID = strings.TrimSpace(materialID)
+	materialID := strings.TrimSpace(cmd.MaterialID)
 	if materialID == "" {
 		return errors.New("catalog service: material id is required")
 	}
-	return s.repo.DeleteMaterial(ctx, materialID)
+	var existing Material
+	current, err := s.repo.GetMaterial(ctx, materialID)
+	if err != nil && !isCatalogRepositoryNotFound(err) {
+		return err
+	}
+	if err == nil {
+		existing = Material(current)
+	}
+	if err := s.repo.DeleteMaterial(ctx, materialID); err != nil {
+		var repoErr repositories.RepositoryError
+		if errors.As(err, &repoErr) && repoErr.IsNotFound() {
+			return nil
+		}
+		return err
+	}
+	if existing.ID != "" {
+		diff := map[string]AuditLogDiff{
+			"isAvailable": {Before: existing.IsAvailable, After: false},
+		}
+		s.recordMaterialAudit(ctx, "catalog.material.delete", existing.MaterialSummary, strings.TrimSpace(cmd.ActorID), s.clock(), diff, map[string]any{"deleted": true})
+		s.flagMaterialProducts(ctx, materialID, cmd.ActorID, "material_deleted")
+	}
+	return nil
 }
 
 func (s *catalogService) appendTemplateVersion(ctx context.Context, template Template, actorID string, now time.Time) error {
@@ -406,6 +497,102 @@ func (s *catalogService) invalidateTemplates(ctx context.Context, templateIDs []
 		return
 	}
 	_ = s.cache.InvalidateTemplates(ctx, templateIDs)
+}
+
+func (s *catalogService) syncMaterialSafetyStock(ctx context.Context, material MaterialSummary) error {
+	if s.inventory == nil {
+		return nil
+	}
+	sku := strings.TrimSpace(material.Inventory.SKU)
+	if sku == "" {
+		return nil
+	}
+	_, err := s.inventory.ConfigureSafetyStock(ctx, ConfigureSafetyStockCommand{
+		SKU:         sku,
+		ProductRef:  materialTargetRef(material.ID),
+		SafetyStock: material.Inventory.SafetyStock,
+	})
+	return err
+}
+
+func (s *catalogService) flagMaterialProducts(ctx context.Context, materialID string, actorID string, reason string) {
+	if s.audit == nil || s.repo == nil {
+		return
+	}
+	materialID = strings.TrimSpace(materialID)
+	if materialID == "" {
+		return
+	}
+	filterID := materialID
+	page, err := s.repo.ListProducts(ctx, repositories.ProductFilter{
+		MaterialID: &filterID,
+		Pagination: domain.Pagination{PageSize: 50},
+	})
+	if err != nil || len(page.Items) == 0 {
+		return
+	}
+	affected := make([]string, 0, len(page.Items))
+	for _, product := range page.Items {
+		affected = append(affected, product.ID)
+		if len(affected) >= 20 {
+			break
+		}
+	}
+	metadata := map[string]any{
+		"materialId": materialID,
+		"products":   affected,
+	}
+	if strings.TrimSpace(reason) != "" {
+		metadata["reason"] = strings.TrimSpace(reason)
+	}
+	s.audit.Record(ctx, AuditLogRecord{
+		Actor:      strings.TrimSpace(actorID),
+		ActorType:  "staff",
+		Action:     "catalog.material.products.flagged",
+		TargetRef:  materialTargetRef(materialID),
+		Severity:   "warning",
+		OccurredAt: s.clock(),
+		Metadata:   metadata,
+	})
+}
+
+func (s *catalogService) recordMaterialAudit(ctx context.Context, action string, material MaterialSummary, actorID string, occurredAt time.Time, diff map[string]AuditLogDiff, metadata map[string]any) {
+	if s.audit == nil {
+		return
+	}
+	actorID = strings.TrimSpace(actorID)
+	if occurredAt.IsZero() {
+		occurredAt = s.clock()
+	}
+	meta := map[string]any{
+		"materialId":   material.ID,
+		"category":     material.Category,
+		"inventorySku": strings.TrimSpace(material.Inventory.SKU),
+		"supplierRef":  strings.TrimSpace(material.Procurement.SupplierRef),
+	}
+	for k, v := range metadata {
+		if v != nil {
+			meta[k] = v
+		}
+	}
+	s.audit.Record(ctx, AuditLogRecord{
+		Actor:      actorID,
+		ActorType:  "staff",
+		Action:     action,
+		TargetRef:  materialTargetRef(material.ID),
+		Severity:   "info",
+		OccurredAt: occurredAt,
+		Metadata:   meta,
+		Diff:       diff,
+	})
+}
+
+func materialTargetRef(materialID string) string {
+	trimmed := strings.TrimSpace(materialID)
+	if trimmed == "" {
+		return ""
+	}
+	return fmt.Sprintf("/materials/%s", trimmed)
 }
 
 func (s *catalogService) recordTemplateAudit(ctx context.Context, action string, template Template, actorID string, occurredAt time.Time, diff map[string]AuditLogDiff, extra map[string]any) {
@@ -436,6 +623,91 @@ func (s *catalogService) recordTemplateAudit(ctx context.Context, action string,
 		Diff:       diff,
 	}
 	s.audit.Record(ctx, record)
+}
+
+func normalizeMaterialSummary(material MaterialSummary) MaterialSummary {
+	material.ID = strings.TrimSpace(material.ID)
+	material.Name = strings.TrimSpace(material.Name)
+	material.Description = strings.TrimSpace(material.Description)
+	material.Category = strings.TrimSpace(material.Category)
+	material.Grain = strings.TrimSpace(material.Grain)
+	material.Color = strings.TrimSpace(material.Color)
+	material.PreviewImagePath = strings.TrimSpace(material.PreviewImagePath)
+	material.DefaultLocale = strings.TrimSpace(material.DefaultLocale)
+	material.Translations = normalizeMaterialTranslations(material.Translations)
+	material.Procurement = normalizeMaterialProcurement(material.Procurement)
+	material.Inventory = normalizeMaterialInventory(material.Inventory)
+	return material
+}
+
+func normalizeMaterialTranslations(translations map[string]MaterialTranslation) map[string]MaterialTranslation {
+	if len(translations) == 0 {
+		return nil
+	}
+	normalized := make(map[string]MaterialTranslation, len(translations))
+	for key, translation := range translations {
+		normalized[strings.TrimSpace(key)] = MaterialTranslation{
+			Locale:      strings.TrimSpace(translation.Locale),
+			Name:        strings.TrimSpace(translation.Name),
+			Description: strings.TrimSpace(translation.Description),
+		}
+	}
+	return normalized
+}
+
+func normalizeMaterialProcurement(info MaterialProcurement) MaterialProcurement {
+	info.SupplierRef = strings.TrimSpace(info.SupplierRef)
+	info.SupplierName = strings.TrimSpace(info.SupplierName)
+	info.ContactEmail = strings.TrimSpace(info.ContactEmail)
+	info.ContactPhone = strings.TrimSpace(info.ContactPhone)
+	info.Currency = strings.ToUpper(strings.TrimSpace(info.Currency))
+	info.Notes = strings.TrimSpace(info.Notes)
+	return info
+}
+
+func normalizeMaterialInventory(info MaterialInventory) MaterialInventory {
+	info.SKU = strings.TrimSpace(info.SKU)
+	info.Warehouse = strings.TrimSpace(info.Warehouse)
+	return info
+}
+
+func validateMaterialInput(material MaterialSummary) error {
+	if material.ID == "" {
+		return errors.New("material id is required")
+	}
+	if strings.TrimSpace(material.Name) == "" {
+		return errors.New("material name is required")
+	}
+	if strings.TrimSpace(material.Category) == "" {
+		return errors.New("material category is required")
+	}
+	if material.Inventory.SafetyStock < 0 {
+		return errors.New("inventory safety stock must be >= 0")
+	}
+	if material.Inventory.ReorderPoint < 0 {
+		return errors.New("inventory reorder point must be >= 0")
+	}
+	if material.Inventory.ReorderQuantity < 0 {
+		return errors.New("inventory reorder quantity must be >= 0")
+	}
+	if material.Inventory.SKU == "" {
+		if material.Inventory.SafetyStock > 0 || material.Inventory.ReorderPoint > 0 || material.Inventory.ReorderQuantity > 0 {
+			return errors.New("inventory sku is required when safety thresholds are configured")
+		}
+	}
+	if material.Procurement.UnitCostCents < 0 {
+		return errors.New("procurement unit cost must be >= 0")
+	}
+	if material.Procurement.MinimumOrderQuantity < 0 {
+		return errors.New("procurement minimum order quantity must be >= 0")
+	}
+	if material.Procurement.LeadTimeDays < 0 {
+		return errors.New("procurement lead time must be >= 0")
+	}
+	if cur := strings.TrimSpace(material.Procurement.Currency); cur != "" && len(cur) != 3 {
+		return errors.New("procurement currency must be a 3-letter ISO code")
+	}
+	return nil
 }
 
 func resolveTemplatePublishedAt(next Template, existing Template, now time.Time) time.Time {

@@ -738,28 +738,28 @@ type TemplateVersion struct {
 
 // FontLicense captures public licensing metadata for fonts.
 type FontLicense struct {
-    Name string
-    URL  string
-    // AllowedUsages enumerates permitted contexts for this font (e.g. "app", "print").
-    AllowedUsages []string
+	Name string
+	URL  string
+	// AllowedUsages enumerates permitted contexts for this font (e.g. "app", "print").
+	AllowedUsages []string
 }
 
 // FontSummary captures metadata required by rendering services.
 type FontSummary struct {
-    ID               string
-    Slug             string
-    DisplayName      string
-    Family           string
-    Weight           string
-    Scripts          []string
-    PreviewImagePath string
-    LetterSpacing    float64
-    IsPremium        bool
-    SupportedWeights []string
-    License          FontLicense
-    IsPublished      bool
-    CreatedAt        time.Time
-    UpdatedAt        time.Time
+	ID               string
+	Slug             string
+	DisplayName      string
+	Family           string
+	Weight           string
+	Scripts          []string
+	PreviewImagePath string
+	LetterSpacing    float64
+	IsPremium        bool
+	SupportedWeights []string
+	License          FontLicense
+	IsPublished      bool
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // Font represents full font metadata for detail endpoints.
@@ -772,6 +772,28 @@ type MaterialTranslation struct {
 	Locale      string
 	Name        string
 	Description string
+}
+
+// MaterialProcurement captures supplier and purchase metadata for a material.
+type MaterialProcurement struct {
+	SupplierRef          string
+	SupplierName         string
+	ContactEmail         string
+	ContactPhone         string
+	LeadTimeDays         int
+	MinimumOrderQuantity int
+	UnitCostCents        int64
+	Currency             string
+	Notes                string
+}
+
+// MaterialInventory stores safety stock and SKU level configuration.
+type MaterialInventory struct {
+	SKU             string
+	SafetyStock     int
+	ReorderPoint    int
+	ReorderQuantity int
+	Warehouse       string
 }
 
 // MaterialSummary stores material metadata for product configuration and public listings.
@@ -787,6 +809,8 @@ type MaterialSummary struct {
 	PreviewImagePath string
 	DefaultLocale    string
 	Translations     map[string]MaterialTranslation
+	Procurement      MaterialProcurement
+	Inventory        MaterialInventory
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }

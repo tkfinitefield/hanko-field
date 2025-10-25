@@ -44,6 +44,9 @@ func (h *AdminCatalogHandlers) Routes(r chi.Router) {
 		rt.Post("/fonts", h.createFont)
 		rt.Put("/fonts/{fontID}", h.updateFont)
 		rt.Delete("/fonts/{fontID}", h.deleteFont)
+		rt.Post("/materials", h.createMaterial)
+		rt.Put("/materials/{materialID}", h.updateMaterial)
+		rt.Delete("/materials/{materialID}", h.deleteMaterial)
 	})
 }
 
@@ -198,6 +201,69 @@ func (h *AdminCatalogHandlers) deleteFont(w http.ResponseWriter, r *http.Request
 			writeCatalogError(ctx, w, err, "font")
 			return
 		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *AdminCatalogHandlers) createMaterial(w http.ResponseWriter, r *http.Request) {
+	h.saveMaterial(w, r, "")
+}
+
+func (h *AdminCatalogHandlers) updateMaterial(w http.ResponseWriter, r *http.Request) {
+	materialID := chi.URLParam(r, "materialID")
+	h.saveMaterial(w, r, materialID)
+}
+
+func (h *AdminCatalogHandlers) saveMaterial(w http.ResponseWriter, r *http.Request, materialID string) {
+	ctx := r.Context()
+	if h.catalog == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "catalog service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	material, err := decodeAdminMaterialRequest(r, materialID)
+	if err != nil {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+	result, err := h.catalog.UpsertMaterial(ctx, services.UpsertMaterialCommand{Material: material, ActorID: identity.UID})
+	if err != nil {
+		writeCatalogError(ctx, w, err, "material")
+		return
+	}
+	response := newAdminMaterialResponse(result)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == http.MethodPost {
+		w.WriteHeader(http.StatusCreated)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+func (h *AdminCatalogHandlers) deleteMaterial(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.catalog == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "catalog service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	materialID := strings.TrimSpace(chi.URLParam(r, "materialID"))
+	if materialID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "material id is required", http.StatusBadRequest))
+		return
+	}
+	if err := h.catalog.DeleteMaterial(ctx, services.DeleteMaterialCommand{MaterialID: materialID, ActorID: identity.UID}); err != nil {
+		writeCatalogError(ctx, w, err, "material")
+		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -406,6 +472,83 @@ func decodeAdminFontRequest(r *http.Request, overrideID string) (services.FontSu
 	return font, nil
 }
 
+func decodeAdminMaterialRequest(r *http.Request, overrideID string) (services.MaterialSummary, error) {
+	limited := io.LimitReader(r.Body, maxCatalogRequestBody)
+	defer r.Body.Close()
+	decoder := json.NewDecoder(limited)
+	decoder.DisallowUnknownFields()
+	var req adminMaterialRequest
+	if err := decoder.Decode(&req); err != nil {
+		if errors.Is(err, io.EOF) {
+			return services.MaterialSummary{}, errors.New("request body required")
+		}
+		return services.MaterialSummary{}, fmt.Errorf("invalid request body: %w", err)
+	}
+	material := services.MaterialSummary{
+		ID:               strings.TrimSpace(req.ID),
+		Name:             req.Name,
+		Description:      req.Description,
+		Category:         req.Category,
+		Grain:            req.Grain,
+		Color:            req.Color,
+		IsAvailable:      req.IsAvailable,
+		LeadTimeDays:     req.LeadTimeDays,
+		PreviewImagePath: req.PreviewImagePath,
+		DefaultLocale:    req.DefaultLocale,
+	}
+	if strings.TrimSpace(overrideID) != "" {
+		material.ID = strings.TrimSpace(overrideID)
+	}
+	if material.ID == "" {
+		return services.MaterialSummary{}, errors.New("material id is required")
+	}
+	if len(req.Translations) > 0 {
+		material.Translations = make(map[string]services.MaterialTranslation, len(req.Translations))
+		for key, value := range req.Translations {
+			material.Translations[key] = services.MaterialTranslation{
+				Locale:      value.Locale,
+				Name:        value.Name,
+				Description: value.Description,
+			}
+		}
+	}
+	if req.Procurement != nil {
+		material.Procurement = services.MaterialProcurement{
+			SupplierRef:  req.Procurement.SupplierRef,
+			SupplierName: req.Procurement.SupplierName,
+			ContactEmail: req.Procurement.ContactEmail,
+			ContactPhone: req.Procurement.ContactPhone,
+			Currency:     req.Procurement.Currency,
+			Notes:        req.Procurement.Notes,
+		}
+		if req.Procurement.LeadTimeDays != nil {
+			material.Procurement.LeadTimeDays = *req.Procurement.LeadTimeDays
+		}
+		if req.Procurement.MinimumOrderQuantity != nil {
+			material.Procurement.MinimumOrderQuantity = *req.Procurement.MinimumOrderQuantity
+		}
+		if req.Procurement.UnitCostCents != nil {
+			material.Procurement.UnitCostCents = *req.Procurement.UnitCostCents
+		}
+	}
+	if req.Inventory != nil {
+		material.Inventory = services.MaterialInventory{
+			SKU:       req.Inventory.SKU,
+			Warehouse: req.Inventory.Warehouse,
+		}
+		if req.Inventory.SafetyStock != nil {
+			material.Inventory.SafetyStock = *req.Inventory.SafetyStock
+		}
+		if req.Inventory.ReorderPoint != nil {
+			material.Inventory.ReorderPoint = *req.Inventory.ReorderPoint
+		}
+		if req.Inventory.ReorderQuantity != nil {
+			material.Inventory.ReorderQuantity = *req.Inventory.ReorderQuantity
+		}
+	}
+	return material, nil
+}
+
 type adminFontRequest struct {
 	ID               string                   `json:"id"`
 	DisplayName      string                   `json:"display_name"`
@@ -465,6 +608,153 @@ func newAdminFontResponse(font services.FontSummary) adminFontResponse {
 		UpdatedAt:   formatTimestamp(font.UpdatedAt),
 	}
 	return resp
+}
+
+type adminMaterialRequest struct {
+	ID               string                                     `json:"id"`
+	Name             string                                     `json:"name"`
+	Description      string                                     `json:"description"`
+	Category         string                                     `json:"category"`
+	Grain            string                                     `json:"grain"`
+	Color            string                                     `json:"color"`
+	IsAvailable      bool                                       `json:"is_available"`
+	LeadTimeDays     int                                        `json:"lead_time_days"`
+	PreviewImagePath string                                     `json:"preview_image_path"`
+	DefaultLocale    string                                     `json:"default_locale"`
+	Translations     map[string]adminMaterialTranslationPayload `json:"translations"`
+	Procurement      *adminMaterialProcurementPayload           `json:"procurement"`
+	Inventory        *adminMaterialInventoryPayload             `json:"inventory"`
+}
+
+type adminMaterialTranslationPayload struct {
+	Locale      string `json:"locale"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type adminMaterialProcurementPayload struct {
+	SupplierRef          string `json:"supplier_ref"`
+	SupplierName         string `json:"supplier_name"`
+	ContactEmail         string `json:"contact_email"`
+	ContactPhone         string `json:"contact_phone"`
+	LeadTimeDays         *int   `json:"lead_time_days"`
+	MinimumOrderQuantity *int   `json:"minimum_order_quantity"`
+	UnitCostCents        *int64 `json:"unit_cost_cents"`
+	Currency             string `json:"currency"`
+	Notes                string `json:"notes"`
+}
+
+type adminMaterialInventoryPayload struct {
+	SKU             string `json:"sku"`
+	SafetyStock     *int   `json:"safety_stock"`
+	ReorderPoint    *int   `json:"reorder_point"`
+	ReorderQuantity *int   `json:"reorder_quantity"`
+	Warehouse       string `json:"warehouse"`
+}
+
+type adminMaterialResponse struct {
+	ID               string                                     `json:"id"`
+	Name             string                                     `json:"name"`
+	Description      string                                     `json:"description,omitempty"`
+	Category         string                                     `json:"category,omitempty"`
+	Grain            string                                     `json:"grain,omitempty"`
+	Color            string                                     `json:"color,omitempty"`
+	IsAvailable      bool                                       `json:"is_available"`
+	LeadTimeDays     int                                        `json:"lead_time_days"`
+	PreviewImagePath string                                     `json:"preview_image_path,omitempty"`
+	DefaultLocale    string                                     `json:"default_locale,omitempty"`
+	Translations     map[string]adminMaterialTranslationPayload `json:"translations,omitempty"`
+	Procurement      *adminMaterialProcurementResponse          `json:"procurement,omitempty"`
+	Inventory        *adminMaterialInventoryResponse            `json:"inventory,omitempty"`
+	CreatedAt        string                                     `json:"created_at"`
+	UpdatedAt        string                                     `json:"updated_at"`
+}
+
+type adminMaterialProcurementResponse struct {
+	SupplierRef          string `json:"supplier_ref,omitempty"`
+	SupplierName         string `json:"supplier_name,omitempty"`
+	ContactEmail         string `json:"contact_email,omitempty"`
+	ContactPhone         string `json:"contact_phone,omitempty"`
+	LeadTimeDays         int    `json:"lead_time_days,omitempty"`
+	MinimumOrderQuantity int    `json:"minimum_order_quantity,omitempty"`
+	UnitCostCents        int64  `json:"unit_cost_cents,omitempty"`
+	Currency             string `json:"currency,omitempty"`
+	Notes                string `json:"notes,omitempty"`
+}
+
+type adminMaterialInventoryResponse struct {
+	SKU             string `json:"sku,omitempty"`
+	SafetyStock     int    `json:"safety_stock,omitempty"`
+	ReorderPoint    int    `json:"reorder_point,omitempty"`
+	ReorderQuantity int    `json:"reorder_quantity,omitempty"`
+	Warehouse       string `json:"warehouse,omitempty"`
+}
+
+func newAdminMaterialResponse(material services.MaterialSummary) adminMaterialResponse {
+	resp := adminMaterialResponse{
+		ID:               material.ID,
+		Name:             material.Name,
+		Description:      material.Description,
+		Category:         material.Category,
+		Grain:            material.Grain,
+		Color:            material.Color,
+		IsAvailable:      material.IsAvailable,
+		LeadTimeDays:     material.LeadTimeDays,
+		PreviewImagePath: material.PreviewImagePath,
+		DefaultLocale:    material.DefaultLocale,
+		CreatedAt:        formatTimestamp(material.CreatedAt),
+		UpdatedAt:        formatTimestamp(material.UpdatedAt),
+	}
+	if len(material.Translations) > 0 {
+		resp.Translations = make(map[string]adminMaterialTranslationPayload, len(material.Translations))
+		for key, value := range material.Translations {
+			resp.Translations[key] = adminMaterialTranslationPayload{
+				Locale:      value.Locale,
+				Name:        value.Name,
+				Description: value.Description,
+			}
+		}
+	}
+	if payload := materialProcurementToResponse(material.Procurement); payload != nil {
+		resp.Procurement = payload
+	}
+	if payload := materialInventoryToResponse(material.Inventory); payload != nil {
+		resp.Inventory = payload
+	}
+	return resp
+}
+
+func materialProcurementToResponse(info services.MaterialProcurement) *adminMaterialProcurementResponse {
+	if strings.TrimSpace(info.SupplierRef) == "" && strings.TrimSpace(info.SupplierName) == "" &&
+		strings.TrimSpace(info.ContactEmail) == "" && strings.TrimSpace(info.ContactPhone) == "" &&
+		info.LeadTimeDays == 0 && info.MinimumOrderQuantity == 0 && info.UnitCostCents == 0 &&
+		strings.TrimSpace(info.Currency) == "" && strings.TrimSpace(info.Notes) == "" {
+		return nil
+	}
+	return &adminMaterialProcurementResponse{
+		SupplierRef:          info.SupplierRef,
+		SupplierName:         info.SupplierName,
+		ContactEmail:         info.ContactEmail,
+		ContactPhone:         info.ContactPhone,
+		LeadTimeDays:         info.LeadTimeDays,
+		MinimumOrderQuantity: info.MinimumOrderQuantity,
+		UnitCostCents:        info.UnitCostCents,
+		Currency:             info.Currency,
+		Notes:                info.Notes,
+	}
+}
+
+func materialInventoryToResponse(info services.MaterialInventory) *adminMaterialInventoryResponse {
+	if strings.TrimSpace(info.SKU) == "" && info.SafetyStock == 0 && info.ReorderPoint == 0 && info.ReorderQuantity == 0 && strings.TrimSpace(info.Warehouse) == "" {
+		return nil
+	}
+	return &adminMaterialInventoryResponse{
+		SKU:             info.SKU,
+		SafetyStock:     info.SafetyStock,
+		ReorderPoint:    info.ReorderPoint,
+		ReorderQuantity: info.ReorderQuantity,
+		Warehouse:       info.Warehouse,
+	}
 }
 
 func isTemplateDraftEmpty(draft services.TemplateDraft) bool {

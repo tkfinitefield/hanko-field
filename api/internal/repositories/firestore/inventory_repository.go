@@ -413,6 +413,54 @@ func (r *InventoryRepository) ListLowStock(ctx context.Context, query repositori
 	}, nil
 }
 
+func (r *InventoryRepository) ConfigureSafetyStock(ctx context.Context, cfg repositories.InventorySafetyStockConfig) (domain.InventoryStock, error) {
+	if r == nil || r.stocks == nil {
+		return domain.InventoryStock{}, errors.New("inventory repository not initialised")
+	}
+	sku := strings.TrimSpace(cfg.SKU)
+	if sku == "" {
+		return domain.InventoryStock{}, repositories.NewInventoryError(repositories.InventoryErrorUnknown, "inventory configure safety: sku is required", nil)
+	}
+	if cfg.SafetyStock < 0 {
+		return domain.InventoryStock{}, repositories.NewInventoryError(repositories.InventoryErrorUnknown, "inventory configure safety: safety stock must be >= 0", nil)
+	}
+	productRef := strings.TrimSpace(cfg.ProductRef)
+	now := cfg.Now.UTC()
+	var updated domain.InventoryStock
+	err := r.provider.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		stockRef, err := r.stocks.DocumentRef(ctx, sku)
+		if err != nil {
+			return err
+		}
+		var doc stockDocument
+		snap, err := tx.Get(stockRef)
+		if err != nil {
+			if status.Code(err) != codes.NotFound {
+				return err
+			}
+			doc = stockDocument{}
+		} else if err := snap.DataTo(&doc); err != nil {
+			return fmt.Errorf("decode inventory stock %s: %w", sku, err)
+		}
+		if productRef != "" {
+			doc.ProductRef = productRef
+		}
+		doc.SKU = sku
+		doc.SafetyStock = cfg.SafetyStock
+		doc.UpdatedAt = now
+		doc.recalculate()
+		if err := tx.Set(stockRef, doc); err != nil {
+			return err
+		}
+		updated = doc.toDomain(sku)
+		return nil
+	})
+	if err != nil {
+		return domain.InventoryStock{}, wrapInventoryError("inventory.configureSafety", err)
+	}
+	return updated, nil
+}
+
 // Helper structures ---------------------------------------------------------
 
 type stockDocument struct {

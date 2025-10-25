@@ -1068,6 +1068,28 @@ components:
         careNotes: { type: string }
         sustainability: { type: object, properties: { certifications: { type: array, items: { type: string } }, notes: { type: string } } }
         photos: { type: array, items: { type: string, format: uri } }
+        supplier:
+          type: object
+          additionalProperties: false
+          properties:
+            reference: { type: string }
+            name: { type: string }
+            contactEmail: { type: string, format: email }
+            contactPhone: { type: string }
+            leadTimeDays: { type: integer, minimum: 0 }
+            minimumOrderQuantity: { type: integer, minimum: 0 }
+            unitCostCents: { type: integer, minimum: 0 }
+            currency: { type: string, pattern: '^[A-Z]{3}$' }
+            notes: { type: string }
+        inventory:
+          type: object
+          additionalProperties: false
+          properties:
+            sku: { type: string }
+            safetyStock: { type: integer, minimum: 0 }
+            reorderPoint: { type: integer, minimum: 0 }
+            reorderQuantity: { type: integer, minimum: 0 }
+            warehouse: { type: string }
         isActive: { type: boolean }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }

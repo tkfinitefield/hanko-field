@@ -251,6 +251,37 @@ func (s *inventoryService) ListLowStock(ctx context.Context, filter InventoryLow
 	}, nil
 }
 
+func (s *inventoryService) ConfigureSafetyStock(ctx context.Context, cmd ConfigureSafetyStockCommand) (InventoryStock, error) {
+	sku := strings.TrimSpace(cmd.SKU)
+	if sku == "" {
+		return InventoryStock{}, fmt.Errorf("%w: sku is required", ErrInventoryInvalidInput)
+	}
+	productRef := strings.TrimSpace(cmd.ProductRef)
+	if productRef == "" {
+		return InventoryStock{}, fmt.Errorf("%w: product ref is required", ErrInventoryInvalidInput)
+	}
+	if cmd.SafetyStock < 0 {
+		return InventoryStock{}, fmt.Errorf("%w: safety stock must be >= 0", ErrInventoryInvalidInput)
+	}
+	stock, err := s.repo.ConfigureSafetyStock(ctx, repositories.InventorySafetyStockConfig{
+		SKU:         sku,
+		ProductRef:  productRef,
+		SafetyStock: cmd.SafetyStock,
+		Now:         s.now(),
+	})
+	if err != nil {
+		return InventoryStock{}, s.mapRepositoryError(err)
+	}
+	if s.logger != nil {
+		s.logger(ctx, "inventory.configureSafety", map[string]any{
+			"sku":         sku,
+			"productRef":  productRef,
+			"safetyStock": stock.SafetyStock,
+		})
+	}
+	return InventoryStock(stock), nil
+}
+
 func (s *inventoryService) now() time.Time {
 	return s.clock()
 }

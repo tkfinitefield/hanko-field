@@ -1466,16 +1466,21 @@ type stubCatalogService struct {
 	productGetProd services.Product
 	productGetErr  error
 
-	adminUpsertCmd      services.UpsertTemplateCommand
-	adminUpsertResp     services.Template
-	adminUpsertErr      error
-	adminDeleteCmd      services.DeleteTemplateCommand
-	adminDeleteErr      error
-	adminFontUpsertCmd  services.UpsertFontCommand
-	adminFontUpsertResp services.FontSummary
-	adminFontUpsertErr  error
-	adminFontDeleteID   string
-	adminFontDeleteErr  error
+	adminUpsertCmd          services.UpsertTemplateCommand
+	adminUpsertResp         services.Template
+	adminUpsertErr          error
+	adminDeleteCmd          services.DeleteTemplateCommand
+	adminDeleteErr          error
+	adminFontUpsertCmd      services.UpsertFontCommand
+	adminFontUpsertResp     services.FontSummary
+	adminFontUpsertErr      error
+	adminFontDeleteID       string
+	adminFontDeleteErr      error
+	adminMaterialUpsertCmd  services.UpsertMaterialCommand
+	adminMaterialUpsertResp services.MaterialSummary
+	adminMaterialUpsertErr  error
+	adminMaterialDeleteCmd  services.DeleteMaterialCommand
+	adminMaterialDeleteErr  error
 }
 
 func (s *stubCatalogService) ListTemplates(_ context.Context, filter services.TemplateFilter) (domain.CursorPage[domain.TemplateSummary], error) {
@@ -1549,12 +1554,20 @@ func (s *stubCatalogService) GetMaterial(_ context.Context, materialID string) (
 	return s.materialGetMat, nil
 }
 
-func (s *stubCatalogService) UpsertMaterial(context.Context, services.UpsertMaterialCommand) (services.MaterialSummary, error) {
-	return services.MaterialSummary{}, errors.New("not implemented")
+func (s *stubCatalogService) UpsertMaterial(_ context.Context, cmd services.UpsertMaterialCommand) (services.MaterialSummary, error) {
+	s.adminMaterialUpsertCmd = cmd
+	if s.adminMaterialUpsertErr != nil {
+		return services.MaterialSummary{}, s.adminMaterialUpsertErr
+	}
+	if s.adminMaterialUpsertResp.ID != "" {
+		return s.adminMaterialUpsertResp, nil
+	}
+	return cmd.Material, nil
 }
 
-func (s *stubCatalogService) DeleteMaterial(context.Context, string) error {
-	return errors.New("not implemented")
+func (s *stubCatalogService) DeleteMaterial(_ context.Context, cmd services.DeleteMaterialCommand) error {
+	s.adminMaterialDeleteCmd = cmd
+	return s.adminMaterialDeleteErr
 }
 
 func (s *stubCatalogService) ListProducts(_ context.Context, filter services.ProductFilter) (domain.CursorPage[services.ProductSummary], error) {

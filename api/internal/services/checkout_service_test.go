@@ -768,6 +768,10 @@ func (s *stubCheckoutInventory) ListLowStock(context.Context, InventoryLowStockF
 	return domain.CursorPage[InventorySnapshot]{}, errors.New("not implemented")
 }
 
+func (s *stubCheckoutInventory) ConfigureSafetyStock(context.Context, ConfigureSafetyStockCommand) (InventoryStock, error) {
+	return InventoryStock{}, errors.New("not implemented")
+}
+
 type stubCheckoutPayments struct {
 	createFunc func(ctx context.Context, paymentCtx payments.PaymentContext, req payments.CheckoutSessionRequest) (payments.CheckoutSession, error)
 	lookupFunc func(ctx context.Context, paymentCtx payments.PaymentContext, req payments.LookupRequest) (payments.PaymentDetails, error)

@@ -11,10 +11,11 @@ import (
 )
 
 type stubInventoryRepo struct {
-	reserveFn func(ctx context.Context, req repositories.InventoryReserveRequest) (repositories.InventoryReserveResult, error)
-	commitFn  func(ctx context.Context, req repositories.InventoryCommitRequest) (repositories.InventoryCommitResult, error)
-	releaseFn func(ctx context.Context, req repositories.InventoryReleaseRequest) (repositories.InventoryReleaseResult, error)
-	listFn    func(ctx context.Context, query repositories.InventoryLowStockQuery) (domain.CursorPage[domain.InventoryStock], error)
+	reserveFn   func(ctx context.Context, req repositories.InventoryReserveRequest) (repositories.InventoryReserveResult, error)
+	commitFn    func(ctx context.Context, req repositories.InventoryCommitRequest) (repositories.InventoryCommitResult, error)
+	releaseFn   func(ctx context.Context, req repositories.InventoryReleaseRequest) (repositories.InventoryReleaseResult, error)
+	listFn      func(ctx context.Context, query repositories.InventoryLowStockQuery) (domain.CursorPage[domain.InventoryStock], error)
+	configureFn func(ctx context.Context, cfg repositories.InventorySafetyStockConfig) (domain.InventoryStock, error)
 }
 
 func (s *stubInventoryRepo) Reserve(ctx context.Context, req repositories.InventoryReserveRequest) (repositories.InventoryReserveResult, error) {
@@ -47,6 +48,13 @@ func (s *stubInventoryRepo) ListLowStock(ctx context.Context, query repositories
 		return s.listFn(ctx, query)
 	}
 	return domain.CursorPage[domain.InventoryStock]{}, nil
+}
+
+func (s *stubInventoryRepo) ConfigureSafetyStock(ctx context.Context, cfg repositories.InventorySafetyStockConfig) (domain.InventoryStock, error) {
+	if s.configureFn != nil {
+		return s.configureFn(ctx, cfg)
+	}
+	return domain.InventoryStock{}, errors.New("not implemented")
 }
 
 type captureInventoryEvents struct {
@@ -266,5 +274,59 @@ func TestInventoryServiceListLowStock(t *testing.T) {
 	}
 	if len(page.Items) != 1 || page.Items[0].SafetyDelta != -1 {
 		t.Fatalf("unexpected page contents: %+v", page.Items)
+	}
+}
+
+func TestInventoryServiceConfigureSafetyStock(t *testing.T) {
+	repo := &stubInventoryRepo{}
+	repo.configureFn = func(ctx context.Context, cfg repositories.InventorySafetyStockConfig) (domain.InventoryStock, error) {
+		if cfg.SKU != "MAT-001" {
+			t.Fatalf("expected sku MAT-001 got %s", cfg.SKU)
+		}
+		if cfg.ProductRef != "/materials/mat_001" {
+			t.Fatalf("expected product ref /materials/mat_001 got %s", cfg.ProductRef)
+		}
+		if cfg.SafetyStock != 6 {
+			t.Fatalf("expected safety stock 6 got %d", cfg.SafetyStock)
+		}
+		return domain.InventoryStock{SKU: cfg.SKU, ProductRef: cfg.ProductRef, SafetyStock: cfg.SafetyStock}, nil
+	}
+	var logged map[string]any
+	svc, err := NewInventoryService(InventoryServiceDeps{
+		Inventory: repo,
+		Logger: func(_ context.Context, _ string, fields map[string]any) {
+			logged = fields
+		},
+	})
+	if err != nil {
+		t.Fatalf("new inventory service: %v", err)
+	}
+	stock, err := svc.ConfigureSafetyStock(context.Background(), ConfigureSafetyStockCommand{
+		SKU:         " MAT-001 ",
+		ProductRef:  " /materials/mat_001 ",
+		SafetyStock: 6,
+	})
+	if err != nil {
+		t.Fatalf("configure safety stock: %v", err)
+	}
+	if stock.SKU != "MAT-001" || stock.SafetyStock != 6 {
+		t.Fatalf("unexpected stock %+v", stock)
+	}
+	if logged == nil || logged["sku"] != "MAT-001" {
+		t.Fatalf("expected logger fields recorded, got %#v", logged)
+	}
+}
+
+func TestInventoryServiceConfigureSafetyStockValidatesInput(t *testing.T) {
+	repo := &stubInventoryRepo{}
+	svc, err := NewInventoryService(InventoryServiceDeps{Inventory: repo})
+	if err != nil {
+		t.Fatalf("new inventory service: %v", err)
+	}
+	if _, err := svc.ConfigureSafetyStock(context.Background(), ConfigureSafetyStockCommand{}); err == nil {
+		t.Fatalf("expected error when inputs missing")
+	}
+	if _, err := svc.ConfigureSafetyStock(context.Background(), ConfigureSafetyStockCommand{SKU: "MAT-1", SafetyStock: -1, ProductRef: "/materials/mat_1"}); err == nil {
+		t.Fatalf("expected error for negative safety stock")
 	}
 }

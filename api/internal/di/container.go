@@ -131,8 +131,10 @@ func buildServices(ctx context.Context, reg repositories.Registry, cfg config.Co
 
 	if catalogRepo := reg.Catalog(); catalogRepo != nil {
 		catalogSvc, err := services.NewCatalogService(services.CatalogServiceDeps{
-			Catalog: catalogRepo,
-			Clock:   time.Now,
+			Catalog:   catalogRepo,
+			Audit:     svc.Audit,
+			Inventory: svc.Inventory,
+			Clock:     time.Now,
 		})
 		if err != nil {
 			return Services{}, fmt.Errorf("build catalog service: %w", err)

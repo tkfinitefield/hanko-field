@@ -578,6 +578,113 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
+func TestCatalogServiceUpsertMaterialSyncsInventoryAndAudits(t *testing.T) {
+	repo := &stubCatalogRepository{}
+	audit := &stubAuditLogService{}
+	inventory := &stubInventorySafetyService{}
+	now := time.Date(2024, time.June, 10, 12, 0, 0, 0, time.UTC)
+	repo.materialUpsertResp = domain.MaterialSummary{
+		ID:       "mat_wood",
+		Name:     "Maple",
+		Category: "wood",
+		Inventory: domain.MaterialInventory{
+			SKU:         "MAT-WOOD",
+			SafetyStock: 5,
+		},
+		Procurement: domain.MaterialProcurement{SupplierRef: "sup-1"},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	svc, err := NewCatalogService(CatalogServiceDeps{
+		Catalog:   repo,
+		Audit:     audit,
+		Inventory: inventory,
+		Clock:     func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("new catalog service: %v", err)
+	}
+	result, err := svc.UpsertMaterial(context.Background(), UpsertMaterialCommand{
+		ActorID: " admin ",
+		Material: MaterialSummary{
+			ID:       " mat_wood ",
+			Name:     " Maple ",
+			Category: " wood ",
+			Inventory: MaterialInventory{
+				SKU:         " mat-wood ",
+				SafetyStock: 5,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("upsert material: %v", err)
+	}
+	if repo.materialUpsertInput.ID != "mat_wood" {
+		t.Fatalf("expected trimmed id mat_wood got %s", repo.materialUpsertInput.ID)
+	}
+	if inventory.configureCmd.SKU != "MAT-WOOD" {
+		t.Fatalf("expected inventory sync to use sku MAT-WOOD got %s", inventory.configureCmd.SKU)
+	}
+	if inventory.configureCmd.ProductRef != "/materials/mat_wood" {
+		t.Fatalf("expected product ref /materials/mat_wood got %s", inventory.configureCmd.ProductRef)
+	}
+	if result.ID != "mat_wood" || result.Name != "Maple" {
+		t.Fatalf("unexpected result %#v", result)
+	}
+	if len(audit.records) == 0 {
+		t.Fatalf("expected audit records, got none")
+	}
+}
+
+func TestCatalogServiceUpsertMaterialValidatesInput(t *testing.T) {
+	repo := &stubCatalogRepository{}
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: repo})
+	if err != nil {
+		t.Fatalf("new catalog service: %v", err)
+	}
+	_, err = svc.UpsertMaterial(context.Background(), UpsertMaterialCommand{Material: MaterialSummary{}})
+	if err == nil {
+		t.Fatalf("expected validation error when id missing")
+	}
+	_, err = svc.UpsertMaterial(context.Background(), UpsertMaterialCommand{
+		Material: MaterialSummary{
+			ID:       "mat_stock",
+			Name:     "Maple",
+			Category: "wood",
+			Inventory: MaterialInventory{
+				SafetyStock: 3,
+			},
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected error when safety stock set without sku")
+	}
+}
+
+func TestCatalogServiceDeleteMaterialRecordsAudit(t *testing.T) {
+	repo := &stubCatalogRepository{
+		materialGet: domain.Material{MaterialSummary: domain.MaterialSummary{ID: "mat_wood", Name: "Maple", Category: "wood", IsAvailable: true}},
+		productListResp: domain.CursorPage[domain.ProductSummary]{
+			Items: []domain.ProductSummary{{ID: "prod-1"}},
+		},
+	}
+	audit := &stubAuditLogService{}
+	now := time.Date(2024, time.May, 1, 8, 0, 0, 0, time.UTC)
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: repo, Audit: audit, Clock: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("new catalog service: %v", err)
+	}
+	if err := svc.DeleteMaterial(context.Background(), DeleteMaterialCommand{MaterialID: "mat_wood", ActorID: "admin"}); err != nil {
+		t.Fatalf("delete material: %v", err)
+	}
+	if repo.materialDeleteID != "mat_wood" {
+		t.Fatalf("expected repo delete id mat_wood got %s", repo.materialDeleteID)
+	}
+	if len(audit.records) == 0 {
+		t.Fatalf("expected audit records on delete")
+	}
+}
+
 type stubCatalogRepository struct {
 	listFilter         repositories.TemplateFilter
 	listResp           domain.CursorPage[domain.TemplateSummary]
@@ -605,23 +712,28 @@ type stubCatalogRepository struct {
 	productGetPublished     domain.Product
 	productGetPublishedErr  error
 
-	getID           string
-	getTemplate     domain.Template
-	getErr          error
-	fontGetID       string
-	fontGet         domain.Font
-	fontGetErr      error
-	fontUpsertInput domain.FontSummary
-	fontUpsertResp  domain.FontSummary
-	fontUpsertErr   error
-	fontDeleteID    string
-	fontDeleteErr   error
-	materialGetID   string
-	materialGet     domain.Material
-	materialGetErr  error
-	productGetID    string
-	productGet      domain.Product
-	productGetErr   error
+	getID               string
+	getTemplate         domain.Template
+	getErr              error
+	fontGetID           string
+	fontGet             domain.Font
+	fontGetErr          error
+	fontUpsertInput     domain.FontSummary
+	fontUpsertResp      domain.FontSummary
+	fontUpsertErr       error
+	fontDeleteID        string
+	fontDeleteErr       error
+	materialGetID       string
+	materialGet         domain.Material
+	materialGetErr      error
+	materialUpsertInput domain.MaterialSummary
+	materialUpsertResp  domain.MaterialSummary
+	materialUpsertErr   error
+	materialDeleteID    string
+	materialDeleteErr   error
+	productGetID        string
+	productGet          domain.Product
+	productGetErr       error
 
 	upsertInput  domain.Template
 	upsertResult domain.Template
@@ -743,12 +855,20 @@ func (s *stubCatalogRepository) GetMaterial(_ context.Context, materialID string
 	return s.materialGet, s.materialGetErr
 }
 
-func (s *stubCatalogRepository) UpsertMaterial(context.Context, domain.MaterialSummary) (domain.MaterialSummary, error) {
-	return domain.MaterialSummary{}, errors.New("not implemented")
+func (s *stubCatalogRepository) UpsertMaterial(_ context.Context, material domain.MaterialSummary) (domain.MaterialSummary, error) {
+	s.materialUpsertInput = material
+	if s.materialUpsertErr != nil {
+		return domain.MaterialSummary{}, s.materialUpsertErr
+	}
+	if s.materialUpsertResp.ID != "" {
+		return s.materialUpsertResp, nil
+	}
+	return material, nil
 }
 
-func (s *stubCatalogRepository) DeleteMaterial(context.Context, string) error {
-	return errors.New("not implemented")
+func (s *stubCatalogRepository) DeleteMaterial(_ context.Context, materialID string) error {
+	s.materialDeleteID = materialID
+	return s.materialDeleteErr
 }
 
 func (s *stubCatalogRepository) ListProducts(_ context.Context, filter repositories.ProductFilter) (domain.CursorPage[domain.ProductSummary], error) {
@@ -815,4 +935,33 @@ func (s *stubAuditLogService) Record(_ context.Context, record AuditLogRecord) {
 
 func (s *stubAuditLogService) List(context.Context, AuditLogFilter) (domain.CursorPage[domain.AuditLogEntry], error) {
 	return domain.CursorPage[domain.AuditLogEntry]{}, nil
+}
+
+type stubInventorySafetyService struct {
+	configureCmd ConfigureSafetyStockCommand
+	configureErr error
+}
+
+func (s *stubInventorySafetyService) ReserveStocks(context.Context, InventoryReserveCommand) (InventoryReservation, error) {
+	return InventoryReservation{}, errors.New("not implemented")
+}
+
+func (s *stubInventorySafetyService) CommitReservation(context.Context, InventoryCommitCommand) (InventoryReservation, error) {
+	return InventoryReservation{}, errors.New("not implemented")
+}
+
+func (s *stubInventorySafetyService) ReleaseReservation(context.Context, InventoryReleaseCommand) (InventoryReservation, error) {
+	return InventoryReservation{}, errors.New("not implemented")
+}
+
+func (s *stubInventorySafetyService) ListLowStock(context.Context, InventoryLowStockFilter) (domain.CursorPage[InventorySnapshot], error) {
+	return domain.CursorPage[InventorySnapshot]{}, nil
+}
+
+func (s *stubInventorySafetyService) ConfigureSafetyStock(_ context.Context, cmd ConfigureSafetyStockCommand) (InventoryStock, error) {
+	s.configureCmd = cmd
+	if s.configureErr != nil {
+		return InventoryStock{}, s.configureErr
+	}
+	return InventoryStock{SKU: cmd.SKU, SafetyStock: cmd.SafetyStock}, nil
 }

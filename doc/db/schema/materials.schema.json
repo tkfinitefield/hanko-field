@@ -55,6 +55,34 @@
       "description": "画像URL（署名URL可）。",
       "items": { "type": "string", "format": "uri" }
     },
+    "supplier": {
+      "type": "object",
+      "description": "調達先メタデータ。",
+      "additionalProperties": false,
+      "properties": {
+        "reference": { "type": "string", "description": "仕入先リファレンス/コード。" },
+        "name": { "type": "string", "description": "仕入先名。" },
+        "contactEmail": { "type": "string", "format": "email", "description": "担当者メールアドレス。" },
+        "contactPhone": { "type": "string", "description": "担当者電話番号。" },
+        "leadTimeDays": { "type": "integer", "minimum": 0, "description": "発注からのリードタイム（日）。" },
+        "minimumOrderQuantity": { "type": "integer", "minimum": 0, "description": "最小発注数量。" },
+        "unitCostCents": { "type": "integer", "minimum": 0, "description": "仕入単価（最小通貨単位）。" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$", "description": "仕入通貨（ISO 4217）。" },
+        "notes": { "type": "string", "description": "備考。" }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "description": "在庫関連メタデータ。",
+      "additionalProperties": false,
+      "properties": {
+        "sku": { "type": "string", "description": "原材料SKU。" },
+        "safetyStock": { "type": "integer", "minimum": 0, "description": "安全在庫。" },
+        "reorderPoint": { "type": "integer", "minimum": 0, "description": "発注点。" },
+        "reorderQuantity": { "type": "integer", "minimum": 0, "description": "発注ロット。" },
+        "warehouse": { "type": "string", "description": "主在庫ロケーション。" }
+      }
+    },
     "isActive": {
       "type": "boolean",
       "description": "販売・表示対象か。false は非表示。"

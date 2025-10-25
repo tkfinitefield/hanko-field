@@ -106,6 +106,10 @@ func (s *stubInventoryService) ListLowStock(context.Context, InventoryLowStockFi
 	return domain.CursorPage[InventorySnapshot]{}, errors.New("not implemented")
 }
 
+func (s *stubInventoryService) ConfigureSafetyStock(context.Context, ConfigureSafetyStockCommand) (InventoryStock, error) {
+	return InventoryStock{}, errors.New("not implemented")
+}
+
 type captureOrderEvents struct {
 	events []OrderEvent
 }
