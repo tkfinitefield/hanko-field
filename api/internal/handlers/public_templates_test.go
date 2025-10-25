@@ -1481,6 +1481,11 @@ type stubCatalogService struct {
 	adminMaterialUpsertErr  error
 	adminMaterialDeleteCmd  services.DeleteMaterialCommand
 	adminMaterialDeleteErr  error
+	adminProductUpsertCmd   services.UpsertProductCommand
+	adminProductUpsertResp  services.Product
+	adminProductUpsertErr   error
+	adminProductDeleteCmd   services.DeleteProductCommand
+	adminProductDeleteErr   error
 }
 
 func (s *stubCatalogService) ListTemplates(_ context.Context, filter services.TemplateFilter) (domain.CursorPage[domain.TemplateSummary], error) {
@@ -1583,12 +1588,20 @@ func (s *stubCatalogService) GetProduct(_ context.Context, productID string) (se
 	return s.productGetProd, nil
 }
 
-func (s *stubCatalogService) UpsertProduct(context.Context, services.UpsertProductCommand) (services.ProductSummary, error) {
-	return services.ProductSummary{}, errors.New("not implemented")
+func (s *stubCatalogService) UpsertProduct(_ context.Context, cmd services.UpsertProductCommand) (services.Product, error) {
+	s.adminProductUpsertCmd = cmd
+	if s.adminProductUpsertErr != nil {
+		return services.Product{}, s.adminProductUpsertErr
+	}
+	if s.adminProductUpsertResp.ID != "" {
+		return s.adminProductUpsertResp, nil
+	}
+	return cmd.Product, nil
 }
 
-func (s *stubCatalogService) DeleteProduct(context.Context, string) error {
-	return errors.New("not implemented")
+func (s *stubCatalogService) DeleteProduct(_ context.Context, cmd services.DeleteProductCommand) error {
+	s.adminProductDeleteCmd = cmd
+	return s.adminProductDeleteErr
 }
 
 type stubPromotionService struct {

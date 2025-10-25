@@ -47,6 +47,9 @@ func (h *AdminCatalogHandlers) Routes(r chi.Router) {
 		rt.Post("/materials", h.createMaterial)
 		rt.Put("/materials/{materialID}", h.updateMaterial)
 		rt.Delete("/materials/{materialID}", h.deleteMaterial)
+		rt.Post("/products", h.createProduct)
+		rt.Put("/products/{productID}", h.updateProduct)
+		rt.Delete("/products/{productID}", h.deleteProduct)
 	})
 }
 
@@ -263,6 +266,70 @@ func (h *AdminCatalogHandlers) deleteMaterial(w http.ResponseWriter, r *http.Req
 	}
 	if err := h.catalog.DeleteMaterial(ctx, services.DeleteMaterialCommand{MaterialID: materialID, ActorID: identity.UID}); err != nil {
 		writeCatalogError(ctx, w, err, "material")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *AdminCatalogHandlers) createProduct(w http.ResponseWriter, r *http.Request) {
+	h.saveProduct(w, r, "")
+}
+
+func (h *AdminCatalogHandlers) updateProduct(w http.ResponseWriter, r *http.Request) {
+	productID := chi.URLParam(r, "productID")
+	h.saveProduct(w, r, productID)
+}
+
+func (h *AdminCatalogHandlers) saveProduct(w http.ResponseWriter, r *http.Request, productID string) {
+	ctx := r.Context()
+	if h.catalog == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "catalog service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	product, err := decodeAdminProductRequest(r, productID)
+	if err != nil {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+	result, err := h.catalog.UpsertProduct(ctx, services.UpsertProductCommand{
+		Product: product,
+		ActorID: identity.UID,
+	})
+	if err != nil {
+		writeCatalogError(ctx, w, err, "product")
+		return
+	}
+	response := newAdminProductResponse(result)
+	status := http.StatusOK
+	if r.Method == http.MethodPost {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, response)
+}
+
+func (h *AdminCatalogHandlers) deleteProduct(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.catalog == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "catalog service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	productID := strings.TrimSpace(chi.URLParam(r, "productID"))
+	if productID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "product id is required", http.StatusBadRequest))
+		return
+	}
+	if err := h.catalog.DeleteProduct(ctx, services.DeleteProductCommand{ProductID: productID, ActorID: identity.UID}); err != nil {
+		writeCatalogError(ctx, w, err, "product")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -720,6 +787,264 @@ func newAdminMaterialResponse(material services.MaterialSummary) adminMaterialRe
 	}
 	if payload := materialInventoryToResponse(material.Inventory); payload != nil {
 		resp.Inventory = payload
+	}
+	return resp
+}
+
+type adminProductRequest struct {
+	ID                    string                         `json:"id"`
+	SKU                   string                         `json:"sku"`
+	Name                  string                         `json:"name"`
+	Description           string                         `json:"description"`
+	Shape                 string                         `json:"shape"`
+	SizesMm               []int                          `json:"sizes_mm"`
+	DefaultMaterialID     string                         `json:"default_material_id"`
+	MaterialIDs           []string                       `json:"material_ids"`
+	BasePrice             int64                          `json:"base_price"`
+	Currency              string                         `json:"currency"`
+	ImagePaths            []string                       `json:"image_paths"`
+	IsPublished           bool                           `json:"is_published"`
+	IsCustomizable        bool                           `json:"is_customizable"`
+	InventoryStatus       string                         `json:"inventory_status"`
+	CompatibleTemplateIDs []string                       `json:"compatible_template_ids"`
+	LeadTimeDays          int                            `json:"lead_time_days"`
+	PriceTiers            []adminProductPriceTierRequest `json:"price_tiers"`
+	Variants              []adminProductVariantRequest   `json:"variants"`
+	Inventory             *adminProductInventoryRequest  `json:"inventory"`
+	CreatedAt             *string                        `json:"created_at"`
+	UpdatedAt             *string                        `json:"updated_at"`
+}
+
+type adminProductPriceTierRequest struct {
+	MinQuantity int   `json:"min_quantity"`
+	UnitPrice   int64 `json:"unit_price"`
+}
+
+type adminProductVariantRequest struct {
+	Name    string                             `json:"name"`
+	Label   string                             `json:"label"`
+	Options []adminProductVariantOptionRequest `json:"options"`
+}
+
+type adminProductVariantOptionRequest struct {
+	Value        string `json:"value"`
+	Label        string `json:"label"`
+	PriceDelta   int64  `json:"price_delta"`
+	ImagePath    string `json:"image_path"`
+	IsDefault    bool   `json:"is_default"`
+	Availability string `json:"availability"`
+}
+
+type adminProductInventoryRequest struct {
+	InitialStock *int `json:"initial_stock"`
+	SafetyStock  *int `json:"safety_stock"`
+}
+
+type adminProductResponse struct {
+	ID                    string                         `json:"id"`
+	SKU                   string                         `json:"sku"`
+	Name                  string                         `json:"name"`
+	Description           string                         `json:"description,omitempty"`
+	Shape                 string                         `json:"shape,omitempty"`
+	SizesMm               []int                          `json:"sizes_mm,omitempty"`
+	DefaultMaterialID     string                         `json:"default_material_id,omitempty"`
+	MaterialIDs           []string                       `json:"material_ids,omitempty"`
+	BasePrice             int64                          `json:"base_price,omitempty"`
+	Currency              string                         `json:"currency,omitempty"`
+	ImagePaths            []string                       `json:"image_paths,omitempty"`
+	IsPublished           bool                           `json:"is_published"`
+	IsCustomizable        bool                           `json:"is_customizable"`
+	InventoryStatus       string                         `json:"inventory_status,omitempty"`
+	CompatibleTemplateIDs []string                       `json:"compatible_template_ids,omitempty"`
+	LeadTimeDays          int                            `json:"lead_time_days,omitempty"`
+	PriceTiers            []adminProductPriceTierPayload `json:"price_tiers,omitempty"`
+	Variants              []adminProductVariantPayload   `json:"variants,omitempty"`
+	Inventory             *adminProductInventoryPayload  `json:"inventory,omitempty"`
+	CreatedAt             string                         `json:"created_at,omitempty"`
+	UpdatedAt             string                         `json:"updated_at,omitempty"`
+}
+
+type adminProductPriceTierPayload struct {
+	MinQuantity int   `json:"min_quantity"`
+	UnitPrice   int64 `json:"unit_price"`
+}
+
+type adminProductVariantPayload struct {
+	Name    string                             `json:"name"`
+	Label   string                             `json:"label,omitempty"`
+	Options []adminProductVariantOptionPayload `json:"options"`
+}
+
+type adminProductVariantOptionPayload struct {
+	Value        string `json:"value"`
+	Label        string `json:"label,omitempty"`
+	PriceDelta   int64  `json:"price_delta,omitempty"`
+	ImagePath    string `json:"image_path,omitempty"`
+	IsDefault    bool   `json:"is_default,omitempty"`
+	Availability string `json:"availability,omitempty"`
+}
+
+type adminProductInventoryPayload struct {
+	InitialStock int `json:"initial_stock,omitempty"`
+	SafetyStock  int `json:"safety_stock,omitempty"`
+}
+
+func decodeAdminProductRequest(r *http.Request, overrideID string) (services.Product, error) {
+	limited := io.LimitReader(r.Body, maxCatalogRequestBody)
+	defer r.Body.Close()
+	decoder := json.NewDecoder(limited)
+	decoder.DisallowUnknownFields()
+
+	var req adminProductRequest
+	if err := decoder.Decode(&req); err != nil {
+		if errors.Is(err, io.EOF) {
+			return services.Product{}, errors.New("request body required")
+		}
+		return services.Product{}, fmt.Errorf("invalid request body: %w", err)
+	}
+
+	product := services.Product{
+		ProductSummary: services.ProductSummary{
+			ID:                    strings.TrimSpace(req.ID),
+			SKU:                   strings.TrimSpace(req.SKU),
+			Name:                  req.Name,
+			Description:           req.Description,
+			Shape:                 req.Shape,
+			SizesMm:               copyIntSlice(req.SizesMm),
+			DefaultMaterialID:     strings.TrimSpace(req.DefaultMaterialID),
+			MaterialIDs:           copyStringSlice(req.MaterialIDs),
+			BasePrice:             req.BasePrice,
+			Currency:              strings.ToUpper(strings.TrimSpace(req.Currency)),
+			ImagePaths:            copyStringSlice(req.ImagePaths),
+			IsPublished:           req.IsPublished,
+			IsCustomizable:        req.IsCustomizable,
+			InventoryStatus:       req.InventoryStatus,
+			CompatibleTemplateIDs: copyStringSlice(req.CompatibleTemplateIDs),
+			LeadTimeDays:          req.LeadTimeDays,
+		},
+	}
+	if strings.TrimSpace(overrideID) != "" {
+		product.ID = strings.TrimSpace(overrideID)
+	}
+	if req.CreatedAt != nil {
+		created, err := parseTimePointer(req.CreatedAt)
+		if err != nil {
+			return services.Product{}, err
+		}
+		if !created.IsZero() {
+			product.CreatedAt = created
+		}
+	}
+	if req.UpdatedAt != nil {
+		updated, err := parseTimePointer(req.UpdatedAt)
+		if err != nil {
+			return services.Product{}, err
+		}
+		if !updated.IsZero() {
+			product.UpdatedAt = updated
+		}
+	}
+	if len(req.PriceTiers) > 0 {
+		product.PriceTiers = make([]services.ProductPriceTier, 0, len(req.PriceTiers))
+		for _, tier := range req.PriceTiers {
+			product.PriceTiers = append(product.PriceTiers, services.ProductPriceTier{
+				MinQuantity: tier.MinQuantity,
+				UnitPrice:   tier.UnitPrice,
+			})
+		}
+	}
+	if len(req.Variants) > 0 {
+		product.Variants = make([]services.ProductVariant, 0, len(req.Variants))
+		for _, variant := range req.Variants {
+			options := make([]services.ProductVariantOption, 0, len(variant.Options))
+			for _, option := range variant.Options {
+				options = append(options, services.ProductVariantOption{
+					Value:        option.Value,
+					Label:        option.Label,
+					PriceDelta:   option.PriceDelta,
+					ImagePath:    option.ImagePath,
+					IsDefault:    option.IsDefault,
+					Availability: option.Availability,
+				})
+			}
+			product.Variants = append(product.Variants, services.ProductVariant{
+				Name:    variant.Name,
+				Label:   variant.Label,
+				Options: options,
+			})
+		}
+	}
+	if req.Inventory != nil {
+		if req.Inventory.SafetyStock != nil {
+			product.Inventory.SafetyStock = *req.Inventory.SafetyStock
+		}
+		if req.Inventory.InitialStock != nil {
+			product.Inventory.InitialStock = *req.Inventory.InitialStock
+		}
+	}
+	return product, nil
+}
+
+func newAdminProductResponse(product services.Product) adminProductResponse {
+	resp := adminProductResponse{
+		ID:                    product.ID,
+		SKU:                   product.SKU,
+		Name:                  product.Name,
+		Description:           product.Description,
+		Shape:                 product.Shape,
+		SizesMm:               copyIntSlice(product.SizesMm),
+		DefaultMaterialID:     product.DefaultMaterialID,
+		MaterialIDs:           copyStringSlice(product.MaterialIDs),
+		BasePrice:             product.BasePrice,
+		Currency:              product.Currency,
+		ImagePaths:            copyStringSlice(product.ImagePaths),
+		IsPublished:           product.IsPublished,
+		IsCustomizable:        product.IsCustomizable,
+		InventoryStatus:       product.InventoryStatus,
+		CompatibleTemplateIDs: copyStringSlice(product.CompatibleTemplateIDs),
+		LeadTimeDays:          product.LeadTimeDays,
+	}
+	if len(product.PriceTiers) > 0 {
+		resp.PriceTiers = make([]adminProductPriceTierPayload, 0, len(product.PriceTiers))
+		for _, tier := range product.PriceTiers {
+			resp.PriceTiers = append(resp.PriceTiers, adminProductPriceTierPayload{
+				MinQuantity: tier.MinQuantity,
+				UnitPrice:   tier.UnitPrice,
+			})
+		}
+	}
+	if len(product.Variants) > 0 {
+		resp.Variants = make([]adminProductVariantPayload, 0, len(product.Variants))
+		for _, variant := range product.Variants {
+			options := make([]adminProductVariantOptionPayload, 0, len(variant.Options))
+			for _, option := range variant.Options {
+				options = append(options, adminProductVariantOptionPayload{
+					Value:        option.Value,
+					Label:        option.Label,
+					PriceDelta:   option.PriceDelta,
+					ImagePath:    option.ImagePath,
+					IsDefault:    option.IsDefault,
+					Availability: option.Availability,
+				})
+			}
+			resp.Variants = append(resp.Variants, adminProductVariantPayload{
+				Name:    variant.Name,
+				Label:   variant.Label,
+				Options: options,
+			})
+		}
+	}
+	if !product.CreatedAt.IsZero() {
+		resp.CreatedAt = formatTimestamp(product.CreatedAt)
+	}
+	if !product.UpdatedAt.IsZero() {
+		resp.UpdatedAt = formatTimestamp(product.UpdatedAt)
+	}
+	if product.Inventory.InitialStock > 0 || product.Inventory.SafetyStock > 0 {
+		resp.Inventory = &adminProductInventoryPayload{
+			InitialStock: product.Inventory.InitialStock,
+			SafetyStock:  product.Inventory.SafetyStock,
+		}
 	}
 	return resp
 }

@@ -289,7 +289,10 @@ func TestInventoryServiceConfigureSafetyStock(t *testing.T) {
 		if cfg.SafetyStock != 6 {
 			t.Fatalf("expected safety stock 6 got %d", cfg.SafetyStock)
 		}
-		return domain.InventoryStock{SKU: cfg.SKU, ProductRef: cfg.ProductRef, SafetyStock: cfg.SafetyStock}, nil
+		if cfg.InitialOnHand == nil || *cfg.InitialOnHand != 25 {
+			t.Fatalf("expected initial stock pointer 25 got %#v", cfg.InitialOnHand)
+		}
+		return domain.InventoryStock{SKU: cfg.SKU, ProductRef: cfg.ProductRef, SafetyStock: cfg.SafetyStock, OnHand: *cfg.InitialOnHand}, nil
 	}
 	var logged map[string]any
 	svc, err := NewInventoryService(InventoryServiceDeps{
@@ -301,19 +304,24 @@ func TestInventoryServiceConfigureSafetyStock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new inventory service: %v", err)
 	}
+	initial := 25
 	stock, err := svc.ConfigureSafetyStock(context.Background(), ConfigureSafetyStockCommand{
-		SKU:         " MAT-001 ",
-		ProductRef:  " /materials/mat_001 ",
-		SafetyStock: 6,
+		SKU:           " MAT-001 ",
+		ProductRef:    " /materials/mat_001 ",
+		SafetyStock:   6,
+		InitialOnHand: &initial,
 	})
 	if err != nil {
 		t.Fatalf("configure safety stock: %v", err)
 	}
-	if stock.SKU != "MAT-001" || stock.SafetyStock != 6 {
+	if stock.SKU != "MAT-001" || stock.SafetyStock != 6 || stock.OnHand != 25 {
 		t.Fatalf("unexpected stock %+v", stock)
 	}
 	if logged == nil || logged["sku"] != "MAT-001" {
 		t.Fatalf("expected logger fields recorded, got %#v", logged)
+	}
+	if logged["initialOnHand"] != 25 {
+		t.Fatalf("expected logger to capture initial stock 25 got %#v", logged["initialOnHand"])
 	}
 }
 
@@ -328,5 +336,9 @@ func TestInventoryServiceConfigureSafetyStockValidatesInput(t *testing.T) {
 	}
 	if _, err := svc.ConfigureSafetyStock(context.Background(), ConfigureSafetyStockCommand{SKU: "MAT-1", SafetyStock: -1, ProductRef: "/materials/mat_1"}); err == nil {
 		t.Fatalf("expected error for negative safety stock")
+	}
+	initial := -5
+	if _, err := svc.ConfigureSafetyStock(context.Background(), ConfigureSafetyStockCommand{SKU: "MAT-1", SafetyStock: 1, ProductRef: "/materials/mat_1", InitialOnHand: &initial}); err == nil {
+		t.Fatalf("expected error for negative initial stock")
 	}
 }

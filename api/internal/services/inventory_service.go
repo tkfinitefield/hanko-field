@@ -263,21 +263,30 @@ func (s *inventoryService) ConfigureSafetyStock(ctx context.Context, cmd Configu
 	if cmd.SafetyStock < 0 {
 		return InventoryStock{}, fmt.Errorf("%w: safety stock must be >= 0", ErrInventoryInvalidInput)
 	}
+	if cmd.InitialOnHand != nil && *cmd.InitialOnHand < 0 {
+		return InventoryStock{}, fmt.Errorf("%w: initial stock must be >= 0", ErrInventoryInvalidInput)
+	}
+	now := s.now()
 	stock, err := s.repo.ConfigureSafetyStock(ctx, repositories.InventorySafetyStockConfig{
-		SKU:         sku,
-		ProductRef:  productRef,
-		SafetyStock: cmd.SafetyStock,
-		Now:         s.now(),
+		SKU:           sku,
+		ProductRef:    productRef,
+		SafetyStock:   cmd.SafetyStock,
+		InitialOnHand: cmd.InitialOnHand,
+		Now:           now,
 	})
 	if err != nil {
 		return InventoryStock{}, s.mapRepositoryError(err)
 	}
 	if s.logger != nil {
-		s.logger(ctx, "inventory.configureSafety", map[string]any{
+		fields := map[string]any{
 			"sku":         sku,
 			"productRef":  productRef,
 			"safetyStock": stock.SafetyStock,
-		})
+		}
+		if cmd.InitialOnHand != nil {
+			fields["initialOnHand"] = *cmd.InitialOnHand
+		}
+		s.logger(ctx, "inventory.configureSafety", fields)
 	}
 	return InventoryStock(stock), nil
 }

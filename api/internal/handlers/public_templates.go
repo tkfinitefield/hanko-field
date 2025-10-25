@@ -1259,6 +1259,9 @@ func writeCatalogError(ctx context.Context, w http.ResponseWriter, err error, re
 	case errors.Is(err, services.ErrCatalogMaterialConflict):
 		httpx.WriteError(ctx, w, httpx.NewError(fmt.Sprintf("%s_conflict", codePrefix), err.Error(), http.StatusConflict))
 		return
+	case errors.Is(err, services.ErrCatalogProductConflict):
+		httpx.WriteError(ctx, w, httpx.NewError(fmt.Sprintf("%s_conflict", codePrefix), err.Error(), http.StatusConflict))
+		return
 	}
 
 	var repoErr repositories.RepositoryError

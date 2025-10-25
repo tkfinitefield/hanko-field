@@ -424,6 +424,9 @@ func (r *InventoryRepository) ConfigureSafetyStock(ctx context.Context, cfg repo
 	if cfg.SafetyStock < 0 {
 		return domain.InventoryStock{}, repositories.NewInventoryError(repositories.InventoryErrorUnknown, "inventory configure safety: safety stock must be >= 0", nil)
 	}
+	if cfg.InitialOnHand != nil && *cfg.InitialOnHand < 0 {
+		return domain.InventoryStock{}, repositories.NewInventoryError(repositories.InventoryErrorUnknown, "inventory configure safety: initial stock must be >= 0", nil)
+	}
 	productRef := strings.TrimSpace(cfg.ProductRef)
 	now := cfg.Now.UTC()
 	var updated domain.InventoryStock
@@ -447,6 +450,9 @@ func (r *InventoryRepository) ConfigureSafetyStock(ctx context.Context, cfg repo
 		}
 		doc.SKU = sku
 		doc.SafetyStock = cfg.SafetyStock
+		if cfg.InitialOnHand != nil {
+			doc.OnHand = *cfg.InitialOnHand
+		}
 		doc.UpdatedAt = now
 		doc.recalculate()
 		if err := tx.Set(stockRef, doc); err != nil {

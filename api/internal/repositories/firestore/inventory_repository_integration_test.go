@@ -203,11 +203,13 @@ func TestInventoryRepositoryIntegration(t *testing.T) {
 		t.Fatalf("expected negative safety delta, got %d", lowPage.Items[0].SafetyDelta)
 	}
 
+	initial := 12
 	configured, err := repo.ConfigureSafetyStock(ctx, repositories.InventorySafetyStockConfig{
-		SKU:         "SKU-001",
-		ProductRef:  "/materials/mat_wood",
-		SafetyStock: 8,
-		Now:         now.Add(5 * time.Minute),
+		SKU:           "SKU-001",
+		ProductRef:    "/materials/mat_wood",
+		SafetyStock:   8,
+		InitialOnHand: &initial,
+		Now:           now.Add(5 * time.Minute),
 	})
 	if err != nil {
 		t.Fatalf("configure safety stock existing: %v", err)
@@ -215,16 +217,18 @@ func TestInventoryRepositoryIntegration(t *testing.T) {
 	if configured.SafetyStock != 8 {
 		t.Fatalf("expected updated safety stock 8 got %d", configured.SafetyStock)
 	}
+	newInitial := 5
 	created, err := repo.ConfigureSafetyStock(ctx, repositories.InventorySafetyStockConfig{
-		SKU:         "MAT-002",
-		ProductRef:  "/materials/mat_002",
-		SafetyStock: 4,
-		Now:         now.Add(6 * time.Minute),
+		SKU:           "MAT-002",
+		ProductRef:    "/materials/mat_002",
+		SafetyStock:   4,
+		InitialOnHand: &newInitial,
+		Now:           now.Add(6 * time.Minute),
 	})
 	if err != nil {
 		t.Fatalf("configure safety stock new: %v", err)
 	}
-	if created.SKU != "MAT-002" || created.SafetyStock != 4 {
+	if created.SKU != "MAT-002" || created.SafetyStock != 4 || created.OnHand != 5 {
 		t.Fatalf("expected new stock for MAT-002, got %+v", created)
 	}
 }

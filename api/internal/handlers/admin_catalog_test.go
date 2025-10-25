@@ -444,3 +444,115 @@ func TestAdminCatalogHandlers_CreateMaterialConflict(t *testing.T) {
 		t.Fatalf("expected 409 got %d", resp.Code)
 	}
 }
+
+func TestAdminCatalogHandlers_CreateProduct(t *testing.T) {
+	svc := &stubCatalogService{}
+	svc.adminProductUpsertResp = services.Product{
+		ProductSummary: services.ProductSummary{
+			ID:                "prod_round",
+			SKU:               "SKU-100",
+			Name:              "Round Seal",
+			Shape:             "round",
+			SizesMm:           []int{30},
+			DefaultMaterialID: "mat_wood",
+			MaterialIDs:       []string{"mat_wood"},
+			BasePrice:         5200,
+			Currency:          "JPY",
+			InventoryStatus:   "inventory",
+			LeadTimeDays:      5,
+			IsPublished:       true,
+		},
+		PriceTiers: []services.ProductPriceTier{{MinQuantity: 1, UnitPrice: 5200}},
+		Inventory:  services.ProductInventorySettings{SafetyStock: 4},
+	}
+	handler := NewAdminCatalogHandlers(nil, svc)
+	router := chi.NewRouter()
+	handler.Routes(router)
+	body := map[string]any{
+		"id":                  "prod_round",
+		"sku":                 "SKU-100",
+		"name":                "Round Seal",
+		"shape":               "round",
+		"sizes_mm":            []int{30},
+		"default_material_id": "mat_wood",
+		"material_ids":        []string{"mat_wood"},
+		"base_price":          5200,
+		"currency":            "JPY",
+		"inventory_status":    "inventory",
+		"lead_time_days":      5,
+		"price_tiers": []map[string]any{
+			{"min_quantity": 1, "unit_price": 5200},
+		},
+		"inventory": map[string]any{
+			"safety_stock":  4,
+			"initial_stock": 10,
+		},
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/catalog/products", bytes.NewReader(payload))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "admin", Roles: []string{auth.RoleAdmin}}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201 got %d", resp.Code)
+	}
+	if svc.adminProductUpsertCmd.ActorID != "admin" {
+		t.Fatalf("expected actor admin got %s", svc.adminProductUpsertCmd.ActorID)
+	}
+	var decoded adminProductResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if decoded.ID != "prod_round" || len(decoded.PriceTiers) != 1 {
+		t.Fatalf("unexpected response %#v", decoded)
+	}
+}
+
+func TestAdminCatalogHandlers_UpdateProductUsesPathID(t *testing.T) {
+	svc := &stubCatalogService{}
+	handler := NewAdminCatalogHandlers(nil, svc)
+	router := chi.NewRouter()
+	handler.Routes(router)
+	body := map[string]any{
+		"id":                  "prod_other",
+		"sku":                 "SKU-200",
+		"name":                "Square Seal",
+		"shape":               "square",
+		"sizes_mm":            []int{25},
+		"default_material_id": "mat_steel",
+		"material_ids":        []string{"mat_steel"},
+		"base_price":          6200,
+		"currency":            "JPY",
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPut, "/catalog/products/prod_square", bytes.NewReader(payload))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "editor", Roles: []string{auth.RoleAdmin}}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", resp.Code)
+	}
+	if svc.adminProductUpsertCmd.Product.ID != "prod_square" {
+		t.Fatalf("expected product id from path got %s", svc.adminProductUpsertCmd.Product.ID)
+	}
+}
+
+func TestAdminCatalogHandlers_DeleteProduct(t *testing.T) {
+	svc := &stubCatalogService{}
+	handler := NewAdminCatalogHandlers(nil, svc)
+	router := chi.NewRouter()
+	handler.Routes(router)
+	req := httptest.NewRequest(http.MethodDelete, "/catalog/products/prod_del", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "deleter", Roles: []string{auth.RoleAdmin}}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 got %d", resp.Code)
+	}
+	if svc.adminProductDeleteCmd.ProductID != "prod_del" {
+		t.Fatalf("expected command for prod_del got %s", svc.adminProductDeleteCmd.ProductID)
+	}
+	if svc.adminProductDeleteCmd.ActorID != "deleter" {
+		t.Fatalf("expected actor deleter got %s", svc.adminProductDeleteCmd.ActorID)
+	}
+}

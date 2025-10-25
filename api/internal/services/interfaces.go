@@ -77,6 +77,9 @@ type (
 	Product                   = domain.Product
 	ProductSummary            = domain.ProductSummary
 	ProductPriceTier          = domain.ProductPriceTier
+	ProductVariant            = domain.ProductVariant
+	ProductVariantOption      = domain.ProductVariantOption
+	ProductInventorySettings  = domain.ProductInventorySettings
 	SystemHealthReport        = domain.SystemHealthReport
 	AuditLogEntry             = domain.AuditLogEntry
 	SignedAssetResponse       = domain.SignedAssetResponse
@@ -267,8 +270,8 @@ type CatalogService interface {
 	DeleteMaterial(ctx context.Context, cmd DeleteMaterialCommand) error
 	ListProducts(ctx context.Context, filter ProductFilter) (domain.CursorPage[ProductSummary], error)
 	GetProduct(ctx context.Context, productID string) (Product, error)
-	UpsertProduct(ctx context.Context, cmd UpsertProductCommand) (ProductSummary, error)
-	DeleteProduct(ctx context.Context, productID string) error
+	UpsertProduct(ctx context.Context, cmd UpsertProductCommand) (Product, error)
+	DeleteProduct(ctx context.Context, cmd DeleteProductCommand) error
 }
 
 // AssetService issues signed URLs and coordinates storage metadata syncing.
@@ -825,9 +828,10 @@ type InventoryLowStockFilter struct {
 }
 
 type ConfigureSafetyStockCommand struct {
-	SKU         string
-	ProductRef  string
-	SafetyStock int
+	SKU           string
+	ProductRef    string
+	SafetyStock   int
+	InitialOnHand *int
 }
 
 type ContentGuideFilter struct {
@@ -870,6 +874,11 @@ type DeleteTemplateCommand struct {
 	ActorID    string
 }
 
+type DeleteProductCommand struct {
+	ProductID string
+	ActorID   string
+}
+
 type FontFilter struct {
 	Script        *string
 	IsPremium     *bool
@@ -909,7 +918,7 @@ type ProductFilter struct {
 }
 
 type UpsertProductCommand struct {
-	Product ProductSummary
+	Product Product
 	ActorID string
 }
 

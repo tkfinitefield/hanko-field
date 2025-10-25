@@ -518,6 +518,171 @@ func TestCatalogServiceGetProduct(t *testing.T) {
 	})
 }
 
+func TestCatalogServiceUpsertProductValidations(t *testing.T) {
+	repo := &stubCatalogRepository{
+		materialGet: domain.Material{MaterialSummary: domain.MaterialSummary{ID: "mat_wood"}},
+	}
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: repo})
+	if err != nil {
+		t.Fatalf("new catalog service: %v", err)
+	}
+	base := Product{
+		ProductSummary: domain.ProductSummary{
+			ID:                "prod_round",
+			SKU:               "SKU-100",
+			Name:              "Round 30mm",
+			Shape:             "round",
+			SizesMm:           []int{30},
+			DefaultMaterialID: "mat_wood",
+			MaterialIDs:       []string{"mat_wood"},
+			BasePrice:         5400,
+			Currency:          "JPY",
+			InventoryStatus:   "inventory",
+			LeadTimeDays:      5,
+			IsPublished:       true,
+		},
+	}
+
+	t.Run("ensures default material present in list", func(t *testing.T) {
+		product := base
+		product.MaterialIDs = []string{"mat_bamboo"}
+		if _, err := svc.UpsertProduct(context.Background(), UpsertProductCommand{Product: product}); err == nil {
+			t.Fatalf("expected validation error for default material not included")
+		}
+	})
+
+	t.Run("fails when template missing", func(t *testing.T) {
+		product := base
+		product.CompatibleTemplateIDs = []string{"tpl_missing"}
+		repo.getTemplate = domain.Template{}
+		repo.getErr = stubRepositoryError{notFound: true}
+		if _, err := svc.UpsertProduct(context.Background(), UpsertProductCommand{Product: product}); err == nil {
+			t.Fatalf("expected error when template missing")
+		}
+	})
+}
+
+func TestCatalogServiceUpsertProductConfiguresInventory(t *testing.T) {
+	repo := &stubCatalogRepository{
+		materialGet:         domain.Material{MaterialSummary: domain.MaterialSummary{ID: "mat_steel"}},
+		productFindBySKUErr: stubRepositoryError{notFound: true},
+	}
+	inventory := &stubInventorySafetyService{}
+	svc, err := NewCatalogService(CatalogServiceDeps{
+		Catalog:   repo,
+		Inventory: inventory,
+		Clock: func() time.Time {
+			return time.Date(2024, time.June, 1, 10, 0, 0, 0, time.UTC)
+		},
+	})
+	if err != nil {
+		t.Fatalf("new catalog service: %v", err)
+	}
+	initialStock := 20
+	product := Product{
+		ProductSummary: domain.ProductSummary{
+			ID:                "prod_inv",
+			SKU:               "SKU-INV",
+			Name:              "Inventory Product",
+			Shape:             "square",
+			SizesMm:           []int{20},
+			DefaultMaterialID: "mat_steel",
+			MaterialIDs:       []string{"mat_steel"},
+			BasePrice:         8800,
+			Currency:          "JPY",
+			InventoryStatus:   "inventory",
+			IsPublished:       true,
+		},
+		Inventory: ProductInventorySettings{
+			SafetyStock:  5,
+			InitialStock: initialStock,
+		},
+	}
+	saved, err := svc.UpsertProduct(context.Background(), UpsertProductCommand{
+		Product: product,
+		ActorID: "admin",
+	})
+	if err != nil {
+		t.Fatalf("upsert product: %v", err)
+	}
+	if inventory.configureCmd.SKU != "SKU-INV" {
+		t.Fatalf("expected inventory sku SKU-INV got %s", inventory.configureCmd.SKU)
+	}
+	if inventory.configureCmd.ProductRef != "/products/prod_inv" {
+		t.Fatalf("expected product ref /products/prod_inv got %s", inventory.configureCmd.ProductRef)
+	}
+	if inventory.configureCmd.InitialOnHand == nil || *inventory.configureCmd.InitialOnHand != initialStock {
+		t.Fatalf("expected initial stock pointer %d got %#v", initialStock, inventory.configureCmd.InitialOnHand)
+	}
+	if saved.ID != "prod_inv" || saved.BasePrice != 8800 {
+		t.Fatalf("unexpected saved product %+v", saved)
+	}
+}
+
+func TestCatalogServiceUpsertProductSKUConflict(t *testing.T) {
+	repo := &stubCatalogRepository{
+		materialGet:         domain.Material{MaterialSummary: domain.MaterialSummary{ID: "mat_brass"}},
+		productFindBySKU:    domain.Product{ProductSummary: domain.ProductSummary{ID: "prod_existing", SKU: "SKU-dup"}},
+		productFindBySKUErr: nil,
+	}
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: repo})
+	if err != nil {
+		t.Fatalf("new catalog service: %v", err)
+	}
+	product := Product{
+		ProductSummary: domain.ProductSummary{
+			ID:                "prod_new",
+			SKU:               "SKU-DUP",
+			Name:              "Dup Product",
+			Shape:             "round",
+			SizesMm:           []int{18},
+			DefaultMaterialID: "mat_brass",
+			MaterialIDs:       []string{"mat_brass"},
+			BasePrice:         3200,
+			Currency:          "JPY",
+			InventoryStatus:   "made_to_order",
+		},
+	}
+	if _, err := svc.UpsertProduct(context.Background(), UpsertProductCommand{Product: product}); !errors.Is(err, ErrCatalogProductConflict) {
+		t.Fatalf("expected sku conflict, got %v", err)
+	}
+}
+
+func TestCatalogServiceDeleteProduct(t *testing.T) {
+	repo := &stubCatalogRepository{
+		productGet: domain.Product{
+			ProductSummary: domain.ProductSummary{
+				ID:          "prod_del",
+				SKU:         "SKU-DEL",
+				IsPublished: true,
+				MaterialIDs: []string{"mat_wood"},
+			},
+		},
+		materialGet: domain.Material{MaterialSummary: domain.MaterialSummary{ID: "mat_wood"}},
+	}
+	audit := &stubAuditLogService{}
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: repo, Audit: audit})
+	if err != nil {
+		t.Fatalf("new catalog service: %v", err)
+	}
+	if err := svc.DeleteProduct(context.Background(), DeleteProductCommand{ProductID: "prod_del", ActorID: "admin"}); err != nil {
+		t.Fatalf("delete product: %v", err)
+	}
+	if repo.productUpsertInput.ProductSummary.ID != "prod_del" || repo.productUpsertInput.ProductSummary.IsPublished {
+		t.Fatalf("expected product to be unpublished, got %+v", repo.productUpsertInput.ProductSummary)
+	}
+	foundStateChange := false
+	for _, record := range audit.records {
+		if record.Action == "catalog.product.unpublish" {
+			foundStateChange = true
+			break
+		}
+	}
+	if !foundStateChange {
+		t.Fatalf("expected unpublish audit record, got %#v", audit.records)
+	}
+}
+
 func TestCatalogServiceDeleteTemplate(t *testing.T) {
 	repo := &stubCatalogRepository{
 		getTemplate: domain.Template{
@@ -717,19 +882,27 @@ func TestCatalogServiceDeleteMaterialRecordsAudit(t *testing.T) {
 }
 
 type stubCatalogRepository struct {
-	listFilter         repositories.TemplateFilter
-	listResp           domain.CursorPage[domain.TemplateSummary]
-	listErr            error
-	fontListFilter     repositories.FontFilter
-	fontListResp       domain.CursorPage[domain.FontSummary]
-	fontListErr        error
-	materialListFilter repositories.MaterialFilter
-	materialListResp   domain.CursorPage[domain.MaterialSummary]
-	materialListErr    error
-	productListFilter  repositories.ProductFilter
-	productListResp    domain.CursorPage[domain.ProductSummary]
-	productListPages   map[string]domain.CursorPage[domain.ProductSummary]
-	productListErr     error
+	listFilter          repositories.TemplateFilter
+	listResp            domain.CursorPage[domain.TemplateSummary]
+	listErr             error
+	fontListFilter      repositories.FontFilter
+	fontListResp        domain.CursorPage[domain.FontSummary]
+	fontListErr         error
+	materialListFilter  repositories.MaterialFilter
+	materialListResp    domain.CursorPage[domain.MaterialSummary]
+	materialListErr     error
+	productListFilter   repositories.ProductFilter
+	productListResp     domain.CursorPage[domain.ProductSummary]
+	productListPages    map[string]domain.CursorPage[domain.ProductSummary]
+	productListErr      error
+	productFindBySKU    domain.Product
+	productFindBySKUErr error
+	productFindSKU      string
+	productUpsertInput  domain.Product
+	productUpsertResp   domain.Product
+	productUpsertErr    error
+	productDeleteID     string
+	productDeleteErr    error
 
 	getPublishedID          string
 	getPublished            domain.Template
@@ -947,12 +1120,31 @@ func (s *stubCatalogRepository) GetProduct(_ context.Context, productID string) 
 	return s.productGet, s.productGetErr
 }
 
-func (s *stubCatalogRepository) UpsertProduct(context.Context, domain.ProductSummary) (domain.ProductSummary, error) {
-	return domain.ProductSummary{}, errors.New("not implemented")
+func (s *stubCatalogRepository) FindProductBySKU(_ context.Context, sku string) (domain.Product, error) {
+	s.productFindSKU = sku
+	if s.productFindBySKUErr != nil {
+		return domain.Product{}, s.productFindBySKUErr
+	}
+	if s.productFindBySKU.ID != "" {
+		return s.productFindBySKU, nil
+	}
+	return domain.Product{}, stubRepositoryError{notFound: true}
 }
 
-func (s *stubCatalogRepository) DeleteProduct(context.Context, string) error {
-	return errors.New("not implemented")
+func (s *stubCatalogRepository) UpsertProduct(_ context.Context, product domain.Product) (domain.Product, error) {
+	s.productUpsertInput = product
+	if s.productUpsertErr != nil {
+		return domain.Product{}, s.productUpsertErr
+	}
+	if s.productUpsertResp.ID != "" {
+		return s.productUpsertResp, nil
+	}
+	return product, nil
+}
+
+func (s *stubCatalogRepository) DeleteProduct(_ context.Context, productID string) error {
+	s.productDeleteID = productID
+	return s.productDeleteErr
 }
 
 type stubRepositoryError struct {
@@ -1015,5 +1207,9 @@ func (s *stubInventorySafetyService) ConfigureSafetyStock(_ context.Context, cmd
 	if s.configureErr != nil {
 		return InventoryStock{}, s.configureErr
 	}
-	return InventoryStock{SKU: cmd.SKU, SafetyStock: cmd.SafetyStock}, nil
+	stock := InventoryStock{SKU: cmd.SKU, SafetyStock: cmd.SafetyStock}
+	if cmd.InitialOnHand != nil {
+		stock.OnHand = *cmd.InitialOnHand
+	}
+	return stock, nil
 }

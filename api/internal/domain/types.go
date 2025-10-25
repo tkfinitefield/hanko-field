@@ -858,12 +858,37 @@ type ProductSummary struct {
 type Product struct {
 	ProductSummary
 	PriceTiers []ProductPriceTier
+	Variants   []ProductVariant
+	Inventory  ProductInventorySettings
 }
 
 // ProductPriceTier describes unit pricing for volume tiers.
 type ProductPriceTier struct {
 	MinQuantity int
 	UnitPrice   int64
+}
+
+// ProductVariant groups a set of selectable options such as size or color.
+type ProductVariant struct {
+	Name    string
+	Label   string
+	Options []ProductVariantOption
+}
+
+// ProductVariantOption represents a single selectable value under a variant group.
+type ProductVariantOption struct {
+	Value        string
+	Label        string
+	PriceDelta   int64
+	ImagePath    string
+	IsDefault    bool
+	Availability string
+}
+
+// ProductInventorySettings stores admin-managed inventory configuration.
+type ProductInventorySettings struct {
+	InitialStock int
+	SafetyStock  int
 }
 
 const (

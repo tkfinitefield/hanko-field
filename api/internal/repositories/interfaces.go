@@ -167,10 +167,11 @@ type InventoryLowStockQuery struct {
 
 // InventorySafetyStockConfig updates or creates a stock document with a new safety threshold.
 type InventorySafetyStockConfig struct {
-	SKU         string
-	ProductRef  string
-	SafetyStock int
-	Now         time.Time
+	SKU           string
+	ProductRef    string
+	SafetyStock   int
+	InitialOnHand *int
+	Now           time.Time
 }
 
 // OrderRepository persists order headers and provides query helpers for users and admins.
@@ -297,7 +298,8 @@ type CatalogRepository interface {
 	ListProducts(ctx context.Context, filter ProductFilter) (domain.CursorPage[domain.ProductSummary], error)
 	GetPublishedProduct(ctx context.Context, productID string) (domain.Product, error)
 	GetProduct(ctx context.Context, productID string) (domain.Product, error)
-	UpsertProduct(ctx context.Context, product domain.ProductSummary) (domain.ProductSummary, error)
+	FindProductBySKU(ctx context.Context, sku string) (domain.Product, error)
+	UpsertProduct(ctx context.Context, product domain.Product) (domain.Product, error)
 	DeleteProduct(ctx context.Context, productID string) error
 }
 

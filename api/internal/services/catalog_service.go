@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	domain "github.com/hanko-field/api/internal/domain"
 	"github.com/hanko-field/api/internal/repositories"
@@ -53,6 +55,8 @@ var (
 	ErrCatalogFontInUse = errors.New("catalog service: font in use")
 	// ErrCatalogMaterialConflict indicates a duplicate material ID creation attempt.
 	ErrCatalogMaterialConflict = errors.New("catalog service: material conflict")
+	// ErrCatalogProductConflict indicates SKU collisions or other product constraints.
+	ErrCatalogProductConflict = errors.New("catalog service: product conflict")
 )
 
 // NewCatalogService constructs the catalog service with the supplied dependencies.
@@ -855,22 +859,88 @@ func (s *catalogService) GetProduct(ctx context.Context, productID string) (Prod
 	return Product(product), nil
 }
 
-func (s *catalogService) UpsertProduct(ctx context.Context, cmd UpsertProductCommand) (ProductSummary, error) {
+func (s *catalogService) UpsertProduct(ctx context.Context, cmd UpsertProductCommand) (Product, error) {
 	if s.repo == nil {
-		return ProductSummary{}, ErrCatalogRepositoryMissing
+		return Product{}, ErrCatalogRepositoryMissing
 	}
-	return s.repo.UpsertProduct(ctx, cmd.Product)
+	product := normalizeProduct(cmd.Product)
+	actorID := strings.TrimSpace(cmd.ActorID)
+	if err := s.validateProductInput(ctx, product); err != nil {
+		return Product{}, fmt.Errorf("%w: %s", ErrCatalogInvalidInput, err)
+	}
+
+	var existing Product
+	current, err := s.repo.GetProduct(ctx, product.ID)
+	if err != nil && !isCatalogRepositoryNotFound(err) {
+		return Product{}, err
+	}
+	if err == nil {
+		existing = Product(current)
+	}
+
+	now := s.clock()
+	if existing.ID == "" {
+		if product.CreatedAt.IsZero() {
+			product.CreatedAt = now
+		} else {
+			product.CreatedAt = product.CreatedAt.UTC()
+		}
+	} else {
+		if product.CreatedAt.IsZero() {
+			product.CreatedAt = existing.CreatedAt
+		} else {
+			product.CreatedAt = product.CreatedAt.UTC()
+		}
+	}
+	product.UpdatedAt = now
+
+	if err := s.ensureProductSKUUnique(ctx, product, existing); err != nil {
+		return Product{}, err
+	}
+
+	savedDomain, err := s.repo.UpsertProduct(ctx, domain.Product(product))
+	if err != nil {
+		return Product{}, err
+	}
+	saved := Product(savedDomain)
+
+	if err := s.configureProductInventory(ctx, saved); err != nil {
+		return Product{}, err
+	}
+
+	s.recordProductAudit(ctx, existing, saved, actorID)
+
+	return saved, nil
 }
 
-func (s *catalogService) DeleteProduct(ctx context.Context, productID string) error {
+func (s *catalogService) DeleteProduct(ctx context.Context, cmd DeleteProductCommand) error {
 	if s.repo == nil {
 		return ErrCatalogRepositoryMissing
 	}
-	productID = strings.TrimSpace(productID)
+	productID := strings.TrimSpace(cmd.ProductID)
 	if productID == "" {
 		return errors.New("catalog service: product id is required")
 	}
-	return s.repo.DeleteProduct(ctx, productID)
+	current, err := s.repo.GetProduct(ctx, productID)
+	if err != nil {
+		if isCatalogRepositoryNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	existing := Product(current)
+	if existing.ID == "" || !existing.IsPublished {
+		return nil
+	}
+	before := existing
+	existing.IsPublished = false
+	existing.UpdatedAt = s.clock()
+	savedDomain, err := s.repo.UpsertProduct(ctx, domain.Product(existing))
+	if err != nil {
+		return err
+	}
+	s.recordProductAudit(ctx, before, Product(savedDomain), strings.TrimSpace(cmd.ActorID))
+	return nil
 }
 
 func normalizeFilterPointer(value *string) *string {
@@ -1017,4 +1087,427 @@ func normalizeBoolPointer(value *bool) *bool {
 	}
 	v := *value
 	return &v
+}
+
+func normalizeProduct(product Product) Product {
+	product.ID = strings.TrimSpace(product.ID)
+	product.SKU = strings.ToUpper(strings.TrimSpace(product.SKU))
+	product.Name = strings.TrimSpace(product.Name)
+	product.Description = strings.TrimSpace(product.Description)
+	product.Shape = strings.TrimSpace(product.Shape)
+	product.DefaultMaterialID = strings.TrimSpace(product.DefaultMaterialID)
+	product.InventoryStatus = strings.TrimSpace(product.InventoryStatus)
+	product.Currency = strings.ToUpper(strings.TrimSpace(product.Currency))
+	product.MaterialIDs = normalizeStringList(product.MaterialIDs)
+	product.CompatibleTemplateIDs = normalizeStringList(product.CompatibleTemplateIDs)
+	product.ImagePaths = normalizeStringList(product.ImagePaths)
+	product.SizesMm = normalizeSizeList(product.SizesMm)
+	product.PriceTiers = normalizeProductPriceTiers(product.PriceTiers)
+	product.Variants = normalizeProductVariants(product.Variants)
+	if product.Inventory.InitialStock < 0 {
+		product.Inventory.InitialStock = 0
+	}
+	if product.Inventory.SafetyStock < 0 {
+		product.Inventory.SafetyStock = 0
+	}
+	return product
+}
+
+func normalizeProductPriceTiers(tiers []ProductPriceTier) []ProductPriceTier {
+	if len(tiers) == 0 {
+		return nil
+	}
+	seen := make(map[int]struct{}, len(tiers))
+	filtered := make([]ProductPriceTier, 0, len(tiers))
+	for _, tier := range tiers {
+		if tier.MinQuantity <= 0 || tier.UnitPrice < 0 {
+			continue
+		}
+		if _, ok := seen[tier.MinQuantity]; ok {
+			continue
+		}
+		seen[tier.MinQuantity] = struct{}{}
+		filtered = append(filtered, ProductPriceTier{
+			MinQuantity: tier.MinQuantity,
+			UnitPrice:   tier.UnitPrice,
+		})
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].MinQuantity < filtered[j].MinQuantity
+	})
+	return filtered
+}
+
+func normalizeProductVariants(variants []ProductVariant) []ProductVariant {
+	if len(variants) == 0 {
+		return nil
+	}
+	normalized := make([]ProductVariant, 0, len(variants))
+	for _, variant := range variants {
+		name := strings.TrimSpace(variant.Name)
+		label := strings.TrimSpace(variant.Label)
+		if name == "" && len(variant.Options) == 0 {
+			continue
+		}
+		seen := make(map[string]struct{}, len(variant.Options))
+		options := make([]ProductVariantOption, 0, len(variant.Options))
+		for _, option := range variant.Options {
+			value := strings.TrimSpace(option.Value)
+			if value == "" {
+				continue
+			}
+			key := strings.ToLower(value)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			options = append(options, ProductVariantOption{
+				Value:        value,
+				Label:        strings.TrimSpace(option.Label),
+				PriceDelta:   option.PriceDelta,
+				ImagePath:    strings.TrimSpace(option.ImagePath),
+				IsDefault:    option.IsDefault,
+				Availability: strings.TrimSpace(option.Availability),
+			})
+		}
+		if len(options) == 0 {
+			continue
+		}
+		normalized = append(normalized, ProductVariant{
+			Name:    name,
+			Label:   label,
+			Options: options,
+		})
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
+}
+
+func normalizeStringList(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func normalizeSizeList(values []int) []int {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[int]struct{}, len(values))
+	result := make([]int, 0, len(values))
+	for _, value := range values {
+		if value <= 0 {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	sort.Ints(result)
+	return result
+}
+
+func stringSliceContains(values []string, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, value := range values {
+		if strings.TrimSpace(value) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func isValidCurrency(code string) bool {
+	if len(code) != 3 {
+		return false
+	}
+	for _, r := range code {
+		if !unicode.IsUpper(r) || !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *catalogService) validateProductInput(ctx context.Context, product Product) error {
+	if product.ID == "" {
+		return errors.New("product id is required")
+	}
+	if product.SKU == "" {
+		return errors.New("sku is required")
+	}
+	if product.BasePrice < 0 {
+		return errors.New("base price must be >= 0")
+	}
+	if !isValidCurrency(product.Currency) {
+		return errors.New("currency must be a 3-letter uppercase ISO code")
+	}
+	if len(product.SizesMm) == 0 {
+		return errors.New("at least one size must be provided")
+	}
+	if len(product.MaterialIDs) == 0 {
+		return errors.New("at least one material id must be provided")
+	}
+	if product.DefaultMaterialID == "" {
+		return errors.New("default material id is required")
+	}
+	if !stringSliceContains(product.MaterialIDs, product.DefaultMaterialID) {
+		return fmt.Errorf("default material %s must be included in material_ids", product.DefaultMaterialID)
+	}
+	if product.LeadTimeDays < 0 {
+		return errors.New("lead time days must be >= 0")
+	}
+	if product.Inventory.SafetyStock < 0 {
+		return errors.New("inventory safety stock must be >= 0")
+	}
+	if product.Inventory.InitialStock < 0 {
+		return errors.New("inventory initial stock must be >= 0")
+	}
+	if err := validatePriceTiersInput(product.PriceTiers); err != nil {
+		return err
+	}
+	if err := validateProductVariantsInput(product.Variants); err != nil {
+		return err
+	}
+	if err := s.ensureMaterialsExist(ctx, product.MaterialIDs); err != nil {
+		return err
+	}
+	if err := s.ensureTemplatesExist(ctx, product.CompatibleTemplateIDs); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validatePriceTiersInput(tiers []ProductPriceTier) error {
+	prev := 0
+	for i, tier := range tiers {
+		if tier.MinQuantity <= 0 {
+			return fmt.Errorf("price tier %d min quantity must be > 0", i)
+		}
+		if tier.UnitPrice < 0 {
+			return fmt.Errorf("price tier %d unit price must be >= 0", i)
+		}
+		if prev > 0 && tier.MinQuantity <= prev {
+			return fmt.Errorf("price tiers must be in ascending order")
+		}
+		prev = tier.MinQuantity
+	}
+	return nil
+}
+
+func validateProductVariantsInput(variants []ProductVariant) error {
+	for _, variant := range variants {
+		if strings.TrimSpace(variant.Name) == "" {
+			return errors.New("variant name is required")
+		}
+		if len(variant.Options) == 0 {
+			return fmt.Errorf("variant %s must include at least one option", variant.Name)
+		}
+	}
+	return nil
+}
+
+func (s *catalogService) ensureMaterialsExist(ctx context.Context, ids []string) error {
+	if s.repo == nil || len(ids) == 0 {
+		return nil
+	}
+	checked := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		materialID := strings.TrimSpace(id)
+		if materialID == "" {
+			continue
+		}
+		if _, ok := checked[materialID]; ok {
+			continue
+		}
+		checked[materialID] = struct{}{}
+		if _, err := s.repo.GetMaterial(ctx, materialID); err != nil {
+			if isCatalogRepositoryNotFound(err) {
+				return fmt.Errorf("material %s not found", materialID)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *catalogService) ensureTemplatesExist(ctx context.Context, ids []string) error {
+	if s.repo == nil || len(ids) == 0 {
+		return nil
+	}
+	checked := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		templateID := strings.TrimSpace(id)
+		if templateID == "" {
+			continue
+		}
+		if _, ok := checked[templateID]; ok {
+			continue
+		}
+		checked[templateID] = struct{}{}
+		if _, err := s.repo.GetTemplate(ctx, templateID); err != nil {
+			if isCatalogRepositoryNotFound(err) {
+				return fmt.Errorf("template %s not found", templateID)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *catalogService) ensureProductSKUUnique(ctx context.Context, candidate Product, existing Product) error {
+	if s.repo == nil || strings.TrimSpace(candidate.SKU) == "" {
+		return nil
+	}
+	found, err := s.repo.FindProductBySKU(ctx, candidate.SKU)
+	if err != nil {
+		if isCatalogRepositoryNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if found.ID == "" {
+		return nil
+	}
+	if existing.ID != "" && found.ID == existing.ID {
+		return nil
+	}
+	if found.ID != candidate.ID {
+		return ErrCatalogProductConflict
+	}
+	return nil
+}
+
+func (s *catalogService) configureProductInventory(ctx context.Context, product Product) error {
+	if s.inventory == nil {
+		return nil
+	}
+	sku := strings.TrimSpace(product.SKU)
+	if sku == "" {
+		return nil
+	}
+	if product.Inventory.SafetyStock == 0 && product.Inventory.InitialStock == 0 {
+		return nil
+	}
+	var initial *int
+	if product.Inventory.InitialStock > 0 {
+		value := product.Inventory.InitialStock
+		initial = &value
+	}
+	_, err := s.inventory.ConfigureSafetyStock(ctx, ConfigureSafetyStockCommand{
+		SKU:           sku,
+		ProductRef:    productTargetRef(product.ID),
+		SafetyStock:   product.Inventory.SafetyStock,
+		InitialOnHand: initial,
+	})
+	return err
+}
+
+func productTargetRef(productID string) string {
+	productID = strings.TrimSpace(productID)
+	if productID == "" {
+		return ""
+	}
+	return fmt.Sprintf("/products/%s", productID)
+}
+
+func (s *catalogService) recordProductAudit(ctx context.Context, before Product, after Product, actorID string) {
+	if s.audit == nil {
+		return
+	}
+	actorID = strings.TrimSpace(actorID)
+	action := "catalog.product.update"
+	occurredAt := after.UpdatedAt
+	if before.ID == "" {
+		action = "catalog.product.create"
+		occurredAt = after.CreatedAt
+	}
+	diff := map[string]AuditLogDiff{}
+	if before.IsPublished != after.IsPublished {
+		diff["isPublished"] = AuditLogDiff{Before: before.IsPublished, After: after.IsPublished}
+	}
+	if before.BasePrice != after.BasePrice {
+		diff["basePrice"] = AuditLogDiff{Before: before.BasePrice, After: after.BasePrice}
+	}
+	if before.Currency != after.Currency {
+		diff["currency"] = AuditLogDiff{Before: before.Currency, After: after.Currency}
+	}
+	if before.InventoryStatus != after.InventoryStatus {
+		diff["inventoryStatus"] = AuditLogDiff{Before: before.InventoryStatus, After: after.InventoryStatus}
+	}
+	if before.LeadTimeDays != after.LeadTimeDays {
+		diff["leadTimeDays"] = AuditLogDiff{Before: before.LeadTimeDays, After: after.LeadTimeDays}
+	}
+	if len(diff) == 0 {
+		diff = nil
+	}
+	metadata := map[string]any{
+		"productId":   after.ID,
+		"sku":         after.SKU,
+		"shape":       after.Shape,
+		"materials":   after.MaterialIDs,
+		"templates":   after.CompatibleTemplateIDs,
+		"leadTime":    after.LeadTimeDays,
+		"isPublished": after.IsPublished,
+	}
+	s.audit.Record(ctx, AuditLogRecord{
+		Actor:      actorID,
+		ActorType:  "staff",
+		Action:     action,
+		TargetRef:  productTargetRef(after.ID),
+		Severity:   "info",
+		OccurredAt: occurredAt,
+		Metadata:   metadata,
+		Diff:       diff,
+	})
+
+	if before.IsPublished != after.IsPublished {
+		stateAction := "catalog.product.unpublish"
+		if after.IsPublished {
+			stateAction = "catalog.product.publish"
+		}
+		stateDiff := map[string]AuditLogDiff{
+			"isPublished": {Before: before.IsPublished, After: after.IsPublished},
+		}
+		s.audit.Record(ctx, AuditLogRecord{
+			Actor:      actorID,
+			ActorType:  "staff",
+			Action:     stateAction,
+			TargetRef:  productTargetRef(after.ID),
+			Severity:   "info",
+			OccurredAt: occurredAt,
+			Metadata:   metadata,
+			Diff:       stateDiff,
+		})
+	}
 }
