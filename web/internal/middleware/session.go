@@ -33,6 +33,7 @@ type SessionData struct {
 type CheckoutState struct {
 	ShippingAddressID string           `json:"ship,omitempty"`
 	BillingAddressID  string           `json:"bill,omitempty"`
+	ShippingMethodID  string           `json:"method,omitempty"`
 	Addresses         []SessionAddress `json:"addresses,omitempty"`
 }
 

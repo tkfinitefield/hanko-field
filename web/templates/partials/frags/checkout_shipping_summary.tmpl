@@ -1,0 +1,63 @@
+{{ define "frag_checkout_shipping_summary" }}
+{{ $lang := .Lang }}
+{{ $summary := .Summary }}
+<section class="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" aria-live="polite">
+  <header>
+    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">{{ if eq $lang "ja" }}注文概要{{ else }}Order summary{{ end }}</p>
+    <h2 class="text-xl font-semibold text-gray-900">{{ if eq $lang "ja" }}合計とETA{{ else }}Totals & ETA{{ end }}</h2>
+  </header>
+  <dl class="space-y-3 text-sm text-gray-600">
+    <div class="flex items-center justify-between">
+      <dt>{{ if eq $lang "ja" }}小計{{ else }}Subtotal{{ end }}</dt>
+      <dd class="font-medium text-gray-900">{{ fmtMoney $summary.Estimate.Subtotal "JPY" $lang }}</dd>
+    </div>
+    {{ if gt $summary.Estimate.Discount 0 }}
+      <div class="flex items-center justify-between text-emerald-600">
+        <dt>{{ if eq $lang "ja" }}割引{{ else }}Discount{{ end }}</dt>
+        <dd class="font-semibold">−{{ fmtMoney $summary.Estimate.Discount "JPY" $lang }}</dd>
+      </div>
+    {{ end }}
+    <div class="flex items-center justify-between">
+      <dt>{{ if eq $lang "ja" }}送料{{ else }}Shipping{{ end }} · {{ $summary.Estimate.MethodLabel }}</dt>
+      <dd class="font-medium text-gray-900">{{ if and (eq $summary.Estimate.Shipping 0) (ne $summary.Estimate.ItemsCount 0) }}{{ if eq $lang "ja" }}無料{{ else }}Free{{ end }}{{ else }}{{ fmtMoney $summary.Estimate.Shipping "JPY" $lang }}{{ end }}</dd>
+    </div>
+    <div class="flex items-center justify-between">
+      <dt>{{ if eq $lang "ja" }}税金{{ else }}Tax{{ end }}</dt>
+      <dd class="font-medium text-gray-900">{{ fmtMoney $summary.Estimate.Tax "JPY" $lang }}</dd>
+    </div>
+  </dl>
+  <div class="flex items-center justify-between border-t border-gray-100 pt-3">
+    <div>
+      <p class="text-xs uppercase tracking-wide text-gray-400">{{ if eq $lang "ja" }}支払い総額{{ else }}Grand total{{ end }}</p>
+      <p class="text-xs text-gray-500">{{ if eq $lang "ja" }}{{ $summary.Estimate.ItemsCount }}点 · {{ $summary.Estimate.WeightDisplay }}{{ else }}{{ $summary.Estimate.ItemsCount }} items · {{ $summary.Estimate.WeightDisplay }}{{ end }}</p>
+    </div>
+    <p class="text-2xl font-bold text-gray-900">{{ fmtMoney $summary.Estimate.Total "JPY" $lang }}</p>
+  </div>
+  {{ if $summary.ShippingAddress }}
+    <div class="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-700">
+      <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">{{ if eq $lang "ja" }}配送予定{{ else }}Deliver to{{ end }}</p>
+      <p class="font-semibold text-gray-900">{{ if $summary.ShippingAddress.Label }}{{ $summary.ShippingAddress.Label }}{{ else }}{{ $summary.ShippingAddress.Recipient }}{{ end }}</p>
+      <p>{{ $summary.ShippingAddress.Recipient }}</p>
+      <p>{{ $summary.ShippingAddress.Line1 }}</p>
+      {{ if $summary.ShippingAddress.Line2 }}<p>{{ $summary.ShippingAddress.Line2 }}</p>{{ end }}
+      <p>{{ if $summary.ShippingAddress.PostalCode }}{{ $summary.ShippingAddress.PostalCode }} {{ end }}{{ $summary.ShippingAddress.City }}, {{ $summary.ShippingAddress.Region }}</p>
+      <p>{{ $summary.ShippingAddress.CountryLabel }}</p>
+    </div>
+  {{ end }}
+  {{ if $summary.Notes }}
+    <ul class="space-y-1 text-xs text-gray-500">
+      {{ range $note := $summary.Notes }}<li>• {{ $note }}</li>{{ end }}
+    </ul>
+  {{ end }}
+</section>
+{{ if .Support }}
+  <section class="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 text-sm text-indigo-900">
+    <h3 class="text-base font-semibold">{{ .Support.Title }}</h3>
+    <p class="mt-1 text-sm">{{ .Support.Body }}</p>
+    <a href="{{ .Support.CTAHref }}" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-indigo-700 hover:text-indigo-600">
+      <span>{{ .Support.CTALabel }}</span>
+      {{ template "icon" (dict "Name" "chat-bubble-left-right" "Class" "h-4 w-4") }}
+    </a>
+  </section>
+{{ end }}
+{{ end }}

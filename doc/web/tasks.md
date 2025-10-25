@@ -41,7 +41,7 @@
 ## 5. Cart & Checkout
 - [x] [Implement cart page (`/cart`) with table fragment, promo modal, and estimate refresh fragment.](doc/web/tasks/029-implement-cart-page-cart-with-table-fragment-promo-modal-and-estimate-refresh-fragment.md)
 - [x] [Build checkout address page (`/checkout/address`) with address selection fragment and forms.](doc/web/tasks/030-build-checkout-address-page-checkout-address-with-address-selection-fragment-and-forms.md)
-- [ ] [Implement shipping selection (`/checkout/shipping`) with comparison fragment and integration with estimate API.](doc/web/tasks/031-implement-shipping-selection-checkout-shipping-with-comparison-fragment-and-integration-wi.md)
+- [x] [Implement shipping selection (`/checkout/shipping`) with comparison fragment and integration with estimate API.](doc/web/tasks/031-implement-shipping-selection-checkout-shipping-with-comparison-fragment-and-integration-wi.md)
 - [ ] [Build payment page (`/checkout/payment`) with PSP session initiation and confirmation handling.](doc/web/tasks/032-build-payment-page-checkout-payment-with-psp-session-initiation-and-confirmation-handling.md)
 - [ ] [Implement review page (`/checkout/review`) summarizing order and linking to confirmation action.](doc/web/tasks/033-implement-review-page-checkout-review-summarizing-order-and-linking-to-confirmation-action.md)
 - [ ] [Build completion page (`/checkout/complete`) displaying order number, next steps, and share options.](doc/web/tasks/034-build-completion-page-checkout-complete-displaying-order-number-next-steps-and-share-optio.md)
