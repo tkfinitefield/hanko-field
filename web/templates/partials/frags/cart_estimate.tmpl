@@ -1,0 +1,120 @@
+{{ define "frag_cart_estimate" }}
+{{ $lang := .Lang }}
+{{ $estimate := .Estimate }}
+{{ $promo := .Promo }}
+{{ $shipping := .Shipping }}
+<section class="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" aria-live="polite">
+  <header class="flex items-center justify-between gap-3">
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">{{ if eq $lang "ja" }}合計{{ else }}Summary{{ end }}</p>
+      <h2 class="text-xl font-semibold text-gray-900">{{ if eq $lang "ja" }}見積と内訳{{ else }}Estimate & breakdown{{ end }}</h2>
+    </div>
+    <button type="button"
+            class="text-sm font-medium text-indigo-600 hover:text-indigo-500"
+            hx-get="/modal/cart/promo"
+            hx-target="#modal-root"
+            hx-swap="innerHTML">
+      {{ if eq $lang "ja" }}プロモコード{{ else }}Promo code{{ end }}
+    </button>
+  </header>
+
+  <dl class="space-y-3 text-sm text-gray-600">
+    <div class="flex items-center justify-between">
+      <dt>{{ if eq $lang "ja" }}小計{{ else }}Subtotal{{ end }}</dt>
+      <dd class="font-medium text-gray-900">{{ fmtMoney $estimate.Subtotal "JPY" $lang }}</dd>
+    </div>
+    {{ if gt $estimate.Discount 0 }}
+      <div class="flex items-center justify-between text-emerald-600">
+        <dt>{{ if eq $lang "ja" }}割引{{ else }}Discount{{ end }}</dt>
+        <dd class="font-semibold">−{{ fmtMoney $estimate.Discount "JPY" $lang }}</dd>
+      </div>
+    {{ end }}
+    <div class="flex items-center justify-between">
+      <dt>{{ if eq $lang "ja" }}送料{{ else }}Shipping{{ end }} · {{ $estimate.MethodLabel }}</dt>
+      <dd class="font-medium text-gray-900">{{ if and (eq $estimate.Shipping 0) (ne $estimate.ItemsCount 0) }}{{ if eq $lang "ja" }}無料{{ else }}Free{{ end }}{{ else }}{{ fmtMoney $estimate.Shipping "JPY" $lang }}{{ end }}</dd>
+    </div>
+    <div class="flex items-center justify-between">
+      <dt>{{ if eq $lang "ja" }}税金{{ else }}Tax (10%){{ end }}</dt>
+      <dd class="font-medium text-gray-900">{{ fmtMoney $estimate.Tax "JPY" $lang }}</dd>
+    </div>
+  </dl>
+
+  <div class="flex items-center justify-between border-t border-gray-100 pt-4">
+    <div>
+      <p class="text-xs uppercase tracking-wide text-gray-400">{{ if eq $lang "ja" }}お支払い総額{{ else }}Grand total{{ end }}</p>
+      <p class="text-sm text-gray-500">{{ if eq $lang "ja" }}数量{{ else }}Items{{ end }}: {{ $estimate.ItemsCount }} · {{ if $estimate.WeightDisplay }}{{ $estimate.WeightDisplay }}{{ end }}</p>
+    </div>
+    <p class="text-2xl font-bold text-gray-900">{{ fmtMoney $estimate.Total "JPY" $lang }}</p>
+  </div>
+
+  {{ if and $promo $promo.ActiveCode }}
+    <div class="rounded-lg border {{ if eq $promo.ActiveTone "success" }}border-emerald-200 bg-emerald-50 text-emerald-900{{ else }}border-gray-200 bg-gray-50 text-gray-900{{ end }} px-3 py-2 text-xs">
+      <p class="font-semibold">
+        {{ if $promo.ActiveCode }}
+          {{ $promo.ActiveCode }} · {{ $promo.ActiveLabel }}
+        {{ else }}
+          {{ if eq $lang "ja" }}コード{{ else }}Promo{{ end }}
+        {{ end }}
+      </p>
+      {{ if $promo.ActiveMessage }}
+        <p>{{ $promo.ActiveMessage }}</p>
+      {{ end }}
+    </div>
+  {{ end }}
+
+  <form id="cart-estimator-form"
+        class="space-y-4 rounded-xl border border-gray-100 bg-gray-50 p-4"
+        hx-get="/cart/estimate"
+        hx-target="#cart-estimate-shell"
+        hx-swap="innerHTML"
+        hx-trigger="submit, change delay:400ms">
+    <input type="hidden" name="promo" value="{{ $estimate.PromoCode }}">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <p class="text-sm font-semibold text-gray-900">{{ if eq $lang "ja" }}配送先推定{{ else }}Shipping estimator{{ end }}</p>
+        <p class="text-xs text-gray-500">{{ if $shipping.WeightDisplay }}{{ if eq $lang "ja" }}総重量{{ else }}Weight{{ end }}: {{ $shipping.WeightDisplay }}{{ end }}</p>
+      </div>
+      <button type="submit" class="text-xs font-medium text-gray-500 hover:text-gray-700">{{ if eq $lang "ja" }}再計算{{ else }}Refresh{{ end }}</button>
+    </div>
+    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+      {{ if eq $lang "ja" }}国・地域{{ else }}Destination{{ end }}
+      <select name="country" class="mt-1 w-full rounded-lg border-gray-200 text-sm focus:border-indigo-500 focus:ring-indigo-500">
+        {{ range $shipping.Countries }}
+          <option value="{{ .Value }}" {{ if eq $.Estimate.Country .Value }}selected{{ end }}>{{ .Label }}</option>
+        {{ end }}
+      </select>
+    </label>
+    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+      {{ if eq $lang "ja" }}郵便番号{{ else }}Postal code{{ end }}
+      <input type="text" name="postal" value="{{ $estimate.PostalCode }}" class="mt-1 w-full rounded-lg border-gray-200 text-sm focus:border-indigo-500 focus:ring-indigo-500">
+    </label>
+    <fieldset class="space-y-3">
+      <legend class="text-xs font-semibold uppercase tracking-wide text-gray-500">{{ if eq $lang "ja" }}配送方法{{ else }}Method{{ end }}</legend>
+      {{ range $shipping.Methods }}
+        <label class="flex w-full flex-col gap-1 rounded-lg border p-3 text-sm {{ if .Selected }}border-indigo-300 bg-white shadow-sm{{ else }}border-gray-200 bg-gray-100/60{{ end }}">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-medium text-gray-900">{{ .Label }}</span>
+            <span class="text-sm font-semibold text-gray-900">{{ if and (eq .Cost 0) (ne $.Estimate.ItemsCount 0) }}{{ if eq $lang "ja" }}無料{{ else }}Free{{ end }}{{ else }}{{ fmtMoney .Cost "JPY" $lang }}{{ end }}</span>
+          </div>
+          <p class="text-xs text-gray-500">{{ .ETA }}</p>
+          <p class="text-xs text-gray-500">{{ .Description }}</p>
+          <input type="radio" name="method" value="{{ .ID }}" class="sr-only" {{ if .Selected }}checked{{ end }}>
+        </label>
+      {{ end }}
+    </fieldset>
+  </form>
+
+  <div class="space-y-3">
+    <a href="/checkout/address" class="inline-flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-3 text-base font-semibold text-white hover:bg-indigo-500 {{ if eq $estimate.ItemsCount 0 }}pointer-events-none opacity-50{{ end }}">
+      {{ if eq $lang "ja" }}配送先へ進む{{ else }}Proceed to shipping{{ end }}
+    </a>
+    <p class="text-xs text-gray-500">
+      {{ if eq $lang "ja" }}
+        見積更新: {{ fmtDate $estimate.UpdatedAt $lang }} · {{ $estimate.ETA }}
+      {{ else }}
+        Estimate refreshed {{ fmtDate $estimate.UpdatedAt $lang }} · {{ $estimate.ETA }}
+      {{ end }}
+    </p>
+  </div>
+</section>
+{{ end }}

@@ -117,6 +117,17 @@
     <path d="M17 13V3h4v10z" />
     <path d="M17 13H9l-1 5a2 2 0 002 2h1l2-4 4-3z" />
     <path d="M7 13H4a2 2 0 01-2-2 10 10 0 013-6h6" />
+  {{- else if eq $name "shopping-bag" -}}
+    <path d="M6 7V5a4 4 0 018 0v2" />
+    <path d="M3 7h18l-1.5 12a2 2 0 01-2 1.8H6.5a2 2 0 01-2-1.8L3 7z" />
+    <path d="M8 11a1 1 0 102 0" />
+    <path d="M14 11a1 1 0 102 0" />
+  {{- else if eq $name "trash" -}}
+    <path d="M3 6h18" />
+    <path d="M8 6v12a2 2 0 002 2h4a2 2 0 002-2V6" />
+    <path d="M10 6V4h4v2" />
+  {{- else if eq $name "check" -}}
+    <path d="M5 13l4 4L19 7" />
   {{- else -}}
     <circle cx="12" cy="12" r="9" />
   {{- end }}

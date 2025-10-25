@@ -28,4 +28,5 @@ type PageData struct {
 	DesignAI       any
 	DesignPreview  any
 	DesignVersions any
+	Cart           any
 }

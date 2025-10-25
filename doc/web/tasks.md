@@ -39,7 +39,7 @@
 - [x] [Implement design share/download functionality with signed URL workflow.](doc/web/tasks/028-implement-design-share-download-functionality-with-signed-url-workflow.md)
 
 ## 5. Cart & Checkout
-- [ ] [Implement cart page (`/cart`) with table fragment, promo modal, and estimate refresh fragment.](doc/web/tasks/029-implement-cart-page-cart-with-table-fragment-promo-modal-and-estimate-refresh-fragment.md)
+- [x] [Implement cart page (`/cart`) with table fragment, promo modal, and estimate refresh fragment.](doc/web/tasks/029-implement-cart-page-cart-with-table-fragment-promo-modal-and-estimate-refresh-fragment.md)
 - [ ] [Build checkout address page (`/checkout/address`) with address selection fragment and forms.](doc/web/tasks/030-build-checkout-address-page-checkout-address-with-address-selection-fragment-and-forms.md)
 - [ ] [Implement shipping selection (`/checkout/shipping`) with comparison fragment and integration with estimate API.](doc/web/tasks/031-implement-shipping-selection-checkout-shipping-with-comparison-fragment-and-integration-wi.md)
 - [ ] [Build payment page (`/checkout/payment`) with PSP session initiation and confirmation handling.](doc/web/tasks/032-build-payment-page-checkout-payment-with-psp-session-initiation-and-confirmation-handling.md)
