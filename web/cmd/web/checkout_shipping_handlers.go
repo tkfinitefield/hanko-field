@@ -98,7 +98,7 @@ func CheckoutShippingSummaryFrag(w http.ResponseWriter, r *http.Request) {
 		"Summary": view.Summary,
 		"Support": view.Support,
 	}
-	renderTemplate(w, r, "frag_checkout_shipping_summary", data)
+	renderTemplate(w, r, "frag_checkout_summary", data)
 }
 
 // CheckoutShippingSubmitHandler persists the selected method then advances to payment.

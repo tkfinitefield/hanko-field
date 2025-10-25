@@ -34,6 +34,7 @@ type CheckoutState struct {
 	ShippingAddressID string           `json:"ship,omitempty"`
 	BillingAddressID  string           `json:"bill,omitempty"`
 	ShippingMethodID  string           `json:"method,omitempty"`
+	PaymentMethodID   string           `json:"payMethod,omitempty"`
 	Addresses         []SessionAddress `json:"addresses,omitempty"`
 }
 

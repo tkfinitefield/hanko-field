@@ -61,7 +61,7 @@
     <aside class="space-y-4">
       <div id="checkout-shipping-summary-shell"
            data-shipping-query="{{ $view.Options.Query }}">
-        {{ slot "frag_checkout_shipping_summary" (dict "Lang" $.Lang "Summary" $view.Summary "Support" $view.Support) }}
+        {{ slot "frag_checkout_summary" (dict "Lang" $.Lang "Summary" $view.Summary "Support" $view.Support) }}
       </div>
     </aside>
   </div>
