@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -289,6 +290,11 @@ func parseCheckoutAddressForm(values url.Values) checkoutAddressFormInput {
 	}
 }
 
+var (
+	postalPattern = regexp.MustCompile(`^[0-9A-Za-z\-\s]{3,16}$`)
+	phonePattern  = regexp.MustCompile(`^[0-9+\-\s]{6,20}$`)
+)
+
 func validateCheckoutAddressForm(input checkoutAddressFormInput, lang string) map[string]string {
 	errors := map[string]string{}
 	if input.Label == "" {
@@ -305,9 +311,16 @@ func validateCheckoutAddressForm(input checkoutAddressFormInput, lang string) ma
 	}
 	if input.Postal == "" {
 		errors["postal"] = i18nOrDefault(lang, "checkout.address.error.postal", "Postal code is required.")
+	} else if !postalPattern.MatchString(input.Postal) {
+		errors["postal"] = i18nOrDefault(lang, "checkout.address.error.postal_format", "Postal code format looks off.")
 	}
 	if input.Country == "" {
 		errors["country"] = i18nOrDefault(lang, "checkout.address.error.country", "Select a country.")
+	} else if !isSupportedCountry(input.Country) {
+		errors["country"] = i18nOrDefault(lang, "checkout.address.error.country_supported", "Pick a supported fulfillment country.")
+	}
+	if input.Phone != "" && !phonePattern.MatchString(input.Phone) {
+		errors["phone"] = i18nOrDefault(lang, "checkout.address.error.phone", "Phone number should use digits, spaces, or +/-.")
 	}
 	switch input.Kind {
 	case "shipping", "billing", "both":
@@ -315,6 +328,15 @@ func validateCheckoutAddressForm(input checkoutAddressFormInput, lang string) ma
 		errors["kind"] = i18nOrDefault(lang, "checkout.address.error.kind", "Choose how this address should be used.")
 	}
 	return errors
+}
+
+func isSupportedCountry(code string) bool {
+	switch strings.ToUpper(code) {
+	case "JP", "US", "SG", "AU":
+		return true
+	default:
+		return false
+	}
 }
 
 func detectKindFromAddress(addr *CheckoutAddress, fallback string) string {

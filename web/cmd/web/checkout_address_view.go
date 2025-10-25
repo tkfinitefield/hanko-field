@@ -2,11 +2,13 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net/url"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	mw "finitefield.org/hanko-web/internal/middleware"
@@ -445,10 +447,14 @@ func checkoutKindOptions(lang string) []CartOption {
 	}
 }
 
+var addrFallbackCounter uint64
+
 func newSessionAddressID() string {
-	b := make([]byte, 4)
-	if _, err := rand.Read(b); err != nil {
-		return fmt.Sprintf("addr_%d", time.Now().UnixNano())
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err == nil {
+		return "addr_" + hex.EncodeToString(b)
 	}
-	return "addr_" + hex.EncodeToString(b)
+	seed := fmt.Sprintf("%d-%d", time.Now().UnixNano(), atomic.AddUint64(&addrFallbackCounter, 1))
+	sum := sha256.Sum256([]byte(seed))
+	return "addr_" + hex.EncodeToString(sum[:6])
 }
