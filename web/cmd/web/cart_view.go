@@ -155,11 +155,7 @@ func buildCartView(lang string, q url.Values) CartView {
 	}
 	postal := strings.TrimSpace(q.Get("postal"))
 	if postal == "" {
-		if country == "JP" {
-			postal = "100-0001"
-		} else {
-			postal = "94107"
-		}
+		postal = defaultPostalForCountry(country)
 	}
 	empty := strings.TrimSpace(q.Get("empty")) == "1"
 
@@ -263,6 +259,21 @@ func formatCartWeight(weight int) string {
 		return fmt.Sprintf("%d g", weight)
 	}
 	return fmt.Sprintf("%.1f kg", float64(weight)/1000.0)
+}
+
+func defaultPostalForCountry(country string) string {
+	switch strings.ToUpper(strings.TrimSpace(country)) {
+	case "JP":
+		return "100-0001"
+	case "US":
+		return "94107"
+	case "SG":
+		return "049910"
+	case "AU":
+		return "2000"
+	default:
+		return ""
+	}
 }
 
 func normalizePromoCode(code string) string {

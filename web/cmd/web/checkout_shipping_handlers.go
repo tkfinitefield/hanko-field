@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
 
 	handlersPkg "finitefield.org/hanko-web/internal/handlers"
 	mw "finitefield.org/hanko-web/internal/middleware"
@@ -134,8 +135,9 @@ func CheckoutShippingSubmitHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func isShippingMethodSelectable(options []CheckoutShippingOption, method string) bool {
+	method = strings.TrimSpace(method)
 	if method == "" {
-		method = "standard"
+		return false
 	}
 	for _, opt := range options {
 		if opt.ID == method && !opt.Disabled {

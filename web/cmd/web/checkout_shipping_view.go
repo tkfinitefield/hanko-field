@@ -88,12 +88,18 @@ func buildCheckoutShippingView(lang string, q url.Values, sess *mw.SessionData) 
 	addresses := mergeCheckoutAddresses(lang, sess.Checkout.Addresses)
 	shippingAddr := findCheckoutAddress(addresses, sess.Checkout.ShippingAddressID)
 
-	method := normalizeCartShippingMethod(q.Get("method"))
-	if method == "" {
-		method = normalizeCartShippingMethod(sess.Checkout.ShippingMethodID)
+	requestedMethodRaw := strings.TrimSpace(q.Get("method"))
+	requestedMethod := ""
+	if requestedMethodRaw != "" {
+		requestedMethod = normalizeCartShippingMethod(requestedMethodRaw)
 	}
-	if method == "" {
-		method = "standard"
+	sessionMethod := ""
+	if sess.Checkout.ShippingMethodID != "" {
+		sessionMethod = normalizeCartShippingMethod(sess.Checkout.ShippingMethodID)
+	}
+	chosenMethod := requestedMethod
+	if chosenMethod == "" {
+		chosenMethod = sessionMethod
 	}
 
 	country := strings.ToUpper(strings.TrimSpace(q.Get("country")))
@@ -112,7 +118,7 @@ func buildCheckoutShippingView(lang string, q url.Values, sess *mw.SessionData) 
 		country = "JP"
 	}
 	if postal == "" {
-		postal = defaultPostalFor(country)
+		postal = defaultPostalForCountry(country)
 	}
 
 	query := url.Values{}
@@ -120,20 +126,15 @@ func buildCheckoutShippingView(lang string, q url.Values, sess *mw.SessionData) 
 	if postal != "" {
 		query.Set("postal", postal)
 	}
-	if method != "" {
-		query.Set("method", method)
+	if chosenMethod != "" {
+		query.Set("method", chosenMethod)
 	}
 	if promo != "" {
 		query.Set("promo", promo)
 	}
 
 	cartView := buildCartView(lang, query)
-	selectedMethod := cartView.Estimate.MethodID
-	if selectedMethod == "" {
-		selectedMethod = method
-	}
-
-	options := buildCheckoutShippingOptions(lang, country, cartView.Shipping.Methods, selectedMethod)
+	options := buildCheckoutShippingOptions(lang, country, cartView.Shipping.Methods, chosenMethod)
 	comparison := buildCheckoutShippingComparison(lang, country, cartView.Shipping.WeightDisplay, cartView.Shipping.Methods, cartView.Estimate.UpdatedAt)
 	optionsView := CheckoutShippingOptionsView{
 		Lang:          lang,
@@ -177,7 +178,7 @@ func buildCheckoutShippingView(lang string, q url.Values, sess *mw.SessionData) 
 			MissingAddress: shippingAddr == nil,
 		},
 		ShippingAddress: shippingAddr,
-		SelectedMethod:  selectedMethod,
+		SelectedMethod:  chosenMethod,
 		ContinueURL:     "/checkout/payment",
 		BackURL:         "/checkout/address",
 		LastUpdated:     cartView.Estimate.UpdatedAt,
@@ -231,14 +232,7 @@ func buildCheckoutShippingOptions(lang, country string, methods []CartShippingMe
 			opt.Disabled = true
 			opt.Warning = i18nOrDefault(lang, "checkout.shipping.option.pickup.unavailable", "Pickup is limited to Japan-based orders.")
 		}
-		if method.Cost == 0 && method.ID != "pickup" {
-			opt.Badge = i18nOrDefault(lang, "checkout.shipping.option.promo", "Promo applied")
-			opt.BadgeTone = "success"
-		}
 		opts = append(opts, opt)
-	}
-	if len(opts) > 0 && selected == "" {
-		opts[0].Selected = true
 	}
 	return opts
 }
@@ -327,13 +321,22 @@ func shippingMethodMeta(lang, id string) shippingMethodMetadata {
 }
 
 func localized(lang, ja, en string) string {
-	if lang == "ja" && ja != "" {
+	if lang == "ja" {
+		if ja != "" {
+			return ja
+		}
+		if en != "" {
+			return en
+		}
 		return ja
 	}
 	if en != "" {
 		return en
 	}
-	return ja
+	if ja != "" {
+		return ja
+	}
+	return ""
 }
 
 func buildCheckoutShippingComparison(lang, country, weight string, methods []CartShippingMethod, updated time.Time) CheckoutShippingComparison {
@@ -390,19 +393,4 @@ func labelForCountry(lang, code string) string {
 		return "Unspecified"
 	}
 	return code
-}
-
-func defaultPostalFor(country string) string {
-	switch strings.ToUpper(country) {
-	case "JP":
-		return "100-0001"
-	case "SG":
-		return "049910"
-	case "AU":
-		return "2000"
-	case "US":
-		return "94107"
-	default:
-		return "94107"
-	}
 }
