@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+const (
+	slaDelayWarningMinutes = 60
+	slaDelayBreachMinutes  = 180
+)
+
 func filterTrackingShipments(shipments []TrackingShipment, query TrackingQuery) []TrackingShipment {
 	status := strings.TrimSpace(string(query.Status))
 	carrier := strings.TrimSpace(query.Carrier)
@@ -158,9 +163,9 @@ func deriveSLAFromShipment(sh TrackingShipment) (string, string) {
 		return "完了", "success"
 	case sh.Status == TrackingStatusException:
 		return "SLA逸脱", "danger"
-	case sh.DelayMinutes >= 180:
+	case sh.DelayMinutes >= slaDelayBreachMinutes:
 		return "SLA逸脱", "danger"
-	case sh.DelayMinutes >= 60:
+	case sh.DelayMinutes >= slaDelayWarningMinutes:
 		return "遅延リスク", "warning"
 	default:
 		return "SLA内", "success"

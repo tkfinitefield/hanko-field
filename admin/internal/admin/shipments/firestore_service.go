@@ -14,6 +14,16 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const (
+	syntheticAlertExceptionLabel       = "配送例外が検出されました"
+	syntheticAlertExceptionDesc        = "%d 件が要対応ステータスです。優先的に確認してください。"
+	syntheticAlertExceptionActionLabel = "例外を確認"
+	syntheticAlertDelayLabel           = "SLA遅延リスク"
+	syntheticAlertDelayDesc            = "%d 件がSLA警告ゾーンに入っています。"
+	syntheticAlertDelayActionLabel     = "遅延を確認"
+	defaultAlertActionLabel            = "詳細を見る"
+)
+
 // FirestoreConfig tunes Firestore-backed shipment tracking.
 type FirestoreConfig struct {
 	TrackingCollection     string
@@ -43,6 +53,7 @@ type FirestoreService struct {
 	dataset            trackingDataset
 	alertsMu           sync.RWMutex
 	alertsCache        alertsCache
+	datasetFetchMu     sync.Mutex
 }
 
 type trackingDataset struct {
@@ -137,7 +148,11 @@ func NewFirestoreService(client *firestore.Client, cfg FirestoreConfig) *Firesto
 
 	var metadataRef *firestore.DocumentRef
 	if trimmed := strings.Trim(cfg.MetadataDocPath, "/"); trimmed != "" {
-		metadataRef = documentRefFromPath(client, trimmed)
+		if ref := documentRefFromPath(client, trimmed); ref != nil {
+			metadataRef = ref
+		} else {
+			log.Printf("shipments: invalid metadata doc path %q; metadata cache invalidation disabled", trimmed)
+		}
 	}
 
 	batchSvc := cfg.BatchService
@@ -209,6 +224,23 @@ func (s *FirestoreService) loadDataset(ctx context.Context) (trackingDataset, er
 		return trackingDataset{}, err
 	}
 	now := s.now()
+
+	s.mu.RLock()
+	if s.dataset.isValid(now, meta.version) {
+		cached := s.dataset.withMetadata(meta, now, s.cacheTTL, s.defaultRefresh)
+		s.mu.RUnlock()
+		return cached, nil
+	}
+	s.mu.RUnlock()
+
+	s.datasetFetchMu.Lock()
+	defer s.datasetFetchMu.Unlock()
+
+	meta, err = s.loadMetadata(ctx)
+	if err != nil {
+		return trackingDataset{}, err
+	}
+	now = s.now()
 
 	s.mu.RLock()
 	if s.dataset.isValid(now, meta.version) {
@@ -336,12 +368,25 @@ func (s *FirestoreService) loadAlerts(ctx context.Context) ([]TrackingAlert, err
 	}
 	s.alertsMu.RUnlock()
 
+	alerts, err := s.fetchAlerts(ctx, now)
+	if err != nil {
+		return nil, err
+	}
+
 	s.alertsMu.Lock()
 	defer s.alertsMu.Unlock()
 	if len(s.alertsCache.alerts) > 0 && s.alertsCache.expires.After(now) {
 		return append([]TrackingAlert(nil), s.alertsCache.alerts...), nil
 	}
 
+	s.alertsCache = alertsCache{
+		alerts:  alerts,
+		expires: now.Add(s.cacheTTL),
+	}
+	return append([]TrackingAlert(nil), alerts...), nil
+}
+
+func (s *FirestoreService) fetchAlerts(ctx context.Context, now time.Time) ([]TrackingAlert, error) {
 	iter := s.client.Collection(s.alertsCollection).
 		OrderBy("priority", firestore.Asc).
 		OrderBy("updatedAt", firestore.Desc).
@@ -370,16 +415,11 @@ func (s *FirestoreService) loadAlerts(ctx context.Context) ([]TrackingAlert, err
 			Label:       doc.Label,
 			Description: doc.Description,
 			Tone:        defaultTone(doc.Tone),
-			ActionLabel: firstNonEmpty(doc.ActionLabel, "詳細を見る"),
+			ActionLabel: firstNonEmpty(doc.ActionLabel, defaultAlertActionLabel),
 			ActionURL:   firstNonEmpty(doc.ActionURL, "/admin/shipments/tracking"),
 		})
 	}
-
-	s.alertsCache = alertsCache{
-		alerts:  alerts,
-		expires: now.Add(s.cacheTTL),
-	}
-	return append([]TrackingAlert(nil), alerts...), nil
+	return alerts, nil
 }
 
 func decodeTrackingShipment(snap *firestore.DocumentSnapshot) (TrackingShipment, error) {
@@ -448,9 +488,18 @@ func documentRefFromPath(client *firestore.Client, path string) *firestore.Docum
 	if len(parts) < 2 || len(parts)%2 != 0 {
 		return nil
 	}
-	ref := client.Collection(parts[0]).Doc(parts[1])
-	for i := 2; i < len(parts); i += 2 {
-		ref = ref.Collection(parts[i]).Doc(parts[i+1])
+	var ref *firestore.DocumentRef
+	for i := 0; i < len(parts); i += 2 {
+		collectionID := strings.TrimSpace(parts[i])
+		docID := strings.TrimSpace(parts[i+1])
+		if collectionID == "" || docID == "" {
+			return nil
+		}
+		if ref == nil {
+			ref = client.Collection(collectionID).Doc(docID)
+		} else {
+			ref = ref.Collection(collectionID).Doc(docID)
+		}
 	}
 	return ref
 }
@@ -516,19 +565,19 @@ func syntheticTrackingAlerts(summary TrackingSummary) []TrackingAlert {
 	var alerts []TrackingAlert
 	if summary.Exceptions > 0 {
 		alerts = append(alerts, TrackingAlert{
-			Label:       "配送例外が検出されました",
-			Description: fmt.Sprintf("%d 件が要対応ステータスです。優先的に確認してください。", summary.Exceptions),
+			Label:       syntheticAlertExceptionLabel,
+			Description: fmt.Sprintf(syntheticAlertExceptionDesc, summary.Exceptions),
 			Tone:        "danger",
-			ActionLabel: "例外を確認",
+			ActionLabel: syntheticAlertExceptionActionLabel,
 			ActionURL:   "/admin/shipments/tracking?status=exception",
 		})
 	}
 	if summary.Delayed > 0 {
 		alerts = append(alerts, TrackingAlert{
-			Label:       "SLA遅延リスク",
-			Description: fmt.Sprintf("%d 件がSLA警告ゾーンに入っています。", summary.Delayed),
+			Label:       syntheticAlertDelayLabel,
+			Description: fmt.Sprintf(syntheticAlertDelayDesc, summary.Delayed),
 			Tone:        "warning",
-			ActionLabel: "遅延を確認",
+			ActionLabel: syntheticAlertDelayActionLabel,
 			ActionURL:   "/admin/shipments/tracking?delay=delayed",
 		})
 	}
