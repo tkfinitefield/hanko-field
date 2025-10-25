@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"sort"
 	"strings"
@@ -9,6 +10,8 @@ import (
 
 	"finitefield.org/hanko-web/internal/format"
 )
+
+const cartTaxRate = 0.10
 
 // CartView aggregates all data needed for the cart page and fragments.
 type CartView struct {
@@ -167,16 +170,12 @@ func buildCartView(lang string, q url.Values) CartView {
 	subtotal, quantity, weight := calcCartTotals(items)
 
 	shippingOptions := buildCartShippingMethods(method, country, weight)
-	shippingCost := shippingOptionsCost(shippingOptions)
-	if promo == "FREESHIP" && shippingCost > 0 {
-		shippingCost = 0
+	if promo == "FREESHIP" {
 		for i := range shippingOptions {
-			if shippingOptions[i].Selected {
-				shippingOptions[i].Cost = 0
-				break
-			}
+			shippingOptions[i].Cost = 0
 		}
 	}
+	shippingCost := shippingOptionsCost(shippingOptions)
 
 	discount := estimateCartDiscount(subtotal, promo)
 	if discount > subtotal {
@@ -186,7 +185,7 @@ func buildCartView(lang string, q url.Values) CartView {
 	if taxable < 0 {
 		taxable = 0
 	}
-	tax := (taxable * 10) / 100
+	tax := int64(math.Round(float64(taxable) * cartTaxRate))
 	total := taxable + tax
 
 	estimate := CartEstimate{
@@ -303,7 +302,7 @@ func estimateCartDiscount(subtotal int64, promo string) int64 {
 	}
 	switch promo {
 	case "HANKO10":
-		return subtotal / 10
+		return int64(math.Round(float64(subtotal) * 0.10))
 	case "STUDIO15":
 		return 1500
 	case "WELCOME500":
@@ -490,20 +489,43 @@ func buildCartCrossSell(lang string) []Product {
 	if len(all) == 0 {
 		return nil
 	}
-	// Ensure deterministic order but prioritize rubber variants for quick upsell.
 	sort.SliceStable(all, func(i, j int) bool {
-		if all[i].Material == "rubber" && all[j].Material != "rubber" {
-			return true
-		}
-		if all[j].Material == "rubber" && all[i].Material != "rubber" {
-			return false
+		if all[i].PriceJPY == all[j].PriceJPY {
+			return all[i].ID < all[j].ID
 		}
 		return all[i].PriceJPY < all[j].PriceJPY
 	})
-	if len(all) > 4 {
-		all = all[:4]
+	var selected []Product
+	seenMaterial := map[string]bool{}
+	for _, p := range all {
+		if seenMaterial[p.Material] {
+			continue
+		}
+		selected = append(selected, p)
+		seenMaterial[p.Material] = true
+		if len(selected) == 4 {
+			return selected
+		}
 	}
-	return all
+	if len(selected) < 4 {
+		for _, p := range all {
+			if len(selected) == 4 {
+				break
+			}
+			duplicate := false
+			for _, chosen := range selected {
+				if chosen.ID == p.ID {
+					duplicate = true
+					break
+				}
+			}
+			if duplicate {
+				continue
+			}
+			selected = append(selected, p)
+		}
+	}
+	return selected
 }
 
 func cartCountryOptions(lang, active string) []CartOption {
