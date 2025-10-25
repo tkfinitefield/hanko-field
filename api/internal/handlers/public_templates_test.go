@@ -1441,6 +1441,12 @@ type stubCatalogService struct {
 	productGetID   string
 	productGetProd services.Product
 	productGetErr  error
+
+	adminUpsertCmd  services.UpsertTemplateCommand
+	adminUpsertResp services.Template
+	adminUpsertErr  error
+	adminDeleteCmd  services.DeleteTemplateCommand
+	adminDeleteErr  error
 }
 
 func (s *stubCatalogService) ListTemplates(_ context.Context, filter services.TemplateFilter) (domain.CursorPage[domain.TemplateSummary], error) {
@@ -1456,12 +1462,20 @@ func (s *stubCatalogService) GetTemplate(_ context.Context, templateID string) (
 	return services.Template(s.getTemplate), nil
 }
 
-func (s *stubCatalogService) UpsertTemplate(context.Context, services.UpsertTemplateCommand) (services.Template, error) {
-	return services.Template{}, errors.New("not implemented")
+func (s *stubCatalogService) UpsertTemplate(_ context.Context, cmd services.UpsertTemplateCommand) (services.Template, error) {
+	s.adminUpsertCmd = cmd
+	if s.adminUpsertErr != nil {
+		return services.Template{}, s.adminUpsertErr
+	}
+	if s.adminUpsertResp.ID != "" {
+		return s.adminUpsertResp, nil
+	}
+	return cmd.Template, nil
 }
 
-func (s *stubCatalogService) DeleteTemplate(context.Context, string) error {
-	return errors.New("not implemented")
+func (s *stubCatalogService) DeleteTemplate(_ context.Context, cmd services.DeleteTemplateCommand) error {
+	s.adminDeleteCmd = cmd
+	return s.adminDeleteErr
 }
 
 func (s *stubCatalogService) ListFonts(_ context.Context, filter services.FontFilter) (domain.CursorPage[services.FontSummary], error) {

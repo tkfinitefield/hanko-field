@@ -76,6 +76,18 @@ func TestNewCatalogService(t *testing.T) {
 		if got, want := stubRepo.upsertInput.SVGPath, "svg/tpl_001.svg"; got != want {
 			t.Fatalf("expected trimmed svg path %q, got %q", want, got)
 		}
+		if stubRepo.upsertInput.Version != 1 {
+			t.Fatalf("expected version 1, got %d", stubRepo.upsertInput.Version)
+		}
+		if stubRepo.upsertInput.PublishedAt != now {
+			t.Fatalf("expected publishedAt to use clock, got %v", stubRepo.upsertInput.PublishedAt)
+		}
+		if len(stubRepo.templateVersions) != 1 {
+			t.Fatalf("expected a single template version append, got %d", len(stubRepo.templateVersions))
+		}
+		if stubRepo.templateVersions[0].Version != 1 {
+			t.Fatalf("expected appended version 1, got %d", stubRepo.templateVersions[0].Version)
+		}
 	})
 }
 
@@ -138,6 +150,93 @@ func TestCatalogServiceListTemplates(t *testing.T) {
 	}
 	if !stubRepo.listFilter.OnlyPublished {
 		t.Fatalf("expected published flag to be propagated")
+	}
+}
+
+func TestCatalogServiceUpsertTemplate_ExistingTemplateVersioning(t *testing.T) {
+	existingCreatedAt := time.Date(2024, time.February, 2, 10, 0, 0, 0, time.UTC)
+	existingPublishedAt := time.Date(2024, time.February, 5, 10, 0, 0, 0, time.UTC)
+	repo := &stubCatalogRepository{
+		getTemplate: domain.Template{
+			TemplateSummary: domain.TemplateSummary{
+				ID:          "tpl_777",
+				Name:        "Existing",
+				IsPublished: true,
+				Version:     2,
+				CreatedAt:   existingCreatedAt,
+				UpdatedAt:   existingPublishedAt,
+				PublishedAt: existingPublishedAt,
+			},
+			SVGPath: "svg/existing.svg",
+		},
+	}
+	cache := &stubTemplateCache{}
+	audit := &stubAuditLogService{}
+	now := time.Date(2024, time.March, 1, 12, 0, 0, 0, time.UTC)
+	svc, err := NewCatalogService(CatalogServiceDeps{
+		Catalog: repo,
+		Cache:   cache,
+		Audit:   audit,
+		Clock: func() time.Time {
+			return now
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	template := Template{
+		TemplateSummary: domain.TemplateSummary{
+			ID:          "tpl_777",
+			Name:        "Existing",
+			Description: "Updated copy",
+			IsPublished: false,
+		},
+		SVGPath: " svg/new.svg ",
+		Draft: TemplateDraft{
+			Notes: "  adjust kerning  ",
+		},
+	}
+	actor := "admin-777"
+	saved, err := svc.UpsertTemplate(context.Background(), UpsertTemplateCommand{Template: template, ActorID: actor})
+	if err != nil {
+		t.Fatalf("unexpected error upserting: %v", err)
+	}
+	if saved.Version != 3 {
+		t.Fatalf("expected version to increment to 3, got %d", saved.Version)
+	}
+	if !saved.CreatedAt.Equal(existingCreatedAt) {
+		t.Fatalf("expected createdAt to remain unchanged, got %v", saved.CreatedAt)
+	}
+	if !saved.PublishedAt.IsZero() {
+		t.Fatalf("expected publishedAt reset when unpublishing, got %v", saved.PublishedAt)
+	}
+	if len(repo.templateVersions) != 1 {
+		t.Fatalf("expected version append, got %d", len(repo.templateVersions))
+	}
+	if repo.templateVersions[0].CreatedBy != actor {
+		t.Fatalf("expected version created by %s, got %s", actor, repo.templateVersions[0].CreatedBy)
+	}
+	if got := repo.upsertInput.Draft.Notes; got != "adjust kerning" {
+		t.Fatalf("expected trimmed draft notes, got %q", got)
+	}
+	if repo.upsertInput.Draft.UpdatedBy != actor {
+		t.Fatalf("expected draft updatedBy %s, got %s", actor, repo.upsertInput.Draft.UpdatedBy)
+	}
+	if len(cache.calls) != 1 {
+		t.Fatalf("expected cache invalidation, got %d", len(cache.calls))
+	}
+	if cache.calls[0][0] != "tpl_777" {
+		t.Fatalf("expected invalidated template tpl_777, got %#v", cache.calls)
+	}
+	if len(audit.records) < 2 {
+		t.Fatalf("expected audit records for update + unpublish, got %d", len(audit.records))
+	}
+	if audit.records[0].Action != "catalog.template.update" {
+		t.Fatalf("expected first audit action update, got %s", audit.records[0].Action)
+	}
+	if audit.records[1].Action != "catalog.template.unpublish" {
+		t.Fatalf("expected unpublish audit action, got %s", audit.records[1].Action)
 	}
 }
 
@@ -286,20 +385,44 @@ func TestCatalogServiceGetProduct(t *testing.T) {
 }
 
 func TestCatalogServiceDeleteTemplate(t *testing.T) {
-	stubRepo := &stubCatalogRepository{}
-	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: stubRepo})
+	repo := &stubCatalogRepository{
+		getTemplate: domain.Template{
+			TemplateSummary: domain.TemplateSummary{
+				ID:          "tpl_001",
+				IsPublished: true,
+			},
+		},
+	}
+	cache := &stubTemplateCache{}
+	audit := &stubAuditLogService{}
+	now := time.Date(2024, time.March, 2, 8, 0, 0, 0, time.UTC)
+	svc, err := NewCatalogService(CatalogServiceDeps{
+		Catalog: repo,
+		Cache:   cache,
+		Audit:   audit,
+		Clock: func() time.Time {
+			return now
+		},
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if err := svc.DeleteTemplate(context.Background(), " tpl_001 "); err != nil {
+	cmd := DeleteTemplateCommand{TemplateID: " tpl_001 ", ActorID: "admin"}
+	if err := svc.DeleteTemplate(context.Background(), cmd); err != nil {
 		t.Fatalf("unexpected error deleting: %v", err)
 	}
-	if stubRepo.deletedID != "tpl_001" {
-		t.Fatalf("expected trimmed id, got %q", stubRepo.deletedID)
+	if repo.deletedID != "tpl_001" {
+		t.Fatalf("expected trimmed id, got %q", repo.deletedID)
+	}
+	if len(cache.calls) != 1 {
+		t.Fatalf("expected cache invalidation, got %d", len(cache.calls))
+	}
+	if len(audit.records) == 0 || audit.records[len(audit.records)-1].Action != "catalog.template.delete" {
+		t.Fatalf("expected delete audit action, got %#v", audit.records)
 	}
 
-	if err := svc.DeleteTemplate(context.Background(), " "); err == nil {
+	if err := svc.DeleteTemplate(context.Background(), DeleteTemplateCommand{}); err == nil {
 		t.Fatalf("expected error when id empty")
 	}
 }
@@ -350,6 +473,9 @@ type stubCatalogRepository struct {
 
 	deletedID string
 	deleteErr error
+
+	templateVersions []domain.TemplateVersion
+	appendVersionErr error
 }
 
 func (s *stubCatalogRepository) ListTemplates(_ context.Context, filter repositories.TemplateFilter) (domain.CursorPage[domain.TemplateSummary], error) {
@@ -390,6 +516,11 @@ func (s *stubCatalogRepository) UpsertTemplate(_ context.Context, template domai
 func (s *stubCatalogRepository) DeleteTemplate(_ context.Context, templateID string) error {
 	s.deletedID = templateID
 	return s.deleteErr
+}
+
+func (s *stubCatalogRepository) AppendTemplateVersion(_ context.Context, version domain.TemplateVersion) error {
+	s.templateVersions = append(s.templateVersions, version)
+	return s.appendVersionErr
 }
 
 func (s *stubCatalogRepository) ListFonts(_ context.Context, filter repositories.FontFilter) (domain.CursorPage[domain.FontSummary], error) {
@@ -486,4 +617,26 @@ func (s *stubCatalogRepository) UpsertProduct(context.Context, domain.ProductSum
 
 func (s *stubCatalogRepository) DeleteProduct(context.Context, string) error {
 	return errors.New("not implemented")
+}
+
+type stubTemplateCache struct {
+	calls [][]string
+}
+
+func (s *stubTemplateCache) InvalidateTemplates(_ context.Context, ids []string) error {
+	clone := append([]string(nil), ids...)
+	s.calls = append(s.calls, clone)
+	return nil
+}
+
+type stubAuditLogService struct {
+	records []AuditLogRecord
+}
+
+func (s *stubAuditLogService) Record(_ context.Context, record AuditLogRecord) {
+	s.records = append(s.records, record)
+}
+
+func (s *stubAuditLogService) List(context.Context, AuditLogFilter) (domain.CursorPage[domain.AuditLogEntry], error) {
+	return domain.CursorPage[domain.AuditLogEntry]{}, nil
 }

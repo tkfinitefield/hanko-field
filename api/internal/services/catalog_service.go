@@ -16,14 +16,23 @@ const (
 	defaultTemplateSortOrder = domain.SortDesc
 )
 
+// TemplateCacheInvalidator purges CDN/cache entries referencing template assets.
+type TemplateCacheInvalidator interface {
+	InvalidateTemplates(ctx context.Context, templateIDs []string) error
+}
+
 // CatalogServiceDeps bundles constructor inputs for the catalog service.
 type CatalogServiceDeps struct {
 	Catalog repositories.CatalogRepository
+	Audit   AuditLogService
+	Cache   TemplateCacheInvalidator
 	Clock   func() time.Time
 }
 
 type catalogService struct {
 	repo  repositories.CatalogRepository
+	audit AuditLogService
+	cache TemplateCacheInvalidator
 	clock func() time.Time
 }
 
@@ -41,6 +50,8 @@ func NewCatalogService(deps CatalogServiceDeps) (CatalogService, error) {
 	}
 	return &catalogService{
 		repo:  deps.Catalog,
+		audit: deps.Audit,
+		cache: deps.Cache,
 		clock: func() time.Time { return clock().UTC() },
 	}, nil
 }
@@ -99,27 +110,110 @@ func (s *catalogService) UpsertTemplate(ctx context.Context, cmd UpsertTemplateC
 	template.Tags = normalizeTags(template.Tags)
 	template.PreviewImagePath = strings.TrimSpace(template.PreviewImagePath)
 	template.SVGPath = strings.TrimSpace(template.SVGPath)
+	actorID := strings.TrimSpace(cmd.ActorID)
 
 	now := s.clock()
+
+	var existing Template
+	if template.ID != "" {
+		current, err := s.repo.GetTemplate(ctx, template.ID)
+		if err != nil && !isCatalogRepositoryNotFound(err) {
+			return Template{}, err
+		}
+		if err == nil {
+			existing = Template(current)
+		}
+	}
+
 	if template.CreatedAt.IsZero() {
-		template.CreatedAt = now
+		if existing.CreatedAt.IsZero() {
+			template.CreatedAt = now
+		} else {
+			template.CreatedAt = existing.CreatedAt
+		}
 	} else {
 		template.CreatedAt = template.CreatedAt.UTC()
 	}
 	template.UpdatedAt = now
+	template.Version = nextTemplateVersion(existing.Version)
+	template.PublishedAt = resolveTemplatePublishedAt(template, existing, now)
+	template.Draft = normalizeTemplateDraft(template.Draft, now, actorID)
 
-	return s.repo.UpsertTemplate(ctx, template)
+	savedDomain, err := s.repo.UpsertTemplate(ctx, template)
+	if err != nil {
+		return Template{}, err
+	}
+	saved := Template(savedDomain)
+
+	if err := s.appendTemplateVersion(ctx, saved, actorID, now); err != nil {
+		return Template{}, err
+	}
+
+	if existing.IsPublished != saved.IsPublished {
+		s.invalidateTemplates(ctx, []string{saved.ID})
+	}
+
+	action := "catalog.template.update"
+	occurredAt := saved.UpdatedAt
+	if existing.ID == "" {
+		action = "catalog.template.create"
+		occurredAt = saved.CreatedAt
+	}
+	s.recordTemplateAudit(ctx, action, saved, actorID, occurredAt, nil, nil)
+
+	if existing.IsPublished != saved.IsPublished {
+		diff := map[string]AuditLogDiff{
+			"isPublished": {
+				Before: existing.IsPublished,
+				After:  saved.IsPublished,
+			},
+		}
+		extra := map[string]any{"publishedAt": saved.PublishedAt}
+		if saved.IsPublished {
+			s.recordTemplateAudit(ctx, "catalog.template.publish", saved, actorID, saved.PublishedAt, diff, extra)
+		} else {
+			s.recordTemplateAudit(ctx, "catalog.template.unpublish", saved, actorID, occurredAt, diff, extra)
+		}
+	}
+
+	return saved, nil
 }
 
-func (s *catalogService) DeleteTemplate(ctx context.Context, templateID string) error {
+func (s *catalogService) DeleteTemplate(ctx context.Context, cmd DeleteTemplateCommand) error {
 	if s.repo == nil {
 		return ErrCatalogRepositoryMissing
 	}
-	templateID = strings.TrimSpace(templateID)
+	templateID := strings.TrimSpace(cmd.TemplateID)
 	if templateID == "" {
 		return errors.New("catalog service: template id is required")
 	}
-	return s.repo.DeleteTemplate(ctx, templateID)
+
+	var existing Template
+	current, err := s.repo.GetTemplate(ctx, templateID)
+	if err != nil && !isCatalogRepositoryNotFound(err) {
+		return err
+	}
+	if err == nil {
+		existing = Template(current)
+	}
+
+	if err := s.repo.DeleteTemplate(ctx, templateID); err != nil {
+		return err
+	}
+
+	occurredAt := s.clock()
+	if existing.ID != "" {
+		if existing.IsPublished {
+			s.invalidateTemplates(ctx, []string{existing.ID})
+		}
+		diff := map[string]AuditLogDiff{
+			"isPublished": {Before: existing.IsPublished, After: false},
+		}
+		extra := map[string]any{"deleted": true}
+		s.recordTemplateAudit(ctx, "catalog.template.delete", existing, strings.TrimSpace(cmd.ActorID), occurredAt, diff, extra)
+	}
+
+	return nil
 }
 
 func (s *catalogService) ListFonts(ctx context.Context, filter FontFilter) (domain.CursorPage[FontSummary], error) {
@@ -216,6 +310,123 @@ func (s *catalogService) DeleteMaterial(ctx context.Context, materialID string) 
 		return errors.New("catalog service: material id is required")
 	}
 	return s.repo.DeleteMaterial(ctx, materialID)
+}
+
+func (s *catalogService) appendTemplateVersion(ctx context.Context, template Template, actorID string, now time.Time) error {
+	if s.repo == nil {
+		return ErrCatalogRepositoryMissing
+	}
+	version := domain.TemplateVersion{
+		TemplateID: template.ID,
+		Version:    template.Version,
+		Snapshot:   domain.Template(template),
+		Draft:      domain.TemplateDraft(template.Draft),
+		CreatedAt:  now,
+		CreatedBy:  strings.TrimSpace(actorID),
+	}
+	return s.repo.AppendTemplateVersion(ctx, version)
+}
+
+func (s *catalogService) invalidateTemplates(ctx context.Context, templateIDs []string) {
+	if s.cache == nil || len(templateIDs) == 0 {
+		return
+	}
+	_ = s.cache.InvalidateTemplates(ctx, templateIDs)
+}
+
+func (s *catalogService) recordTemplateAudit(ctx context.Context, action string, template Template, actorID string, occurredAt time.Time, diff map[string]AuditLogDiff, extra map[string]any) {
+	if s.audit == nil {
+		return
+	}
+	actorID = strings.TrimSpace(actorID)
+	if occurredAt.IsZero() {
+		occurredAt = s.clock()
+	}
+	metadata := map[string]any{
+		"templateId":  template.ID,
+		"name":        template.Name,
+		"version":     template.Version,
+		"isPublished": template.IsPublished,
+	}
+	for k, v := range extra {
+		if metadata == nil {
+			metadata = make(map[string]any, len(extra))
+		}
+		metadata[k] = v
+	}
+	record := AuditLogRecord{
+		Actor:      actorID,
+		ActorType:  "staff",
+		Action:     action,
+		TargetRef:  fmt.Sprintf("/templates/%s", strings.TrimSpace(template.ID)),
+		Severity:   "info",
+		OccurredAt: occurredAt,
+		Metadata:   metadata,
+		Diff:       diff,
+	}
+	s.audit.Record(ctx, record)
+}
+
+func resolveTemplatePublishedAt(next Template, existing Template, now time.Time) time.Time {
+	if !next.IsPublished {
+		return time.Time{}
+	}
+	if !next.PublishedAt.IsZero() {
+		return next.PublishedAt.UTC()
+	}
+	if existing.IsPublished && !existing.PublishedAt.IsZero() {
+		return existing.PublishedAt
+	}
+	return now
+}
+
+func nextTemplateVersion(current int) int {
+	if current < 0 {
+		current = 0
+	}
+	return current + 1
+}
+
+func normalizeTemplateDraft(d TemplateDraft, now time.Time, actorID string) TemplateDraft {
+	d.Notes = strings.TrimSpace(d.Notes)
+	d.PreviewImagePath = strings.TrimSpace(d.PreviewImagePath)
+	d.PreviewSVGPath = strings.TrimSpace(d.PreviewSVGPath)
+	if len(d.Metadata) == 0 {
+		d.Metadata = nil
+	}
+	if templateDraftIsEmpty(d) {
+		return TemplateDraft{}
+	}
+	if d.UpdatedAt.IsZero() {
+		d.UpdatedAt = now
+	} else {
+		d.UpdatedAt = d.UpdatedAt.UTC()
+	}
+	actorID = strings.TrimSpace(actorID)
+	if strings.TrimSpace(d.UpdatedBy) == "" {
+		d.UpdatedBy = actorID
+	} else {
+		d.UpdatedBy = strings.TrimSpace(d.UpdatedBy)
+	}
+	return d
+}
+
+func templateDraftIsEmpty(d TemplateDraft) bool {
+	if d.Notes != "" || d.PreviewImagePath != "" || d.PreviewSVGPath != "" {
+		return false
+	}
+	return len(d.Metadata) == 0
+}
+
+func isCatalogRepositoryNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	var repoErr repositories.RepositoryError
+	if errors.As(err, &repoErr) {
+		return repoErr.IsNotFound()
+	}
+	return false
 }
 
 func (s *catalogService) ListProducts(ctx context.Context, filter ProductFilter) (domain.CursorPage[ProductSummary], error) {

@@ -62,6 +62,8 @@ type (
 	ContentGuide              = domain.ContentGuide
 	TemplateSummary           = domain.TemplateSummary
 	Template                  = domain.Template
+	TemplateDraft             = domain.TemplateDraft
+	TemplateVersion           = domain.TemplateVersion
 	TemplateSort              = domain.TemplateSort
 	Font                      = domain.Font
 	FontSummary               = domain.FontSummary
@@ -251,7 +253,7 @@ type CatalogService interface {
 	ListTemplates(ctx context.Context, filter TemplateFilter) (domain.CursorPage[TemplateSummary], error)
 	GetTemplate(ctx context.Context, templateID string) (Template, error)
 	UpsertTemplate(ctx context.Context, cmd UpsertTemplateCommand) (Template, error)
-	DeleteTemplate(ctx context.Context, templateID string) error
+	DeleteTemplate(ctx context.Context, cmd DeleteTemplateCommand) error
 	ListFonts(ctx context.Context, filter FontFilter) (domain.CursorPage[FontSummary], error)
 	GetFont(ctx context.Context, fontID string) (Font, error)
 	UpsertFont(ctx context.Context, cmd UpsertFontCommand) (FontSummary, error)
@@ -852,6 +854,11 @@ type TemplateFilter struct {
 type UpsertTemplateCommand struct {
 	Template Template
 	ActorID  string
+}
+
+type DeleteTemplateCommand struct {
+	TemplateID string
+	ActorID    string
 }
 
 type FontFilter struct {

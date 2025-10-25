@@ -266,6 +266,7 @@ type CatalogRepository interface {
 	GetTemplate(ctx context.Context, templateID string) (domain.Template, error)
 	UpsertTemplate(ctx context.Context, template domain.Template) (domain.Template, error)
 	DeleteTemplate(ctx context.Context, templateID string) error
+	AppendTemplateVersion(ctx context.Context, version domain.TemplateVersion) error
 
 	// ListFonts returns a paginated collection of fonts respecting the provided filter.
 	ListFonts(ctx context.Context, filter FontFilter) (domain.CursorPage[domain.FontSummary], error)

@@ -702,6 +702,8 @@ type TemplateSummary struct {
 	PreviewImagePath string
 	Popularity       int
 	IsPublished      bool
+	PublishedAt      time.Time
+	Version          int
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -710,6 +712,28 @@ type TemplateSummary struct {
 type Template struct {
 	TemplateSummary
 	SVGPath string
+	Draft   TemplateDraft
+}
+
+// TemplateDraft contains internal-only fields for unpublished iterations.
+type TemplateDraft struct {
+	Notes            string
+	PreviewImagePath string
+	PreviewSVGPath   string
+	Metadata         map[string]any
+	UpdatedAt        time.Time
+	UpdatedBy        string
+}
+
+// TemplateVersion preserves a snapshot of a template whenever staff make changes.
+type TemplateVersion struct {
+	ID         string
+	TemplateID string
+	Version    int
+	Snapshot   Template
+	Draft      TemplateDraft
+	CreatedAt  time.Time
+	CreatedBy  string
 }
 
 // FontLicense captures public licensing metadata for fonts.
