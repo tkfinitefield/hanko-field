@@ -29,4 +29,5 @@ type PageData struct {
 	DesignPreview  any
 	DesignVersions any
 	Cart           any
+	Checkout       any
 }

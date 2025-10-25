@@ -17,15 +17,42 @@ import (
 const sessionCookieName = "HANKO_WEB_SESSION"
 
 type SessionData struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"uid,omitempty"`
-	Locale    string    `json:"locale,omitempty"`
-	CartID    string    `json:"cart,omitempty"`
-	CSRFToken string    `json:"csrf,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID        string        `json:"id"`
+	UserID    string        `json:"uid,omitempty"`
+	Locale    string        `json:"locale,omitempty"`
+	CartID    string        `json:"cart,omitempty"`
+	Checkout  CheckoutState `json:"checkout,omitempty"`
+	CSRFToken string        `json:"csrf,omitempty"`
+	CreatedAt time.Time     `json:"createdAt"`
+	UpdatedAt time.Time     `json:"updatedAt"`
 	// internal dirty flag; not serialized
 	dirty bool `json:"-"`
+}
+
+// CheckoutState stores lightweight checkout progress scoped to the session cookie.
+type CheckoutState struct {
+	ShippingAddressID string           `json:"ship,omitempty"`
+	BillingAddressID  string           `json:"bill,omitempty"`
+	Addresses         []SessionAddress `json:"addresses,omitempty"`
+}
+
+// SessionAddress is a simplified address record persisted inside the signed session cookie.
+type SessionAddress struct {
+	ID         string    `json:"id"`
+	Label      string    `json:"label,omitempty"`
+	Recipient  string    `json:"recipient,omitempty"`
+	Company    string    `json:"company,omitempty"`
+	Department string    `json:"department,omitempty"`
+	Line1      string    `json:"line1,omitempty"`
+	Line2      string    `json:"line2,omitempty"`
+	City       string    `json:"city,omitempty"`
+	Region     string    `json:"region,omitempty"`
+	Postal     string    `json:"postal,omitempty"`
+	Country    string    `json:"country,omitempty"`
+	Phone      string    `json:"phone,omitempty"`
+	Kind       string    `json:"kind,omitempty"`
+	Notes      string    `json:"notes,omitempty"`
+	CreatedAt  time.Time `json:"createdAt,omitempty"`
 }
 
 var sessionSignKey []byte
@@ -62,18 +89,18 @@ func Session(next http.Handler) http.Handler {
 		// attach to context
 		ctx := contextWithSession(r, sd)
 		// proceed
-        rw := NewResponseRecorder(w)
-        // ensure cookie is set just before first write if needed
-        rw.SetBeforeWrite(func(w http.ResponseWriter) {
-            if sd.dirty || !fromCookie {
-                writeSessionCookie(w, r, sd)
-            }
-        })
-        next.ServeHTTP(rw, r.WithContext(ctx))
-        // If nothing was written yet (e.g., HEAD), persist cookie now
-        if !rw.wrote && (sd.dirty || !fromCookie) {
-            writeSessionCookie(w, r, sd)
-        }
+		rw := NewResponseRecorder(w)
+		// ensure cookie is set just before first write if needed
+		rw.SetBeforeWrite(func(w http.ResponseWriter) {
+			if sd.dirty || !fromCookie {
+				writeSessionCookie(w, r, sd)
+			}
+		})
+		next.ServeHTTP(rw, r.WithContext(ctx))
+		// If nothing was written yet (e.g., HEAD), persist cookie now
+		if !rw.wrote && (sd.dirty || !fromCookie) {
+			writeSessionCookie(w, r, sd)
+		}
 	})
 }
 
@@ -102,40 +129,40 @@ func (s *SessionData) MarkDirty() { s.dirty = true; s.UpdatedAt = time.Now().UTC
 
 // readSessionCookie parses and verifies the session cookie
 func readSessionCookie(r *http.Request) (*SessionData, bool) {
-    c, err := r.Cookie(sessionCookieName)
-    if err != nil || c.Value == "" {
-        return &SessionData{}, false
-    }
-    parts := strings.Split(c.Value, ".")
-    if len(parts) != 2 {
-        return &SessionData{}, false
-    }
-    payloadB, err := base64.RawURLEncoding.DecodeString(parts[0])
-    if err != nil {
-        return &SessionData{}, false
-    }
-    sigB, err := base64.RawURLEncoding.DecodeString(parts[1])
-    if err != nil {
-        return &SessionData{}, false
-    }
-    mac := hmac.New(sha256.New, sessionSignKey)
-    mac.Write(payloadB)
-    if !hmac.Equal(sigB, mac.Sum(nil)) {
-        return &SessionData{}, false
-    }
-    var sd SessionData
-    if err := json.Unmarshal(payloadB, &sd); err != nil {
-        return &SessionData{}, false
-    }
-    return &sd, true
+	c, err := r.Cookie(sessionCookieName)
+	if err != nil || c.Value == "" {
+		return &SessionData{}, false
+	}
+	parts := strings.Split(c.Value, ".")
+	if len(parts) != 2 {
+		return &SessionData{}, false
+	}
+	payloadB, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return &SessionData{}, false
+	}
+	sigB, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return &SessionData{}, false
+	}
+	mac := hmac.New(sha256.New, sessionSignKey)
+	mac.Write(payloadB)
+	if !hmac.Equal(sigB, mac.Sum(nil)) {
+		return &SessionData{}, false
+	}
+	var sd SessionData
+	if err := json.Unmarshal(payloadB, &sd); err != nil {
+		return &SessionData{}, false
+	}
+	return &sd, true
 }
 
 func writeSessionCookie(w http.ResponseWriter, r *http.Request, sd *SessionData) {
-    b, _ := json.Marshal(sd)
-    payload := base64.RawURLEncoding.EncodeToString(b)
-    mac := hmac.New(sha256.New, sessionSignKey)
-    mac.Write(b)
-    sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	b, _ := json.Marshal(sd)
+	payload := base64.RawURLEncoding.EncodeToString(b)
+	mac := hmac.New(sha256.New, sessionSignKey)
+	mac.Write(b)
+	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	val := payload + "." + sig
 	// httpOnly to prevent JS access
 	http.SetCookie(w, &http.Cookie{

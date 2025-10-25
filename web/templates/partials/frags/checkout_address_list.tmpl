@@ -1,0 +1,64 @@
+{{ define "frag_checkout_address_list" }}
+{{ $lang := .Lang }}
+{{ $section := .Section }}
+{{ $id := printf "checkout-address-%s" $section.Kind }}
+<section id="{{ $id }}" class="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" data-address-section data-kind="{{ $section.Kind }}" data-selected="{{ $section.SelectedID }}">
+  <header class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">{{ if eq $section.Kind "shipping" }}{{ if eq $lang "ja" }}配送先{{ else }}Shipping{{ end }}{{ else }}{{ if eq $lang "ja" }}請求先{{ else }}Billing{{ end }}{{ end }}</p>
+      <h2 class="text-xl font-semibold text-gray-900">{{ $section.Title }}</h2>
+      <p class="text-sm text-gray-600">{{ $section.Description }}</p>
+    </div>
+    <button type="button"
+            class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-gray-300 hover:text-gray-900"
+            hx-get="/checkout/address/form?kind={{ $section.AddKind }}"
+            hx-target="#modal-root"
+            hx-swap="innerHTML">
+      {{ if eq $lang "ja" }}住所を追加{{ else }}{{ $section.AddLabel }}{{ end }}
+    </button>
+  </header>
+  {{ if $section.Hint }}
+    {{ template "c_inline_alert" (dict "Tone" "info" "Icon" "sparkles" "Title" $section.Hint) }}
+  {{ end }}
+  {{ if not .Addresses }}
+    <p class="text-sm text-gray-500">{{ $section.EmptyCopy }}</p>
+  {{ else }}
+    <div class="space-y-3" role="radiogroup" aria-label="{{ $section.Title }}">
+      {{ range $addr := .Addresses }}
+        <label class="relative flex flex-col gap-3 rounded-2xl border px-4 py-4 text-sm shadow-sm transition {{ if eq $section.SelectedID $addr.ID }}border-indigo-300 bg-indigo-50/60{{ else }}border-gray-200 bg-gray-50{{ end }}" data-address-card data-address-id="{{ $addr.ID }}">
+          <div class="flex items-start gap-3">
+            <input type="radio" name="{{ $section.Kind }}_address" value="{{ $addr.ID }}" class="mt-1 h-4 w-4 flex-none rounded-full border-gray-300 text-indigo-600 focus:ring-indigo-500" {{ if eq $section.SelectedID $addr.ID }}checked{{ end }}>
+            <div class="flex-1 space-y-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="text-base font-semibold text-gray-900">{{ if $addr.Label }}{{ $addr.Label }}{{ else }}{{ $addr.Recipient }}{{ end }}</p>
+                {{ range $addr.Tags }}
+                  <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold {{ if eq .Tone "success" }}bg-emerald-100 text-emerald-700{{ else if eq .Tone "warning" }}bg-amber-100 text-amber-800{{ else if eq .Tone "indigo" }}bg-indigo-100 text-indigo-700{{ else if eq .Tone "info" }}bg-blue-100 text-blue-700{{ else }}bg-gray-100 text-gray-600{{ end }}">{{ .Label }}</span>
+                {{ end }}
+              </div>
+              <p class="text-sm text-gray-600">{{ $addr.Recipient }}{{ if $addr.Company }}, {{ $addr.Company }}{{ end }}{{ if $addr.Department }} · {{ $addr.Department }}{{ end }}</p>
+              <ul class="text-sm text-gray-600 leading-snug">
+                <li>{{ $addr.Line1 }}</li>
+                {{ if $addr.Line2 }}<li>{{ $addr.Line2 }}</li>{{ end }}
+                <li>{{ if $addr.PostalCode }}{{ $addr.PostalCode }} {{ end }}{{ $addr.City }}, {{ $addr.Region }}</li>
+                <li>{{ $addr.CountryLabel }}</li>
+              </ul>
+              {{ if $addr.Phone }}<p class="text-xs text-gray-500">{{ $addr.Phone }}</p>{{ end }}
+              {{ if $addr.Instructions }}<p class="text-xs text-gray-500">{{ $addr.Instructions }}</p>{{ end }}
+              {{ if not ($addr.UpdatedAt.IsZero) }}<p class="text-[11px] uppercase tracking-wide text-gray-400">{{ if eq $lang "ja" }}更新{{ else }}Updated{{ end }} · {{ fmtDate $addr.UpdatedAt $lang }}</p>{{ end }}
+            </div>
+            <div class="flex flex-none flex-col items-end gap-2">
+              <button type="button"
+                      class="text-sm font-medium text-indigo-600 hover:text-indigo-500"
+                      hx-get="/checkout/address/form?id={{ $addr.ID }}&kind={{ $section.Kind }}"
+                      hx-target="#modal-root"
+                      hx-swap="innerHTML">
+                {{ if eq $lang "ja" }}編集{{ else }}Edit{{ end }}
+              </button>
+            </div>
+          </div>
+        </label>
+      {{ end }}
+    </div>
+  {{ end }}
+</section>
+{{ end }}

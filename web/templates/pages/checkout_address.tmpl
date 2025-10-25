@@ -1,0 +1,244 @@
+{{ define "content" }}
+{{ $view := $.Checkout }}
+<section id="checkout-address-root" class="py-6 space-y-6">
+  <header class="space-y-5 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+    <nav class="flex flex-wrap items-center gap-2 text-sm text-gray-500" aria-label="{{ if eq $.Lang "ja" }}パンくずリスト{{ else }}Breadcrumb{{ end }}">
+      {{ range $i, $crumb := $.Breadcrumbs }}
+        {{ if $i }}<span aria-hidden="true" class="text-gray-300">/</span>{{ end }}
+        {{ if $crumb.Active }}
+          <span class="font-medium text-gray-700">{{ if $crumb.LabelKey }}{{ tlang $.Lang $crumb.LabelKey }}{{ else if $crumb.Label }}{{ $crumb.Label }}{{ else }}{{ $crumb.Href }}{{ end }}</span>
+        {{ else }}
+          <a href="{{ $crumb.Href }}" class="hover:text-indigo-600 hover:underline">{{ if $crumb.LabelKey }}{{ tlang $.Lang $crumb.LabelKey }}{{ else if $crumb.Label }}{{ $crumb.Label }}{{ else }}{{ $crumb.Href }}{{ end }}</a>
+        {{ end }}
+      {{ end }}
+    </nav>
+    <div class="space-y-3">
+      <p class="text-xs font-semibold uppercase tracking-wide text-indigo-500">{{ if eq $.Lang "ja" }}チェックアウト{{ else }}Checkout{{ end }}</p>
+      <h1 class="text-3xl font-bold text-gray-900 leading-tight">{{ if eq $.Lang "ja" }}配送先と請求先{{ else }}Shipping & billing addresses{{ end }}</h1>
+      <p class="text-sm text-gray-600">
+        {{ if eq $.Lang "ja" }}配送や請求に利用する住所を選択し、新しい住所を追加できます。ジオコーディング済みの住所は配送ラベルに自動反映されます。{{ else }}Choose where we should deliver your seals and which entity should appear on invoices. Add or edit entries and we’ll sync them to future orders automatically.{{ end }}
+      </p>
+    </div>
+    {{ if $view.Steps }}
+      <ol class="grid gap-3 md:grid-cols-4" aria-label="{{ if eq $.Lang "ja" }}進捗状況{{ else }}Checkout progress{{ end }}">
+        {{ range $view.Steps }}
+          <li class="flex items-center gap-3 rounded-xl border px-3 py-2 text-sm {{ if .Active }}border-indigo-200 bg-indigo-50 text-indigo-700{{ else if .Completed }}border-emerald-200 bg-emerald-50 text-emerald-700{{ else }}border-gray-200 bg-gray-50 text-gray-500{{ end }}">
+            <span class="inline-flex h-6 w-6 flex-none items-center justify-center rounded-full text-xs font-semibold {{ if .Active }}bg-indigo-600 text-white{{ else if .Completed }}bg-emerald-500 text-white{{ else }}bg-gray-200 text-gray-600{{ end }}">
+              {{ if eq .Key "cart" }}1{{ else if eq .Key "shipping" }}2{{ else if eq .Key "payment" }}3{{ else }}4{{ end }}
+            </span>
+            <div>
+              <p class="font-semibold">{{ .Label }}</p>
+              <p class="text-xs text-gray-500">{{ .Description }}</p>
+            </div>
+          </li>
+        {{ end }}
+      </ol>
+    {{ end }}
+    {{ if $view.Alerts }}
+      <div class="space-y-3">
+        {{ range $alert := $view.Alerts }}
+          {{ template "c_inline_alert" (dict "Tone" $alert.Tone "Icon" $alert.Icon "Title" $alert.Title "Body" $alert.Body) }}
+        {{ end }}
+      </div>
+    {{ end }}
+  </header>
+
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+    <div class="space-y-6" id="checkout-address-selection">
+      <div id="shipping-address-shell"
+           class="space-y-4"
+           hx-get="/checkout/address/list?kind=shipping"
+           hx-target="this"
+           hx-trigger="refresh-address from:body"
+           hx-swap="innerHTML">
+        {{ slot "frag_checkout_address_list" (dict "Lang" $.Lang "Section" $view.ShippingSection "Addresses" $view.Addresses) }}
+      </div>
+      <div class="space-y-3">
+        <div id="billing-address-shell"
+             class="space-y-4"
+             data-lockable
+             hx-get="/checkout/address/list?kind=billing"
+             hx-target="this"
+             hx-trigger="refresh-address from:body"
+             hx-swap="innerHTML">
+          {{ slot "frag_checkout_address_list" (dict "Lang" $.Lang "Section" $view.BillingSection "Addresses" $view.Addresses) }}
+        </div>
+        <label class="inline-flex items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" id="billing-sync-toggle" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" {{ if $view.BillingSection.MirrorShip }}checked{{ end }}>
+          <span>{{ if eq $.Lang "ja" }}配送先と同じ住所を請求に使用する{{ else }}Use shipping address for billing{{ end }}</span>
+        </label>
+      </div>
+    </div>
+    <aside class="space-y-4">
+      <section class="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <header>
+          <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">{{ if eq $.Lang "ja" }}注文概要{{ else }}Order summary{{ end }}</p>
+          <h2 class="text-xl font-semibold text-gray-900">{{ if eq $.Lang "ja" }}合計とETA{{ else }}Totals & ETA{{ end }}</h2>
+        </header>
+        <dl class="space-y-2 text-sm text-gray-600">
+          <div class="flex items-center justify-between">
+            <dt>{{ if eq $.Lang "ja" }}小計{{ else }}Subtotal{{ end }}</dt>
+            <dd class="font-medium text-gray-900">{{ fmtMoney $view.Summary.Estimate.Subtotal "JPY" $.Lang }}</dd>
+          </div>
+          {{ if gt $view.Summary.Estimate.Discount 0 }}
+            <div class="flex items-center justify-between text-emerald-600">
+              <dt>{{ if eq $.Lang "ja" }}割引{{ else }}Discount{{ end }}</dt>
+              <dd class="font-semibold">−{{ fmtMoney $view.Summary.Estimate.Discount "JPY" $.Lang }}</dd>
+            </div>
+          {{ end }}
+          <div class="flex items-center justify-between">
+            <dt>{{ if eq $.Lang "ja" }}送料{{ else }}Shipping{{ end }}</dt>
+            <dd class="font-medium text-gray-900">{{ if and (eq $view.Summary.Estimate.Shipping 0) (ne $view.Summary.Estimate.ItemsCount 0) }}{{ if eq $.Lang "ja" }}無料{{ else }}Free{{ end }}{{ else }}{{ fmtMoney $view.Summary.Estimate.Shipping "JPY" $.Lang }}{{ end }}</dd>
+          </div>
+          <div class="flex items-center justify-between">
+            <dt>{{ if eq $.Lang "ja" }}税金{{ else }}Tax{{ end }}</dt>
+            <dd class="font-medium text-gray-900">{{ fmtMoney $view.Summary.Estimate.Tax "JPY" $.Lang }}</dd>
+          </div>
+        </dl>
+        <div class="flex items-center justify-between border-t border-gray-100 pt-3">
+          <div>
+            <p class="text-xs uppercase tracking-wide text-gray-400">{{ if eq $.Lang "ja" }}支払い総額{{ else }}Grand total{{ end }}</p>
+            <p class="text-xs text-gray-500">{{ if eq $.Lang "ja" }}{{ $view.Summary.Estimate.ItemsCount }}点 · {{ $view.Summary.Estimate.WeightDisplay }}{{ else }}{{ $view.Summary.Estimate.ItemsCount }} items · {{ $view.Summary.Estimate.WeightDisplay }}{{ end }}</p>
+          </div>
+          <p class="text-2xl font-bold text-gray-900">{{ fmtMoney $view.Summary.Estimate.Total "JPY" $.Lang }}</p>
+        </div>
+        {{ if $view.Summary.ShippingAddress }}
+          <div class="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-700">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">{{ if eq $.Lang "ja" }}配送予定{{ else }}Deliver to{{ end }}</p>
+            <p class="font-semibold text-gray-900">{{ if $view.Summary.ShippingAddress.Label }}{{ $view.Summary.ShippingAddress.Label }}{{ else }}{{ $view.Summary.ShippingAddress.Recipient }}{{ end }}</p>
+            <p>{{ $view.Summary.ShippingAddress.Recipient }}</p>
+            <p>{{ $view.Summary.ShippingAddress.Line1 }}</p>
+            {{ if $view.Summary.ShippingAddress.Line2 }}<p>{{ $view.Summary.ShippingAddress.Line2 }}</p>{{ end }}
+            <p>{{ if $view.Summary.ShippingAddress.PostalCode }}{{ $view.Summary.ShippingAddress.PostalCode }} {{ end }}{{ $view.Summary.ShippingAddress.City }}, {{ $view.Summary.ShippingAddress.Region }}</p>
+            <p>{{ $view.Summary.ShippingAddress.CountryLabel }}</p>
+          </div>
+        {{ end }}
+        {{ if $view.Summary.Notes }}
+          <ul class="space-y-1 text-xs text-gray-500">
+            {{ range $note := $view.Summary.Notes }}<li>• {{ $note }}</li>{{ end }}
+          </ul>
+        {{ end }}
+      </section>
+      <section class="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 text-sm text-indigo-900">
+        <h3 class="text-base font-semibold">{{ $view.Support.Title }}</h3>
+        <p class="mt-1 text-sm">{{ $view.Support.Body }}</p>
+        <a href="{{ $view.Support.CTAHref }}" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-indigo-700 hover:text-indigo-600">
+          <span>{{ $view.Support.CTALabel }}</span>
+          {{ template "icon" (dict "Name" "chat-bubble-left-right" "Class" "h-4 w-4") }}
+        </a>
+      </section>
+    </aside>
+  </div>
+
+  <div class="sticky bottom-3 z-10">
+    <form id="checkout-address-action"
+          class="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white/95 p-4 shadow-xl backdrop-blur"
+          hx-post="/checkout/address/submit"
+          hx-target="#checkout-action-status"
+          hx-swap="innerHTML">
+      <input type="hidden" name="shipping_id" id="shipping-selection-input" value="{{ $view.ShippingSection.SelectedID }}">
+      <input type="hidden" name="billing_id" id="billing-selection-input" value="{{ $view.BillingSection.SelectedID }}">
+      <div id="checkout-action-status"></div>
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <p class="text-xs text-gray-500">
+          {{ if eq $.Lang "ja" }}更新: {{ fmtDate $view.LastUpdated $.Lang }} · {{ $view.Summary.Estimate.ETA }}{{ else }}Updated {{ fmtDate $view.LastUpdated $.Lang }} · {{ $view.Summary.Estimate.ETA }}{{ end }}
+        </p>
+        <div class="flex flex-col gap-3 md:flex-row">
+          <a href="{{ $view.BackURL }}" class="inline-flex items-center justify-center rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-gray-300">{{ if eq $.Lang "ja" }}カートに戻る{{ else }}Back to cart{{ end }}</a>
+          <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-5 py-3 text-base font-semibold text-white hover:bg-indigo-500">{{ if eq $.Lang "ja" }}配送方法へ進む{{ else }}Continue to shipping{{ end }}</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</section>
+
+<script>
+(function(){
+  var shippingInput = document.getElementById('shipping-selection-input');
+  var billingInput = document.getElementById('billing-selection-input');
+  var billingToggle = document.getElementById('billing-sync-toggle');
+  var billingShell = document.getElementById('billing-address-shell');
+
+  function ensureHTMX(){ return window.htmx; }
+
+  function setBillingLocked(locked){
+    if (!billingShell) { return; }
+    if (locked) {
+      billingShell.classList.add('pointer-events-none','opacity-60');
+      billingShell.setAttribute('aria-disabled','true');
+    } else {
+      billingShell.classList.remove('pointer-events-none','opacity-60');
+      billingShell.removeAttribute('aria-disabled');
+    }
+  }
+
+  function updateHidden(kind, value){
+    if (kind === 'shipping' && shippingInput) {
+      shippingInput.value = value || '';
+      if (billingToggle && billingToggle.checked) {
+        billingInput.value = value || '';
+      }
+    }
+    if (kind === 'billing' && billingInput) {
+      billingInput.value = value || '';
+    }
+  }
+
+  function initSection(root){
+    if (!root || root.__checkoutReady) { return; }
+    root.__checkoutReady = true;
+    root.addEventListener('change', function(event){
+      var target = event.target;
+      if (!target || target.type !== 'radio') { return; }
+      var section = target.closest('[data-address-section]');
+      if (!section) { return; }
+      var kind = section.getAttribute('data-kind');
+      var val = target.value;
+      section.setAttribute('data-selected', val);
+      updateHidden(kind, val);
+      if (kind === 'shipping' && billingToggle && billingToggle.checked) {
+        updateHidden('billing', val);
+        setBillingLocked(true);
+      }
+    });
+  }
+
+  billingToggle && billingToggle.addEventListener('change', function(){
+    if (!billingInput || !shippingInput) { return; }
+    if (billingToggle.checked) {
+      billingInput.value = shippingInput.value;
+      setBillingLocked(true);
+    } else {
+      setBillingLocked(false);
+    }
+  });
+  if (billingToggle && billingToggle.checked) {
+    setBillingLocked(true);
+  }
+
+  initSection(document.getElementById('shipping-address-shell'));
+  initSection(document.getElementById('billing-address-shell'));
+
+  document.body.addEventListener('htmx:afterSwap', function(event){
+    if (!event || !event.target) { return; }
+    if (event.target.id === 'shipping-address-shell' || event.target.closest && event.target.closest('#shipping-address-shell')) {
+      initSection(document.getElementById('shipping-address-shell'));
+    }
+    if (event.target.id === 'billing-address-shell' || event.target.closest && event.target.closest('#billing-address-shell')) {
+      billingShell = document.getElementById('billing-address-shell');
+      initSection(billingShell);
+      if (billingToggle && billingToggle.checked) {
+        setBillingLocked(true);
+      }
+    }
+  });
+
+  document.body.addEventListener('checkout:address:saved', function(){
+    if (window.hankoModalClose) { window.hankoModalClose(); }
+    if (ensureHTMX()) {
+      window.htmx.trigger(document.body, 'refresh-address');
+    }
+  });
+})();
+</script>
+{{ end }}
