@@ -487,86 +487,12 @@ func (s *StaticService) ListTracking(_ context.Context, _ string, query Tracking
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	status := strings.TrimSpace(string(query.Status))
-	carrier := strings.TrimSpace(query.Carrier)
-	lane := strings.TrimSpace(query.Lane)
-	region := strings.TrimSpace(query.Destination)
-	delay := strings.TrimSpace(query.DelayWindow)
-
-	var filtered []TrackingShipment
-	for _, shipment := range s.trackings {
-		if status != "" && string(shipment.Status) != status {
-			continue
-		}
-		if carrier != "" && shipment.Carrier != carrier {
-			continue
-		}
-		if lane != "" && shipment.Lane != lane {
-			continue
-		}
-		if region != "" && shipment.Region != region {
-			continue
-		}
-		if delay != "" {
-			switch delay {
-			case "breach":
-				if shipment.SLATone != "danger" {
-					continue
-				}
-			case "delayed":
-				if shipment.DelayMinutes < 30 {
-					continue
-				}
-			}
-		}
-		filtered = append(filtered, shipment)
-	}
-
-	pageSize := query.PageSize
-	if pageSize <= 0 {
-		pageSize = 20
-	}
-	page := query.Page
-	if page < 1 {
-		page = 1
-	}
-
-	total := len(filtered)
-	start := (page - 1) * pageSize
-	if start >= total {
-		start = 0
-		page = 1
-	}
-	end := start + pageSize
-	if end > total {
-		end = total
-	}
-
-	rows := append([]TrackingShipment(nil), filtered[start:end]...)
-
-	var next, prev *int
-	if end < total {
-		nextPage := page + 1
-		next = &nextPage
-	}
-	if start > 0 {
-		prevPage := page - 1
-		if prevPage < 1 {
-			prevPage = 1
-		}
-		prev = &prevPage
-	}
-
+	filtered := filterTrackingShipments(s.trackings, query)
+	rows, pagination := paginateTrackingShipments(filtered, query.Page, query.PageSize)
 	now := time.Now()
 
 	return TrackingResult{
-		Summary: TrackingSummary{
-			ActiveShipments: countActiveShipments(s.trackings),
-			Delayed:         countDelayedShipments(s.trackings),
-			Exceptions:      countExceptionShipments(s.trackings),
-			LastRefresh:     now,
-			RefreshInterval: 30 * time.Second,
-		},
+		Summary:   trackingSummary(s.trackings, now, 30*time.Second),
 		Shipments: rows,
 		Filters: TrackingFilters{
 			StatusOptions:  buildTrackingStatusOptions(s.trackings),
@@ -574,14 +500,8 @@ func (s *StaticService) ListTracking(_ context.Context, _ string, query Tracking
 			LaneOptions:    buildTrackingLaneOptions(s.trackings),
 			RegionOptions:  buildTrackingRegionOptions(s.trackings),
 		},
-		Pagination: Pagination{
-			Page:       page,
-			PageSize:   pageSize,
-			TotalItems: total,
-			NextPage:   next,
-			PrevPage:   prev,
-		},
-		Generated: now,
+		Pagination: pagination,
+		Generated:  now,
 		Alerts: []TrackingAlert{
 			{
 				Label:       "佐川: 関西中継センターで保留が増加",

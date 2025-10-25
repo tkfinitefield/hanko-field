@@ -35,8 +35,16 @@ Environment variables:
 - `ADMIN_HTTP_ADDR` – bind address (default `:8080`)
 - `ADMIN_BASE_PATH` – mount point for the admin UI (default `/admin`)
 - `FIREBASE_PROJECT_ID` – enables Firebase ID token verification when provided (requires service account credentials)
+- `ADMIN_FIRESTORE_PROJECT_ID` – optional override for the Firestore project used by shipment tracking (falls back to `FIRESTORE_PROJECT_ID` or `FIREBASE_PROJECT_ID`)
 - `GOOGLE_APPLICATION_CREDENTIALS` – path to service account JSON used by the Firebase Admin SDK
 - `FIREBASE_AUTH_EMULATOR_HOST` – optional host for the Firebase Auth emulator during local development
+- `ADMIN_SHIPMENTS_TRACKING_COLLECTION` – Firestore collection containing the pre-aggregated tracking view (default `ops_tracking_shipments`)
+- `ADMIN_SHIPMENTS_TRACKING_ALERTS_COLLECTION` – optional collection for dashboard alert banners (default `ops_tracking_alerts`)
+- `ADMIN_SHIPMENTS_TRACKING_METADATA_DOC` – document path storing `updatedAt`/interval metadata to invalidate caches (e.g. `ops_tracking/meta/state`)
+- `ADMIN_SHIPMENTS_TRACKING_FETCH_LIMIT` – maximum number of active tracking rows to hydrate per refresh (default `500`)
+- `ADMIN_SHIPMENTS_TRACKING_ALERTS_LIMIT` – maximum number of alert banners to render (default `5`)
+- `ADMIN_SHIPMENTS_TRACKING_CACHE_TTL` – in-memory cache duration for the tracking dataset (default `15s`)
+- `ADMIN_SHIPMENTS_TRACKING_REFRESH_INTERVAL` – fallback auto-refresh interval exposed to the UI when metadata does not supply one (default `30s`)
 
 Run `make ensure-tailwind` after changing `TAILWIND_VERSION` in the `Makefile`; the rule verifies the installed binary matches the requested version and re-downloads if needed.
 

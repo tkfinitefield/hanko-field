@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
 
 	"finitefield.org/hanko-admin/internal/admin/httpserver"
@@ -19,18 +20,23 @@ import (
 	adminorders "finitefield.org/hanko-admin/internal/admin/orders"
 	"finitefield.org/hanko-admin/internal/admin/profile"
 	"finitefield.org/hanko-admin/internal/admin/search"
+	adminshipments "finitefield.org/hanko-admin/internal/admin/shipments"
 )
 
 func main() {
 	rootCtx := context.Background()
+	shipmentsService, shipmentsClose := buildShipmentsService(rootCtx)
+	defer shipmentsClose()
+
 	cfg := httpserver.Config{
-		Address:        getEnv("ADMIN_HTTP_ADDR", ":8080"),
-		BasePath:       getEnv("ADMIN_BASE_PATH", "/admin"),
-		Authenticator:  buildAuthenticator(rootCtx),
-		ProfileService: buildProfileService(),
-		SearchService:  buildSearchService(),
-		OrdersService:  buildOrdersService(),
-		Environment:    getEnv("ADMIN_ENVIRONMENT", "Development"),
+		Address:          getEnv("ADMIN_HTTP_ADDR", ":8080"),
+		BasePath:         getEnv("ADMIN_BASE_PATH", "/admin"),
+		Authenticator:    buildAuthenticator(rootCtx),
+		ProfileService:   buildProfileService(),
+		SearchService:    buildSearchService(),
+		OrdersService:    buildOrdersService(),
+		ShipmentsService: shipmentsService,
+		Environment:      getEnv("ADMIN_ENVIRONMENT", "Development"),
 		Session: httpserver.SessionConfig{
 			CookieName:       getEnv("ADMIN_SESSION_COOKIE_NAME", ""),
 			CookieDomain:     os.Getenv("ADMIN_SESSION_COOKIE_DOMAIN"),
@@ -131,6 +137,19 @@ func boolPtr(v bool) *bool {
 	return &v
 }
 
+func getEnvInt(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		log.Printf("invalid integer for %s: %v", key, err)
+		return fallback
+	}
+	return value
+}
+
 func buildAuthenticator(ctx context.Context) middleware.Authenticator {
 	projectID := os.Getenv("FIREBASE_PROJECT_ID")
 	if projectID == "" {
@@ -181,4 +200,45 @@ func buildSearchService() search.Service {
 
 func buildOrdersService() adminorders.Service {
 	return adminorders.NewStaticService()
+}
+
+func buildShipmentsService(ctx context.Context) (adminshipments.Service, func()) {
+	projectID := getFirestoreProjectID()
+	if projectID == "" {
+		log.Printf("admin: no Firestore project configured; using static shipment tracking data")
+		return adminshipments.NewStaticService(), func() {}
+	}
+
+	client, err := firestore.NewClient(ctx, projectID)
+	if err != nil {
+		log.Printf("admin: failed to initialise Firestore client (%s): %v", projectID, err)
+		return adminshipments.NewStaticService(), func() {}
+	}
+
+	cfg := adminshipments.FirestoreConfig{
+		TrackingCollection:     getEnv("ADMIN_SHIPMENTS_TRACKING_COLLECTION", "ops_tracking_shipments"),
+		AlertsCollection:       getEnv("ADMIN_SHIPMENTS_TRACKING_ALERTS_COLLECTION", "ops_tracking_alerts"),
+		MetadataDocPath:        strings.TrimSpace(os.Getenv("ADMIN_SHIPMENTS_TRACKING_METADATA_DOC")),
+		FetchLimit:             getEnvInt("ADMIN_SHIPMENTS_TRACKING_FETCH_LIMIT", 500),
+		AlertsLimit:            getEnvInt("ADMIN_SHIPMENTS_TRACKING_ALERTS_LIMIT", 5),
+		CacheTTL:               getEnvDuration("ADMIN_SHIPMENTS_TRACKING_CACHE_TTL", 15*time.Second),
+		DefaultRefreshInterval: getEnvDuration("ADMIN_SHIPMENTS_TRACKING_REFRESH_INTERVAL", 30*time.Second),
+	}
+	service := adminshipments.NewFirestoreService(client, cfg)
+	cleanup := func() {
+		if err := client.Close(); err != nil {
+			log.Printf("admin: firestore client close error: %v", err)
+		}
+	}
+	return service, cleanup
+}
+
+func getFirestoreProjectID() string {
+	if v := strings.TrimSpace(os.Getenv("ADMIN_FIRESTORE_PROJECT_ID")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("FIRESTORE_PROJECT_ID")); v != "" {
+		return v
+	}
+	return strings.TrimSpace(os.Getenv("FIREBASE_PROJECT_ID"))
 }
