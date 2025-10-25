@@ -5,10 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"html/template"
 	"math"
 	"net/http"
 	"net/url"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -88,7 +89,7 @@ type DesignShareLink struct {
 	ExpiresAt       time.Time
 	ExpiresDisplay  string
 	ExpiresRelative string
-	EmbedHTML       template.HTML
+	EmbedCode       string
 	GeneratedAt     time.Time
 	GeneratedCopy   string
 	ShortCode       string
@@ -120,72 +121,80 @@ type shareOptionSeed struct {
 	NotesEN       string
 }
 
-var shareFormatCatalog = []shareOptionSeed{
-	{
-		ID:            "png",
-		LabelJA:       "PNG（透過）",
-		LabelEN:       "PNG (transparent)",
-		DescriptionJA: "ICC プロファイル付き / 背景透過",
-		DescriptionEN: "Embedded ICC profile / transparent",
-		NotesJA:       "ICC プロファイル埋め込み / 背景透過",
-		NotesEN:       "Embedded ICC profile / alpha channel",
-	},
-	{
-		ID:            "svg",
-		LabelJA:       "SVG（ベクター）",
-		LabelEN:       "SVG (vector)",
-		DescriptionJA: "編集可能なパスを保持 / 彫刻向け",
-		DescriptionEN: "Keeps editable paths for engraving",
-		NotesJA:       "パス保持 / 彫刻・大判印刷",
-		NotesEN:       "Live paths for engraving / large format",
-	},
-	{
-		ID:            "pdf",
-		LabelJA:       "PDF（校正用）",
-		LabelEN:       "PDF (proof)",
-		DescriptionJA: "校正コメント欄付きシート",
-		DescriptionEN: "Proof sheet with comment gutter",
-		NotesJA:       "校正コメント欄付き / ドキュメント共有",
-		NotesEN:       "Proof sheet with comment gutter",
-	},
-}
+var (
+	shareFormatCatalog = []shareOptionSeed{
+		{
+			ID:            "png",
+			LabelJA:       "PNG（透過）",
+			LabelEN:       "PNG (transparent)",
+			DescriptionJA: "ICC プロファイル付き / 背景透過",
+			DescriptionEN: "Embedded ICC profile / transparent",
+			NotesJA:       "ICC プロファイル埋め込み / 背景透過",
+			NotesEN:       "Embedded ICC profile / alpha channel",
+		},
+		{
+			ID:            "svg",
+			LabelJA:       "SVG（ベクター）",
+			LabelEN:       "SVG (vector)",
+			DescriptionJA: "編集可能なパスを保持 / 彫刻向け",
+			DescriptionEN: "Keeps editable paths for engraving",
+			NotesJA:       "パス保持 / 彫刻・大判印刷",
+			NotesEN:       "Live paths for engraving / large format",
+		},
+		{
+			ID:            "pdf",
+			LabelJA:       "PDF（校正用）",
+			LabelEN:       "PDF (proof)",
+			DescriptionJA: "校正コメント欄付きシート",
+			DescriptionEN: "Proof sheet with comment gutter",
+			NotesJA:       "校正コメント欄付き / ドキュメント共有",
+			NotesEN:       "Proof sheet with comment gutter",
+		},
+	}
 
-var shareSizeCatalog = []shareOptionSeed{
-	{
-		ID:            "original",
-		LabelJA:       "原寸（1200px）",
-		LabelEN:       "Original (1200px)",
-		DescriptionJA: "最大解像度 / 印刷登録用",
-		DescriptionEN: "Maximum resolution for print",
-		NotesJA:       "フル解像度 / 提出用",
-		NotesEN:       "Full resolution / approvals",
-	},
-	{
-		ID:            "medium",
-		LabelJA:       "ミドル（800px）",
-		LabelEN:       "Medium (800px)",
-		DescriptionJA: "スライド・メール共有向け",
-		DescriptionEN: "Ideal for slides and emails",
-		NotesJA:       "メール添付 / スライド",
-		NotesEN:       "Email + decks",
-	},
-	{
-		ID:            "thumbnail",
-		LabelJA:       "サムネ（320px）",
-		LabelEN:       "Thumbnail (320px)",
-		DescriptionJA: "チャット・リスト向け軽量版",
-		DescriptionEN: "Lightweight preview for chat",
-		NotesJA:       "チャット / 一覧",
-		NotesEN:       "Chat previews",
-	},
-}
+	shareSizeCatalog = []shareOptionSeed{
+		{
+			ID:            "original",
+			LabelJA:       "原寸（1200px）",
+			LabelEN:       "Original (1200px)",
+			DescriptionJA: "最大解像度 / 印刷登録用",
+			DescriptionEN: "Maximum resolution for print",
+			NotesJA:       "フル解像度 / 提出用",
+			NotesEN:       "Full resolution / approvals",
+		},
+		{
+			ID:            "medium",
+			LabelJA:       "ミドル（800px）",
+			LabelEN:       "Medium (800px)",
+			DescriptionJA: "スライド・メール共有向け",
+			DescriptionEN: "Ideal for slides and emails",
+			NotesJA:       "メール添付 / スライド",
+			NotesEN:       "Email + decks",
+		},
+		{
+			ID:            "thumbnail",
+			LabelJA:       "サムネ（320px）",
+			LabelEN:       "Thumbnail (320px)",
+			DescriptionJA: "チャット・リスト向け軽量版",
+			DescriptionEN: "Lightweight preview for chat",
+			NotesJA:       "チャット / 一覧",
+			NotesEN:       "Chat previews",
+		},
+	}
+)
+
+var (
+	designIDPattern = regexp.MustCompile(`^df-[a-z0-9-]{4,}$`)
+	cdnBase         = strings.TrimSuffix(strings.TrimSpace(os.Getenv("HANKO_WEB_CDN_BASE")), "/")
+	shareBase       = strings.TrimSuffix(strings.TrimSpace(os.Getenv("HANKO_WEB_SHARE_BASE")), "/")
+)
 
 func defaultDesignShareForm(now time.Time) designShareForm {
 	now = toShareZone(now)
 	defExpiry := now.Add(72 * time.Hour)
 	defExpiry = normalizeShareDate(defExpiry)
 	return designShareForm{
-		DesignID:  "df-219a",
+		DesignID:  demoDesignID,
 		Format:    defaultDesignShareFormat,
 		Size:      defaultDesignShareSize,
 		Watermark: true,
@@ -198,7 +207,16 @@ func parseDesignShareForm(lang string, form url.Values, now time.Time) (designSh
 	var alerts []DesignShareAlert
 
 	if id := strings.TrimSpace(form.Get("design_id")); id != "" {
-		state.DesignID = id
+		if normalized, ok := normalizeDesignID(id); ok {
+			state.DesignID = normalized
+		} else {
+			alerts = append(alerts, DesignShareAlert{
+				Tone:        "danger",
+				Title:       editorCopy(lang, "デザイン ID が無効です。", "Design ID is invalid."),
+				Description: editorCopy(lang, "もう一度共有リンクを開き直してください。", "Reload the share dialog and try again."),
+				Icon:        "exclamation-triangle",
+			})
+		}
 	}
 
 	format := strings.TrimSpace(strings.ToLower(form.Get("format")))
@@ -362,13 +380,19 @@ func issueDesignShareLink(ctx context.Context, lang, designID string, form desig
 	}
 	now = toShareZone(now)
 	expires := shareExpiryCutoff(form.Expiry)
-	token := randomShareToken(20)
-	short := randomShareToken(6)
+	token, err := randomShareToken(20)
+	if err != nil {
+		return DesignShareLink{}, fmt.Errorf("issue share link token: %w", err)
+	}
+	short, err := randomShareToken(6)
+	if err != nil {
+		return DesignShareLink{}, fmt.Errorf("issue share shortcode: %w", err)
+	}
 	path := fmt.Sprintf("designs/%s/export/%s/%s.%s", designID, form.Size, watermarkSlug(form.Watermark), form.Format)
-	downloadURL := fmt.Sprintf("https://cdn.hanko-field.app/%s?token=%s", path, token)
-	shareURL := fmt.Sprintf("https://share.hanko-field.jp/d/%s?design=%s", short, designID)
+	downloadURL := fmt.Sprintf("%s/%s?token=%s", designShareCDNBase(), path, token)
+	shareURL := fmt.Sprintf("%s/d/%s?design=%s", designSharePortalBase(), short, designID)
 	fileSize := shareApproxFileSize(form.Format, form.Size)
-	embed := template.HTML(fmt.Sprintf(`<iframe src="%s" title="Hanko Field design preview" loading="lazy" style="width:100%%;max-width:560px;height:420px;border:0;border-radius:20px;"></iframe>`, shareURL))
+	embed := fmt.Sprintf(`<iframe src="%s" title="Hanko Field design preview" loading="lazy" style="width:100%%;max-width:560px;height:420px;border:0;border-radius:20px;"></iframe>`, shareURL)
 
 	link := DesignShareLink{
 		Available:       true,
@@ -386,7 +410,7 @@ func issueDesignShareLink(ctx context.Context, lang, designID string, form desig
 		ExpiresAt:       expires,
 		ExpiresDisplay:  formatShareDate(expires, lang),
 		ExpiresRelative: relativeShareExpiry(expires, now, lang),
-		EmbedHTML:       embed,
+		EmbedCode:       embed,
 		GeneratedAt:     now,
 		GeneratedCopy:   editorCopy(lang, "共有リンクを発行しました。", "Share link is ready."),
 		ShortCode:       short,
@@ -549,10 +573,10 @@ func toShareZone(ts time.Time) time.Time {
 }
 
 func shareLocation() *time.Location {
-	if jstLocation != nil {
-		return jstLocation
+	if jstLocation == nil {
+		return time.FixedZone("JST", 9*60*60)
 	}
-	return time.FixedZone("JST", 9*60*60)
+	return jstLocation
 }
 
 func watermarkSlug(enabled bool) string {
@@ -586,13 +610,38 @@ func designShareLinkAlerts(lang string, link DesignShareLink, now time.Time) []D
 	return alerts
 }
 
-func randomShareToken(n int) string {
+func randomShareToken(n int) (string, error) {
 	if n <= 0 {
 		n = 8
 	}
 	buf := make([]byte, n)
 	if _, err := rand.Read(buf); err != nil {
-		return fmt.Sprintf("%x", time.Now().UnixNano())
+		return "", fmt.Errorf("random: %w", err)
 	}
-	return hex.EncodeToString(buf)
+	return hex.EncodeToString(buf), nil
+}
+
+func designShareCDNBase() string {
+	if cdnBase != "" {
+		return cdnBase
+	}
+	return "https://cdn.hanko-field.app"
+}
+
+func designSharePortalBase() string {
+	if shareBase != "" {
+		return shareBase
+	}
+	return "https://share.hanko-field.jp"
+}
+
+func normalizeDesignID(id string) (string, bool) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", false
+	}
+	if designIDPattern.MatchString(id) {
+		return id, true
+	}
+	return "", false
 }

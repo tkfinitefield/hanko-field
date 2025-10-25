@@ -24,13 +24,16 @@
     btn.addEventListener('click', function(){
       var value = btn.getAttribute('data-share-value');
       if (!value) { return; }
+      var original = btn.getAttribute('data-share-copy-label') || btn.textContent || 'Copy';
       var success = btn.getAttribute('data-share-copied-label') || 'Copied';
       function done(ok){
         if (ok) {
           btn.dataset.shareCopied = 'true';
+          btn.textContent = success;
           announce(success);
           setTimeout(function(){
             delete btn.dataset.shareCopied;
+            btn.textContent = original;
           }, 1600);
         }
       }
@@ -238,7 +241,7 @@
                   data-share-copy
                   data-share-copy-label="{{ if eq $view.Lang "ja" }}コピー{{ else }}Copy{{ end }}"
                   data-share-copied-label="{{ if eq $view.Lang "ja" }}コピーしました{{ else }}Copied{{ end }}"
-                  data-share-value="{{ printf "%s" $view.Link.EmbedHTML }}"
+                  data-share-value="{{ $view.Link.EmbedCode }}"
                   data-analytics-click="design_share_copy"
                   data-analytics-prop-type="embed"
                   data-analytics-prop-format="{{ $view.Link.Format }}"
@@ -247,7 +250,7 @@
             <span>{{ if eq $view.Lang "ja" }}コピー{{ else }}Copy{{ end }}</span>
           </button>
         </div>
-        <textarea class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700" rows="3" readonly>{{ printf "%s" $view.Link.EmbedHTML }}</textarea>
+        <textarea class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700" rows="3" readonly>{{ $view.Link.EmbedCode }}</textarea>
       </div>
       <span data-share-copy-status class="sr-only" role="status" aria-live="polite"></span>
     </section>

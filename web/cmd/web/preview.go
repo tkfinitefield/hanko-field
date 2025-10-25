@@ -12,6 +12,7 @@ import (
 
 // DesignPreviewView aggregates all state required to render the design preview page and fragment.
 type DesignPreviewView struct {
+	DesignID            string
 	Lang                string
 	Title               string
 	Subtitle            string
@@ -172,6 +173,7 @@ func buildDesignPreviewView(lang string, values url.Values) DesignPreviewView {
 	showGrid := parsePreviewGrid(values.Get("grid"))
 
 	view := DesignPreviewView{
+		DesignID:           demoDesignID,
 		Lang:               lang,
 		Title:              editorCopy(lang, "デザインプレビュー", "Design preview"),
 		Subtitle:           editorCopy(lang, "最終的な印影とモックアップを確認してエクスポートします。", "Review the final impression in context before export."),
@@ -199,8 +201,8 @@ func buildDesignPreviewView(lang string, values url.Values) DesignPreviewView {
 	view.Preview = buildPreviewImage(lang, bg, frame, dpi, showGrid)
 	view.Metadata = buildPreviewMetadata(lang, bg, frame, dpi)
 	view.InfoBar = buildPreviewInfoBar(lang, view.Metadata)
-	view.Downloads = buildPreviewDownloads(lang, bg, frame, dpi)
-	view.ShareActions = buildPreviewShare(lang, bg, frame, dpi)
+	view.Downloads = buildPreviewDownloads(lang, view.DesignID, bg, frame, dpi)
+	view.ShareActions = buildPreviewShare(lang, view.DesignID, bg, frame, dpi)
 	view.Tips = buildPreviewTips(lang, frame)
 	view.Snackbars = buildPreviewSnackbars(lang, bg, frame, dpi, showGrid)
 	view.Coachmark = buildPreviewCoachmark(lang, frame)
@@ -527,8 +529,7 @@ func buildPreviewInfoBar(lang string, meta DesignPreviewMetadata) []DesignPrevie
 	}
 }
 
-func buildPreviewDownloads(lang, bg, frame string, dpi int) []DesignPreviewDownload {
-	designID := "df-219a"
+func buildPreviewDownloads(lang, designID, bg, frame string, dpi int) []DesignPreviewDownload {
 	base := fmt.Sprintf("https://cdn.hanko-field.app/designs/%s/%s/%s", designID, bg, frame)
 	token := previewSignedToken(dpi)
 	return []DesignPreviewDownload{
@@ -560,12 +561,12 @@ func previewSignedToken(dpi int) string {
 	return fmt.Sprintf("exp=%d&sig=%x", exp, hash&math.MaxInt32)
 }
 
-func buildPreviewShare(lang, bg, frame string, dpi int) []DesignPreviewShareAction {
+func buildPreviewShare(lang, designID, bg, frame string, dpi int) []DesignPreviewShareAction {
 	query := url.Values{}
 	query.Set("bg", bg)
 	query.Set("frame", frame)
 	query.Set("dpi", strconv.Itoa(dpi))
-	shareURL := "https://app.hanko-field.jp/design/df-219a/preview?" + query.Encode()
+	shareURL := fmt.Sprintf("https://app.hanko-field.jp/design/%s/preview?%s", designID, query.Encode())
 	return []DesignPreviewShareAction{
 		{
 			ID:          "copy-link",

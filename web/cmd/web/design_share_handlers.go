@@ -15,7 +15,9 @@ func DesignShareModal(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	form := defaultDesignShareForm(now)
 	if design := strings.TrimSpace(r.URL.Query().Get("design")); design != "" {
-		form.DesignID = design
+		if normalized, ok := normalizeDesignID(design); ok {
+			form.DesignID = normalized
+		}
 	}
 	view := buildDesignShareView(lang, form, nil, nil, now)
 	renderTemplate(w, r, "frag_design_share_modal", view)
