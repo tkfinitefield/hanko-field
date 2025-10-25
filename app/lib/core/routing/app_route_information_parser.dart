@@ -16,34 +16,33 @@ class AppRouteInformationParser extends RouteInformationParser<AppRoute> {
     }
     final firstSegment = uri.pathSegments.first;
     final remaining = uri.pathSegments.skip(1).toList();
+    final routeSegments = _extractRouteSegments(remaining);
     final tab = _tabFromSegment(firstSegment);
     switch (tab) {
       case AppTab.creation:
         return TabRoute(
           currentTab: AppTab.creation,
-          stack: remaining.isEmpty ? const [] : [CreationStageRoute(remaining)],
+          stack: _buildCreationStack(routeSegments),
         );
       case AppTab.shop:
         return TabRoute(
           currentTab: AppTab.shop,
-          stack: _buildShopStack(remaining),
+          stack: _buildShopStack(routeSegments),
         );
       case AppTab.orders:
         return TabRoute(
           currentTab: AppTab.orders,
-          stack: _buildOrderStack(remaining),
+          stack: _buildOrderStack(routeSegments),
         );
       case AppTab.library:
         return TabRoute(
           currentTab: AppTab.library,
-          stack: _buildLibraryStack(remaining),
+          stack: _buildLibraryStack(routeSegments),
         );
       case AppTab.profile:
         return TabRoute(
           currentTab: AppTab.profile,
-          stack: remaining.isEmpty
-              ? const []
-              : [ProfileSectionRoute(remaining)],
+          stack: _buildProfileStack(routeSegments),
         );
     }
   }
@@ -62,43 +61,112 @@ class AppRouteInformationParser extends RouteInformationParser<AppRoute> {
     return kDefaultAppTab;
   }
 
-  List<IndependentRoute> _buildShopStack(List<String> segments) {
-    if (segments.length < 2) {
+  List<IndependentRoute> _buildCreationStack(List<List<String>> routes) {
+    if (routes.isEmpty) {
       return const [];
     }
-    final entity = segments.first;
-    final identifier = segments[1];
-    final trailingSegments = segments.length > 2
-        ? segments.sublist(2)
-        : const <String>[];
     return [
-      ShopDetailRoute(
-        entity: entity,
-        identifier: identifier,
-        trailingSegments: trailingSegments,
-      ),
+      for (final segments in routes)
+        if (segments.isNotEmpty) CreationStageRoute(segments),
     ];
   }
 
-  List<IndependentRoute> _buildOrderStack(List<String> segments) {
-    if (segments.isEmpty) {
+  List<IndependentRoute> _buildShopStack(List<List<String>> routes) {
+    if (routes.isEmpty) {
       return const [];
     }
-    final orderId = segments.first;
-    final trailingSegments = segments.length > 1
-        ? segments.sublist(1)
-        : const <String>[];
-    return [OrderDetailsRoute(orderId: orderId, trailing: trailingSegments)];
+    final result = <IndependentRoute>[];
+    for (final segments in routes) {
+      if (segments.length < 2) {
+        continue;
+      }
+      result.add(
+        ShopDetailRoute(
+          entity: segments[0],
+          identifier: segments[1],
+          trailingSegments: segments.length > 2
+              ? segments.sublist(2)
+              : const <String>[],
+        ),
+      );
+    }
+    return result;
   }
 
-  List<IndependentRoute> _buildLibraryStack(List<String> segments) {
+  List<IndependentRoute> _buildOrderStack(List<List<String>> routes) {
+    if (routes.isEmpty) {
+      return const [];
+    }
+    final result = <IndependentRoute>[];
+    for (final segments in routes) {
+      if (segments.isEmpty) {
+        continue;
+      }
+      result.add(
+        OrderDetailsRoute(
+          orderId: segments.first,
+          trailing: segments.length > 1
+              ? segments.sublist(1)
+              : const <String>[],
+        ),
+      );
+    }
+    return result;
+  }
+
+  List<IndependentRoute> _buildLibraryStack(List<List<String>> routes) {
+    if (routes.isEmpty) {
+      return const [];
+    }
+    final result = <IndependentRoute>[];
+    for (final segments in routes) {
+      if (segments.isEmpty) {
+        continue;
+      }
+      result.add(
+        LibraryEntryRoute(
+          designId: segments.first,
+          trailing: segments.length > 1
+              ? segments.sublist(1)
+              : const <String>[],
+        ),
+      );
+    }
+    return result;
+  }
+
+  List<IndependentRoute> _buildProfileStack(List<List<String>> routes) {
+    if (routes.isEmpty) {
+      return const [];
+    }
+    return [
+      for (final segments in routes)
+        if (segments.isNotEmpty) ProfileSectionRoute(segments),
+    ];
+  }
+
+  List<List<String>> _extractRouteSegments(List<String> segments) {
     if (segments.isEmpty) {
       return const [];
     }
-    final designId = segments.first;
-    final trailingSegments = segments.length > 1
-        ? segments.sublist(1)
-        : const <String>[];
-    return [LibraryEntryRoute(designId: designId, trailing: trailingSegments)];
+    if (!segments.contains(kStackBoundarySegment)) {
+      return [List.unmodifiable(segments)];
+    }
+    final result = <List<String>>[];
+    var current = <String>[];
+    for (final segment in segments) {
+      if (segment == kStackBoundarySegment) {
+        if (current.isNotEmpty) {
+          result.add(List.unmodifiable(current));
+          current = <String>[];
+        }
+        continue;
+      }
+      current.add(segment);
+    }
+    if (current.isNotEmpty) {
+      result.add(List.unmodifiable(current));
+    }
+    return result;
   }
 }

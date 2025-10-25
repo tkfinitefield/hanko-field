@@ -4,6 +4,9 @@ import 'package:app/core/routing/app_tab.dart';
 import 'package:app/features/navigation/presentation/deep_link_pages.dart';
 import 'package:flutter/material.dart';
 
+/// スタックの境界を表すパスセグメント
+const String kStackBoundarySegment = '__stack__';
+
 /// タブ横断で積み上げるルート
 sealed class IndependentRoute {
   List<String> get pathSegments;
@@ -47,7 +50,12 @@ class TabRoute implements AppRoute {
   String get location {
     final segments = <String>[currentTab.pathSegment];
     for (final route in _stack) {
-      segments.addAll(route.pathSegments);
+      final routeSegments = route.pathSegments;
+      if (routeSegments.isEmpty) {
+        continue;
+      }
+      segments.add(kStackBoundarySegment);
+      segments.addAll(routeSegments);
     }
     return '/${segments.join('/')}';
   }
