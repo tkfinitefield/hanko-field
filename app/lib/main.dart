@@ -6,6 +6,8 @@ import 'package:app/core/firebase/firebase_providers.dart';
 import 'package:app/core/monitoring/analytics_controller.dart';
 import 'package:app/core/monitoring/analytics_events.dart';
 import 'package:app/core/monitoring/crash_reporting_controller.dart';
+import 'package:app/core/routing/app_route_information_parser.dart';
+import 'package:app/core/routing/app_router_delegate.dart';
 import 'package:app/core/storage/storage_providers.dart';
 import 'package:app/core/theme/app_theme.dart';
 import 'package:app/l10n/gen/app_localizations.dart';
@@ -53,6 +55,7 @@ class App extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final config = ref.watch(appConfigProvider);
+    final routerDelegate = ref.watch(appRouterDelegateProvider);
     // Kick off Firebase initialization once. UI does not block on it.
     ref.listen<AsyncValue<void>>(firebaseInitializedProvider, (_, __) {});
     ref.listen<AsyncValue<AnalyticsState>>(analyticsControllerProvider, (
@@ -76,35 +79,15 @@ class App extends ConsumerWidget {
         );
       }
     });
-    return MaterialApp(
+    return MaterialApp.router(
+      routerDelegate: routerDelegate,
+      routeInformationParser: const AppRouteInformationParser(),
+      title: config.displayName,
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        appBar: AppBar(title: Text(config.displayName)),
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Base URL: ${config.baseUrl}'),
-              const SizedBox(height: 12),
-              Text(
-                'Flavor (dart-define FLAVOR): '
-                '${const String.fromEnvironment('FLAVOR', defaultValue: 'dev')}',
-              ),
-              const SizedBox(height: 12),
-              // Remote Config sample value (default set in init)
-              const Text('RC welcome_title: '),
-              Text(
-                ref.watch(welcomeTitleProvider),
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

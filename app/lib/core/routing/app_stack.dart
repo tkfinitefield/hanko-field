@@ -1,5 +1,5 @@
-import 'app_route_configuration.dart';
-import 'app_tab.dart';
+import 'package:app/core/routing/app_route_configuration.dart';
+import 'package:app/core/routing/app_tab.dart';
 
 /// アプリのルーティングスタック
 class AppStack {

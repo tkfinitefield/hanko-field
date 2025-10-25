@@ -1,6 +1,6 @@
-import 'app_route_configuration.dart';
-import 'app_stack.dart';
-import 'app_tab.dart';
+import 'package:app/core/routing/app_route_configuration.dart';
+import 'package:app/core/routing/app_stack.dart';
+import 'package:app/core/routing/app_tab.dart';
 
 /// アプリのルーティング状態
 class AppState {
@@ -27,7 +27,14 @@ class AppState {
   }
 
   AppState push(IndependentRoute route) {
-    return copyWith(stack: stack.push(currentTab, route));
+    final updatedStack = stack.push(currentTab, route);
+    return copyWith(
+      stack: updatedStack,
+      currentRoute: TabRoute(
+        currentTab: currentTab,
+        stack: updatedStack.getStack(currentTab),
+      ),
+    );
   }
 
   @override
