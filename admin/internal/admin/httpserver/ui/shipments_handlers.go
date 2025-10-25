@@ -29,6 +29,11 @@ type shipmentsRequest struct {
 	state shipmentstpl.QueryState
 }
 
+type trackingRequest struct {
+	query adminshipments.TrackingQuery
+	state shipmentstpl.TrackingQueryState
+}
+
 func buildShipmentsRequest(r *http.Request) shipmentsRequest {
 	raw := r.URL.Query()
 
@@ -90,6 +95,67 @@ func buildShipmentsRequest(r *http.Request) shipmentsRequest {
 	}
 }
 
+func buildTrackingRequest(r *http.Request) trackingRequest {
+	raw := r.URL.Query()
+
+	status := parseTrackingStatus(raw.Get("status"))
+	carrier := strings.TrimSpace(raw.Get("carrier"))
+	lane := strings.TrimSpace(raw.Get("lane"))
+	region := strings.TrimSpace(raw.Get("region"))
+	delay := strings.TrimSpace(raw.Get("delay"))
+	page := parsePositiveIntDefault(raw.Get("page"), 1)
+	pageSize := parsePositiveIntDefault(raw.Get("pageSize"), 20)
+
+	query := adminshipments.TrackingQuery{
+		Status:      status,
+		Carrier:     carrier,
+		Lane:        lane,
+		Destination: region,
+		DelayWindow: delay,
+		Page:        page,
+		PageSize:    pageSize,
+	}
+
+	state := shipmentstpl.TrackingQueryState{
+		Status:      string(status),
+		Carrier:     carrier,
+		Lane:        lane,
+		Region:      region,
+		DelayWindow: delay,
+		Page:        page,
+		PageSize:    pageSize,
+		RawQuery:    trackingRawQuery(query),
+	}
+
+	return trackingRequest{query: query, state: state}
+}
+
+func trackingRawQuery(query adminshipments.TrackingQuery) string {
+	values := url.Values{}
+	if query.Status != "" {
+		values.Set("status", string(query.Status))
+	}
+	if query.Carrier != "" {
+		values.Set("carrier", query.Carrier)
+	}
+	if query.Lane != "" {
+		values.Set("lane", query.Lane)
+	}
+	if query.Destination != "" {
+		values.Set("region", query.Destination)
+	}
+	if query.DelayWindow != "" {
+		values.Set("delay", query.DelayWindow)
+	}
+	if query.Page > 1 {
+		values.Set("page", strconv.Itoa(query.Page))
+	}
+	if query.PageSize > 0 && query.PageSize != 20 {
+		values.Set("pageSize", strconv.Itoa(query.PageSize))
+	}
+	return values.Encode()
+}
+
 func parseBatchStatus(value string) adminshipments.BatchStatus {
 	switch strings.TrimSpace(value) {
 	case string(adminshipments.BatchStatusDraft):
@@ -102,6 +168,23 @@ func parseBatchStatus(value string) adminshipments.BatchStatus {
 		return adminshipments.BatchStatusCompleted
 	case string(adminshipments.BatchStatusFailed):
 		return adminshipments.BatchStatusFailed
+	default:
+		return ""
+	}
+}
+
+func parseTrackingStatus(value string) adminshipments.TrackingStatus {
+	switch strings.TrimSpace(value) {
+	case string(adminshipments.TrackingStatusInTransit):
+		return adminshipments.TrackingStatusInTransit
+	case string(adminshipments.TrackingStatusOutForDelivery):
+		return adminshipments.TrackingStatusOutForDelivery
+	case string(adminshipments.TrackingStatusLabelCreated):
+		return adminshipments.TrackingStatusLabelCreated
+	case string(adminshipments.TrackingStatusDelivered):
+		return adminshipments.TrackingStatusDelivered
+	case string(adminshipments.TrackingStatusException):
+		return adminshipments.TrackingStatusException
 	default:
 		return ""
 	}
@@ -179,6 +262,71 @@ func (h *Handlers) ShipmentsBatchesTable(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	templ.Handler(shipmentstpl.Table(table)).ServeHTTP(w, r)
+}
+
+// ShipmentsTrackingPage renders the shipment tracking monitor.
+func (h *Handlers) ShipmentsTrackingPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	req := buildTrackingRequest(r)
+	result, err := h.shipments.ListTracking(ctx, user.Token, req.query)
+	errMsg := ""
+	if err != nil {
+		log.Printf("shipments: list tracking failed: %v", err)
+		errMsg = "配送状況の取得に失敗しました。時間を置いて再度お試しください。"
+		result = adminshipments.TrackingResult{
+			Summary: adminshipments.TrackingSummary{
+				LastRefresh:     time.Now(),
+				RefreshInterval: 30 * time.Second,
+			},
+		}
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	table := shipmentstpl.TrackingTablePayload(basePath, req.state, result, errMsg)
+	page := shipmentstpl.BuildTrackingPageData(basePath, req.state, result, table)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	templ.Handler(shipmentstpl.TrackingIndex(page)).ServeHTTP(w, r)
+}
+
+// ShipmentsTrackingTable renders the tracking table fragment.
+func (h *Handlers) ShipmentsTrackingTable(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := custommw.UserFromContext(ctx)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	req := buildTrackingRequest(r)
+	result, err := h.shipments.ListTracking(ctx, user.Token, req.query)
+	errMsg := ""
+	if err != nil {
+		log.Printf("shipments: list tracking failed: %v", err)
+		errMsg = "配送状況の取得に失敗しました。時間を置いて再度お試しください。"
+		result = adminshipments.TrackingResult{
+			Summary: adminshipments.TrackingSummary{
+				LastRefresh:     time.Now(),
+				RefreshInterval: 30 * time.Second,
+			},
+		}
+	}
+
+	basePath := custommw.BasePathFromContext(ctx)
+	table := shipmentstpl.TrackingTablePayload(basePath, req.state, result, errMsg)
+
+	if canonical := canonicalTrackingURL(basePath, req.state); canonical != "" {
+		w.Header().Set("HX-Push-Url", canonical)
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	templ.Handler(shipmentstpl.TrackingTable(table)).ServeHTTP(w, r)
 }
 
 // ShipmentsBatchDrawer renders the drawer fragment.
@@ -319,6 +467,47 @@ func canonicalShipmentsURL(basePath string, state shipmentstpl.QueryState, selec
 		return path
 	}
 	return path + "?" + query
+}
+
+func canonicalTrackingURL(basePath string, state shipmentstpl.TrackingQueryState) string {
+	values := url.Values{}
+	if strings.TrimSpace(state.Status) != "" {
+		values.Set("status", strings.TrimSpace(state.Status))
+	}
+	if strings.TrimSpace(state.Carrier) != "" {
+		values.Set("carrier", strings.TrimSpace(state.Carrier))
+	}
+	if strings.TrimSpace(state.Lane) != "" {
+		values.Set("lane", strings.TrimSpace(state.Lane))
+	}
+	if strings.TrimSpace(state.Region) != "" {
+		values.Set("region", strings.TrimSpace(state.Region))
+	}
+	if strings.TrimSpace(state.DelayWindow) != "" {
+		values.Set("delay", strings.TrimSpace(state.DelayWindow))
+	}
+	if state.Page > 1 {
+		values.Set("page", strconv.Itoa(state.Page))
+	}
+	if state.PageSize > 0 && state.PageSize != 20 {
+		values.Set("pageSize", strconv.Itoa(state.PageSize))
+	}
+
+	base := strings.TrimSpace(basePath)
+	if base == "" {
+		base = "/admin"
+	}
+	if !strings.HasPrefix(base, "/") {
+		base = "/" + base
+	}
+	if len(base) > 1 {
+		base = strings.TrimRight(base, "/")
+	}
+	path := base + "/shipments/tracking"
+	if encoded := values.Encode(); encoded != "" {
+		return path + "?" + encoded
+	}
+	return path
 }
 
 func triggerShipmentsSelect(w http.ResponseWriter, batchID string) {

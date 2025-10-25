@@ -2,6 +2,7 @@ package shipments
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -10,9 +11,10 @@ import (
 
 // StaticService provides deterministic shipment batch data for local development.
 type StaticService struct {
-	mu      sync.RWMutex
-	batches []Batch
-	details map[string]BatchDetail
+	mu        sync.RWMutex
+	batches   []Batch
+	details   map[string]BatchDetail
+	trackings []TrackingShipment
 }
 
 // NewStaticService seeds the static shipment data set.
@@ -69,8 +71,9 @@ func NewStaticService() *StaticService {
 	}
 
 	return &StaticService{
-		batches: batches,
-		details: details,
+		batches:   batches,
+		details:   details,
+		trackings: mockTrackingShipments(now),
 	}
 }
 
@@ -190,6 +193,51 @@ func mockDetail(batch Batch, now time.Time) BatchDetail {
 
 func ptr[T any](v T) *T {
 	return &v
+}
+
+func mockTrackingShipments(now time.Time) []TrackingShipment {
+	makeShipment := func(id, orderID, orderNumber, customer, carrier, carrierLabel, serviceLevel string, status TrackingStatus, statusLabel, statusTone, trackingNumber, destination, region, lane, lastEvent string, lastEventAgo time.Duration, etaMinutes int, delayMinutes int, slaStatus, slaTone, exceptionLabel, exceptionTone, alertIcon string) TrackingShipment {
+		var eta *time.Time
+		if etaMinutes > 0 {
+			ts := now.Add(time.Duration(etaMinutes) * time.Minute)
+			eta = &ts
+		}
+		return TrackingShipment{
+			ID:               id,
+			OrderID:          orderID,
+			OrderNumber:      orderNumber,
+			CustomerName:     customer,
+			Carrier:          carrier,
+			CarrierLabel:     carrierLabel,
+			ServiceLevel:     serviceLevel,
+			Status:           status,
+			StatusLabel:      statusLabel,
+			StatusTone:       statusTone,
+			TrackingNumber:   trackingNumber,
+			Destination:      destination,
+			Region:           region,
+			Lane:             lane,
+			LastEvent:        lastEvent,
+			LastEventAt:      now.Add(-lastEventAgo),
+			EstimatedArrival: eta,
+			DelayMinutes:     delayMinutes,
+			SLAStatus:        slaStatus,
+			SLATone:          slaTone,
+			ExceptionLabel:   exceptionLabel,
+			ExceptionTone:    exceptionTone,
+			AlertIcon:        alertIcon,
+			OrderURL:         fmt.Sprintf("/admin/orders/%s?tab=shipments", orderID),
+		}
+	}
+
+	return []TrackingShipment{
+		makeShipment("shp-9001", "order-1101", "HKO1101", "青木 里奈", "yamato", "ヤマト運輸", "宅急便 (翌日)", TrackingStatusInTransit, "中継輸送中", "info", "YMT123456789JP", "東京都世田谷区", "関東", "HND→FUK", "川崎ハブを出発", 42*time.Minute, 320, 0, "SLA内", "success", "", "", ""),
+		makeShipment("shp-9002", "order-1108", "HKO1108", "田村 誠", "sagawa", "佐川急便", "飛脚宅配便", TrackingStatusException, "保留 (要確認)", "danger", "SGW9988776655", "大阪府堺市", "関西", "KIX→NGO", "関西中継センターで保留", 18*time.Minute, 0, 180, "SLA逸脱", "danger", "住所不備", "danger", "⚠️"),
+		makeShipment("shp-9003", "order-1120", "HKO1120", "村上 沙織", "japanpost", "日本郵便", "ゆうパック", TrackingStatusOutForDelivery, "配達中", "warning", "JP5544332211", "福岡県福岡市中央区", "九州", "HND→FUK", "福岡中央郵便局を出発", 12*time.Minute, 90, 45, "遅延リスク", "warning", "", "", "🚨"),
+		makeShipment("shp-9004", "order-1084", "HKO1084", "Michael Chen", "fedex", "FedEx", "International Priority", TrackingStatusInTransit, "国際輸送中", "info", "FDX0011223344", "シンガポール", "海外", "NRT→SIN", "成田を出発", 3*time.Hour+15*time.Minute, 780, 0, "SLA内", "success", "", "", ""),
+		makeShipment("shp-9005", "order-1132", "HKO1132", "近藤 翼", "yamato", "ヤマト運輸", "ネコポス", TrackingStatusLabelCreated, "集荷待ち", "slate", "YMT2233445566", "北海道札幌市", "北海道", "HND→CTS", "ラベル発行済み / 集荷待ち", 1*time.Hour+5*time.Minute, 1440, 0, "要集荷", "info", "", "", ""),
+		makeShipment("shp-9006", "order-1066", "HKO1066", "長谷川 裕子", "dhl", "DHL", "Express Worldwide", TrackingStatusDelivered, "配達完了", "success", "DHL6677889900", "神奈川県横浜市", "関東", "NRT→HND", "配達完了", 15*time.Minute, 0, 0, "完了", "success", "", "", ""),
+	}
 }
 
 // ListBatches implements Service.
@@ -432,4 +480,236 @@ func (s *StaticService) BatchDetail(_ context.Context, _ string, batchID string)
 		return BatchDetail{}, ErrBatchNotFound
 	}
 	return detail, nil
+}
+
+// ListTracking implements Service.
+func (s *StaticService) ListTracking(_ context.Context, _ string, query TrackingQuery) (TrackingResult, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	status := strings.TrimSpace(string(query.Status))
+	carrier := strings.TrimSpace(query.Carrier)
+	lane := strings.TrimSpace(query.Lane)
+	region := strings.TrimSpace(query.Destination)
+	delay := strings.TrimSpace(query.DelayWindow)
+
+	var filtered []TrackingShipment
+	for _, shipment := range s.trackings {
+		if status != "" && string(shipment.Status) != status {
+			continue
+		}
+		if carrier != "" && shipment.Carrier != carrier {
+			continue
+		}
+		if lane != "" && shipment.Lane != lane {
+			continue
+		}
+		if region != "" && shipment.Region != region {
+			continue
+		}
+		if delay != "" {
+			switch delay {
+			case "breach":
+				if shipment.SLATone != "danger" {
+					continue
+				}
+			case "delayed":
+				if shipment.DelayMinutes < 30 {
+					continue
+				}
+			}
+		}
+		filtered = append(filtered, shipment)
+	}
+
+	pageSize := query.PageSize
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	page := query.Page
+	if page < 1 {
+		page = 1
+	}
+
+	total := len(filtered)
+	start := (page - 1) * pageSize
+	if start >= total {
+		start = 0
+		page = 1
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+
+	rows := append([]TrackingShipment(nil), filtered[start:end]...)
+
+	var next, prev *int
+	if end < total {
+		nextPage := page + 1
+		next = &nextPage
+	}
+	if start > 0 {
+		prevPage := page - 1
+		if prevPage < 1 {
+			prevPage = 1
+		}
+		prev = &prevPage
+	}
+
+	now := time.Now()
+
+	return TrackingResult{
+		Summary: TrackingSummary{
+			ActiveShipments: countActiveShipments(s.trackings),
+			Delayed:         countDelayedShipments(s.trackings),
+			Exceptions:      countExceptionShipments(s.trackings),
+			LastRefresh:     now,
+			RefreshInterval: 30 * time.Second,
+		},
+		Shipments: rows,
+		Filters: TrackingFilters{
+			StatusOptions:  buildTrackingStatusOptions(s.trackings),
+			CarrierOptions: buildTrackingCarrierOptions(s.trackings),
+			LaneOptions:    buildTrackingLaneOptions(s.trackings),
+			RegionOptions:  buildTrackingRegionOptions(s.trackings),
+		},
+		Pagination: Pagination{
+			Page:       page,
+			PageSize:   pageSize,
+			TotalItems: total,
+			NextPage:   next,
+			PrevPage:   prev,
+		},
+		Generated: now,
+		Alerts: []TrackingAlert{
+			{
+				Label:       "佐川: 関西中継センターで保留が増加",
+				Description: "大阪以南宛て 18 件が住所不備で止まっています。チームに連絡してください。",
+				Tone:        "warning",
+				ActionLabel: "連絡先を見る",
+				ActionURL:   "/admin/shipments/batches?facility=osaka",
+			},
+			{
+				Label:       "ヤマト HND→FUK レーンで交通規制",
+				Description: "高速道路規制の影響で 6 件が SLA 遅延リスクに入っています。",
+				Tone:        "danger",
+				ActionLabel: "対象注文を表示",
+				ActionURL:   "/admin/shipments/tracking?lane=HND%E2%86%92FUK&status=in_transit",
+			},
+		},
+	}, nil
+}
+
+func buildTrackingStatusOptions(shipments []TrackingShipment) []TrackingStatusOption {
+	counts := map[TrackingStatus]int{}
+	for _, shipment := range shipments {
+		counts[shipment.Status]++
+	}
+
+	options := []TrackingStatusOption{
+		{Value: TrackingStatusInTransit, Label: "中継輸送中", Tone: "info", Count: counts[TrackingStatusInTransit]},
+		{Value: TrackingStatusOutForDelivery, Label: "配達中", Tone: "warning", Count: counts[TrackingStatusOutForDelivery]},
+		{Value: TrackingStatusLabelCreated, Label: "集荷待ち", Tone: "slate", Count: counts[TrackingStatusLabelCreated]},
+		{Value: TrackingStatusException, Label: "要対応", Tone: "danger", Count: counts[TrackingStatusException]},
+		{Value: TrackingStatusDelivered, Label: "配達完了", Tone: "success", Count: counts[TrackingStatusDelivered]},
+	}
+
+	return options
+}
+
+func buildTrackingCarrierOptions(shipments []TrackingShipment) []SelectOption {
+	counts := map[string]int{}
+	labelMap := map[string]string{}
+	for _, shipment := range shipments {
+		counts[shipment.Carrier]++
+		labelMap[shipment.Carrier] = shipment.CarrierLabel
+	}
+
+	var carriers []SelectOption
+	for carrier, count := range counts {
+		carriers = append(carriers, SelectOption{
+			Value: carrier,
+			Label: labelMap[carrier],
+			Count: count,
+		})
+	}
+	sort.Slice(carriers, func(i, j int) bool {
+		return carriers[i].Label < carriers[j].Label
+	})
+	return carriers
+}
+
+func buildTrackingLaneOptions(shipments []TrackingShipment) []SelectOption {
+	counts := map[string]int{}
+	for _, shipment := range shipments {
+		if shipment.Lane == "" {
+			continue
+		}
+		counts[shipment.Lane]++
+	}
+	var options []SelectOption
+	for lane, count := range counts {
+		options = append(options, SelectOption{
+			Value: lane,
+			Label: lane,
+			Count: count,
+		})
+	}
+	sort.Slice(options, func(i, j int) bool {
+		return options[i].Label < options[j].Label
+	})
+	return options
+}
+
+func buildTrackingRegionOptions(shipments []TrackingShipment) []SelectOption {
+	counts := map[string]int{}
+	for _, shipment := range shipments {
+		if shipment.Region == "" {
+			continue
+		}
+		counts[shipment.Region]++
+	}
+	var options []SelectOption
+	for region, count := range counts {
+		options = append(options, SelectOption{
+			Value: region,
+			Label: region,
+			Count: count,
+		})
+	}
+	sort.Slice(options, func(i, j int) bool {
+		return options[i].Label < options[j].Label
+	})
+	return options
+}
+
+func countActiveShipments(shipments []TrackingShipment) int {
+	total := 0
+	for _, shipment := range shipments {
+		if shipment.Status != TrackingStatusDelivered {
+			total++
+		}
+	}
+	return total
+}
+
+func countDelayedShipments(shipments []TrackingShipment) int {
+	total := 0
+	for _, shipment := range shipments {
+		if shipment.DelayMinutes > 30 || shipment.SLATone == "warning" {
+			total++
+		}
+	}
+	return total
+}
+
+func countExceptionShipments(shipments []TrackingShipment) int {
+	total := 0
+	for _, shipment := range shipments {
+		if shipment.Status == TrackingStatusException {
+			total++
+		}
+	}
+	return total
 }

@@ -12,6 +12,8 @@ type Service interface {
 	ListBatches(ctx context.Context, token string, query ListQuery) (ListResult, error)
 	// BatchDetail returns extended information for a specific batch.
 	BatchDetail(ctx context.Context, token, batchID string) (BatchDetail, error)
+	// ListTracking returns in-flight shipment tracking records.
+	ListTracking(ctx context.Context, token string, query TrackingQuery) (TrackingResult, error)
 }
 
 // ErrBatchNotFound indicates the requested batch does not exist.
@@ -184,3 +186,99 @@ type JobStatus struct {
 	EndedAt    *time.Time
 	Message    string
 }
+
+// TrackingQuery captures shipment monitoring filters.
+type TrackingQuery struct {
+	Status        TrackingStatus
+	Carrier       string
+	Lane          string
+	Destination   string
+	DelayWindow   string
+	Page          int
+	PageSize      int
+	AutoRefresh   bool
+	LastRefreshed *time.Time
+}
+
+// TrackingResult summarises shipment tracking data.
+type TrackingResult struct {
+	Summary    TrackingSummary
+	Shipments  []TrackingShipment
+	Filters    TrackingFilters
+	Pagination Pagination
+	Generated  time.Time
+	Alerts     []TrackingAlert
+}
+
+// TrackingSummary powers KPI chips.
+type TrackingSummary struct {
+	ActiveShipments int
+	Delayed         int
+	Exceptions      int
+	LastRefresh     time.Time
+	RefreshInterval time.Duration
+}
+
+// TrackingFilters captures filter options for the monitor.
+type TrackingFilters struct {
+	StatusOptions  []TrackingStatusOption
+	CarrierOptions []SelectOption
+	LaneOptions    []SelectOption
+	RegionOptions  []SelectOption
+}
+
+// TrackingStatusOption represents a status filter option.
+type TrackingStatusOption struct {
+	Value TrackingStatus
+	Label string
+	Tone  string
+	Count int
+}
+
+// TrackingShipment represents a single shipment row.
+type TrackingShipment struct {
+	ID               string
+	OrderID          string
+	OrderNumber      string
+	CustomerName     string
+	Carrier          string
+	CarrierLabel     string
+	Status           TrackingStatus
+	StatusLabel      string
+	StatusTone       string
+	TrackingNumber   string
+	ServiceLevel     string
+	Destination      string
+	Region           string
+	Lane             string
+	LastEvent        string
+	LastEventAt      time.Time
+	EstimatedArrival *time.Time
+	DelayMinutes     int
+	SLAStatus        string
+	SLATone          string
+	ExceptionLabel   string
+	ExceptionTone    string
+	AlertIcon        string
+	OrderURL         string
+}
+
+// TrackingAlert represents alert banner entries.
+type TrackingAlert struct {
+	Label       string
+	Description string
+	Tone        string
+	ActionLabel string
+	ActionURL   string
+}
+
+// TrackingStatus enumerates shipment tracking states.
+type TrackingStatus string
+
+const (
+	TrackingStatusLabelCreated   TrackingStatus = "label_created"
+	TrackingStatusInTransit      TrackingStatus = "in_transit"
+	TrackingStatusOutForDelivery TrackingStatus = "out_for_delivery"
+	TrackingStatusDelivered      TrackingStatus = "delivered"
+	TrackingStatusException      TrackingStatus = "exception"
+)

@@ -45,7 +45,7 @@
 
 ### 5.2 Shipments & Tracking
 - [x] [Create shipment batch page (`/admin/shipments/batches`) for label generation workflows and integration with shipment POST endpoints.](doc/admin/tasks/031-create-shipment-batch-page-admin-shipments-batches-for-label-generation-workflows-and-inte.md)
-- [ ] [Implement shipment tracking monitor (`/admin/shipments/tracking`) with table fragment (`/admin/shipments/tracking/table`) and filtering by carrier/status.](doc/admin/tasks/032-implement-shipment-tracking-monitor-admin-shipments-tracking-with-table-fragment-admin-shi.md)
+- [x] [Implement shipment tracking monitor (`/admin/shipments/tracking`) with table fragment (`/admin/shipments/tracking/table`) and filtering by carrier/status.](doc/admin/tasks/032-implement-shipment-tracking-monitor-admin-shipments-tracking-with-table-fragment-admin-shi.md)
 - [ ] [Hook carrier webhook data or Firestore views to populate tracking dashboard, including exception badges and SLA indicators.](doc/admin/tasks/033-hook-carrier-webhook-data-or-firestore-views-to-populate-tracking-dashboard-including-exce.md)
 
 ### 5.3 Production & Workshop

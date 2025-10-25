@@ -1,0 +1,229 @@
+package shipments
+
+import (
+	"fmt"
+
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+	"finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
+
+templ TrackingIndex(data TrackingPageData) {
+	@layouts.Base(data.Title, data.Breadcrumbs, trackingBody(data))
+}
+
+templ trackingBody(data TrackingPageData) {
+	<div class="space-y-6" data-shipments-tracking-root>
+		<section class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+			<div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+				<div class="space-y-2">
+					<h1 class="text-2xl font-semibold text-slate-900">{ data.Title }</h1>
+					<p class="text-sm text-slate-600">{ data.Description }</p>
+				</div>
+				<div class="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-3">
+					@trackingSummaryChip("進行中", data.Summary.ActiveLabel, "info")
+					@trackingSummaryChip("遅延リスク", data.Summary.DelayedLabel, "warning")
+					@trackingSummaryChip("要対応", data.Summary.ExceptionLabel, "danger")
+				</div>
+			</div>
+			<div class="mt-6 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+				<div>
+					最終更新 { data.Summary.LastRefresh } / { data.Summary.RefreshEvery }
+				</div>
+				<div class="flex items-center gap-2">
+					<button
+						type="button"
+						class={ helpers.ButtonClass("ghost", "sm", false, false) }
+						hx-get={ trackingFragmentURL(data.Table.FragmentPath, data.Table.RawQuery) }
+						hx-target="#tracking-table"
+						hx-swap="outerHTML"
+						hx-indicator="#tracking-refresh-indicator"
+					>
+						🔄 最新に更新
+					</button>
+					<span id="tracking-refresh-indicator" class="text-slate-400">待機中</span>
+				</div>
+			</div>
+		</section>
+
+		if len(data.Alerts) > 0 {
+			<section class="space-y-3">
+				for _, alert := range data.Alerts {
+					<div class={ trackingAlertClass(alert.Tone) }>
+						<div class="flex flex-col gap-1 text-sm">
+							<p class="font-semibold">{ alert.Label }</p>
+							<p>{ alert.Description }</p>
+						</div>
+						if alert.ActionURL != "" {
+							<a href={ alert.ActionURL } class="text-sm font-medium text-brand-100 underline">{ alert.ActionLabel }</a>
+						}
+					</div>
+				}
+			</section>
+		}
+
+		<section class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+			@trackingFilterToolbar(data)
+		</section>
+
+		<section class="space-y-4">
+			<div class="text-xs text-slate-400" id="tracking-loading">データ更新中…</div>
+			<div
+				id="tracking-table"
+				class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+				data-tracking-table
+				hx-target="this"
+				hx-get={ trackingFragmentURL(data.Table.FragmentPath, data.Table.RawQuery) }
+				hx-trigger={ trackingRefreshTrigger(data.Table.AutoRefresh, data.Table.RefreshEvery) }
+				hx-indicator="#tracking-loading"
+				hx-swap="outerHTML"
+			>
+				@TrackingTable(data.Table)
+			</div>
+		</section>
+	</div>
+}
+
+templ trackingSummaryChip(label, value, tone string) {
+	<div class={ trackingSummaryClass(tone) }>
+		<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{ label }</p>
+		<p class="text-lg font-semibold text-white">{ value }</p>
+	</div>
+}
+
+templ trackingFilterToolbar(data TrackingPageData) {
+	<form
+		class="flex flex-col gap-4"
+		method="get"
+		hx-get={ data.TableEndpoint }
+		hx-target="#tracking-table"
+		hx-push-url="true"
+		hx-indicator="#tracking-loading"
+	>
+		<div class="flex flex-wrap items-start justify-between gap-4">
+			<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="配送ステータス">
+				<label class={ trackingStatusChipClass(data.Query.Status == "") }>
+					<input type="radio" name="status" value="" class="sr-only" checked?={ data.Query.Status == "" } />
+					<span class="text-sm font-medium">すべて</span>
+				</label>
+				for _, option := range data.Filters.Statuses {
+					<label class={ trackingStatusTone(option.Tone, option.Active) }>
+						<input type="radio" name="status" value={ option.Value } class="sr-only" checked?={ option.Active } />
+						<span class="text-sm font-medium">
+							{ option.Label }
+							if option.Count > 0 {
+								<span class="text-xs text-slate-400">({ option.Count })</span>
+							}
+						</span>
+					</label>
+				}
+			</div>
+			<div class="flex items-center gap-3">
+				<button type="submit" class={ helpers.ButtonClass("primary", "sm", false, false) }>適用</button>
+				<a href={ joinBase(helpers.BasePath(ctx), "/shipments/tracking") } class={ helpers.ButtonClass("ghost", "sm", false, false) }>リセット</a>
+			</div>
+		</div>
+		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			@trackingSelect("キャリア", "carrier", data.Filters.Carriers)
+			@trackingSelect("配送レーン", "lane", data.Filters.Lanes)
+			@trackingSelect("地域", "region", data.Filters.Regions)
+			<div class="flex flex-col gap-2">
+				<label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="tracking-delay">遅延</label>
+				<select
+					id="tracking-delay"
+					name="delay"
+					class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+				>
+					<option value="">すべて</option>
+					<option value="delayed" selected?={ data.Query.DelayWindow == "delayed" }>遅延リスク</option>
+					<option value="breach" selected?={ data.Query.DelayWindow == "breach" }>SLA 逸脱</option>
+				</select>
+			</div>
+		</div>
+	</form>
+}
+
+templ trackingSelect(label, name string, options []TrackingSelectOption) {
+	<div class="flex flex-col gap-2">
+		<label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for={ fmt.Sprintf("tracking-%s", name) }>{ label }</label>
+		<select
+			id={ fmt.Sprintf("tracking-%s", name) }
+			name={ name }
+			class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+		>
+			<option value="">すべて</option>
+			for _, option := range options {
+				<option value={ option.Value } selected?={ option.Active }>
+					if option.Count > 0 {
+						{ option.Label } ({ option.Count })
+					} else {
+						{ option.Label }
+					}
+				</option>
+			}
+		</select>
+	</div>
+}
+
+func trackingSummaryClass(tone string) string {
+	switch tone {
+	case "warning":
+		return "rounded-xl border border-amber-200 bg-amber-500 px-4 py-3 text-white shadow-sm"
+	case "danger":
+		return "rounded-xl border border-rose-200 bg-rose-500 px-4 py-3 text-white shadow-sm"
+	default:
+		return "rounded-xl border border-sky-200 bg-sky-500 px-4 py-3 text-white shadow-sm"
+	}
+}
+
+func trackingAlertClass(tone string) string {
+	switch tone {
+	case "danger":
+		return "flex flex-col gap-2 rounded-2xl bg-rose-600/90 px-4 py-4 text-white shadow"
+	case "warning":
+		return "flex flex-col gap-2 rounded-2xl bg-amber-500/90 px-4 py-4 text-white shadow"
+	default:
+		return "flex flex-col gap-2 rounded-2xl bg-sky-500/90 px-4 py-4 text-white shadow"
+	}
+}
+
+func trackingStatusChipClass(active bool) string {
+	base := []string{"inline-flex items-center rounded-full border px-4 py-2 text-sm font-medium transition"}
+	if active {
+		base = append(base, "border-brand-500 bg-brand-50 text-brand-700")
+	} else {
+		base = append(base, "border-slate-200 text-slate-500 hover:border-brand-200 hover:text-brand-600")
+	}
+	return helpers.ClassList(base...)
+}
+
+func trackingStatusTone(tone string, active bool) string {
+	base := []string{"inline-flex items-center rounded-full border px-4 py-2 text-sm font-medium transition"}
+	switch tone {
+	case "warning":
+		base = append(base, "border-amber-200 text-amber-800")
+	case "danger":
+		base = append(base, "border-rose-200 text-rose-800")
+	case "success":
+		base = append(base, "border-emerald-200 text-emerald-700")
+	case "slate":
+		base = append(base, "border-slate-200 text-slate-600")
+	default:
+		base = append(base, "border-sky-200 text-sky-800")
+	}
+	if active {
+		base = append(base, "bg-white shadow")
+	} else {
+		base = append(base, "bg-slate-50")
+	}
+	return helpers.ClassList(base...)
+}
+
+func trackingRefreshTrigger(enabled bool, seconds int) string {
+	if !enabled {
+		return ""
+	}
+	if seconds <= 0 {
+		seconds = 30
+	}
+	return fmt.Sprintf("every %ds", seconds)
+}

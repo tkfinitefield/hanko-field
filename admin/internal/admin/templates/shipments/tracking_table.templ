@@ -1,0 +1,161 @@
+package shipments
+
+import (
+	"fmt"
+
+	"finitefield.org/hanko-admin/internal/admin/templates/helpers"
+)
+
+templ TrackingTable(data TrackingTableData) {
+	<div class="space-y-4" data-tracking-table-fragment>
+		if data.Error != "" {
+			<div class="rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">{ data.Error }</div>
+		}
+		<table class="min-w-full divide-y divide-slate-200">
+			<thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+				<tr>
+					<th class="px-4 py-3">注文 / トラッキング</th>
+					<th class="px-4 py-3">キャリア / ステータス</th>
+					<th class="px-4 py-3">目的地 / レーン</th>
+					<th class="px-4 py-3">最終イベント</th>
+					<th class="px-4 py-3 text-right">SLA</th>
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-slate-200 text-sm text-slate-700">
+				if len(data.Rows) == 0 {
+					<tr>
+						<td colspan="5" class="px-4 py-6 text-center text-sm text-slate-500">
+							{ data.EmptyMessage }
+						</td>
+					</tr>
+				} else {
+					for _, row := range data.Rows {
+						<tr>
+							<td class="px-4 py-4 align-top">
+								<div class="flex flex-col gap-1">
+									<div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+										<span>{ row.OrderNumber }</span>
+										if row.BadgeIcon != "" {
+											<span aria-hidden="true">{ row.BadgeIcon }</span>
+										}
+									</div>
+									<p class="text-xs text-slate-500">{ row.Customer }</p>
+									<a href={ row.OrderURL } class="text-xs font-medium text-brand-600 hover:underline">
+										注文詳細を開く →
+									</a>
+									<p class="text-xs text-slate-400">Tracking: { row.TrackingNumber }</p>
+								</div>
+							</td>
+							<td class="px-4 py-4 align-top">
+								<div class="space-y-1">
+									<p class="font-medium text-slate-900">{ row.Carrier }</p>
+									<p class="text-xs text-slate-500">{ row.Service }</p>
+									<span class={ helpers.BadgeClass(row.StatusTone) }>{ row.StatusLabel }</span>
+									if row.Exception != "" {
+										<span class={ helpers.BadgeClass(row.ExceptionTone) }>{ row.Exception }</span>
+									}
+								</div>
+							</td>
+							<td class="px-4 py-4 align-top">
+								<div class="space-y-1">
+									<p class="font-medium text-slate-900">{ row.Destination }</p>
+									<p class="text-xs text-slate-500">{ row.Region } ・ { row.Lane }</p>
+									if row.DelayLabel != "" {
+										<span class="text-xs font-semibold text-rose-600">{ row.DelayLabel }</span>
+									}
+								</div>
+							</td>
+							<td class="px-4 py-4 align-top">
+								<div class="space-y-1">
+									<p class="font-medium text-slate-900">{ row.LastEvent }</p>
+									<p class="text-xs text-slate-500">{ row.LastEventTime }</p>
+									if row.ETA != "" {
+										<p class="text-xs text-slate-500">
+											予定: { row.ETA }
+										</p>
+									}
+								</div>
+							</td>
+							<td class="px-4 py-4 align-top text-right">
+								<div class="flex flex-col items-end gap-2">
+									<span class={ helpers.BadgeClass(row.SLATone) }>{ row.SLAStatus }</span>
+									if row.DelayLabel != "" {
+										<span class="text-xs text-rose-500">{ row.DelayLabel }</span>
+									}
+								</div>
+							</td>
+						</tr>
+					}
+				}
+			</tbody>
+		</table>
+
+		@trackingPaginationControls(data)
+	</div>
+}
+
+templ trackingPaginationControls(data TrackingTableData) {
+	if data.Pagination.Total <= data.Pagination.PageSize && data.Pagination.Next == nil && data.Pagination.Prev == nil {
+		return
+	}
+	<nav class="flex items-center justify-between text-sm text-slate-600">
+		<div>
+			ページ { data.Pagination.Page } / { trackingTotalPages(data.Pagination.Total, data.Pagination.PageSize) }
+		</div>
+		<div class="flex items-center gap-2">
+			if data.Pagination.Prev != nil {
+				<a
+					href={ trackingPaginationURL(data.FragmentPath, data.Pagination.RawQuery, *data.Pagination.Prev) }
+					hx-get={ trackingPaginationURL(data.FragmentPath, data.Pagination.RawQuery, *data.Pagination.Prev) }
+					hx-target="#tracking-table"
+					hx-indicator="#tracking-loading"
+					hx-push-url="true"
+					class={ helpers.ButtonClass("ghost", "xs", false, false) }
+				>
+					前へ
+				</a>
+			} else {
+				<span class="inline-flex items-center rounded-md bg-slate-100 px-3 py-1 text-xs text-slate-400">前へ</span>
+			}
+			if data.Pagination.Next != nil {
+				<a
+					href={ trackingPaginationURL(data.FragmentPath, data.Pagination.RawQuery, *data.Pagination.Next) }
+					hx-get={ trackingPaginationURL(data.FragmentPath, data.Pagination.RawQuery, *data.Pagination.Next) }
+					hx-target="#tracking-table"
+					hx-indicator="#tracking-loading"
+					hx-push-url="true"
+					class={ helpers.ButtonClass("ghost", "xs", false, false) }
+				>
+					次へ
+				</a>
+			} else {
+				<span class="inline-flex items-center rounded-md bg-slate-100 px-3 py-1 text-xs text-slate-400">次へ</span>
+			}
+		</div>
+	</nav>
+}
+
+func trackingTotalPages(total, size int) int {
+	if size <= 0 {
+		return 1
+	}
+	if total <= 0 {
+		return 1
+	}
+	pages := total / size
+	if total%size != 0 {
+		pages++
+	}
+	if pages == 0 {
+		pages = 1
+	}
+	return pages
+}
+
+func trackingPaginationURL(fragment, raw string, page int) string {
+	if page < 1 {
+		page = 1
+	}
+	query := helpers.SetRawQuery(raw, "page", fmt.Sprintf("%d", page))
+	return trackingFragmentURL(fragment, query)
+}

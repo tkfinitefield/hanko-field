@@ -137,7 +137,16 @@ var defaultMenu = []Group{
 				Icon:        "🚚",
 				Capability:  rbac.CapShipmentsMonitor,
 				Path:        "/shipments/batches",
-				Pattern:     "/shipments",
+				Pattern:     "/shipments/batches",
+				MatchPrefix: true,
+			},
+			{
+				Key:         "shipments-tracking",
+				Label:       "配送トラッキング",
+				Icon:        "🛰",
+				Capability:  rbac.CapShipmentsMonitor,
+				Path:        "/shipments/tracking",
+				Pattern:     "/shipments/tracking",
 				MatchPrefix: true,
 			},
 			{

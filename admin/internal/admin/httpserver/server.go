@@ -204,6 +204,8 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 				or.Post("/{orderID}/shipments", uiHandlers.ShipmentsCreateOrderShipment)
 			})
 			protected.Route("/shipments", func(sr chi.Router) {
+				sr.Get("/tracking", uiHandlers.ShipmentsTrackingPage)
+				sr.Get("/tracking/table", uiHandlers.ShipmentsTrackingTable)
 				sr.Get("/batches", uiHandlers.ShipmentsBatchesPage)
 				sr.Get("/batches/table", uiHandlers.ShipmentsBatchesTable)
 				sr.Get("/batches/{batchID}/drawer", uiHandlers.ShipmentsBatchDrawer)
