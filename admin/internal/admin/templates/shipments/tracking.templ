@@ -75,7 +75,7 @@ templ trackingBody(data TrackingPageData) {
 				hx-get={ trackingFragmentURL(data.Table.FragmentPath, data.Table.RawQuery) }
 				hx-trigger={ trackingRefreshTrigger(data.Table.AutoRefresh, data.Table.RefreshEvery) }
 				hx-indicator="#tracking-loading"
-				hx-swap="outerHTML"
+				hx-swap="innerHTML"
 			>
 				@TrackingTable(data.Table)
 			</div>
