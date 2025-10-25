@@ -1,0 +1,334 @@
+package production
+
+import (
+    "fmt"
+
+    "finitefield.org/hanko-admin/internal/admin/templates/helpers"
+    "finitefield.org/hanko-admin/internal/admin/templates/layouts"
+)
+
+templ Index(data PageData) {
+    @layouts.Base(data.Title, data.Breadcrumbs, productionBody(data))
+}
+
+templ productionBody(data PageData) {
+    <div
+        class="space-y-6"
+        data-production-root
+        data-board-endpoint={ data.Board.FragmentPath }
+    >
+        <section class="rounded-2xl bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200">
+            <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                <div class="space-y-2">
+                    <h1 class="text-2xl font-semibold text-slate-900">{ data.Title }</h1>
+                    <p class="text-sm text-slate-600">{ data.Description }</p>
+                </div>
+                <form
+                    class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 lg:w-auto"
+                    method="get"
+                    hx-get={ data.QueueForm.Endpoint }
+                    hx-target={ fmt.Sprintf("#%s", data.Board.ContainerID) }
+                    hx-swap="outerHTML"
+                    hx-push-url="true"
+                >
+                    <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">制作キュー</label>
+                    <div class="flex items-center gap-2">
+                        <select name="queue" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200">
+                            for _, option := range data.QueueForm.Options {
+                                <option value={ option.ID } selected?={ option.Active }>
+                                    { option.Label }
+                                    if option.Load != "" {
+                                        <text> ({ option.Load })</text>
+                                    }
+                                </option>
+                            }
+                        </select>
+                        <input type="hidden" name="priority" value={ data.Filters.Query.Priority } />
+                        <input type="hidden" name="product_line" value={ data.Filters.Query.ProductLine } />
+                        <input type="hidden" name="workstation" value={ data.Filters.Query.Workstation } />
+                        <input type="hidden" name="selected" value={ data.Filters.Query.Selected } />
+                        <button type="submit" class={ helpers.ButtonClass("secondary", "sm", false, false) }>切り替え</button>
+                    </div>
+                </form>
+            </div>
+            <div class="mt-6 grid gap-3 sm:grid-cols-3">
+                for _, chip := range data.Summary {
+                    <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1">
+                            if chip.Icon != "" {
+                                <span>{ chip.Icon }</span>
+                            }
+                            <span>{ chip.Label }</span>
+                        </p>
+                        <p class="text-2xl font-semibold text-slate-900">{ chip.Value }</p>
+                        if chip.SubText != "" {
+                            <p class="text-xs text-slate-500">{ chip.SubText }</p>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+
+        if data.Error != "" {
+            <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{ data.Error }</div>
+        }
+
+        <section class="rounded-2xl bg-white px-6 py-4 shadow-sm ring-1 ring-slate-200">
+            @filterToolbar(data.Filters)
+        </section>
+
+        @Board(data.Board)
+    </div>
+}
+
+templ filterToolbar(filters FilterBar) {
+    <form
+        class="flex flex-col gap-4"
+        method="get"
+        hx-get={ filters.Endpoint }
+        hx-target={ fmt.Sprintf("#%s", boardContainerID) }
+        hx-swap="outerHTML"
+        hx-push-url="true"
+    >
+        <div class="grid gap-4 md:grid-cols-3">
+            <div class="flex flex-col gap-2">
+                <label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="production-filter-product">プロダクトライン</label>
+                <select id="production-filter-product" name="product_line" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200">
+                    <option value="">すべて</option>
+                    for _, option := range filters.ProductLines {
+                        <option value={ option.Value } selected?={ option.Active }>
+                            if option.Count > 0 {
+                                { option.Label } ({ option.Count })
+                            } else {
+                                { option.Label }
+                            }
+                        </option>
+                    }
+                </select>
+            </div>
+            <div class="flex flex-col gap-2">
+                <label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="production-filter-priority">優先度</label>
+                <select id="production-filter-priority" name="priority" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200">
+                    <option value="">すべて</option>
+                    for _, option := range filters.Priorities {
+                        <option value={ option.Value } selected?={ option.Active }>
+                            if option.Count > 0 {
+                                { option.Label } ({ option.Count })
+                            } else {
+                                { option.Label }
+                            }
+                        </option>
+                    }
+                </select>
+            </div>
+            <div class="flex flex-col gap-2">
+                <label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="production-filter-workstation">ステーション</label>
+                <select id="production-filter-workstation" name="workstation" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200">
+                    <option value="">すべて</option>
+                    for _, option := range filters.Workstations {
+                        <option value={ option.Value } selected?={ option.Active }>
+                            if option.Count > 0 {
+                                { option.Label } ({ option.Count })
+                            } else {
+                                { option.Label }
+                            }
+                        </option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <input type="hidden" name="queue" value={ filters.Query.Queue } />
+            <input type="hidden" name="selected" value={ filters.Query.Selected } />
+            <button type="submit" class={ helpers.ButtonClass("primary", "sm", false, false) }>適用</button>
+            <a href={ joinBase(helpers.BasePath(ctx), "/production/queues") } class={ helpers.ButtonClass("ghost", "sm", false, false) }>リセット</a>
+        </div>
+    </form>
+}
+
+templ Board(data BoardData) {
+    <section
+        id={ data.ContainerID }
+        class="space-y-4"
+        data-production-shell
+        data-board-refresh={ data.RefreshURL }
+        data-board-query={ data.Query.RawQuery }
+        data-refresh-interval={ fmt.Sprintf("%d", data.RefreshInterval) }
+        hx-target="this"
+    >
+        <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+            <div>最終更新 { data.LastUpdatedLabel }</div>
+            <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600">
+                    📍 { data.Queue.Location }
+                </span>
+                if data.Queue.Shift != "" {
+                    <span class="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600">
+                        🕑 { data.Queue.Shift }
+                    </span>
+                }
+            </div>
+        </div>
+        if data.Error != "" {
+            <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{ data.Error }</div>
+        }
+        <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div id={ data.BoardID } class="space-y-4" data-production-board data-selected={ data.Query.Selected }>
+                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                    for _, lane := range data.Lanes {
+                        <div class="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4" data-production-lane data-stage={ lane.Stage }>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-semibold text-slate-900">{ lane.Label }</p>
+                                    <p class="text-xs text-slate-500">{ lane.Description }</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-xs font-medium text-slate-500">容量</p>
+                                    <p class="text-sm font-semibold text-slate-900">{ lane.CapacityLabel }</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 h-1.5 w-full rounded-full bg-slate-100">
+                                <div class="h-full rounded-full bg-brand-500" style={ fmt.Sprintf("width:%d%%", min(lane.CapacityPercent, 100)) }></div>
+                            </div>
+                            <div class="mt-4 space-y-3" data-production-cards>
+                                if len(lane.Cards) == 0 {
+                                    <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">{ lane.EmptyMessage }</div>
+                                }
+                                for _, card := range lane.Cards {
+                                    @kanbanCard(card)
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+            <aside id={ data.DrawerID } class="rounded-2xl border border-slate-200 bg-white p-4" data-production-drawer>
+                if data.Drawer.Empty {
+                    <div class="flex h-full flex-col items-center justify-center text-center text-sm text-slate-500">
+                        <p>カードを選択すると詳細が表示されます。</p>
+                    </div>
+                } else {
+                    @drawerContent(data.Drawer)
+                }
+            </aside>
+        </div>
+    </section>
+}
+
+templ kanbanCard(card CardData) {
+    <div
+        class={ kanbanCardClass(card.Selected, card.Blocked) }
+        draggable="true"
+        data-production-card
+        data-order-id={ card.ID }
+        data-stage={ card.Stage }
+        data-endpoint={ card.Endpoint }
+        data-card-payload={ card.Payload }
+        data-selected={ card.Selected }
+        tabindex="0"
+    >
+        <div class="flex items-center justify-between">
+            <p class="text-sm font-semibold text-slate-900">#{ card.OrderNumber }</p>
+            <span class={ helpers.BadgeClass(card.PriorityTone) }>{ card.PriorityLabel }</span>
+        </div>
+        <p class="mt-1 text-base font-semibold text-slate-900">{ card.Customer }</p>
+        <p class="text-xs text-slate-500">{ card.ProductLine } · { card.Design }</p>
+        if len(card.Flags) > 0 {
+            <div class="mt-2 flex flex-wrap gap-1">
+                for _, flag := range card.Flags {
+                    <span class={ helpers.BadgeClass(flag.Tone) }>{ flag.Icon } { flag.Label }</span>
+                }
+            </div>
+        }
+        <div class="mt-3 flex items-center justify-between text-xs">
+            <span class={ dueToneClass(card.DueTone) }>{ card.DueLabel }</span>
+            <span class="text-slate-500">{ card.Workstation }</span>
+        </div>
+        <div class="mt-3 flex items-center -space-x-2">
+            for _, assignee := range card.Assignees {
+                <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white bg-slate-800 text-xs font-semibold text-white" title={ assignee.Name }>{ assignee.Initials }</span>
+            }
+        </div>
+    </div>
+}
+
+templ drawerContent(drawer DrawerData) {
+    <div class="space-y-4">
+        <div class="space-y-2">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-slate-900">注文 #{ drawer.Card.OrderNumber }</h2>
+                <span class={ helpers.BadgeClass(drawer.Card.PriorityTone) }>{ drawer.Card.PriorityLabel }</span>
+            </div>
+            <p class="text-sm text-slate-600">{ drawer.Card.Customer } / { drawer.Card.ProductLine }</p>
+            <div class="flex flex-wrap gap-2 text-xs">
+                <span class={ helpers.BadgeClass("info") }>{ drawer.Card.StageLabel }</span>
+                if drawer.Card.Workstation != "" {
+                    <span class={ helpers.BadgeClass("secondary") }>{ drawer.Card.Workstation }</span>
+                }
+            </div>
+        </div>
+        if len(drawer.Card.Flags) > 0 {
+            <div class="flex flex-wrap gap-2">
+                for _, flag := range drawer.Card.Flags {
+                    <span class={ helpers.BadgeClass(flag.Tone) }>{ flag.Icon } { flag.Label }</span>
+                }
+            </div>
+        }
+        <dl class="divide-y divide-slate-100 rounded-xl border border-slate-100">
+            for _, detail := range drawer.Details {
+                <div class="flex items-center justify-between px-4 py-2">
+                    <dt class="text-xs font-medium text-slate-500">{ detail.Label }</dt>
+                    <dd class="text-sm text-slate-900">{ detail.Value }</dd>
+                </div>
+            }
+        </dl>
+        <div>
+            <h3 class="text-sm font-semibold text-slate-900">タイムライン</h3>
+            if len(drawer.Timeline) == 0 {
+                <p class="text-xs text-slate-500">まだイベントがありません。</p>
+            } else {
+                <ol class="mt-2 space-y-3">
+                    for _, item := range drawer.Timeline {
+                        <li class="rounded-xl border border-slate-100 px-3 py-2">
+                            <p class="text-xs font-semibold text-slate-900">{ item.StageLabel }</p>
+                            <p class="text-sm text-slate-700">{ item.Description }</p>
+                            <p class="text-xs text-slate-500">{ item.Timestamp } · { item.Actor }</p>
+                            if item.Note != "" {
+                                <p class="text-xs text-slate-500">{ item.Note }</p>
+                            }
+                        </li>
+                    }
+                </ol>
+            }
+        </div>
+    </div>
+}
+
+func kanbanCardClass(selected bool, blocked bool) string {
+    classes := []string{"rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-500"}
+    if selected {
+        classes = append(classes, "ring-2 ring-brand-500")
+    }
+    if blocked {
+        classes = append(classes, "border-rose-200")
+    }
+    return helpers.ClassList(classes...)
+}
+
+func dueToneClass(tone string) string {
+    switch tone {
+    case "danger":
+        return "text-rose-600"
+    case "warning":
+        return "text-amber-600"
+    default:
+        return "text-slate-500"
+    }
+}
+
+func min(a, b int) int {
+    if a < b {
+        return a
+    }
+    return b
+}

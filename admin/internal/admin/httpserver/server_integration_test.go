@@ -16,6 +16,7 @@ import (
 
 	admindashboard "finitefield.org/hanko-admin/internal/admin/dashboard"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
+	adminproduction "finitefield.org/hanko-admin/internal/admin/production"
 	"finitefield.org/hanko-admin/internal/admin/profile"
 	"finitefield.org/hanko-admin/internal/admin/testutil"
 )
@@ -671,6 +672,186 @@ func TestOrdersInvoiceIssueFlow(t *testing.T) {
 	defer finalPollResp.Body.Close()
 	require.Equal(t, http.StatusOK, finalPollResp.StatusCode)
 	require.Equal(t, `{"toast":{"message":"領収書を発行しました。","tone":"success"},"modal:close":true,"refresh:fragment":{"targets":["[data-order-invoice]"]}}`, finalPollResp.Header.Get("HX-Trigger"))
+}
+
+func TestProductionQueuesPageRenders(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "prod-board"}
+	stub := &productionStub{boardResult: sampleBoardResult()}
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth), testutil.WithProductionService(stub))
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/production/queues", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+auth.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), "青山アトリエ")
+	require.Contains(t, string(body), "待機")
+}
+
+func TestOrdersProductionEventSuccess(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "prod-events"}
+	stub := &productionStub{boardResult: sampleBoardResult()}
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth), testutil.WithProductionService(stub))
+	client := noRedirectClient(t)
+
+	seedReq, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/production/queues", nil)
+	require.NoError(t, err)
+	seedReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	seedResp, err := client.Do(seedReq)
+	require.NoError(t, err)
+	seedResp.Body.Close()
+	require.Equal(t, http.StatusOK, seedResp.StatusCode)
+
+	csrf := findCSRFCookie(t, client.Jar, ts.URL+"/admin")
+	require.NotEmpty(t, csrf)
+
+	form := url.Values{}
+	form.Set("type", "engraving")
+	postReq, err := http.NewRequest(http.MethodPost, ts.URL+"/admin/orders/order-5000/production-events", strings.NewReader(form.Encode()))
+	require.NoError(t, err)
+	postReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	postReq.Header.Set("HX-Request", "true")
+	postReq.Header.Set("HX-Target", "production-board")
+	postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	postReq.Header.Set("X-CSRF-Token", csrf)
+
+	resp, err := client.Do(postReq)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.Contains(t, resp.Header.Get("HX-Trigger"), "制作ステージを更新しました。")
+
+	require.Equal(t, "order-5000", stub.lastOrderID)
+	require.Len(t, stub.appendCalls, 1)
+	require.Equal(t, adminproduction.Stage("engraving"), stub.appendCalls[0].Stage)
+}
+
+func TestOrdersProductionEventHandlesErrors(t *testing.T) {
+	t.Parallel()
+
+	auth := &tokenAuthenticator{Token: "prod-events-error"}
+	stub := &productionStub{boardResult: sampleBoardResult(), appendErr: adminproduction.ErrStageInvalid}
+	ts := testutil.NewServer(t, testutil.WithAuthenticator(auth), testutil.WithProductionService(stub))
+	client := noRedirectClient(t)
+
+	seedReq, err := http.NewRequest(http.MethodGet, ts.URL+"/admin/production/queues", nil)
+	require.NoError(t, err)
+	seedReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	seedResp, err := client.Do(seedReq)
+	require.NoError(t, err)
+	seedResp.Body.Close()
+	require.Equal(t, http.StatusOK, seedResp.StatusCode)
+	csrf := findCSRFCookie(t, client.Jar, ts.URL+"/admin")
+	require.NotEmpty(t, csrf)
+
+	form := url.Values{}
+	form.Set("type", "invalid-stage")
+	postReq, err := http.NewRequest(http.MethodPost, ts.URL+"/admin/orders/order-5000/production-events", strings.NewReader(form.Encode()))
+	require.NoError(t, err)
+	postReq.Header.Set("Authorization", "Bearer "+auth.Token)
+	postReq.Header.Set("HX-Request", "true")
+	postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	postReq.Header.Set("X-CSRF-Token", csrf)
+
+	resp, err := client.Do(postReq)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), "指定されたステージに移動できません")
+}
+
+func sampleBoardResult() adminproduction.BoardResult {
+	now := time.Now()
+	return adminproduction.BoardResult{
+		Queue: adminproduction.Queue{
+			ID:            "atelier-aoyama",
+			Name:          "青山アトリエ",
+			Capacity:      10,
+			Load:          5,
+			LeadTimeHours: 24,
+		},
+		Queues: []adminproduction.QueueOption{{ID: "atelier-aoyama", Label: "青山アトリエ", Active: true}},
+		Summary: adminproduction.Summary{
+			TotalWIP:     1,
+			DueSoon:      1,
+			Blocked:      0,
+			AvgLeadHours: 24,
+			Utilisation:  50,
+			UpdatedAt:    now,
+		},
+		Filters: adminproduction.FilterSummary{},
+		Lanes: []adminproduction.Lane{
+			{
+				Stage:    adminproduction.StageQueued,
+				Label:    "待機",
+				Capacity: adminproduction.LaneCapacity{Used: 1, Limit: 6},
+				SLA:      adminproduction.SLAMeta{Label: "平均6h", Tone: "info"},
+				Cards: []adminproduction.Card{
+					{
+						ID:            "order-5000",
+						OrderNumber:   "5000",
+						Stage:         adminproduction.StageQueued,
+						Priority:      adminproduction.PriorityRush,
+						PriorityLabel: "特急",
+						PriorityTone:  "warning",
+						Customer:      "テスト 顧客",
+						ProductLine:   "Classic",
+						Design:        "テストリング",
+						PreviewURL:    "/public/static/previews/ring-classic.png",
+						QueueID:       "atelier-aoyama",
+						QueueName:     "青山アトリエ",
+						DueAt:         now.Add(6 * time.Hour),
+						DueLabel:      "残り6時間",
+					},
+				},
+			},
+		},
+		Drawer:          adminproduction.Drawer{Empty: true},
+		SelectedCardID:  "order-5000",
+		GeneratedAt:     now,
+		RefreshInterval: 30 * time.Second,
+	}
+}
+
+type productionStub struct {
+	boardResult  adminproduction.BoardResult
+	boardErr     error
+	appendResult adminproduction.AppendEventResult
+	appendErr    error
+	lastOrderID  string
+	appendCalls  []adminproduction.AppendEventRequest
+}
+
+func (s *productionStub) Board(ctx context.Context, token string, query adminproduction.BoardQuery) (adminproduction.BoardResult, error) {
+	if s.boardErr != nil {
+		return adminproduction.BoardResult{}, s.boardErr
+	}
+	return s.boardResult, nil
+}
+
+func (s *productionStub) AppendEvent(ctx context.Context, token, orderID string, req adminproduction.AppendEventRequest) (adminproduction.AppendEventResult, error) {
+	s.lastOrderID = orderID
+	s.appendCalls = append(s.appendCalls, req)
+	if s.appendErr != nil {
+		return adminproduction.AppendEventResult{}, s.appendErr
+	}
+	res := s.appendResult
+	if res.Card.ID == "" {
+		res.Card.ID = orderID
+	}
+	return res, nil
 }
 
 type dashboardStub struct {

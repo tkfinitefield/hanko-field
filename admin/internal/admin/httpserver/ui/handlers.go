@@ -13,6 +13,7 @@ import (
 	custommw "finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	adminnotifications "finitefield.org/hanko-admin/internal/admin/notifications"
 	adminorders "finitefield.org/hanko-admin/internal/admin/orders"
+	adminproduction "finitefield.org/hanko-admin/internal/admin/production"
 	"finitefield.org/hanko-admin/internal/admin/profile"
 	adminsearch "finitefield.org/hanko-admin/internal/admin/search"
 	adminshipments "finitefield.org/hanko-admin/internal/admin/shipments"
@@ -28,6 +29,7 @@ type Dependencies struct {
 	NotificationsService adminnotifications.Service
 	OrdersService        adminorders.Service
 	ShipmentsService     adminshipments.Service
+	ProductionService    adminproduction.Service
 }
 
 // Handlers exposes HTTP handlers for admin UI pages and fragments.
@@ -38,6 +40,7 @@ type Handlers struct {
 	notifications adminnotifications.Service
 	orders        adminorders.Service
 	shipments     adminshipments.Service
+	production    adminproduction.Service
 }
 
 // NewHandlers wires the UI handler set.
@@ -66,6 +69,10 @@ func NewHandlers(deps Dependencies) *Handlers {
 	if shipmentsService == nil {
 		shipmentsService = adminshipments.NewStaticService()
 	}
+	productionService := deps.ProductionService
+	if productionService == nil {
+		productionService = adminproduction.NewStaticService()
+	}
 	return &Handlers{
 		dashboard:     dashboardService,
 		profile:       profileService,
@@ -73,6 +80,7 @@ func NewHandlers(deps Dependencies) *Handlers {
 		notifications: notificationsService,
 		orders:        ordersService,
 		shipments:     shipmentsService,
+		production:    productionService,
 	}
 }
 

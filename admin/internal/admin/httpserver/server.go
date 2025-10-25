@@ -15,6 +15,7 @@ import (
 	"finitefield.org/hanko-admin/internal/admin/httpserver/ui"
 	adminnotifications "finitefield.org/hanko-admin/internal/admin/notifications"
 	adminorders "finitefield.org/hanko-admin/internal/admin/orders"
+	adminproduction "finitefield.org/hanko-admin/internal/admin/production"
 	"finitefield.org/hanko-admin/internal/admin/profile"
 	"finitefield.org/hanko-admin/internal/admin/search"
 	appsession "finitefield.org/hanko-admin/internal/admin/session"
@@ -34,6 +35,7 @@ type Config struct {
 	NotificationsService adminnotifications.Service
 	OrdersService        adminorders.Service
 	ShipmentsService     adminshipments.Service
+	ProductionService    adminproduction.Service
 	Session              SessionConfig
 	SessionStore         custommw.SessionStore
 	CSRFCookieName       string
@@ -102,6 +104,7 @@ func New(cfg Config) *http.Server {
 		NotificationsService: cfg.NotificationsService,
 		OrdersService:        cfg.OrdersService,
 		ShipmentsService:     cfg.ShipmentsService,
+		ProductionService:    cfg.ProductionService,
 	})
 
 	mountAdminRoutes(router, basePath, routeOptions{
@@ -202,6 +205,7 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 				or.Post("/{orderID}/payments:refund", uiHandlers.OrdersSubmitRefund)
 				or.Get("/{orderID}/modal/invoice", uiHandlers.OrdersInvoiceModal)
 				or.Post("/{orderID}/shipments", uiHandlers.ShipmentsCreateOrderShipment)
+				or.Post("/{orderID}/production-events", uiHandlers.OrdersProductionEvent)
 			})
 			protected.Route("/shipments", func(sr chi.Router) {
 				sr.Get("/tracking", uiHandlers.ShipmentsTrackingPage)
@@ -211,6 +215,10 @@ func mountAdminRoutes(router chi.Router, base string, opts routeOptions) {
 				sr.Get("/batches/{batchID}/drawer", uiHandlers.ShipmentsBatchDrawer)
 				sr.Post("/batches", uiHandlers.ShipmentsCreateBatch)
 				sr.Post("/batches/regenerate", uiHandlers.ShipmentsRegenerateLabels)
+			})
+			protected.Route("/production", func(pr chi.Router) {
+				pr.Get("/queues", uiHandlers.ProductionQueuesPage)
+				RegisterFragment(pr, "/queues/board", uiHandlers.ProductionQueuesBoard)
 			})
 			protected.Post("/invoices:issue", uiHandlers.InvoicesIssue)
 			protected.Get("/invoices/jobs/{jobID}", uiHandlers.InvoiceJobStatus)

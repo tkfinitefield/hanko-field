@@ -18,6 +18,7 @@ import (
 	"finitefield.org/hanko-admin/internal/admin/httpserver"
 	"finitefield.org/hanko-admin/internal/admin/httpserver/middleware"
 	adminorders "finitefield.org/hanko-admin/internal/admin/orders"
+	adminproduction "finitefield.org/hanko-admin/internal/admin/production"
 	"finitefield.org/hanko-admin/internal/admin/profile"
 	"finitefield.org/hanko-admin/internal/admin/search"
 	adminshipments "finitefield.org/hanko-admin/internal/admin/shipments"
@@ -29,14 +30,15 @@ func main() {
 	defer shipmentsClose()
 
 	cfg := httpserver.Config{
-		Address:          getEnv("ADMIN_HTTP_ADDR", ":8080"),
-		BasePath:         getEnv("ADMIN_BASE_PATH", "/admin"),
-		Authenticator:    buildAuthenticator(rootCtx),
-		ProfileService:   buildProfileService(),
-		SearchService:    buildSearchService(),
-		OrdersService:    buildOrdersService(),
-		ShipmentsService: shipmentsService,
-		Environment:      getEnv("ADMIN_ENVIRONMENT", "Development"),
+		Address:           getEnv("ADMIN_HTTP_ADDR", ":8080"),
+		BasePath:          getEnv("ADMIN_BASE_PATH", "/admin"),
+		Authenticator:     buildAuthenticator(rootCtx),
+		ProfileService:    buildProfileService(),
+		SearchService:     buildSearchService(),
+		OrdersService:     buildOrdersService(),
+		ProductionService: buildProductionService(),
+		ShipmentsService:  shipmentsService,
+		Environment:       getEnv("ADMIN_ENVIRONMENT", "Development"),
 		Session: httpserver.SessionConfig{
 			CookieName:       getEnv("ADMIN_SESSION_COOKIE_NAME", ""),
 			CookieDomain:     os.Getenv("ADMIN_SESSION_COOKIE_DOMAIN"),
@@ -200,6 +202,10 @@ func buildSearchService() search.Service {
 
 func buildOrdersService() adminorders.Service {
 	return adminorders.NewStaticService()
+}
+
+func buildProductionService() adminproduction.Service {
+	return adminproduction.NewStaticService()
 }
 
 func buildShipmentsService(ctx context.Context) (adminshipments.Service, func()) {

@@ -1006,7 +1006,188 @@ const createModalController = () => {
     close,
     clear: () => close({ skipAnimation: true, restoreFocus: false }),
     isOpen: () => isOpen,
-  };
+};
+};
+
+const productionRoots = new WeakMap();
+const productionMoves = new WeakMap();
+
+const initProductionKanban = () => {
+  document.querySelectorAll("[data-production-root]").forEach((root) => {
+    if (root instanceof HTMLElement) {
+      ensureProductionRoot(root);
+    }
+  });
+};
+
+const ensureProductionRoot = (root) => {
+  let state = productionRoots.get(root);
+  if (!state) {
+    state = { dragging: null };
+    productionRoots.set(root, state);
+    root.addEventListener("click", (event) => {
+      const card = event.target instanceof Element ? event.target.closest("[data-production-card]") : null;
+      if (!card) {
+        return;
+      }
+      event.preventDefault();
+      requestBoardSelection(root, card.getAttribute("data-order-id"));
+    });
+    root.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      const card = event.target instanceof Element ? event.target.closest("[data-production-card]") : null;
+      if (!card) {
+        return;
+      }
+      event.preventDefault();
+      requestBoardSelection(root, card.getAttribute("data-order-id"));
+    });
+  }
+  bindProductionElements(root, state);
+};
+
+const bindProductionElements = (root, state) => {
+  root.querySelectorAll("[data-production-card]").forEach((card) => {
+    if (!(card instanceof HTMLElement) || card.dataset.productionCardInit === "true") {
+      return;
+    }
+    card.dataset.productionCardInit = "true";
+    card.addEventListener("dragstart", (event) => {
+      state.dragging = card;
+      card.classList.add("opacity-60");
+      if (event && event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+      }
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("opacity-60");
+      state.dragging = null;
+    });
+  });
+
+  root.querySelectorAll("[data-production-lane]").forEach((lane) => {
+    if (!(lane instanceof HTMLElement) || lane.dataset.productionLaneInit === "true") {
+      return;
+    }
+    lane.dataset.productionLaneInit = "true";
+    lane.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      lane.classList.add("ring-2", "ring-brand-200");
+    });
+    lane.addEventListener("dragleave", () => {
+      lane.classList.remove("ring-2", "ring-brand-200");
+    });
+    lane.addEventListener("drop", (event) => {
+      event.preventDefault();
+      lane.classList.remove("ring-2", "ring-brand-200");
+      const card = state.dragging;
+      if (!card || !(card instanceof HTMLElement)) {
+        return;
+      }
+      const targetStage = lane.getAttribute("data-stage");
+      if (!targetStage || targetStage === card.getAttribute("data-stage")) {
+        return;
+      }
+      moveProductionCard(lane, card);
+      sendStageUpdate(root, card, targetStage);
+    });
+  });
+};
+
+const moveProductionCard = (lane, card) => {
+  const list = lane.querySelector("[data-production-cards]");
+  if (!(list instanceof HTMLElement)) {
+    return;
+  }
+  productionMoves.set(card, { parent: card.parentElement, next: card.nextElementSibling });
+  list.prepend(card);
+  card.setAttribute("data-stage", lane.getAttribute("data-stage") || "");
+  card.classList.add("opacity-70");
+};
+
+const revertProductionCard = (card) => {
+  const record = productionMoves.get(card);
+  if (!record) {
+    return;
+  }
+  const { parent, next } = record;
+  if (parent instanceof HTMLElement) {
+    if (next instanceof Node && next.parentElement === parent) {
+      parent.insertBefore(card, next);
+    } else {
+      parent.appendChild(card);
+    }
+  }
+  card.classList.remove("opacity-70");
+  productionMoves.delete(card);
+};
+
+const getProductionShell = (root) => {
+  if (!(root instanceof HTMLElement)) {
+    return null;
+  }
+  const shell = root.querySelector("[data-production-shell]");
+  return shell instanceof HTMLElement ? shell : null;
+};
+
+const requestBoardSelection = (root, cardID) => {
+  const shell = getProductionShell(root);
+  const endpoint = root.getAttribute("data-board-endpoint");
+  if (!shell || !endpoint || !window.htmx) {
+    return;
+  }
+  const params = new URLSearchParams(shell.getAttribute("data-board-query") || "");
+  if (typeof cardID === "string" && cardID.trim() !== "") {
+    params.set("selected", cardID.trim());
+  } else {
+    params.delete("selected");
+  }
+  const query = params.toString();
+  shell.setAttribute("data-board-query", query);
+  const url = query ? `${endpoint}?${query}` : endpoint;
+  window.htmx.ajax("GET", url, { target: shell, swap: "outerHTML" });
+};
+
+const refreshProductionBoard = (root) => {
+  const shell = getProductionShell(root);
+  const endpoint = root.getAttribute("data-board-endpoint");
+  if (!shell || !endpoint || !window.htmx) {
+    return;
+  }
+  const query = shell.getAttribute("data-board-query") || "";
+  const url = query ? `${endpoint}?${query}` : endpoint;
+  window.htmx.ajax("GET", url, { target: shell, swap: "outerHTML" });
+};
+
+const sendStageUpdate = (root, card, stage) => {
+  const endpoint = card.getAttribute("data-endpoint");
+  if (!endpoint || !window.htmx) {
+    revertProductionCard(card);
+    return;
+  }
+  const xhr = window.htmx.ajax("POST", endpoint, { values: { type: stage } });
+  xhr.addEventListener("load", () => {
+    if (xhr.status >= 200 && xhr.status < 300) {
+      productionMoves.delete(card);
+      refreshProductionBoard(root);
+    } else {
+      revertProductionCard(card);
+      showProductionError();
+    }
+  });
+  xhr.addEventListener("error", () => {
+    revertProductionCard(card);
+    showProductionError();
+  });
+};
+
+const showProductionError = () => {
+  const toast = window.hankoAdmin && window.hankoAdmin.toast;
+  if (toast && typeof toast.show === "function") {
+    toast.show({ message: "制作ステージの更新に失敗しました。", tone: "danger" });
+  }
 };
 
 const normaliseRefreshDetail = (detail, defaultEvent = "refresh") => {
@@ -2079,6 +2260,7 @@ window.hankoAdmin = window.hankoAdmin || {
     initNotificationsBadge();
     initNotificationsSelection();
     initShipmentsModule();
+    initProductionKanban();
     initDashboardRefresh();
     initHXTriggerHandlers();
     const toast = initToastStack();
@@ -2093,6 +2275,7 @@ window.hankoAdmin = window.hankoAdmin || {
         }
         initOrdersInteractions(event.target);
         initShipmentsModule();
+        initProductionKanban();
       });
     }
 
