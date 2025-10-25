@@ -80,8 +80,10 @@ class AppModal extends StatelessWidget {
                           variant: action.variant,
                           fullWidth: true,
                           onPressed: () {
-                            Navigator.of(context).pop();
                             action.onPressed();
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                            }
                           },
                         ),
                       ),

@@ -85,6 +85,7 @@ class AppListTile extends StatelessWidget {
     this.onTap,
     this.showDivider = false,
     this.padding,
+    this.dividerSpacing = AppTokens.spaceS,
   });
 
   final String title;
@@ -94,6 +95,7 @@ class AppListTile extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showDivider;
   final EdgeInsetsGeometry? padding;
+  final double dividerSpacing;
 
   @override
   Widget build(BuildContext context) {
@@ -148,9 +150,9 @@ class AppListTile extends StatelessWidget {
     return Column(
       children: [
         tile,
-        const Padding(
-          padding: EdgeInsets.only(top: AppTokens.spaceM),
-          child: Divider(height: 1),
+        Padding(
+          padding: EdgeInsets.only(top: dividerSpacing),
+          child: const Divider(height: 1),
         ),
       ],
     );

@@ -157,6 +157,11 @@ class _ButtonContent extends StatelessWidget {
     final spacing = size == AppButtonSize.small
         ? AppTokens.spaceS
         : AppTokens.spaceM;
+    final iconSize = switch (size) {
+      AppButtonSize.small => 16.0,
+      AppButtonSize.medium => 18.0,
+      AppButtonSize.large => 20.0,
+    };
 
     final child = Row(
       mainAxisSize: MainAxisSize.min,
@@ -165,7 +170,10 @@ class _ButtonContent extends StatelessWidget {
         if (leadingIcon != null)
           Padding(
             padding: EdgeInsets.only(right: spacing),
-            child: SizedBox.square(dimension: 20, child: leadingIcon!),
+            child: IconTheme.merge(
+              data: IconTheme.of(context).copyWith(size: iconSize),
+              child: leadingIcon!,
+            ),
           ),
         Flexible(
           child: Text(
@@ -178,7 +186,10 @@ class _ButtonContent extends StatelessWidget {
         if (trailingIcon != null)
           Padding(
             padding: EdgeInsets.only(left: spacing),
-            child: SizedBox.square(dimension: 20, child: trailingIcon!),
+            child: IconTheme.merge(
+              data: IconTheme.of(context).copyWith(size: iconSize),
+              child: trailingIcon!,
+            ),
           ),
       ],
     );
