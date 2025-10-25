@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -295,6 +296,113 @@ func TestCatalogServiceGetFont(t *testing.T) {
 	}
 }
 
+func TestCatalogServiceUpsertFont_ValidatesInput(t *testing.T) {
+	repo := &stubCatalogRepository{}
+	now := time.Date(2024, time.May, 1, 12, 0, 0, 0, time.UTC)
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: repo, Clock: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_, err = svc.UpsertFont(context.Background(), UpsertFontCommand{
+		Font: FontSummary{
+			DisplayName:      "",
+			Family:           "Ryumin",
+			Weight:           "Regular",
+			Scripts:          []string{"kanji"},
+			PreviewImagePath: "fonts/ryumin.png",
+			License: FontLicense{
+				Name:          "Commercial",
+				URL:           "",
+				AllowedUsages: []string{"app"},
+			},
+		},
+	})
+	if !errors.Is(err, ErrCatalogInvalidInput) {
+		t.Fatalf("expected invalid input error, got %v", err)
+	}
+}
+
+func TestCatalogServiceUpsertFont_SlugAndConflict(t *testing.T) {
+	repo := &stubCatalogRepository{
+		fontGet: domain.Font{
+			FontSummary: domain.FontSummary{
+				ID:        "tensho-regular",
+				CreatedAt: time.Date(2024, time.April, 10, 0, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	now := time.Date(2024, time.May, 2, 9, 0, 0, 0, time.UTC)
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: repo, Clock: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	_, err = svc.UpsertFont(context.Background(), UpsertFontCommand{
+		Font: FontSummary{
+			DisplayName:      "Tensho Regular",
+			Family:           "Tensho",
+			Weight:           "Regular",
+			Scripts:          []string{"kanji"},
+			PreviewImagePath: "fonts/tensho.png",
+			License: FontLicense{
+				Name:          "Commercial",
+				URL:           "https://example.com/license",
+				AllowedUsages: []string{"print"},
+			},
+		},
+	})
+	if !errors.Is(err, ErrCatalogFontConflict) {
+		t.Fatalf("expected conflict error, got %v", err)
+	}
+
+	repo.fontUpsertResp = domain.FontSummary{ID: "tensho-regular", CreatedAt: repo.fontGet.CreatedAt, UpdatedAt: now}
+	result, err := svc.UpsertFont(context.Background(), UpsertFontCommand{
+		Font: FontSummary{
+			ID:               "tensho-regular",
+			DisplayName:      "Tensho Regular",
+			Family:           "Tensho",
+			Weight:           "Regular",
+			Scripts:          []string{"kanji"},
+			PreviewImagePath: "fonts/tensho.png",
+			SupportedWeights: []string{"400"},
+			License: FontLicense{
+				Name:          "Commercial",
+				URL:           "https://example.com/license",
+				AllowedUsages: []string{"print"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.ID != "tensho-regular" {
+		t.Fatalf("expected slug id, got %s", result.ID)
+	}
+	if repo.fontUpsertInput.CreatedAt != repo.fontGet.CreatedAt {
+		t.Fatalf("expected CreatedAt preserved, got %v", repo.fontUpsertInput.CreatedAt)
+	}
+	if !containsString(repo.fontUpsertInput.SupportedWeights, "regular") {
+		t.Fatalf("expected supported weights to include weight, got %#v", repo.fontUpsertInput.SupportedWeights)
+	}
+}
+
+func TestCatalogServiceDeleteFont_Conflict(t *testing.T) {
+	repo := &stubCatalogRepository{fontDeleteErr: stubRepositoryError{conflict: true}}
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: repo})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := svc.DeleteFont(context.Background(), " font_in_use "); !errors.Is(err, ErrCatalogFontInUse) {
+		t.Fatalf("expected font in use error, got %v", err)
+	}
+	if repo.fontDeleteID != "font_in_use" {
+		t.Fatalf("expected trimmed font id, got %q", repo.fontDeleteID)
+	}
+	if err := svc.DeleteFont(context.Background(), " "); !errors.Is(err, ErrCatalogInvalidInput) {
+		t.Fatalf("expected invalid input error, got %v", err)
+	}
+}
+
 func TestCatalogServiceListProducts(t *testing.T) {
 	stubRepo := &stubCatalogRepository{
 		productListResp: domain.CursorPage[domain.ProductSummary]{
@@ -434,6 +542,16 @@ func TestCatalogServiceDeleteTemplate(t *testing.T) {
 	}
 }
 
+func containsString(values []string, target string) bool {
+	target = strings.ToLower(strings.TrimSpace(target))
+	for _, value := range values {
+		if strings.ToLower(strings.TrimSpace(value)) == target {
+			return true
+		}
+	}
+	return false
+}
+
 type stubCatalogRepository struct {
 	listFilter         repositories.TemplateFilter
 	listResp           domain.CursorPage[domain.TemplateSummary]
@@ -467,6 +585,11 @@ type stubCatalogRepository struct {
 	fontGetID      string
 	fontGet        domain.Font
 	fontGetErr     error
+	fontUpsertInput domain.FontSummary
+	fontUpsertResp  domain.FontSummary
+	fontUpsertErr   error
+	fontDeleteID    string
+	fontDeleteErr   error
 	materialGetID  string
 	materialGet    domain.Material
 	materialGetErr error
@@ -554,12 +677,20 @@ func (s *stubCatalogRepository) GetFont(_ context.Context, fontID string) (domai
 	return s.fontGet, s.fontGetErr
 }
 
-func (s *stubCatalogRepository) UpsertFont(context.Context, domain.FontSummary) (domain.FontSummary, error) {
-	return domain.FontSummary{}, errors.New("not implemented")
+func (s *stubCatalogRepository) UpsertFont(_ context.Context, font domain.FontSummary) (domain.FontSummary, error) {
+	s.fontUpsertInput = font
+	if s.fontUpsertErr != nil {
+		return domain.FontSummary{}, s.fontUpsertErr
+	}
+	if s.fontUpsertResp.ID != "" {
+		return s.fontUpsertResp, nil
+	}
+	return font, nil
 }
 
-func (s *stubCatalogRepository) DeleteFont(context.Context, string) error {
-	return errors.New("not implemented")
+func (s *stubCatalogRepository) DeleteFont(_ context.Context, fontID string) error {
+	s.fontDeleteID = fontID
+	return s.fontDeleteErr
 }
 
 func (s *stubCatalogRepository) ListMaterials(_ context.Context, filter repositories.MaterialFilter) (domain.CursorPage[domain.MaterialSummary], error) {

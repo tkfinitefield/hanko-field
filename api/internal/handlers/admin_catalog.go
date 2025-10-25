@@ -16,7 +16,7 @@ import (
 	"github.com/hanko-field/api/internal/services"
 )
 
-const maxTemplateRequestBody = 256 * 1024
+const maxCatalogRequestBody = 256 * 1024
 
 // AdminCatalogHandlers exposes admin catalog CRUD endpoints.
 type AdminCatalogHandlers struct {
@@ -41,6 +41,9 @@ func (h *AdminCatalogHandlers) Routes(r chi.Router) {
 		rt.Post("/templates", h.createTemplate)
 		rt.Put("/templates/{templateID}", h.updateTemplate)
 		rt.Delete("/templates/{templateID}", h.deleteTemplate)
+		rt.Post("/fonts", h.createFont)
+		rt.Put("/fonts/{fontID}", h.updateFont)
+		rt.Delete("/fonts/{fontID}", h.deleteFont)
 	})
 }
 
@@ -91,6 +94,55 @@ func (h *AdminCatalogHandlers) saveTemplate(w http.ResponseWriter, r *http.Reque
 	_ = json.NewEncoder(w).Encode(response)
 }
 
+func (h *AdminCatalogHandlers) createFont(w http.ResponseWriter, r *http.Request) {
+	h.saveFont(w, r, "")
+}
+
+func (h *AdminCatalogHandlers) updateFont(w http.ResponseWriter, r *http.Request) {
+	fontID := chi.URLParam(r, "fontID")
+	h.saveFont(w, r, fontID)
+}
+
+func (h *AdminCatalogHandlers) saveFont(w http.ResponseWriter, r *http.Request, fontID string) {
+	ctx := r.Context()
+	if h.catalog == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "catalog service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	font, err := decodeAdminFontRequest(r, fontID)
+	if err != nil {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+		return
+	}
+	result, err := h.catalog.UpsertFont(ctx, services.UpsertFontCommand{Font: font, ActorID: identity.UID})
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrCatalogInvalidInput):
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+			return
+		case errors.Is(err, services.ErrCatalogFontConflict):
+			httpx.WriteError(ctx, w, httpx.NewError("font_conflict", err.Error(), http.StatusConflict))
+			return
+		default:
+			writeCatalogError(ctx, w, err, "font")
+			return
+		}
+	}
+	response := newAdminFontResponse(result)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == http.MethodPost {
+		w.WriteHeader(http.StatusCreated)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+	_ = json.NewEncoder(w).Encode(response)
+}
+
 func (h *AdminCatalogHandlers) deleteTemplate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.catalog == nil {
@@ -118,8 +170,40 @@ func (h *AdminCatalogHandlers) deleteTemplate(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *AdminCatalogHandlers) deleteFont(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.catalog == nil {
+		httpx.WriteError(ctx, w, httpx.NewError("service_unavailable", "catalog service unavailable", http.StatusServiceUnavailable))
+		return
+	}
+	identity, ok := auth.IdentityFromContext(ctx)
+	if !ok || identity == nil || strings.TrimSpace(identity.UID) == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("unauthenticated", "authentication required", http.StatusUnauthorized))
+		return
+	}
+	fontID := strings.TrimSpace(chi.URLParam(r, "fontID"))
+	if fontID == "" {
+		httpx.WriteError(ctx, w, httpx.NewError("invalid_request", "font id is required", http.StatusBadRequest))
+		return
+	}
+	if err := h.catalog.DeleteFont(ctx, fontID); err != nil {
+		switch {
+		case errors.Is(err, services.ErrCatalogInvalidInput):
+			httpx.WriteError(ctx, w, httpx.NewError("invalid_request", err.Error(), http.StatusBadRequest))
+			return
+		case errors.Is(err, services.ErrCatalogFontInUse):
+			httpx.WriteError(ctx, w, httpx.NewError("font_in_use", err.Error(), http.StatusConflict))
+			return
+		default:
+			writeCatalogError(ctx, w, err, "font")
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func decodeAdminTemplateRequest(r *http.Request, overrideID string) (services.Template, error) {
-	limited := io.LimitReader(r.Body, maxTemplateRequestBody)
+	limited := io.LimitReader(r.Body, maxCatalogRequestBody)
 	defer r.Body.Close()
 	decoder := json.NewDecoder(limited)
 	decoder.DisallowUnknownFields()
@@ -281,6 +365,106 @@ func parseTimePointer(value *string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("invalid timestamp %q: %w", trimmed, err)
 	}
 	return parsed, nil
+}
+
+func decodeAdminFontRequest(r *http.Request, overrideID string) (services.FontSummary, error) {
+	limited := io.LimitReader(r.Body, maxCatalogRequestBody)
+	defer r.Body.Close()
+	decoder := json.NewDecoder(limited)
+	decoder.DisallowUnknownFields()
+
+	var req adminFontRequest
+	if err := decoder.Decode(&req); err != nil {
+		if errors.Is(err, io.EOF) {
+			return services.FontSummary{}, errors.New("request body required")
+		}
+		return services.FontSummary{}, fmt.Errorf("invalid request body: %w", err)
+	}
+
+	font := services.FontSummary{
+		ID:               strings.TrimSpace(req.ID),
+		DisplayName:      req.DisplayName,
+		Family:           req.Family,
+		Weight:           req.Weight,
+		Scripts:          copyStringSlice(req.Scripts),
+		PreviewImagePath: req.PreviewImagePath,
+		LetterSpacing:    req.LetterSpacing,
+		IsPremium:        req.IsPremium,
+		SupportedWeights: copyStringSlice(req.SupportedWeights),
+		IsPublished:      req.IsPublished,
+	}
+	if req.License != nil {
+		font.License = services.FontLicense{
+			Name:          req.License.Name,
+			URL:           req.License.URL,
+			AllowedUsages: copyStringSlice(req.License.AllowedUsages),
+		}
+	}
+	if strings.TrimSpace(overrideID) != "" {
+		font.ID = strings.TrimSpace(overrideID)
+	}
+	return font, nil
+}
+
+type adminFontRequest struct {
+	ID               string                   `json:"id"`
+	DisplayName      string                   `json:"display_name"`
+	Family           string                   `json:"family"`
+	Weight           string                   `json:"weight"`
+	Scripts          []string                 `json:"scripts"`
+	PreviewImagePath string                   `json:"preview_image_path"`
+	LetterSpacing    float64                  `json:"letter_spacing"`
+	IsPremium        bool                     `json:"is_premium"`
+	SupportedWeights []string                 `json:"supported_weights"`
+	License          *adminFontLicensePayload `json:"license"`
+	IsPublished      bool                     `json:"is_published"`
+}
+
+type adminFontResponse struct {
+	ID               string                  `json:"id"`
+	Slug             string                  `json:"slug,omitempty"`
+	DisplayName      string                  `json:"display_name"`
+	Family           string                  `json:"family"`
+	Weight           string                  `json:"weight"`
+	Scripts          []string                `json:"scripts"`
+	PreviewImagePath string                  `json:"preview_image_path"`
+	LetterSpacing    float64                 `json:"letter_spacing"`
+	IsPremium        bool                    `json:"is_premium"`
+	SupportedWeights []string                `json:"supported_weights"`
+	License          adminFontLicensePayload `json:"license"`
+	IsPublished      bool                    `json:"is_published"`
+	CreatedAt        string                  `json:"created_at"`
+	UpdatedAt        string                  `json:"updated_at"`
+}
+
+type adminFontLicensePayload struct {
+	Name          string   `json:"name"`
+	URL           string   `json:"url"`
+	AllowedUsages []string `json:"allowed_usages"`
+}
+
+func newAdminFontResponse(font services.FontSummary) adminFontResponse {
+	resp := adminFontResponse{
+		ID:               font.ID,
+		Slug:             fallbackNonEmpty(font.Slug, font.ID),
+		DisplayName:      font.DisplayName,
+		Family:           font.Family,
+		Weight:           font.Weight,
+		Scripts:          copyStringSlice(font.Scripts),
+		PreviewImagePath: font.PreviewImagePath,
+		LetterSpacing:    font.LetterSpacing,
+		IsPremium:        font.IsPremium,
+		SupportedWeights: copyStringSlice(font.SupportedWeights),
+		License: adminFontLicensePayload{
+			Name:          font.License.Name,
+			URL:           strings.TrimSpace(font.License.URL),
+			AllowedUsages: copyStringSlice(font.License.AllowedUsages),
+		},
+		IsPublished: font.IsPublished,
+		CreatedAt:   formatTimestamp(font.CreatedAt),
+		UpdatedAt:   formatTimestamp(font.UpdatedAt),
+	}
+	return resp
 }
 
 func isTemplateDraftEmpty(draft services.TemplateDraft) bool {

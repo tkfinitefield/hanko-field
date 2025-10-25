@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,6 +17,8 @@ const (
 	defaultTemplateSort      = domain.TemplateSortPopularity
 	defaultTemplateSortOrder = domain.SortDesc
 )
+
+var fontSlugSanitizer = regexp.MustCompile(`[^a-z0-9]+`)
 
 // TemplateCacheInvalidator purges CDN/cache entries referencing template assets.
 type TemplateCacheInvalidator interface {
@@ -36,8 +40,16 @@ type catalogService struct {
 	clock func() time.Time
 }
 
-// ErrCatalogRepositoryMissing indicates the repository dependency is absent.
-var ErrCatalogRepositoryMissing = errors.New("catalog service: repository is not configured")
+var (
+	// ErrCatalogRepositoryMissing indicates the repository dependency is absent.
+	ErrCatalogRepositoryMissing = errors.New("catalog service: repository is not configured")
+	// ErrCatalogInvalidInput indicates the caller supplied invalid data to a catalog mutation.
+	ErrCatalogInvalidInput = errors.New("catalog service: invalid input")
+	// ErrCatalogFontConflict indicates a slug/family+weight combination already exists.
+	ErrCatalogFontConflict = errors.New("catalog service: font conflict")
+	// ErrCatalogFontInUse indicates the font cannot be deleted due to active dependencies.
+	ErrCatalogFontInUse = errors.New("catalog service: font in use")
+)
 
 // NewCatalogService constructs the catalog service with the supplied dependencies.
 func NewCatalogService(deps CatalogServiceDeps) (CatalogService, error) {
@@ -251,7 +263,55 @@ func (s *catalogService) UpsertFont(ctx context.Context, cmd UpsertFontCommand) 
 	if s.repo == nil {
 		return FontSummary{}, ErrCatalogRepositoryMissing
 	}
-	return s.repo.UpsertFont(ctx, cmd.Font)
+
+	font := normalizeFontSummary(cmd.Font)
+	originalID := strings.TrimSpace(cmd.Font.ID)
+	expectedSlug := generateFontSlug(font.Family, font.Weight)
+	if expectedSlug == "" {
+		return FontSummary{}, fmt.Errorf("%w: family and weight are required", ErrCatalogInvalidInput)
+	}
+	if font.Slug != "" && !strings.EqualFold(font.Slug, expectedSlug) {
+		return FontSummary{}, fmt.Errorf("%w: slug mismatch for %s", ErrCatalogInvalidInput, expectedSlug)
+	}
+	font.Slug = expectedSlug
+	font.ID = expectedSlug
+	font.SupportedWeights = ensureSupportedWeight(font.SupportedWeights, font.Weight)
+
+	if err := validateFontSummary(font); err != nil {
+		return FontSummary{}, err
+	}
+
+	var existing domain.Font
+	if font.ID != "" {
+		current, err := s.repo.GetFont(ctx, font.ID)
+		if err != nil && !isCatalogRepositoryNotFound(err) {
+			return FontSummary{}, err
+		}
+		existing = current
+	}
+	isCreate := strings.TrimSpace(originalID) == ""
+	if existing.ID != "" && isCreate {
+		return FontSummary{}, fmt.Errorf("%w: font %s already exists", ErrCatalogFontConflict, font.ID)
+	}
+	now := s.clock()
+	if existing.ID != "" && !existing.CreatedAt.IsZero() {
+		font.CreatedAt = existing.CreatedAt
+	} else if font.CreatedAt.IsZero() {
+		font.CreatedAt = now
+	} else {
+		font.CreatedAt = font.CreatedAt.UTC()
+	}
+	font.UpdatedAt = now
+
+	saved, err := s.repo.UpsertFont(ctx, domain.FontSummary(font))
+	if err != nil {
+		var repoErr repositories.RepositoryError
+		if errors.As(err, &repoErr) && repoErr.IsConflict() {
+			return FontSummary{}, fmt.Errorf("%w: %s", ErrCatalogFontConflict, err.Error())
+		}
+		return FontSummary{}, err
+	}
+	return FontSummary(saved), nil
 }
 
 func (s *catalogService) DeleteFont(ctx context.Context, fontID string) error {
@@ -260,9 +320,16 @@ func (s *catalogService) DeleteFont(ctx context.Context, fontID string) error {
 	}
 	fontID = strings.TrimSpace(fontID)
 	if fontID == "" {
-		return errors.New("catalog service: font id is required")
+		return fmt.Errorf("%w: font id is required", ErrCatalogInvalidInput)
 	}
-	return s.repo.DeleteFont(ctx, fontID)
+	if err := s.repo.DeleteFont(ctx, fontID); err != nil {
+		var repoErr repositories.RepositoryError
+		if errors.As(err, &repoErr) && repoErr.IsConflict() {
+			return fmt.Errorf("%w: font in use", ErrCatalogFontInUse)
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *catalogService) ListMaterials(ctx context.Context, filter MaterialFilter) (domain.CursorPage[MaterialSummary], error) {
@@ -511,6 +578,91 @@ func normalizeTags(tags []string) []string {
 		return nil
 	}
 	return result
+}
+
+func normalizeFontSummary(font FontSummary) FontSummary {
+	font.ID = strings.TrimSpace(font.ID)
+	font.Slug = strings.TrimSpace(font.Slug)
+	font.DisplayName = strings.TrimSpace(font.DisplayName)
+	font.Family = strings.TrimSpace(font.Family)
+	font.Weight = strings.ToLower(strings.TrimSpace(font.Weight))
+	font.PreviewImagePath = strings.TrimSpace(font.PreviewImagePath)
+	font.Scripts = normalizeTags(font.Scripts)
+	font.SupportedWeights = normalizeTags(font.SupportedWeights)
+	font.License.Name = strings.TrimSpace(font.License.Name)
+	font.License.URL = strings.TrimSpace(font.License.URL)
+	font.License.AllowedUsages = normalizeTags(font.License.AllowedUsages)
+	return font
+}
+
+func ensureSupportedWeight(weights []string, weight string) []string {
+	weight = strings.TrimSpace(weight)
+	if weight == "" {
+		return weights
+	}
+	if len(weights) == 0 {
+		return []string{weight}
+	}
+	weightLower := strings.ToLower(weight)
+	for _, w := range weights {
+		if strings.ToLower(strings.TrimSpace(w)) == weightLower {
+			return weights
+		}
+	}
+	return append(weights, weight)
+}
+
+func validateFontSummary(font FontSummary) error {
+	if strings.TrimSpace(font.DisplayName) == "" {
+		return fmt.Errorf("%w: display_name is required", ErrCatalogInvalidInput)
+	}
+	if strings.TrimSpace(font.Family) == "" {
+		return fmt.Errorf("%w: family is required", ErrCatalogInvalidInput)
+	}
+	if strings.TrimSpace(font.Weight) == "" {
+		return fmt.Errorf("%w: weight is required", ErrCatalogInvalidInput)
+	}
+	if len(font.Scripts) == 0 {
+		return fmt.Errorf("%w: at least one script is required", ErrCatalogInvalidInput)
+	}
+	if strings.TrimSpace(font.PreviewImagePath) == "" {
+		return fmt.Errorf("%w: preview_image_path is required", ErrCatalogInvalidInput)
+	}
+	if err := validateFontLicense(font.License); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateFontLicense(license FontLicense) error {
+	if strings.TrimSpace(license.Name) == "" {
+		return fmt.Errorf("%w: license.name is required", ErrCatalogInvalidInput)
+	}
+	if strings.TrimSpace(license.URL) == "" {
+		return fmt.Errorf("%w: license.url is required", ErrCatalogInvalidInput)
+	}
+	parsed, err := url.Parse(license.URL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("%w: license.url must be absolute", ErrCatalogInvalidInput)
+	}
+	if len(license.AllowedUsages) == 0 {
+		return fmt.Errorf("%w: license.allowed_usages is required", ErrCatalogInvalidInput)
+	}
+	return nil
+}
+
+func generateFontSlug(family, weight string) string {
+	normalize := func(value string) string {
+		value = strings.ToLower(strings.TrimSpace(value))
+		value = fontSlugSanitizer.ReplaceAllString(value, "-")
+		return strings.Trim(value, "-")
+	}
+	familySlug := normalize(family)
+	weightSlug := normalize(weight)
+	if familySlug == "" || weightSlug == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s-%s", familySlug, weightSlug)
 }
 
 func normalizeTemplateSort(sortField domain.TemplateSort) domain.TemplateSort {

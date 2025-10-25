@@ -738,24 +738,28 @@ type TemplateVersion struct {
 
 // FontLicense captures public licensing metadata for fonts.
 type FontLicense struct {
-	Name string
-	URL  string
+    Name string
+    URL  string
+    // AllowedUsages enumerates permitted contexts for this font (e.g. "app", "print").
+    AllowedUsages []string
 }
 
 // FontSummary captures metadata required by rendering services.
 type FontSummary struct {
-	ID               string
-	DisplayName      string
-	Family           string
-	Scripts          []string
-	PreviewImagePath string
-	LetterSpacing    float64
-	IsPremium        bool
-	SupportedWeights []string
-	License          FontLicense
-	IsPublished      bool
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+    ID               string
+    Slug             string
+    DisplayName      string
+    Family           string
+    Weight           string
+    Scripts          []string
+    PreviewImagePath string
+    LetterSpacing    float64
+    IsPremium        bool
+    SupportedWeights []string
+    License          FontLicense
+    IsPublished      bool
+    CreatedAt        time.Time
+    UpdatedAt        time.Time
 }
 
 // Font represents full font metadata for detail endpoints.

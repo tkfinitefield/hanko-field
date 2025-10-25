@@ -300,16 +300,19 @@ func (h *PublicHandlers) listFonts(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, fontPayload{
 			ID:               font.ID,
+			Slug:             fallbackNonEmpty(font.Slug, font.ID),
 			DisplayName:      font.DisplayName,
 			Family:           font.Family,
+			Weight:           font.Weight,
 			Scripts:          copyStringSlice(font.Scripts),
 			PreviewURL:       previewURL,
 			LetterSpacing:    font.LetterSpacing,
 			IsPremium:        font.IsPremium,
 			SupportedWeights: copyStringSlice(font.SupportedWeights),
 			License: fontLicensePayload{
-				Name: font.License.Name,
-				URL:  strings.TrimSpace(font.License.URL),
+				Name:          font.License.Name,
+				URL:           strings.TrimSpace(font.License.URL),
+				AllowedUsages: copyStringSlice(font.License.AllowedUsages),
 			},
 			CreatedAt: formatTimestamp(font.CreatedAt),
 			UpdatedAt: formatTimestamp(font.UpdatedAt),
@@ -354,16 +357,19 @@ func (h *PublicHandlers) getFont(w http.ResponseWriter, r *http.Request) {
 
 	payload := fontPayload{
 		ID:               font.ID,
+		Slug:             fallbackNonEmpty(font.Slug, font.ID),
 		DisplayName:      font.DisplayName,
 		Family:           font.Family,
+		Weight:           font.Weight,
 		Scripts:          copyStringSlice(font.Scripts),
 		PreviewURL:       previewURL,
 		LetterSpacing:    font.LetterSpacing,
 		IsPremium:        font.IsPremium,
 		SupportedWeights: copyStringSlice(font.SupportedWeights),
 		License: fontLicensePayload{
-			Name: font.License.Name,
-			URL:  strings.TrimSpace(font.License.URL),
+			Name:          font.License.Name,
+			URL:           strings.TrimSpace(font.License.URL),
+			AllowedUsages: copyStringSlice(font.License.AllowedUsages),
 		},
 		CreatedAt: formatTimestamp(font.CreatedAt),
 		UpdatedAt: formatTimestamp(font.UpdatedAt),
@@ -1244,6 +1250,12 @@ func writeCatalogError(ctx context.Context, w http.ResponseWriter, err error, re
 	case errors.Is(err, services.ErrCatalogRepositoryMissing):
 		httpx.WriteError(ctx, w, httpx.NewError("catalog_unavailable", "catalog service is unavailable", http.StatusServiceUnavailable))
 		return
+	case errors.Is(err, services.ErrCatalogInvalidInput):
+		httpx.WriteError(ctx, w, httpx.NewError(fmt.Sprintf("%s_invalid", codePrefix), err.Error(), http.StatusBadRequest))
+		return
+	case errors.Is(err, services.ErrCatalogFontConflict), errors.Is(err, services.ErrCatalogFontInUse):
+		httpx.WriteError(ctx, w, httpx.NewError(fmt.Sprintf("%s_conflict", codePrefix), err.Error(), http.StatusConflict))
+		return
 	}
 
 	var repoErr repositories.RepositoryError
@@ -1364,8 +1376,10 @@ type fontListResponse struct {
 
 type fontPayload struct {
 	ID               string             `json:"id"`
+	Slug             string             `json:"slug,omitempty"`
 	DisplayName      string             `json:"display_name"`
 	Family           string             `json:"family"`
+	Weight           string             `json:"weight,omitempty"`
 	Scripts          []string           `json:"scripts,omitempty"`
 	PreviewURL       string             `json:"preview_url,omitempty"`
 	LetterSpacing    float64            `json:"letter_spacing"`
@@ -1377,8 +1391,9 @@ type fontPayload struct {
 }
 
 type fontLicensePayload struct {
-	Name string `json:"name,omitempty"`
-	URL  string `json:"url,omitempty"`
+	Name          string   `json:"name,omitempty"`
+	URL           string   `json:"url,omitempty"`
+	AllowedUsages []string `json:"allowed_usages,omitempty"`
 }
 
 type materialListResponse struct {

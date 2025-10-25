@@ -325,8 +325,10 @@ func TestPublicHandlers_ListFonts(t *testing.T) {
 			Items: []services.FontSummary{
 				{
 					ID:               "font_001",
+					Slug:             "tensho-regular",
 					DisplayName:      "Tensho Regular",
 					Family:           "Tensho",
+					Weight:           "regular",
 					Scripts:          []string{"kanji", "kana"},
 					PreviewImagePath: "fonts/font_001.png",
 					LetterSpacing:    0.05,
@@ -334,8 +336,9 @@ func TestPublicHandlers_ListFonts(t *testing.T) {
 					IsPublished:      true,
 					SupportedWeights: []string{"400", "700"},
 					License: services.FontLicense{
-						Name: "Commercial",
-						URL:  "https://example.com/license",
+						Name:          "Commercial",
+						URL:           "https://example.com/license",
+						AllowedUsages: []string{"app", "print"},
 					},
 					CreatedAt: createdAt,
 					UpdatedAt: updatedAt,
@@ -385,6 +388,12 @@ func TestPublicHandlers_ListFonts(t *testing.T) {
 	if item.ID != "font_001" {
 		t.Fatalf("expected font id font_001 got %s", item.ID)
 	}
+	if item.Slug != "tensho-regular" {
+		t.Fatalf("expected slug tensho-regular got %s", item.Slug)
+	}
+	if item.Weight != "regular" {
+		t.Fatalf("expected weight regular got %s", item.Weight)
+	}
 	if item.PreviewURL != "https://cdn.example.com/fonts/font_001.png" {
 		t.Fatalf("expected resolved preview url got %s", item.PreviewURL)
 	}
@@ -396,6 +405,9 @@ func TestPublicHandlers_ListFonts(t *testing.T) {
 	}
 	if item.License.URL != "https://example.com/license" {
 		t.Fatalf("expected license url preserved got %s", item.License.URL)
+	}
+	if len(item.License.AllowedUsages) != 2 || item.License.AllowedUsages[0] != "app" {
+		t.Fatalf("expected allowed usages propagated got %#v", item.License.AllowedUsages)
 	}
 
 	if stubService.fontListFilter.Script == nil || *stubService.fontListFilter.Script != "kanji" {
@@ -431,8 +443,10 @@ func TestPublicHandlers_GetFont(t *testing.T) {
 	font := services.Font{
 		FontSummary: services.FontSummary{
 			ID:               "font_002",
+			Slug:             "kana-regular",
 			DisplayName:      "Kana Script",
 			Family:           "Kana",
+			Weight:           "regular",
 			Scripts:          []string{"kana"},
 			PreviewImagePath: "fonts/font_002.png",
 			LetterSpacing:    0.1,
@@ -440,8 +454,9 @@ func TestPublicHandlers_GetFont(t *testing.T) {
 			IsPublished:      true,
 			SupportedWeights: []string{"400"},
 			License: services.FontLicense{
-				Name: "Commercial",
-				URL:  "https://example.com/license",
+				Name:          "Commercial",
+				URL:           "https://example.com/license",
+				AllowedUsages: []string{"svg"},
 			},
 			CreatedAt: time.Date(2024, time.April, 3, 0, 0, 0, 0, time.UTC),
 			UpdatedAt: time.Date(2024, time.April, 4, 0, 0, 0, 0, time.UTC),
@@ -477,6 +492,15 @@ func TestPublicHandlers_GetFont(t *testing.T) {
 	}
 	if payload.PreviewURL != "https://cdn/fonts/font_002.png" {
 		t.Fatalf("expected resolved preview url got %s", payload.PreviewURL)
+	}
+	if payload.Slug != "kana-regular" {
+		t.Fatalf("expected slug kana-regular got %s", payload.Slug)
+	}
+	if payload.License.URL != "https://example.com/license" {
+		t.Fatalf("expected license url got %s", payload.License.URL)
+	}
+	if len(payload.License.AllowedUsages) != 1 || payload.License.AllowedUsages[0] != "svg" {
+		t.Fatalf("expected license usages got %#v", payload.License.AllowedUsages)
 	}
 	if stubService.fontGetID != "font_002" {
 		t.Fatalf("expected service to receive trimmed id font_002 got %s", stubService.fontGetID)
@@ -1442,11 +1466,16 @@ type stubCatalogService struct {
 	productGetProd services.Product
 	productGetErr  error
 
-	adminUpsertCmd  services.UpsertTemplateCommand
-	adminUpsertResp services.Template
-	adminUpsertErr  error
-	adminDeleteCmd  services.DeleteTemplateCommand
-	adminDeleteErr  error
+	adminUpsertCmd      services.UpsertTemplateCommand
+	adminUpsertResp     services.Template
+	adminUpsertErr      error
+	adminDeleteCmd      services.DeleteTemplateCommand
+	adminDeleteErr      error
+	adminFontUpsertCmd  services.UpsertFontCommand
+	adminFontUpsertResp services.FontSummary
+	adminFontUpsertErr  error
+	adminFontDeleteID   string
+	adminFontDeleteErr  error
 }
 
 func (s *stubCatalogService) ListTemplates(_ context.Context, filter services.TemplateFilter) (domain.CursorPage[domain.TemplateSummary], error) {
@@ -1491,12 +1520,20 @@ func (s *stubCatalogService) GetFont(_ context.Context, fontID string) (services
 	return s.fontGetFont, nil
 }
 
-func (s *stubCatalogService) UpsertFont(context.Context, services.UpsertFontCommand) (services.FontSummary, error) {
-	return services.FontSummary{}, errors.New("not implemented")
+func (s *stubCatalogService) UpsertFont(_ context.Context, cmd services.UpsertFontCommand) (services.FontSummary, error) {
+	s.adminFontUpsertCmd = cmd
+	if s.adminFontUpsertErr != nil {
+		return services.FontSummary{}, s.adminFontUpsertErr
+	}
+	if s.adminFontUpsertResp.ID != "" {
+		return s.adminFontUpsertResp, nil
+	}
+	return cmd.Font, nil
 }
 
-func (s *stubCatalogService) DeleteFont(context.Context, string) error {
-	return errors.New("not implemented")
+func (s *stubCatalogService) DeleteFont(_ context.Context, fontID string) error {
+	s.adminFontDeleteID = fontID
+	return s.adminFontDeleteErr
 }
 
 func (s *stubCatalogService) ListMaterials(_ context.Context, filter services.MaterialFilter) (domain.CursorPage[services.MaterialSummary], error) {

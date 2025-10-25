@@ -181,3 +181,138 @@ func TestAdminCatalogHandlers_InvalidPayload(t *testing.T) {
 		t.Fatalf("expected 400 for invalid json, got %d", resp.Code)
 	}
 }
+
+func TestAdminCatalogHandlers_CreateFont(t *testing.T) {
+	svc := &stubCatalogService{}
+	now := time.Date(2024, time.May, 5, 12, 0, 0, 0, time.UTC)
+	svc.adminFontUpsertResp = services.FontSummary{
+		ID:               "tensho-regular",
+		Slug:             "tensho-regular",
+		DisplayName:      "Tensho Regular",
+		Family:           "Tensho",
+		Weight:           "regular",
+		Scripts:          []string{"kanji"},
+		PreviewImagePath: "fonts/tensho.png",
+		LetterSpacing:    0.1,
+		IsPremium:        true,
+		SupportedWeights: []string{"regular"},
+		License: services.FontLicense{
+			Name:          "Commercial",
+			URL:           "https://example.com/license",
+			AllowedUsages: []string{"app"},
+		},
+		IsPublished: true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	handler := NewAdminCatalogHandlers(nil, svc)
+	router := chi.NewRouter()
+	handler.Routes(router)
+	body := map[string]any{
+		"display_name":       "Tensho Regular",
+		"family":             "Tensho",
+		"weight":             "Regular",
+		"scripts":            []string{"kanji"},
+		"preview_image_path": "fonts/tensho.png",
+		"letter_spacing":     0.1,
+		"is_premium":         true,
+		"supported_weights":  []string{"Regular"},
+		"license": map[string]any{
+			"name":           "Commercial",
+			"url":            "https://example.com/license",
+			"allowed_usages": []string{"app"},
+		},
+		"is_published": true,
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/catalog/fonts", bytes.NewReader(payload))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "admin", Roles: []string{auth.RoleAdmin}}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.Code)
+	}
+	if svc.adminFontUpsertCmd.ActorID != "admin" {
+		t.Fatalf("expected actor admin, got %s", svc.adminFontUpsertCmd.ActorID)
+	}
+	if svc.adminFontUpsertCmd.Font.Family != "Tensho" {
+		t.Fatalf("expected family propagated, got %s", svc.adminFontUpsertCmd.Font.Family)
+	}
+	var decoded adminFontResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if decoded.ID != "tensho-regular" || decoded.Slug != "tensho-regular" {
+		t.Fatalf("expected slug response, got %#v", decoded)
+	}
+	if len(decoded.License.AllowedUsages) != 1 || decoded.License.AllowedUsages[0] != "app" {
+		t.Fatalf("expected allowed usages echoed, got %#v", decoded.License.AllowedUsages)
+	}
+}
+
+func TestAdminCatalogHandlers_UpdateFontUsesPathID(t *testing.T) {
+	svc := &stubCatalogService{}
+	handler := NewAdminCatalogHandlers(nil, svc)
+	router := chi.NewRouter()
+	handler.Routes(router)
+	body := map[string]any{
+		"id":                 "other",
+		"display_name":       "Updated",
+		"family":             "Tensho",
+		"weight":             "Regular",
+		"scripts":            []string{"kanji"},
+		"preview_image_path": "fonts/tensho.png",
+		"license": map[string]any{
+			"name":           "Commercial",
+			"url":            "https://example.com/license",
+			"allowed_usages": []string{"app"},
+		},
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPut, "/catalog/fonts/tensho-regular", bytes.NewReader(payload))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "editor", Roles: []string{auth.RoleAdmin}}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+	if svc.adminFontUpsertCmd.Font.ID != "tensho-regular" {
+		t.Fatalf("expected path id to override, got %s", svc.adminFontUpsertCmd.Font.ID)
+	}
+}
+
+func TestAdminCatalogHandlers_FontValidationError(t *testing.T) {
+	svc := &stubCatalogService{adminFontUpsertErr: services.ErrCatalogInvalidInput}
+	handler := NewAdminCatalogHandlers(nil, svc)
+	router := chi.NewRouter()
+	handler.Routes(router)
+	req := httptest.NewRequest(http.MethodPost, "/catalog/fonts", bytes.NewBufferString(`{"display_name":"Missing"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "admin", Roles: []string{auth.RoleAdmin}}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.Code)
+	}
+}
+
+func TestAdminCatalogHandlers_DeleteFontErrors(t *testing.T) {
+	svc := &stubCatalogService{adminFontDeleteErr: services.ErrCatalogFontInUse}
+	handler := NewAdminCatalogHandlers(nil, svc)
+	router := chi.NewRouter()
+	handler.Routes(router)
+	req := httptest.NewRequest(http.MethodDelete, "/catalog/fonts/tensho-regular", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "admin", Roles: []string{auth.RoleAdmin}}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", resp.Code)
+	}
+	svc.adminFontDeleteErr = services.ErrCatalogInvalidInput
+	req = httptest.NewRequest(http.MethodDelete, "/catalog/fonts/tensho-regular", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "admin", Roles: []string{auth.RoleAdmin}}))
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.Code)
+	}
+}
