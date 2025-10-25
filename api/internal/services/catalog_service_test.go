@@ -386,6 +386,32 @@ func TestCatalogServiceUpsertFont_SlugAndConflict(t *testing.T) {
 	}
 }
 
+func TestCatalogServiceUpsertFont_RejectsMismatchedPathID(t *testing.T) {
+	repo := &stubCatalogRepository{}
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: repo})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_, err = svc.UpsertFont(context.Background(), UpsertFontCommand{
+		Font: FontSummary{
+			ID:               "tensho-regular",
+			DisplayName:      "Tensho Regular",
+			Family:           "Ryumin",
+			Weight:           "Regular",
+			Scripts:          []string{"kanji"},
+			PreviewImagePath: "fonts/tensho.png",
+			License: FontLicense{
+				Name:          "Commercial",
+				URL:           "https://example.com/license",
+				AllowedUsages: []string{"print"},
+			},
+		},
+	})
+	if !errors.Is(err, ErrCatalogInvalidInput) {
+		t.Fatalf("expected invalid input when path id mismatches slug, got %v", err)
+	}
+}
+
 func TestCatalogServiceDeleteFont_Conflict(t *testing.T) {
 	repo := &stubCatalogRepository{fontDeleteErr: stubRepositoryError{conflict: true}}
 	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: repo})
@@ -579,23 +605,23 @@ type stubCatalogRepository struct {
 	productGetPublished     domain.Product
 	productGetPublishedErr  error
 
-	getID          string
-	getTemplate    domain.Template
-	getErr         error
-	fontGetID      string
-	fontGet        domain.Font
-	fontGetErr     error
+	getID           string
+	getTemplate     domain.Template
+	getErr          error
+	fontGetID       string
+	fontGet         domain.Font
+	fontGetErr      error
 	fontUpsertInput domain.FontSummary
 	fontUpsertResp  domain.FontSummary
 	fontUpsertErr   error
 	fontDeleteID    string
 	fontDeleteErr   error
-	materialGetID  string
-	materialGet    domain.Material
-	materialGetErr error
-	productGetID   string
-	productGet     domain.Product
-	productGetErr  error
+	materialGetID   string
+	materialGet     domain.Material
+	materialGetErr  error
+	productGetID    string
+	productGet      domain.Product
+	productGetErr   error
 
 	upsertInput  domain.Template
 	upsertResult domain.Template

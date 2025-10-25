@@ -270,11 +270,14 @@ func (s *catalogService) UpsertFont(ctx context.Context, cmd UpsertFontCommand) 
 	if expectedSlug == "" {
 		return FontSummary{}, fmt.Errorf("%w: family and weight are required", ErrCatalogInvalidInput)
 	}
-	if font.Slug != "" && !strings.EqualFold(font.Slug, expectedSlug) {
-		return FontSummary{}, fmt.Errorf("%w: slug mismatch for %s", ErrCatalogInvalidInput, expectedSlug)
+	id := strings.TrimSpace(cmd.Font.ID)
+	if id == "" {
+		id = expectedSlug
+	} else if !strings.EqualFold(id, expectedSlug) {
+		return FontSummary{}, fmt.Errorf("%w: font id %s must match derived slug %s", ErrCatalogInvalidInput, id, expectedSlug)
 	}
 	font.Slug = expectedSlug
-	font.ID = expectedSlug
+	font.ID = id
 	font.SupportedWeights = ensureSupportedWeight(font.SupportedWeights, font.Weight)
 
 	if err := validateFontSummary(font); err != nil {

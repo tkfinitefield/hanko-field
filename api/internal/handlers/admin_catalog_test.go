@@ -238,6 +238,9 @@ func TestAdminCatalogHandlers_CreateFont(t *testing.T) {
 	if svc.adminFontUpsertCmd.Font.Family != "Tensho" {
 		t.Fatalf("expected family propagated, got %s", svc.adminFontUpsertCmd.Font.Family)
 	}
+	if svc.adminFontUpsertCmd.Font.Weight != "regular" {
+		t.Fatalf("expected weight normalized to lowercase, got %s", svc.adminFontUpsertCmd.Font.Weight)
+	}
 	var decoded adminFontResponse
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		t.Fatalf("decode response: %v", err)

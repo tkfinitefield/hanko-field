@@ -385,7 +385,7 @@ func decodeAdminFontRequest(r *http.Request, overrideID string) (services.FontSu
 		ID:               strings.TrimSpace(req.ID),
 		DisplayName:      req.DisplayName,
 		Family:           req.Family,
-		Weight:           req.Weight,
+		Weight:           strings.ToLower(strings.TrimSpace(req.Weight)),
 		Scripts:          copyStringSlice(req.Scripts),
 		PreviewImagePath: req.PreviewImagePath,
 		LetterSpacing:    req.LetterSpacing,
