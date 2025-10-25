@@ -430,3 +430,17 @@ func TestAdminCatalogHandlers_DeleteMaterialRequiresIdentity(t *testing.T) {
 		t.Fatalf("expected delete command for mat_wood got %s", svc.adminMaterialDeleteCmd.MaterialID)
 	}
 }
+
+func TestAdminCatalogHandlers_CreateMaterialConflict(t *testing.T) {
+	svc := &stubCatalogService{adminMaterialUpsertErr: services.ErrCatalogMaterialConflict}
+	handler := NewAdminCatalogHandlers(nil, svc)
+	router := chi.NewRouter()
+	handler.Routes(router)
+	req := httptest.NewRequest(http.MethodPost, "/catalog/materials", bytes.NewBufferString(`{"id":"mat_wood","name":"Maple","category":"wood"}`))
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UID: "admin", Roles: []string{auth.RoleAdmin}}))
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected 409 got %d", resp.Code)
+	}
+}

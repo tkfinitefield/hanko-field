@@ -619,11 +619,11 @@ func TestCatalogServiceUpsertMaterialSyncsInventoryAndAudits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upsert material: %v", err)
 	}
-	if repo.materialUpsertInput.ID != "mat_wood" {
-		t.Fatalf("expected trimmed id mat_wood got %s", repo.materialUpsertInput.ID)
+	if repo.materialCreateInput.ID != "mat_wood" {
+		t.Fatalf("expected create input with trimmed id mat_wood got %s", repo.materialCreateInput.ID)
 	}
-	if inventory.configureCmd.SKU != "MAT-WOOD" {
-		t.Fatalf("expected inventory sync to use sku MAT-WOOD got %s", inventory.configureCmd.SKU)
+	if inventory.configureCmd.SKU != "mat-wood" {
+		t.Fatalf("expected inventory sync to use sku mat-wood got %s", inventory.configureCmd.SKU)
 	}
 	if inventory.configureCmd.ProductRef != "/materials/mat_wood" {
 		t.Fatalf("expected product ref /materials/mat_wood got %s", inventory.configureCmd.ProductRef)
@@ -661,11 +661,24 @@ func TestCatalogServiceUpsertMaterialValidatesInput(t *testing.T) {
 	}
 }
 
+func TestCatalogServiceUpsertMaterialCreateConflict(t *testing.T) {
+	repo := &stubCatalogRepository{materialCreateErr: stubRepositoryError{conflict: true}}
+	svc, err := NewCatalogService(CatalogServiceDeps{Catalog: repo})
+	if err != nil {
+		t.Fatalf("new catalog service: %v", err)
+	}
+	_, err = svc.UpsertMaterial(context.Background(), UpsertMaterialCommand{Material: MaterialSummary{ID: "mat_wood", Name: "Maple", Category: "wood"}})
+	if err == nil || !errors.Is(err, ErrCatalogMaterialConflict) {
+		t.Fatalf("expected material conflict error, got %v", err)
+	}
+}
+
 func TestCatalogServiceDeleteMaterialRecordsAudit(t *testing.T) {
 	repo := &stubCatalogRepository{
 		materialGet: domain.Material{MaterialSummary: domain.MaterialSummary{ID: "mat_wood", Name: "Maple", Category: "wood", IsAvailable: true}},
-		productListResp: domain.CursorPage[domain.ProductSummary]{
-			Items: []domain.ProductSummary{{ID: "prod-1"}},
+		productListPages: map[string]domain.CursorPage[domain.ProductSummary]{
+			"":     {Items: []domain.ProductSummary{{ID: "prod-1"}, {ID: "prod-2"}}, NextPageToken: "next"},
+			"next": {Items: []domain.ProductSummary{{ID: "prod-3"}}},
 		},
 	}
 	audit := &stubAuditLogService{}
@@ -683,6 +696,24 @@ func TestCatalogServiceDeleteMaterialRecordsAudit(t *testing.T) {
 	if len(audit.records) == 0 {
 		t.Fatalf("expected audit records on delete")
 	}
+	found := false
+	for _, record := range audit.records {
+		if record.Action == "catalog.material.products.flagged" {
+			found = true
+			total, _ := record.Metadata["totalProducts"].(int)
+			if total != 3 {
+				t.Fatalf("expected totalProducts 3 got %v", total)
+			}
+			products, _ := record.Metadata["products"].([]string)
+			if len(products) != 3 {
+				t.Fatalf("expected 3 sampled products got %d", len(products))
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected product flagged audit record")
+	}
 }
 
 type stubCatalogRepository struct {
@@ -697,6 +728,7 @@ type stubCatalogRepository struct {
 	materialListErr    error
 	productListFilter  repositories.ProductFilter
 	productListResp    domain.CursorPage[domain.ProductSummary]
+	productListPages   map[string]domain.CursorPage[domain.ProductSummary]
 	productListErr     error
 
 	getPublishedID          string
@@ -726,6 +758,9 @@ type stubCatalogRepository struct {
 	materialGetID       string
 	materialGet         domain.Material
 	materialGetErr      error
+	materialCreateInput domain.MaterialSummary
+	materialCreateResp  domain.MaterialSummary
+	materialCreateErr   error
 	materialUpsertInput domain.MaterialSummary
 	materialUpsertResp  domain.MaterialSummary
 	materialUpsertErr   error
@@ -855,6 +890,17 @@ func (s *stubCatalogRepository) GetMaterial(_ context.Context, materialID string
 	return s.materialGet, s.materialGetErr
 }
 
+func (s *stubCatalogRepository) CreateMaterial(_ context.Context, material domain.MaterialSummary) (domain.MaterialSummary, error) {
+	s.materialCreateInput = material
+	if s.materialCreateErr != nil {
+		return domain.MaterialSummary{}, s.materialCreateErr
+	}
+	if s.materialCreateResp.ID != "" {
+		return s.materialCreateResp, nil
+	}
+	return material, nil
+}
+
 func (s *stubCatalogRepository) UpsertMaterial(_ context.Context, material domain.MaterialSummary) (domain.MaterialSummary, error) {
 	s.materialUpsertInput = material
 	if s.materialUpsertErr != nil {
@@ -873,6 +919,12 @@ func (s *stubCatalogRepository) DeleteMaterial(_ context.Context, materialID str
 
 func (s *stubCatalogRepository) ListProducts(_ context.Context, filter repositories.ProductFilter) (domain.CursorPage[domain.ProductSummary], error) {
 	s.productListFilter = filter
+	if len(s.productListPages) > 0 {
+		page, ok := s.productListPages[strings.TrimSpace(filter.Pagination.PageToken)]
+		if ok {
+			return page, s.productListErr
+		}
+	}
 	return s.productListResp, s.productListErr
 }
 

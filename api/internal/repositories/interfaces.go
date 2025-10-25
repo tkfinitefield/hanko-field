@@ -290,6 +290,7 @@ type CatalogRepository interface {
 	ListMaterials(ctx context.Context, filter MaterialFilter) (domain.CursorPage[domain.MaterialSummary], error)
 	GetPublishedMaterial(ctx context.Context, materialID string) (domain.Material, error)
 	GetMaterial(ctx context.Context, materialID string) (domain.Material, error)
+	CreateMaterial(ctx context.Context, material domain.MaterialSummary) (domain.MaterialSummary, error)
 	UpsertMaterial(ctx context.Context, material domain.MaterialSummary) (domain.MaterialSummary, error)
 	DeleteMaterial(ctx context.Context, materialID string) error
 

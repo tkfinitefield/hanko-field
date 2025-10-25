@@ -51,6 +51,8 @@ var (
 	ErrCatalogFontConflict = errors.New("catalog service: font conflict")
 	// ErrCatalogFontInUse indicates the font cannot be deleted due to active dependencies.
 	ErrCatalogFontInUse = errors.New("catalog service: font in use")
+	// ErrCatalogMaterialConflict indicates a duplicate material ID creation attempt.
+	ErrCatalogMaterialConflict = errors.New("catalog service: material conflict")
 )
 
 // NewCatalogService constructs the catalog service with the supplied dependencies.
@@ -380,6 +382,9 @@ func (s *catalogService) UpsertMaterial(ctx context.Context, cmd UpsertMaterialC
 	if err := validateMaterialInput(material); err != nil {
 		return MaterialSummary{}, fmt.Errorf("%w: %s", ErrCatalogInvalidInput, err)
 	}
+	if material.ID == "" {
+		return MaterialSummary{}, fmt.Errorf("%w: material id is required", ErrCatalogInvalidInput)
+	}
 	now := s.clock()
 	var existing Material
 	current, err := s.repo.GetMaterial(ctx, material.ID)
@@ -389,58 +394,30 @@ func (s *catalogService) UpsertMaterial(ctx context.Context, cmd UpsertMaterialC
 	if err == nil {
 		existing = Material(current)
 	}
-	if material.CreatedAt.IsZero() {
-		if existing.CreatedAt.IsZero() {
-			material.CreatedAt = now
-		} else {
-			material.CreatedAt = existing.CreatedAt
+	var saved MaterialSummary
+	if existing.ID == "" {
+		material.CreatedAt = now
+		material.UpdatedAt = now
+		saved, err = s.createMaterial(ctx, material)
+		if err != nil {
+			return MaterialSummary{}, err
 		}
 	} else {
-		material.CreatedAt = material.CreatedAt.UTC()
+		if material.CreatedAt.IsZero() {
+			material.CreatedAt = existing.CreatedAt
+		} else {
+			material.CreatedAt = material.CreatedAt.UTC()
+		}
+		material.UpdatedAt = now
+		saved, err = s.updateMaterial(ctx, material)
+		if err != nil {
+			return MaterialSummary{}, err
+		}
 	}
-	material.UpdatedAt = now
-	savedDomain, err := s.repo.UpsertMaterial(ctx, domain.MaterialSummary(material))
-	if err != nil {
-		return MaterialSummary{}, err
-	}
-	saved := MaterialSummary(savedDomain)
 	if err := s.syncMaterialSafetyStock(ctx, saved); err != nil {
 		return MaterialSummary{}, err
 	}
-	action := "catalog.material.update"
-	occurredAt := saved.UpdatedAt
-	if existing.ID == "" {
-		action = "catalog.material.create"
-		occurredAt = saved.CreatedAt
-	}
-	diff := map[string]AuditLogDiff{}
-	if existing.ID != "" {
-		if existing.IsAvailable != saved.IsAvailable {
-			diff["isAvailable"] = AuditLogDiff{Before: existing.IsAvailable, After: saved.IsAvailable}
-		}
-		if strings.TrimSpace(existing.Inventory.SKU) != strings.TrimSpace(saved.Inventory.SKU) {
-			diff["inventory.sku"] = AuditLogDiff{Before: strings.TrimSpace(existing.Inventory.SKU), After: strings.TrimSpace(saved.Inventory.SKU)}
-		}
-		if existing.Inventory.SafetyStock != saved.Inventory.SafetyStock {
-			diff["inventory.safetyStock"] = AuditLogDiff{Before: existing.Inventory.SafetyStock, After: saved.Inventory.SafetyStock}
-		}
-	}
-	if len(diff) == 0 {
-		diff = nil
-	}
-	s.recordMaterialAudit(ctx, action, saved, actorID, occurredAt, diff, nil)
-	if existing.ID == "" && saved.IsAvailable {
-		s.recordMaterialAudit(ctx, "catalog.material.publish", saved, actorID, occurredAt, nil, nil)
-	}
-	if existing.ID != "" && existing.IsAvailable != saved.IsAvailable {
-		stateAction := "catalog.material.publish"
-		if saved.IsAvailable {
-			s.recordMaterialAudit(ctx, stateAction, saved, actorID, occurredAt, nil, nil)
-		} else {
-			s.recordMaterialAudit(ctx, "catalog.material.unpublish", saved, actorID, occurredAt, nil, nil)
-			s.flagMaterialProducts(ctx, saved.ID, actorID, "material_unavailable")
-		}
-	}
+	s.recordMaterialMutations(ctx, existing, saved, actorID)
 	return saved, nil
 }
 
@@ -515,6 +492,63 @@ func (s *catalogService) syncMaterialSafetyStock(ctx context.Context, material M
 	return err
 }
 
+func (s *catalogService) createMaterial(ctx context.Context, material MaterialSummary) (MaterialSummary, error) {
+	savedDomain, err := s.repo.CreateMaterial(ctx, domain.MaterialSummary(material))
+	if err != nil {
+		var repoErr repositories.RepositoryError
+		if errors.As(err, &repoErr) && repoErr.IsConflict() {
+			return MaterialSummary{}, ErrCatalogMaterialConflict
+		}
+		return MaterialSummary{}, err
+	}
+	return MaterialSummary(savedDomain), nil
+}
+
+func (s *catalogService) updateMaterial(ctx context.Context, material MaterialSummary) (MaterialSummary, error) {
+	savedDomain, err := s.repo.UpsertMaterial(ctx, domain.MaterialSummary(material))
+	if err != nil {
+		return MaterialSummary{}, err
+	}
+	return MaterialSummary(savedDomain), nil
+}
+
+func (s *catalogService) recordMaterialMutations(ctx context.Context, existing Material, saved MaterialSummary, actorID string) {
+	action := "catalog.material.update"
+	occurredAt := saved.UpdatedAt
+	if existing.ID == "" {
+		action = "catalog.material.create"
+		occurredAt = saved.CreatedAt
+	}
+	diff := map[string]AuditLogDiff{}
+	if existing.ID != "" {
+		if existing.IsAvailable != saved.IsAvailable {
+			diff["isAvailable"] = AuditLogDiff{Before: existing.IsAvailable, After: saved.IsAvailable}
+		}
+		if strings.TrimSpace(existing.Inventory.SKU) != strings.TrimSpace(saved.Inventory.SKU) {
+			diff["inventory.sku"] = AuditLogDiff{Before: strings.TrimSpace(existing.Inventory.SKU), After: strings.TrimSpace(saved.Inventory.SKU)}
+		}
+		if existing.Inventory.SafetyStock != saved.Inventory.SafetyStock {
+			diff["inventory.safetyStock"] = AuditLogDiff{Before: existing.Inventory.SafetyStock, After: saved.Inventory.SafetyStock}
+		}
+	}
+	if len(diff) == 0 {
+		diff = nil
+	}
+	s.recordMaterialAudit(ctx, action, saved, actorID, occurredAt, diff, nil)
+	if existing.ID == "" && saved.IsAvailable {
+		s.recordMaterialAudit(ctx, "catalog.material.publish", saved, actorID, occurredAt, nil, nil)
+	}
+	if existing.ID != "" && existing.IsAvailable != saved.IsAvailable {
+		stateAction := "catalog.material.publish"
+		if saved.IsAvailable {
+			s.recordMaterialAudit(ctx, stateAction, saved, actorID, occurredAt, nil, nil)
+		} else {
+			s.recordMaterialAudit(ctx, "catalog.material.unpublish", saved, actorID, occurredAt, nil, nil)
+			s.flagMaterialProducts(ctx, saved.ID, actorID, "material_unavailable")
+		}
+	}
+}
+
 func (s *catalogService) flagMaterialProducts(ctx context.Context, materialID string, actorID string, reason string) {
 	if s.audit == nil || s.repo == nil {
 		return
@@ -524,23 +558,42 @@ func (s *catalogService) flagMaterialProducts(ctx context.Context, materialID st
 		return
 	}
 	filterID := materialID
-	page, err := s.repo.ListProducts(ctx, repositories.ProductFilter{
-		MaterialID: &filterID,
-		Pagination: domain.Pagination{PageSize: 50},
-	})
-	if err != nil || len(page.Items) == 0 {
-		return
-	}
-	affected := make([]string, 0, len(page.Items))
-	for _, product := range page.Items {
-		affected = append(affected, product.ID)
-		if len(affected) >= 20 {
+	pageToken := ""
+	total := 0
+	sampled := make([]string, 0, 50)
+	for {
+		page, err := s.repo.ListProducts(ctx, repositories.ProductFilter{
+			MaterialID: &filterID,
+			Pagination: domain.Pagination{PageSize: 100, PageToken: pageToken},
+		})
+		if err != nil {
+			return
+		}
+		if len(page.Items) == 0 {
 			break
 		}
+		for _, product := range page.Items {
+			total++
+			if len(sampled) < 50 {
+				sampled = append(sampled, product.ID)
+			}
+		}
+		if strings.TrimSpace(page.NextPageToken) == "" {
+			break
+		}
+		pageToken = page.NextPageToken
+	}
+	if total == 0 {
+		return
 	}
 	metadata := map[string]any{
-		"materialId": materialID,
-		"products":   affected,
+		"materialId":      materialID,
+		"products":        sampled,
+		"totalProducts":   total,
+		"productsSampled": len(sampled),
+	}
+	if total == len(sampled) {
+		delete(metadata, "productsSampled")
 	}
 	if strings.TrimSpace(reason) != "" {
 		metadata["reason"] = strings.TrimSpace(reason)
