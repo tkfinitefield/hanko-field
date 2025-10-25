@@ -845,6 +845,8 @@ func main() {
 	r.Get("/design/editor/preview", DesignEditorPreviewFrag)
 	r.Get("/design/preview", DesignPreviewHandler)
 	r.Get("/design/preview/image", DesignPreviewImageFrag)
+	r.Get("/design/share/modal", DesignShareModal)
+	r.MethodFunc(http.MethodPost, "/design/share/link", DesignShareLinkHandler)
 	r.Get("/design/versions", DesignVersionsHandler)
 	r.Get("/design/versions/table", DesignVersionsTableFrag)
 	r.Get("/design/versions/preview", DesignVersionsPreviewFrag)

@@ -1,0 +1,289 @@
+{{ define "frag_design_share_modal" }}
+{{ $view := . }}
+<div id="design-share-modal-root">
+  {{ template "c_modal" (dict
+    "ID" "design-share-modal"
+    "Title" (printf "%s · %s" $view.DesignName $view.Owner)
+    "Size" "xl"
+    "BodyTmpl" "design_share_modal_body"
+    "BodyData" $view
+    "FooterTmpl" "design_share_modal_footer"
+    "FooterData" $view
+  ) }}
+</div>
+<script>
+(function(){
+  var root = document.getElementById('design-share-modal-root');
+  if (!root) { return; }
+  var status = root.querySelector('[data-share-copy-status]');
+  function announce(msg){
+    if (!status) { return; }
+    status.textContent = msg;
+  }
+  root.querySelectorAll('[data-share-copy]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var value = btn.getAttribute('data-share-value');
+      if (!value) { return; }
+      var success = btn.getAttribute('data-share-copied-label') || 'Copied';
+      function done(ok){
+        if (ok) {
+          btn.dataset.shareCopied = 'true';
+          announce(success);
+          setTimeout(function(){
+            delete btn.dataset.shareCopied;
+          }, 1600);
+        }
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value).then(function(){ done(true); }).catch(function(){ done(false); });
+      } else {
+        var area = document.createElement('textarea');
+        area.value = value;
+        area.setAttribute('readonly', '');
+        area.style.position = 'absolute';
+        area.style.left = '-9999px';
+        document.body.appendChild(area);
+        area.select();
+        try {
+          document.execCommand('copy');
+          done(true);
+        } catch(_) {
+          done(false);
+        }
+        document.body.removeChild(area);
+      }
+    });
+  });
+})();
+(function(){
+  if (window.__hankoShareAnalyticsInit) { return; }
+  window.__hankoShareAnalyticsInit = true;
+  document.body.addEventListener('design-share:link-issued', function(event){
+    if (window.hankoAnalytics && typeof window.hankoAnalytics.track === 'function') {
+      window.hankoAnalytics.track('design_share_generated', event.detail || {});
+    }
+  });
+})();
+</script>
+{{ end }}
+
+{{ define "design_share_modal_body" }}
+{{ $view := . }}
+<div class="space-y-5">
+  <p class="text-xs text-slate-500">{{ $view.Hint }}</p>
+  {{ if $view.Alerts }}
+    <div class="space-y-3" aria-live="polite">
+      {{ range $view.Alerts }}
+        {{ $tone := .Tone }}
+        <div class="flex items-start gap-3 rounded-lg border px-4 py-3 text-sm {{ if eq $tone "danger" }}border-rose-200 bg-rose-50 text-rose-800{{ else if eq $tone "warning" }}border-amber-200 bg-amber-50 text-amber-800{{ else }}border-slate-200 bg-slate-50 text-slate-700{{ end }}">
+          {{ template "icon" (dict "Name" (or .Icon "information-circle") "Class" "h-4 w-4 mt-0.5") }}
+          <div>
+            <p class="font-semibold">{{ .Title }}</p>
+            {{ if .Description }}<p class="mt-0.5 text-xs leading-5">{{ .Description }}</p>{{ end }}
+          </div>
+        </div>
+      {{ end }}
+    </div>
+  {{ end }}
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+    <section class="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-slate-100 shadow-[0_20px_45px_-25px_rgba(15,23,42,0.8)]">
+      <div class="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
+        <span>{{ $view.Preview.Title }}</span>
+        <span class="rounded-full border border-slate-700 px-3 py-1 text-[11px] font-semibold text-slate-200">{{ $view.Preview.Badge }}</span>
+      </div>
+      <p class="mt-1 text-sm text-slate-400">{{ $view.Preview.Subtitle }}</p>
+      <div class="mt-5 relative rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-6">
+        <div class="aspect-square rounded-2xl border border-slate-800 bg-gradient-to-br from-rose-600 via-fuchsia-600 to-indigo-600 p-6 shadow-[0_35px_60px_-30px_rgba(14,116,144,0.9)]">
+          <div class="relative flex h-full items-center justify-center rounded-2xl bg-white/5 backdrop-blur">
+            <div class="text-center tracking-[0.5em] text-4xl font-semibold text-white/80">HF</div>
+            {{ if $view.Preview.Watermark }}
+              <div class="pointer-events-none absolute inset-0 flex items-center justify-center text-4xl font-bold uppercase tracking-[1em] text-white/10">DRAFT</div>
+            {{ end }}
+          </div>
+        </div>
+        <dl class="mt-5 grid gap-2 text-xs text-slate-300">
+          <div class="flex items-center justify-between">
+            <dt class="text-slate-500">{{ if eq $view.Lang "ja" }}形式{{ else }}Format{{ end }}</dt>
+            <dd class="font-semibold text-slate-100">{{ $view.Preview.FormatLabel }}</dd>
+          </div>
+          <div class="flex items-center justify-between">
+            <dt class="text-slate-500">{{ if eq $view.Lang "ja" }}サイズ{{ else }}Size{{ end }}</dt>
+            <dd class="font-semibold text-slate-100">{{ $view.Preview.SizeLabel }}</dd>
+          </div>
+          <div class="flex items-center justify-between">
+            <dt class="text-slate-500">{{ if eq $view.Lang "ja" }}透かし{{ else }}Watermark{{ end }}</dt>
+            <dd class="font-semibold text-slate-100">{{ $view.Preview.WatermarkLabel }}</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+    <form id="design-share-form"
+          class="space-y-6"
+          hx-post="/design/share/link"
+          hx-target="#design-share-modal-root"
+          hx-swap="outerHTML">
+      <input type="hidden" name="design_id" value="{{ $view.DesignID }}">
+      <div>
+        <label for="design-share-format" class="text-sm font-semibold text-slate-800">{{ if eq $view.Lang "ja" }}出力形式{{ else }}Export format{{ end }}</label>
+        <select id="design-share-format"
+                name="format"
+                class="mt-2 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          {{ range $view.FormatOptions }}
+            <option value="{{ .ID }}" {{ if .Active }}selected{{ end }}>{{ .Label }}</option>
+          {{ end }}
+        </select>
+        {{ range $view.FormatOptions }}
+          {{ if .Active }}
+            <p class="mt-1 text-xs text-slate-500">{{ .Description }}</p>
+          {{ end }}
+        {{ end }}
+      </div>
+      <div>
+        <p class="text-sm font-semibold text-slate-800">{{ if eq $view.Lang "ja" }}サイズ{{ else }}Size{{ end }}</p>
+        <div class="mt-2 grid gap-3 md:grid-cols-3">
+          {{ range $view.SizeOptions }}
+            <label class="flex cursor-pointer flex-col rounded-xl border px-3 py-2 text-sm shadow-sm transition {{ if .Active }}border-indigo-400 bg-indigo-50 text-indigo-900{{ else }}border-slate-200 bg-white text-slate-800 hover:border-indigo-200 hover:bg-indigo-50{{ end }}">
+              <span class="font-semibold">{{ .Label }}</span>
+              <span class="text-xs text-slate-500">{{ .Description }}</span>
+              <input type="radio" name="size" value="{{ .ID }}" class="sr-only" {{ if .Active }}checked{{ end }}>
+            </label>
+          {{ end }}
+        </div>
+      </div>
+      <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <div>
+          <p class="text-sm font-semibold text-slate-800">{{ if eq $view.Lang "ja" }}透かし保護{{ else }}Watermark{{ end }}</p>
+          <p class="text-xs text-slate-500">{{ $view.WatermarkDescription }}</p>
+        </div>
+        <label class="relative inline-flex h-6 w-11 cursor-pointer items-center">
+          <input type="checkbox" name="watermark" value="1" class="peer sr-only" {{ if $view.Watermark }}checked{{ end }}>
+          <span class="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-indigo-500"></span>
+          <span class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-5"></span>
+        </label>
+      </div>
+      <div>
+        <label for="design-share-expiry" class="text-sm font-semibold text-slate-800">{{ if eq $view.Lang "ja" }}有効期限 (JST){{ else }}Expiry (JST){{ end }}</label>
+        <input type="date"
+               id="design-share-expiry"
+               name="expiry"
+               min="{{ $view.ExpiryMin }}"
+               max="{{ $view.ExpiryMax }}"
+               value="{{ $view.ExpiryValue }}"
+               class="mt-2 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <p class="mt-1 text-xs text-slate-500">{{ $view.ExpiryHelp }}</p>
+      </div>
+    </form>
+  </div>
+  {{ if $view.HasLink }}
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <header class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-slate-500">{{ if eq $view.Lang "ja" }}アクティブな共有リンク{{ else }}Active share link{{ end }}</p>
+          <p class="text-base font-semibold text-slate-900">{{ $view.Link.FormatLabel }} · {{ $view.Link.SizeLabel }}</p>
+          <p class="text-xs text-slate-500">{{ $view.Link.ExpiresRelative }} · {{ $view.Link.ExpiresDisplay }}</p>
+        </div>
+        <span class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+          {{ template "icon" (dict "Name" "status-online" "Class" "h-3.5 w-3.5") }}
+          {{ if eq $view.Lang "ja" }}共有中{{ else }}Active{{ end }}
+        </span>
+      </header>
+      <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <span>{{ if eq $view.Lang "ja" }}共有URL{{ else }}Share URL{{ end }}</span>
+            <button type="button"
+                    class="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-500"
+                    data-share-copy
+                    data-share-copy-label="{{ if eq $view.Lang "ja" }}コピー{{ else }}Copy{{ end }}"
+                    data-share-copied-label="{{ if eq $view.Lang "ja" }}コピーしました{{ else }}Copied{{ end }}"
+                    data-share-value="{{ $view.Link.ShareURL }}"
+                    data-analytics-click="design_share_copy"
+                    data-analytics-prop-type="link"
+                    data-analytics-prop-format="{{ $view.Link.Format }}"
+                    data-analytics-prop-size="{{ $view.Link.Size }}">
+              {{ template "icon" (dict "Name" "document-text" "Class" "h-4 w-4") }}
+              <span>{{ if eq $view.Lang "ja" }}コピー{{ else }}Copy{{ end }}</span>
+            </button>
+          </div>
+          <p class="mt-2 break-all text-sm font-semibold text-slate-900">{{ $view.Link.ShareURL }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ if eq $view.Lang "ja" }}署名付きダウンロード{{ else }}Signed download{{ end }}</p>
+          <p class="mt-1 text-sm font-medium text-slate-900">{{ $view.Link.Method }} · {{ $view.Link.FileSize }}</p>
+          <a href="{{ $view.Link.DownloadURL }}"
+             class="mt-2 inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+             data-analytics-click="design_share_download"
+             data-analytics-prop-format="{{ $view.Link.Format }}"
+             data-analytics-prop-size="{{ $view.Link.Size }}"
+             target="_blank" rel="noopener">
+            {{ if eq $view.Lang "ja" }}ダウンロード{{ else }}Download{{ end }}
+          </a>
+        </div>
+      </div>
+      {{ if $view.Link.Headers }}
+        <dl class="mt-4 grid gap-3 text-xs text-slate-500">
+          {{ range $key, $val := $view.Link.Headers }}
+            <div>
+              <dt class="font-semibold text-slate-600">{{ $key }}</dt>
+              <dd class="break-all text-slate-900">{{ $val }}</dd>
+            </div>
+          {{ end }}
+        </dl>
+      {{ end }}
+      <div class="mt-5">
+        <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <span>{{ if eq $view.Lang "ja" }}埋め込みスニペット{{ else }}Embed snippet{{ end }}</span>
+          <button type="button"
+                  class="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-500"
+                  data-share-copy
+                  data-share-copy-label="{{ if eq $view.Lang "ja" }}コピー{{ else }}Copy{{ end }}"
+                  data-share-copied-label="{{ if eq $view.Lang "ja" }}コピーしました{{ else }}Copied{{ end }}"
+                  data-share-value="{{ printf "%s" $view.Link.EmbedHTML }}"
+                  data-analytics-click="design_share_copy"
+                  data-analytics-prop-type="embed"
+                  data-analytics-prop-format="{{ $view.Link.Format }}"
+                  data-analytics-prop-size="{{ $view.Link.Size }}">
+            {{ template "icon" (dict "Name" "layers" "Class" "h-4 w-4") }}
+            <span>{{ if eq $view.Lang "ja" }}コピー{{ else }}Copy{{ end }}</span>
+          </button>
+        </div>
+        <textarea class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700" rows="3" readonly>{{ printf "%s" $view.Link.EmbedHTML }}</textarea>
+      </div>
+      <span data-share-copy-status class="sr-only" role="status" aria-live="polite"></span>
+    </section>
+  {{ end }}
+</div>
+{{ end }}
+
+{{ define "design_share_modal_footer" }}
+{{ $view := . }}
+<div class="flex flex-wrap items-center justify-between gap-3 w-full">
+  <p class="text-xs text-slate-500">
+    {{ if $view.HasLink }}
+      {{ $view.Link.FormatLabel }} · {{ $view.Link.SizeLabel }} · {{ $view.Link.ExpiresRelative }}
+    {{ else }}
+      {{ $view.Summary }}
+    {{ end }}
+  </p>
+  <div class="flex flex-wrap items-center gap-3">
+    <button type="button"
+            class="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            data-modal-close>
+      {{ if eq $view.Lang "ja" }}閉じる{{ else }}Close{{ end }}
+    </button>
+    <button type="submit"
+            form="design-share-form"
+            class="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            data-analytics-click="design_share_generate"
+            data-analytics-prop-format="{{ $view.SelectedFormat }}"
+            data-analytics-prop-size="{{ $view.SelectedSize }}"
+            data-analytics-prop-watermark="{{ if $view.Watermark }}on{{ else }}off{{ end }}">
+      {{ if $view.HasLink }}
+        {{ if eq $view.Lang "ja" }}リンクを再発行{{ else }}Regenerate link{{ end }}
+      {{ else }}
+        {{ if eq $view.Lang "ja" }}リンクを作成{{ else }}Create link{{ end }}
+      {{ end }}
+    </button>
+  </div>
+</div>
+{{ end }}
