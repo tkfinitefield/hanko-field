@@ -1,0 +1,15 @@
+{
+  "@@locale": "zh_Hant",
+  "appTitle": "STONE SIGNATURE",
+  "@appTitle": {
+    "description": "MaterialApp 中顯示的應用名稱。品牌名有意保持英文。"
+  },
+  "designKanjiStyleChinese": "中國風格",
+  "@designKanjiStyleChinese": {
+    "description": "用於選擇偏中國大陸風格漢字名的選項標籤。"
+  },
+  "designKanjiStyleTaiwanese": "台灣風格",
+  "@designKanjiStyleTaiwanese": {
+    "description": "用於選擇偏台灣風格漢字名的選項標籤。"
+  }
+}

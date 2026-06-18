@@ -1619,7 +1619,7 @@ layout rules, or enabled-language behavior.
 - [x] `M2-T01` Introduce Flutter `gen-l10n`.
   Output: `app/l10n.yaml`, `app_en.arb`, `app_ja.arb`, and generated delegates.
   Done when: app builds with generated localization for English and Japanese.
-- [ ] `M2-T02` Migrate existing Chinese app assets.
+- [x] `M2-T02` Migrate existing Chinese app assets.
   Output: `app_zh.arb`, `app_zh_Hant.arb`, or approved fallback sidecars.
   Done when: existing Chinese product copy is not lost during ARB migration and
   the `M0-T05` migration-safety checklist is satisfied.
@@ -1673,6 +1673,54 @@ flutter build apk --debug
 Full `flutter test` was also attempted, but existing widget tests failed on a
 pre-existing Flutter framework assertion about `ListTile` under `DecoratedBox`
 in checkout flows. The focused generated-localization test passed.
+
+#### M2-T02 Chinese App Asset Migration
+
+Completed on 2026-06-18. Added Simplified and Traditional Chinese ARB files for
+the app localization migration baseline and copied the existing Chinese-related
+style labels into generated-localization keys.
+
+Implementation notes:
+
+- `app/lib/l10n/app_zh.arb` provides the Simplified Chinese baseline for route
+  code `zh`.
+- `app/lib/l10n/app_zh_Hant.arb` provides the Traditional Chinese baseline for
+  route code `zhtw`.
+- `designKanjiStyleChinese` and `designKanjiStyleTaiwanese` now exist in the
+  generated ARB schema for `en`, `ja`, `zh`, and `zh_Hant`, preserving the
+  existing product-style labels before `M2-T03` replaces hand-written accessors.
+- `app/lib/l10n/app_zh_intentions.json` and
+  `app/lib/l10n/app_zh_Hant_intentions.json` record `appTitle` as a
+  `brand_name` holdout because `STONE SIGNATURE` intentionally remains English.
+
+M0-T05 preservation evidence:
+
+- M0 inventory rows touched: `hanko_localizations.dart` Chinese-related style
+  labels and generated ARB baseline files.
+- Source files removed or replaced: none.
+- Target files created or updated: `app_en.arb`, `app_ja.arb`, `app_zh.arb`,
+  `app_zh_Hant.arb`, generated localization output, and Chinese intention
+  sidecars.
+- English and Japanese preservation evidence: existing `Chinese style`,
+  `Taiwanese style`, `中国スタイル`, and `台湾スタイル` values were copied into
+  matching ARB keys.
+- Chinese `zh` and `zhtw` disposition: `zh` uses Simplified Chinese labels;
+  `zhtw` uses Traditional Chinese labels through Flutter locale `zh_Hant`.
+- Intentional holdout sidecars updated: Chinese ARB `appTitle` entries are
+  covered by `brand_name` sidecars.
+- Rollback path: remove the new Chinese ARB/sidecar files and regenerate
+  localization output; existing hand-written `HankoLocalizations` runtime
+  behavior remains unchanged until `M2-T03`.
+
+Validation:
+
+```sh
+flutter gen-l10n
+flutter test test/generated_hanko_localizations_test.dart
+flutter analyze
+make i18n-status-test
+make i18n-status
+```
 
 ### M3: Web Copy and Route Migration
 

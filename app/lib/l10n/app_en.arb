@@ -3,5 +3,13 @@
   "appTitle": "STONE SIGNATURE",
   "@appTitle": {
     "description": "Application title shown by MaterialApp. The brand name intentionally remains in English."
+  },
+  "designKanjiStyleChinese": "Chinese style",
+  "@designKanjiStyleChinese": {
+    "description": "Label for the kanji name style option that requests a mainland China-oriented style."
+  },
+  "designKanjiStyleTaiwanese": "Taiwanese style",
+  "@designKanjiStyleTaiwanese": {
+    "description": "Label for the kanji name style option that requests a Taiwan-oriented style."
   }
 }

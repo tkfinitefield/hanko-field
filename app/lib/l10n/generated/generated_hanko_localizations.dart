@@ -7,6 +7,7 @@ import 'package:intl/intl.dart' as intl;
 
 import 'generated_hanko_localizations_en.dart';
 import 'generated_hanko_localizations_ja.dart';
+import 'generated_hanko_localizations_zh.dart';
 
 // ignore_for_file: type=lint
 
@@ -99,6 +100,8 @@ abstract class GeneratedHankoLocalizations {
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
     Locale('ja'),
+    Locale('zh'),
+    Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
   ];
 
   /// Application title shown by MaterialApp. The brand name intentionally remains in English.
@@ -106,6 +109,18 @@ abstract class GeneratedHankoLocalizations {
   /// In en, this message translates to:
   /// **'STONE SIGNATURE'**
   String get appTitle;
+
+  /// Label for the kanji name style option that requests a mainland China-oriented style.
+  ///
+  /// In en, this message translates to:
+  /// **'Chinese style'**
+  String get designKanjiStyleChinese;
+
+  /// Label for the kanji name style option that requests a Taiwan-oriented style.
+  ///
+  /// In en, this message translates to:
+  /// **'Taiwanese style'**
+  String get designKanjiStyleTaiwanese;
 }
 
 class _GeneratedHankoLocalizationsDelegate
@@ -121,19 +136,33 @@ class _GeneratedHankoLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      <String>['en', 'ja'].contains(locale.languageCode);
+      <String>['en', 'ja', 'zh'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_GeneratedHankoLocalizationsDelegate old) => false;
 }
 
 GeneratedHankoLocalizations lookupGeneratedHankoLocalizations(Locale locale) {
+  // Lookup logic when language+script codes are specified.
+  switch (locale.languageCode) {
+    case 'zh':
+      {
+        switch (locale.scriptCode) {
+          case 'Hant':
+            return GeneratedHankoLocalizationsZhHant();
+        }
+        break;
+      }
+  }
+
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
     case 'en':
       return GeneratedHankoLocalizationsEn();
     case 'ja':
       return GeneratedHankoLocalizationsJa();
+    case 'zh':
+      return GeneratedHankoLocalizationsZh();
   }
 
   throw FlutterError(

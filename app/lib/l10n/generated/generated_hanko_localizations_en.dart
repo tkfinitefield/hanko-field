@@ -10,4 +10,10 @@ class GeneratedHankoLocalizationsEn extends GeneratedHankoLocalizations {
 
   @override
   String get appTitle => 'STONE SIGNATURE';
+
+  @override
+  String get designKanjiStyleChinese => 'Chinese style';
+
+  @override
+  String get designKanjiStyleTaiwanese => 'Taiwanese style';
 }
