@@ -16,7 +16,7 @@ GCP_PROD_REGION ?= asia-northeast1
 ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_ADMIN_MODE);,)
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod i18n-registry-test
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -37,6 +37,7 @@ help:
 	@echo "  make docker-dev     # Run API/Admin/Web together in container"
 	@echo "  make deploy-web-prod # Deploy Web to Cloud Run with explicit project/region"
 	@echo "  make stripe-listen  # Forward Stripe webhooks to the local API"
+	@echo "  make i18n-registry-test # Validate the language registry parser"
 	@echo ""
 	@echo "Options:"
 	@echo "  ENV=dev|prod"
@@ -70,3 +71,6 @@ deploy-web-prod:
 
 stripe-listen:
 	@set -e; if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; stripe listen --forward-to "$${STRIPE_WEBHOOK_URL:-$(STRIPE_WEBHOOK_URL)}"
+
+i18n-registry-test:
+	node --test scripts/i18n/registry.test.mjs

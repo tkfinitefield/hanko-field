@@ -1430,7 +1430,7 @@ Fastlane setup readiness notes:
   Output: all 68 route codes with BCP-47, Flutter, text direction, fallback,
   currency, web, app, and release fields.
   Done when: `no`, `zh`, `zhtw`, and RTL entries validate correctly.
-- [ ] `M1-T02` Add a registry parser shared by scripts.
+- [x] `M1-T02` Add a registry parser shared by scripts.
   Output: one typed parser or data model used by status/check commands.
   Done when: duplicate route codes and invalid fallback values fail tests.
 - [ ] `M1-T03` Add `make i18n-status`.
@@ -1467,6 +1467,29 @@ Initial flag policy:
 - Store locale fields are filled only for `en`, `ja`, `zh`, and `zhtw` in this
   baseline. Other languages keep null store locale fields until M8 validates
   platform support.
+
+#### M1-T02 Language Registry Parser
+
+Completed on 2026-06-18. Added `scripts/i18n/registry.mjs` as the shared
+registry parser for future M1 status/check scripts.
+
+Parser contract:
+
+- `loadLanguageRegistry()` reads `config/languages.json` by default.
+- `parseLanguageRegistry()` validates already-loaded JSON and returns
+  `languages` plus `byRouteCode`.
+- `getLanguageByRouteCode()` gives downstream scripts a single lookup helper.
+- `RegistryValidationError` carries a stable `errors` array for command output.
+- Validation rejects duplicate route codes, fallback values that do not point
+  to an existing route code, and fallback values that point to the same route.
+- Validation also checks required nested app, web, Flutter, and release fields
+  so later status/check scripts can rely on a typed shape.
+
+Test command:
+
+```sh
+make i18n-registry-test
+```
 
 ### M2: Flutter App Migration
 
