@@ -656,8 +656,7 @@ struct TopPageTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -677,8 +676,7 @@ struct AboutTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -705,8 +703,7 @@ struct PageTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     purchase_action_url: String,
     purchase_note: String,
@@ -849,8 +846,7 @@ struct PaymentSuccessTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -872,8 +868,7 @@ struct PaymentFailureTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -892,8 +887,7 @@ struct CommercialTransactionsTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -912,8 +906,7 @@ struct TermsTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -930,8 +923,7 @@ struct BlogIndexTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     terms_url: String,
@@ -949,8 +941,7 @@ struct BlogArticleTemplate {
     robots_meta: String,
     canonical_url: String,
     x_default_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    language_links: Vec<LanguageLink>,
     og_image_url: String,
     company_url: String,
     top_url: String,
@@ -2763,8 +2754,7 @@ async fn render_top_page(
         meta_description: web_copy_text("top", &selected_locale, "seo_description").to_owned(),
         robots_meta: "index,follow".to_owned(),
         canonical_url: top_url(site_base_url, "en"),
-        lang_ja_url: top_url(site_base_url, "ja"),
-        lang_en_url: top_url(site_base_url, "en"),
+        language_links: language_links_for_path(site_base_url, "/"),
         company_url: company_url(site_base_url),
         selected_locale: selected_locale.clone(),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
@@ -2817,15 +2807,12 @@ async fn render_about_page(
         Err(response) => return response,
     };
     let site_base_url = state.site_base_url.as_str();
-    let lang_ja_url = about_url(site_base_url, "ja");
-    let lang_en_url = about_url(site_base_url, "en");
     let template = AboutTemplate {
         page_title: web_copy_text("about", &selected_locale, "seo_title").to_owned(),
         meta_description: web_copy_text("about", &selected_locale, "seo_description").to_owned(),
         robots_meta: "index,follow".to_owned(),
-        canonical_url: lang_en_url.clone(),
-        lang_ja_url,
-        lang_en_url,
+        canonical_url: about_url(site_base_url, "en"),
+        language_links: language_links_for_path(site_base_url, "/about"),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -2938,8 +2925,9 @@ async fn render_design_page(
         )
         .to_owned(),
         canonical_url: design_url(site_base_url, "en"),
-        lang_ja_url: design_url_with_filters(site_base_url, "ja", &material_filter_state),
-        lang_en_url: design_url_with_filters(site_base_url, "en", &material_filter_state),
+        language_links: language_links_with_urls(|language| {
+            design_url_with_filters(site_base_url, &language.route_code, &material_filter_state)
+        }),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -3007,8 +2995,7 @@ async fn render_blog_index_page(
             .to_owned(),
         robots_meta: "index,follow".to_owned(),
         canonical_url: blog_index_url(site_base_url, "en"),
-        lang_ja_url: blog_index_url(site_base_url, "ja"),
-        lang_en_url: blog_index_url(site_base_url, "en"),
+        language_links: language_links_for_path(site_base_url, "/blog"),
         company_url: company_url(site_base_url),
         selected_locale: selected_locale.clone(),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
@@ -3092,8 +3079,9 @@ async fn render_blog_article_page(
         robots_meta: "index,follow".to_owned(),
         canonical_url: blog_article_url(site_base_url, &post.slug, &selected_locale),
         x_default_url: blog_article_url(site_base_url, &post.slug, "en"),
-        lang_ja_url: blog_article_url(site_base_url, &post.slug, "ja"),
-        lang_en_url: blog_article_url(site_base_url, &post.slug, "en"),
+        language_links: language_links_with_urls(|language| {
+            blog_article_url(site_base_url, &post.slug, &language.route_code)
+        }),
         og_image_url: absolute_content_url(site_base_url, &localized_post.image_url),
         company_url: company_url(site_base_url),
         selected_locale: selected_locale.clone(),
@@ -3424,8 +3412,14 @@ async fn render_payment_success_page(
         session_id,
         has_app_redirect_url,
         app_redirect_url,
-        lang_en_url: payment_result_locale_url(site_base_url, "/payment/success", &query, "en"),
-        lang_ja_url: payment_result_locale_url(site_base_url, "/payment/success", &query, "ja"),
+        language_links: language_links_with_urls(|language| {
+            payment_result_locale_url(
+                site_base_url,
+                "/payment/success",
+                &query,
+                &language.route_code,
+            )
+        }),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -3502,8 +3496,14 @@ async fn render_payment_failure_page(
         order_id,
         has_app_redirect_url,
         app_redirect_url,
-        lang_en_url: payment_result_locale_url(site_base_url, "/payment/failure", &query, "en"),
-        lang_ja_url: payment_result_locale_url(site_base_url, "/payment/failure", &query, "ja"),
+        language_links: language_links_with_urls(|language| {
+            payment_result_locale_url(
+                site_base_url,
+                "/payment/failure",
+                &query,
+                &language.route_code,
+            )
+        }),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -3551,8 +3551,6 @@ async fn render_commercial_transactions_page(
         Err(response) => return response,
     };
     let site_base_url = state.site_base_url.as_str();
-    let lang_ja_url = commercial_transactions_url(site_base_url, "ja");
-    let lang_en_url = commercial_transactions_url(site_base_url, "en");
     let template = CommercialTransactionsTemplate {
         contact_url: inquiry_url(site_base_url, &selected_locale),
         page_title: web_copy_text("commercial_transactions", &selected_locale, "seo_title")
@@ -3564,9 +3562,8 @@ async fn render_commercial_transactions_page(
         )
         .to_owned(),
         robots_meta: "index,follow".to_owned(),
-        canonical_url: lang_en_url.clone(),
-        lang_ja_url,
-        lang_en_url,
+        canonical_url: commercial_transactions_url(site_base_url, "en"),
+        language_links: language_links_for_path(site_base_url, "/commercial-transactions"),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -3616,16 +3613,13 @@ async fn render_terms_page(
         Err(response) => return response,
     };
     let site_base_url = state.site_base_url.as_str();
-    let lang_ja_url = terms_url(site_base_url, "ja");
-    let lang_en_url = terms_url(site_base_url, "en");
     let template = TermsTemplate {
         contact_url: inquiry_url(site_base_url, &selected_locale),
         page_title: web_copy_text("terms", &selected_locale, "seo_title").to_owned(),
         meta_description: web_copy_text("terms", &selected_locale, "seo_description").to_owned(),
         robots_meta: "index,follow".to_owned(),
-        canonical_url: lang_en_url.clone(),
-        lang_ja_url,
-        lang_en_url,
+        canonical_url: terms_url(site_base_url, "en"),
+        language_links: language_links_for_path(site_base_url, "/terms"),
         company_url: company_url(site_base_url),
         terms_url: localized_navigation_page_url(site_base_url, "/terms", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -4240,6 +4234,17 @@ fn language_links_for_path(base_url: &str, path: &str) -> Vec<LanguageLink> {
     language_links_for_path_with_registry(web_language_registry(), base_url, path)
 }
 
+fn language_links_with_urls<F>(url_for_language: F) -> Vec<LanguageLink>
+where
+    F: Fn(&WebLanguage) -> String,
+{
+    web_language_registry()
+        .enabled_languages()
+        .iter()
+        .map(|language| language_link_with_url(language, url_for_language(language)))
+        .collect()
+}
+
 fn language_links_for_path_with_registry(
     registry: &WebLanguageRegistry,
     base_url: &str,
@@ -4268,11 +4273,18 @@ fn indexed_hreflang_links_for_path_with_registry(
 }
 
 fn language_link_for_path(base_url: &str, path: &str, language: &WebLanguage) -> LanguageLink {
+    language_link_with_url(
+        language,
+        site_url(base_url, &localized_page_path_for_language(path, language)),
+    )
+}
+
+fn language_link_with_url(language: &WebLanguage, url: String) -> LanguageLink {
     LanguageLink {
         route_code: language.route_code.clone(),
         bcp47: language.bcp47.clone(),
         label: language.native_name.clone(),
-        url: site_url(base_url, &localized_page_path_for_language(path, language)),
+        url,
         is_default: language.route_code == DEFAULT_LOCALE,
         is_indexed: language.indexed,
     }
@@ -5871,8 +5883,7 @@ mod tests {
                     .to_owned(),
             robots_meta: "index,follow".to_owned(),
             canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
-            lang_ja_url: top_url(TEST_SITE_BASE_URL, "ja"),
-            lang_en_url: top_url(TEST_SITE_BASE_URL, "en"),
+            language_links: language_links_for_path(TEST_SITE_BASE_URL, "/"),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "en"),
             about_url: about_url(TEST_SITE_BASE_URL, "en"),
@@ -5912,6 +5923,73 @@ mod tests {
     }
 
     #[test]
+    fn language_switcher_renders_registry_language_links() {
+        let registry = WebLanguageRegistry::from_entries(vec![
+            language_registry_entry(
+                "en",
+                "en",
+                "English",
+                "English",
+                RegistryTextDirection::Ltr,
+                true,
+                true,
+                "",
+            ),
+            language_registry_entry(
+                "fr",
+                "fr",
+                "Français",
+                "French",
+                RegistryTextDirection::Ltr,
+                true,
+                false,
+                "fr",
+            ),
+            language_registry_entry(
+                "ja",
+                "ja",
+                "日本語",
+                "Japanese",
+                RegistryTextDirection::Ltr,
+                true,
+                true,
+                "ja",
+            ),
+        ])
+        .expect("fixture registry should load");
+        let template = TopPageTemplate {
+            selected_locale: "fr".to_owned(),
+            page_title: "Custom gemstone seals | STONE SIGNATURE".to_owned(),
+            meta_description:
+                "Design custom hand-carved gemstone seals online and order in English or Japanese."
+                    .to_owned(),
+            robots_meta: "index,follow".to_owned(),
+            canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
+            language_links: language_links_for_path_with_registry(
+                &registry,
+                TEST_SITE_BASE_URL,
+                "/",
+            ),
+            company_url: company_url(TEST_SITE_BASE_URL),
+            top_url: top_url(TEST_SITE_BASE_URL, "en"),
+            about_url: about_url(TEST_SITE_BASE_URL, "en"),
+            design_url: design_url(TEST_SITE_BASE_URL, "en"),
+            blog_index_url: blog_index_url(TEST_SITE_BASE_URL, "en"),
+            terms_url: terms_url(TEST_SITE_BASE_URL, "en"),
+            commercial_transactions_url: commercial_transactions_url(TEST_SITE_BASE_URL, "en"),
+            privacy_policy_url: privacy_policy_url(TEST_SITE_BASE_URL, "en"),
+            blog_posts: Vec::new(),
+        };
+
+        let html = render_html(&template).expect("top page should render");
+
+        assert_eq!(html.matches("data-language-option=").count(), 3);
+        assert!(html.contains(
+            r#"class="top-language-switcher__item is-active" href="https://finitefield.org/fr/" hreflang="fr" data-language-option="fr">Français</a>"#
+        ));
+    }
+
+    #[test]
     fn top_page_renders_journal_cards() {
         let template = TopPageTemplate {
             selected_locale: "en".to_owned(),
@@ -5921,8 +5999,7 @@ mod tests {
                     .to_owned(),
             robots_meta: "index,follow".to_owned(),
             canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
-            lang_ja_url: top_url(TEST_SITE_BASE_URL, "ja"),
-            lang_en_url: top_url(TEST_SITE_BASE_URL, "en"),
+            language_links: language_links_for_path(TEST_SITE_BASE_URL, "/"),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "en"),
             about_url: about_url(TEST_SITE_BASE_URL, "en"),
@@ -6013,8 +6090,7 @@ mod tests {
                 "宝石印鑑をオンラインでデザインして、日本語または英語で注文できます。".to_owned(),
             robots_meta: "index,follow".to_owned(),
             canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
-            lang_ja_url: top_url(TEST_SITE_BASE_URL, "ja"),
-            lang_en_url: top_url(TEST_SITE_BASE_URL, "en"),
+            language_links: language_links_for_path(TEST_SITE_BASE_URL, "/"),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "ja"),
             about_url: about_url(TEST_SITE_BASE_URL, "ja"),
@@ -6361,18 +6437,14 @@ mod tests {
                 &PaymentRedirectQuery::default(),
                 "en",
             ),
-            lang_ja_url: payment_result_locale_url(
-                TEST_SITE_BASE_URL,
-                "/payment/success",
-                &PaymentRedirectQuery::default(),
-                "ja",
-            ),
-            lang_en_url: payment_result_locale_url(
-                TEST_SITE_BASE_URL,
-                "/payment/success",
-                &PaymentRedirectQuery::default(),
-                "en",
-            ),
+            language_links: language_links_with_urls(|language| {
+                payment_result_locale_url(
+                    TEST_SITE_BASE_URL,
+                    "/payment/success",
+                    &PaymentRedirectQuery::default(),
+                    &language.route_code,
+                )
+            }),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "en"),
             about_url: about_url(TEST_SITE_BASE_URL, "en"),
@@ -6401,18 +6473,14 @@ mod tests {
                 &PaymentRedirectQuery::default(),
                 "en",
             ),
-            lang_ja_url: payment_result_locale_url(
-                TEST_SITE_BASE_URL,
-                "/payment/failure",
-                &PaymentRedirectQuery::default(),
-                "ja",
-            ),
-            lang_en_url: payment_result_locale_url(
-                TEST_SITE_BASE_URL,
-                "/payment/failure",
-                &PaymentRedirectQuery::default(),
-                "en",
-            ),
+            language_links: language_links_with_urls(|language| {
+                payment_result_locale_url(
+                    TEST_SITE_BASE_URL,
+                    "/payment/failure",
+                    &PaymentRedirectQuery::default(),
+                    &language.route_code,
+                )
+            }),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "en"),
             about_url: about_url(TEST_SITE_BASE_URL, "en"),

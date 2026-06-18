@@ -7,8 +7,9 @@
   <meta name="description" content="{{ meta_description }}">
   <meta name="robots" content="{{ robots_meta }}">
   <link rel="canonical" href="{{ canonical_url }}">
-  <link rel="alternate" hreflang="ja" href="{{ lang_ja_url }}">
-  <link rel="alternate" hreflang="en" href="{{ lang_en_url }}">
+  {% for language_link in language_links %}
+  <link rel="alternate" hreflang="{{ language_link.bcp47 }}" href="{{ language_link.url }}">
+  {% endfor %}
   <link rel="alternate" hreflang="x-default" href="{{ canonical_url }}">
   <meta property="og:type" content="website">
   <meta property="og:title" content="{{ page_title }}">
@@ -43,8 +44,9 @@
             <span class="material-symbols-outlined top-brand__icon" aria-hidden="true">language</span>
           </summary>
           <div class="top-language-switcher__menu" role="menu" aria-label="Language options">
-            <a class="top-language-switcher__item{{ self.language_active_class("ja") }}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
-            <a class="top-language-switcher__item{{ self.language_active_class("en") }}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
+            {% for language_link in language_links %}
+            <a class="top-language-switcher__item{{ self.language_active_class(language_link.route_code) }}" href="{{ language_link.url }}" hreflang="{{ language_link.bcp47 }}" data-language-option="{{ language_link.route_code }}">{{ language_link.label }}</a>
+            {% endfor %}
           </div>
         </details>
       </div>

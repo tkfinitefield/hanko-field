@@ -1983,7 +1983,7 @@ when run by itself.
   Output: localized JSON files under `web/content/i18n/`.
   Done when: current visible copy is preserved after extraction and the
   `M0-T05` migration-safety checklist is satisfied.
-- [ ] `M3-T04` Replace language switcher fields.
+- [x] `M3-T04` Replace language switcher fields.
   Output: `LanguageLink` list replacing `lang_ja_url` and `lang_en_url`.
   Done when: the switcher can render more than two languages.
 - [ ] `M3-T05` Generate `hreflang`, canonical URLs, and sitemap entries.
@@ -2157,6 +2157,39 @@ for (const section of sections) {
   }
 }
 NODE
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T04 Registry-Backed Language Switcher
+
+Completed on 2026-06-18. Replaced the fixed `lang_ja_url` and `lang_en_url`
+template fields with a registry-backed `LanguageLink` list.
+
+Implementation notes:
+
+- Updated all public web page templates with language switchers to loop over
+  `language_links`.
+- Reused `LanguageLink` for both the header language menu and the existing
+  alternate-language head links.
+- Added `language_links_with_urls` so page-specific URL builders can keep
+  existing behavior for design filters, blog slugs, and payment-result query
+  parameters.
+- Preserved current English and Japanese URLs while making the switcher capable
+  of rendering more than two enabled web languages.
+- Added a rendering test that injects an `en` / `fr` / `ja` registry fixture
+  and verifies the switcher renders all three language options with the current
+  language marked active.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+rg -n 'lang_ja_url|lang_en_url' web/src/main.rs web/templates
 git diff --check
 git diff --cached --check
 ```
