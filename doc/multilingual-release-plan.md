@@ -4384,7 +4384,7 @@ git diff --cached --check
   Output: full QA for Tier 1, screenshot QA for Tier 2, mechanical checks for
   Tier 3.
   Done when: layout issues are fixed before indexing or release enablement.
-- [ ] `M9-T05` Enable language flags in stages.
+- [x] `M9-T05` Enable language flags in stages.
   Output: separate PRs or commits for render-only, app-selectable,
   web-indexed, and store-release-enabled transitions.
   Done when: each flag change has validation evidence.
@@ -4621,6 +4621,83 @@ cargo test --manifest-path web/Cargo.toml web_router_resolves_supported_and_unkn
 cargo test --manifest-path web/Cargo.toml pilot_payment_routes_render_localized_copy -- --nocapture
 make i18n-check
 make i18n-stubs-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M9-T05 Staged Language Flags
+
+Completed on 2026-06-18. Added a staged language-flag readiness gate so future
+registry flag changes must move through explicit promotion stages with matching
+validation evidence.
+
+Implementation notes:
+
+- Added `scripts/i18n/flag_stages.mjs`.
+- Added `scripts/i18n/flag_stages.test.mjs`.
+- Added Make targets:
+  - `make i18n-flag-stages`
+  - `make i18n-flag-stages-check`
+  - `make i18n-flag-stages-test`
+- Added staged flag checks to `make i18n-ci`.
+- Added machine-readable stage evidence:
+  - `doc/qa/m9-t05/flag-stages.json`
+  - `doc/qa/m9-t05/README.md`
+- The checker derives the current stage for every non-English route language
+  from `config/languages.json`.
+- The checker verifies that `flag-stages.json` matches the current registry
+  state and includes the required evidence kinds for each non-empty stage.
+- The checker also enforces flag invariants:
+  - `app.selectable=true` requires `app.enabled=true`.
+  - `web.indexed=true` requires `web.enabled=true`.
+  - `release.enabled=true` requires app selectable, web indexed, Android and
+    iOS store locale mappings, and store metadata source.
+
+Current stage results:
+
+- `web_indexed`: `ja`
+- `app_selectable`: `ar`, `zh`, `zhtw`
+- `disabled`: the remaining 63 non-English route languages
+- `render_only`: none
+- `store_release_enabled`: none
+
+Transition policy:
+
+- Future language-flag promotion order is:
+  1. `disabled`
+  2. `render_only`
+  3. `app_selectable`
+  4. `web_indexed`
+  5. `store_release_enabled`
+- Each transition kind must be made in a separate PR or commit.
+- Each transition must update `doc/qa/m9-t05/flag-stages.json` with fresh
+  evidence before the gate passes.
+- M9-T05 itself does not promote any language flags.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No new language was made render-only, app-selectable, web-indexed, or
+  store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, signing files, uploads, polling, streaming, SSE, or WebSocket
+  behavior were added.
+- Rollback path: remove `scripts/i18n/flag_stages.*`, remove the Makefile
+  targets and `i18n-ci` entries, remove `doc/qa/m9-t05/`, and reopen
+  `M9-T05`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/flag_stages.mjs
+node --check scripts/i18n/flag_stages.test.mjs
+jq empty doc/qa/m9-t05/flag-stages.json
+make i18n-flag-stages-check
+make i18n-flag-stages-test
+make i18n-check
+make i18n-holdouts-check
+make i18n-layout-qa-check
 make i18n-ci
 git diff --check
 git diff --cached --check
