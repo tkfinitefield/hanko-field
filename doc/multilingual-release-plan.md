@@ -2958,7 +2958,7 @@ git diff --cached --check
 
 ### M6: Translation Workflow Tooling
 
-- [ ] `M6-T01` Implement `make i18n-todo`.
+- [x] `M6-T01` Implement `make i18n-todo`.
   Output: actionable missing-key report with file, locale, key, base English
   value, fallback value, and sidecar path.
   Done when: `LANGS=` and `FILE=` filters work.
@@ -2983,6 +2983,66 @@ git diff --cached --check
 - [ ] `M6-T07` Add CI integration after checks stabilize.
   Output: CI target or documented command set for release branches.
   Done when: release-enabled languages cannot regress silently.
+
+#### M6-T01 i18n Todo Report
+
+Completed on 2026-06-18. Added a repository-level `make i18n-todo` command
+for translation work planning.
+
+Implementation notes:
+
+- Added `scripts/i18n/todo.mjs`.
+- Added `scripts/i18n/todo.test.mjs`.
+- Added root Make targets:
+  - `make i18n-todo`
+  - `make i18n-todo-test`
+- The report is Markdown and includes `file`, `locale`, `key`, base English
+  value, fallback value, and sidecar path for every item.
+- Default scope follows registry-enabled app/web/API languages and excludes the
+  English source locale.
+- `LANGS=` narrows or expands the route-code set, with `LANGS=all` available
+  for the full registry.
+- `FILE=` limits the report to a specific base file, target file, or sidecar
+  path.
+- Per-locale files are checked for app ARB, app settings JSON, web content
+  JSON, and API checkout JSON.
+- API catalog files are checked as embedded language maps, using each `.en`
+  value as the base and reporting missing target route keys in the same file.
+- Missing target files are expanded into actionable missing-key rows from the
+  English base file instead of only reporting the file path.
+
+Examples:
+
+```sh
+make i18n-todo
+make i18n-todo LANGS=fr FILE=web/content/i18n/common/fr.json
+make i18n-todo LANGS=zh FILE=api/content/i18n/catalog/materials.json
+make i18n-todo LANGS=all
+```
+
+M0-T05 preservation evidence:
+
+- The command is read-only and does not generate or modify translation files.
+- Existing English, Japanese, Chinese, and Traditional Chinese source files are
+  left untouched.
+- Sidecar paths are reported but not created automatically, keeping manual
+  intention bookkeeping explicit.
+- Rollback path: remove `scripts/i18n/todo.mjs`, `scripts/i18n/todo.test.mjs`,
+  and the Make targets, then reopen `M6-T01`.
+
+Validation:
+
+```sh
+make i18n-todo
+make i18n-todo LANGS=zh FILE=web/content/i18n/top/zh.json
+make i18n-todo LANGS=fr FILE=web/content/i18n/common/fr.json
+make i18n-todo LANGS=zh FILE=api/content/i18n/catalog/materials.json
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
+git diff --check
+git diff --cached --check
+```
 
 ### M7: Pilot Language Rollout
 
