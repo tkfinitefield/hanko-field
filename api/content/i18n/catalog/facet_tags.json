@@ -1,0 +1,38 @@
+{
+  "color:green": {
+    "label": {
+      "en": "Green",
+      "ja": "緑"
+    }
+  },
+  "color:yellow": {
+    "label": {
+      "en": "Yellow",
+      "ja": "黄"
+    }
+  },
+  "color:white": {
+    "label": {
+      "en": "White",
+      "ja": "白"
+    }
+  },
+  "pattern:cloud": {
+    "label": {
+      "en": "Cloud",
+      "ja": "雲状"
+    }
+  },
+  "pattern:veined": {
+    "label": {
+      "en": "Veined",
+      "ja": "筋"
+    }
+  },
+  "pattern:plain": {
+    "label": {
+      "en": "Plain",
+      "ja": "無地"
+    }
+  }
+}

@@ -1315,12 +1315,12 @@ Seed constant inventory:
 
 | Source | Current constants | Translation ownership |
 | --- | --- | --- |
-| `api/src/bin/seed_catalog.rs::app_config_public_document` | Hard-coded `ja` / `en` locale list and `JPY` / `USD` currency map. | Generated from `config/languages.json` during `M4-T01`; no hand-maintained duplicate list after registry exists. |
+| `api/src/bin/seed_catalog.rs::app_config_public_document` | Registry-backed `en` / `ja` locale list and `USD` / `JPY` currency map. | Generated from `config/languages.json`; no hand-maintained duplicate list remains. |
 | `api/src/bin/seed_catalog.rs::font_seeds` | 6 font records with single labels and `kanji_style` values: `zen_maru_gothic`, `kosugi_maru`, `potta_one`, `kiwi_maru`, `wdxl_lubrifont_jp_n`, `ai_generated_seal`. | Locale-neutral font catalog. Do not move to ARB/JSON unless font display names become translated product copy. |
-| `api/src/bin/seed_catalog.rs::material_seeds` | 8 material master records with `label_ja`, `label_en`, `description_ja`, `description_en`: `wood`, `qingtian_stone`, `shoushan_stone`, `balin_stone`, `yili_stone`, `laos_stone`, `xixia_stone`, `frozen_stone`. | `api/content/i18n/catalog/materials.json`. Preserve Chinese-origin material names as topical content, not Chinese translations. |
-| `api/src/bin/seed_catalog.rs::stone_listing_seeds` | 3 published listing records with Japanese/English title, description, story, photo alt derived from title, facet keys, size, and USD/JPY prices. | `api/content/i18n/catalog/stone_listings.json`; keep facet keys, size, listing code, Storage paths, and prices locale-neutral. |
-| `api/src/bin/seed_catalog.rs::facet_tag_seeds` | 6 tag records with Japanese/English labels: `color:green`, `color:yellow`, `color:white`, `pattern:cloud`, `pattern:veined`, `pattern:plain`. | `api/content/i18n/catalog/facet_tags.json`; keep `key`, `facet_type`, and aliases canonical. |
-| `api/src/bin/seed_catalog.rs::country_seeds` | 6 country records with Japanese/English labels and USD/JPY shipping fees: `JP`, `US`, `CA`, `GB`, `AU`, `SG`. | `api/content/i18n/catalog/countries.json`; fees stay in `shipping_fee_by_currency`. |
+| `api/src/bin/seed_catalog.rs::material_seeds` | 8 material master records with locale-neutral keys and sort order: `wood`, `qingtian_stone`, `shoushan_stone`, `balin_stone`, `yili_stone`, `laos_stone`, `xixia_stone`, `frozen_stone`. | `api/content/i18n/catalog/materials.json` owns labels and descriptions. Preserve Chinese-origin material names as topical content, not Chinese translations. |
+| `api/src/bin/seed_catalog.rs::stone_listing_seeds` | 3 published listing records with facet keys, size, listing code, Storage paths, USD/JPY prices, and sort order. | `api/content/i18n/catalog/stone_listings.json` owns title, description, story, and photo alt text. |
+| `api/src/bin/seed_catalog.rs::facet_tag_seeds` | 6 tag records with locale-neutral `key`, `facet_type`, aliases, and sort order: `color:green`, `color:yellow`, `color:white`, `pattern:cloud`, `pattern:veined`, `pattern:plain`. | `api/content/i18n/catalog/facet_tags.json` owns labels; aliases remain canonical. |
+| `api/src/bin/seed_catalog.rs::country_seeds` | 6 country records with ISO country codes, USD/JPY shipping fees, and sort order: `JP`, `US`, `CA`, `GB`, `AU`, `SG`. | `api/content/i18n/catalog/countries.json` owns labels; fees stay in `shipping_fee_by_currency`. |
 | `admin/src/main.rs::new_mock_snapshot` | Mock catalog data for admin/dev with Japanese/English maps for materials, listings, facet tags, countries, and order fixtures. | Treat as fixture data. It can either be generated from the same catalog JSON in `M5`, or kept as a small test fixture that must pass the same missing-key checks. |
 | `web/src/main.rs::new_mock_catalog_source` | Web mock/dev catalog fallback used when Firestore catalog load fails in dev. | After M3/M4, derive from the same catalog JSON or mark as fixture-only so it cannot become a hidden untranslated production source. |
 
@@ -2333,7 +2333,7 @@ git diff --cached --check
   Output: `/v1/config/public` locales, defaults, and currency maps are
   registry-backed.
   Done when: seed and runtime config agree on supported locales.
-- [ ] `M4-T02` Move seed catalog copy to data files or map-based structures.
+- [x] `M4-T02` Move seed catalog copy to data files or map-based structures.
   Output: materials, stone listings, countries, and facet tags no longer need
   per-language Rust struct fields.
   Done when: adding `fr` does not require a new Rust field and the `M0-T05`
@@ -2384,6 +2384,53 @@ Validation:
 cargo fmt --manifest-path api/Cargo.toml -- --check
 cargo test --manifest-path api/Cargo.toml
 jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M4-T02 Catalog Seed Copy Data Files
+
+Completed on 2026-06-18. Moved catalog seed copy from per-language Rust struct
+fields to JSON data files under `api/content/i18n/catalog/`.
+
+Implementation notes:
+
+- Added `api/content/i18n/catalog/materials.json` for material labels and
+  descriptions.
+- Added `api/content/i18n/catalog/stone_listings.json` for listing title,
+  description, story, and photo alt text.
+- Added `api/content/i18n/catalog/facet_tags.json` for facet tag labels.
+- Added `api/content/i18n/catalog/countries.json` for shipping country labels.
+- Kept locale-neutral seed fields in Rust, including keys, listing codes,
+  sizes, facets, aliases, Storage paths, prices, and sort order.
+- Updated `api/src/bin/seed_catalog.rs` to load catalog copy via typed JSON
+  structs and write the same Firestore `*_i18n` maps as before.
+- Removed `label_ja`, `label_en`, `description_ja`, `description_en`,
+  `title_ja`, `title_en`, `story_ja`, and `story_en` fields from seed structs.
+- Added seed coverage tests so every Rust seed record must have matching `en`
+  and `ja` copy in the JSON files.
+
+M0-T05 preservation evidence:
+
+- English and Japanese material labels/descriptions, listing text, facet labels,
+  country labels, and listing photo alt text were moved without wording changes.
+- Locale-neutral catalog fields stayed in Rust and were not translated.
+- Chinese disposition: no standalone Chinese catalog copy existed before this
+  task. Future `zh` or `zhtw` values can be added as new JSON map keys without
+  adding Rust struct fields.
+- Rollback path: restore per-language fields to the seed structs and remove the
+  JSON include/load path.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml --bin seed_catalog
+cargo test --manifest-path api/Cargo.toml
+jq empty api/content/i18n/catalog/*.json
 make i18n-registry-test
 make i18n-status-test
 make i18n-status

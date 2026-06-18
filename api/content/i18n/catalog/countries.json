@@ -1,0 +1,38 @@
+{
+  "JP": {
+    "label": {
+      "en": "Japan",
+      "ja": "日本"
+    }
+  },
+  "US": {
+    "label": {
+      "en": "United States",
+      "ja": "アメリカ"
+    }
+  },
+  "CA": {
+    "label": {
+      "en": "Canada",
+      "ja": "カナダ"
+    }
+  },
+  "GB": {
+    "label": {
+      "en": "United Kingdom",
+      "ja": "イギリス"
+    }
+  },
+  "AU": {
+    "label": {
+      "en": "Australia",
+      "ja": "オーストラリア"
+    }
+  },
+  "SG": {
+    "label": {
+      "en": "Singapore",
+      "ja": "シンガポール"
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "qingtian_stone_01": {
+    "title": {
+      "en": "One-of-a-kind Qingtian Stone 01",
+      "ja": "青田石の一点物 01"
+    },
+    "description": {
+      "en": "A calm seal stone with soft green and gray natural movement.",
+      "ja": "淡い緑と灰色の揺らぎが入った、落ち着きのある印材です。"
+    },
+    "story": {
+      "en": "Its fine texture makes it suitable for daily use or a thoughtful gift.",
+      "ja": "きめ細かな石質で、日常使いにも贈り物にも合わせやすい一本です。"
+    },
+    "photo_alt": {
+      "en": "One-of-a-kind Qingtian Stone 01",
+      "ja": "青田石の一点物 01"
+    }
+  },
+  "shoushan_stone_01": {
+    "title": {
+      "en": "One-of-a-kind Shoushan Stone 01",
+      "ja": "寿山石の一点物 01"
+    },
+    "description": {
+      "en": "A warm yellow piece with natural veining and a strong presence.",
+      "ja": "あたたかな黄味に自然な筋が走る、存在感のある個体です。"
+    },
+    "story": {
+      "en": "A characterful stone known for its gentle color and smooth carving feel.",
+      "ja": "柔らかな色味と彫り心地のよさが魅力の、表情豊かな石です。"
+    },
+    "photo_alt": {
+      "en": "One-of-a-kind Shoushan Stone 01",
+      "ja": "寿山石の一点物 01"
+    }
+  },
+  "frozen_stone_01": {
+    "title": {
+      "en": "One-of-a-kind Frozen Stone 01",
+      "ja": "凍石の一点物 01"
+    },
+    "description": {
+      "en": "A white, translucent stone that gives the finished seal a clear impression.",
+      "ja": "白く半透明な奥行きがあり、清らかな印象に仕上がる石です。"
+    },
+    "story": {
+      "en": "Its frozen-light texture sets off the red seal impression beautifully.",
+      "ja": "凍った光のような質感が、印面の朱色を引き立てます。"
+    },
+    "photo_alt": {
+      "en": "One-of-a-kind Frozen Stone 01",
+      "ja": "凍石の一点物 01"
+    }
+  }
+}
