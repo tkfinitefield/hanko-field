@@ -1002,7 +1002,7 @@ A task is complete only when:
   Output: page-by-page list of template strings, Rust inline copy, blog files,
   SEO metadata, and current `hreflang` behavior.
   Done when: every web route in the current sitemap has a migration target.
-- [ ] `M0-T03` Inventory API, catalog, checkout, and Firestore locale data.
+- [x] `M0-T03` Inventory API, catalog, checkout, and Firestore locale data.
   Output: list of `*_i18n` maps, seed constants, checkout labels, and fallback
   rules.
   Done when: no catalog or checkout copy is left without an owner path.
@@ -1197,6 +1197,93 @@ Sitemap coverage and migration targets:
 - The migration target for sitemap and `hreflang` behavior is the M3 registry
   loader plus page availability checks. Non-indexed QA languages must be
   renderable without being emitted in `/sitemap.xml`.
+
+#### M0-T03 API, Catalog, Checkout, and Firestore Locale Inventory
+
+Completed on 2026-06-18. This inventory covers Rust API runtime locale
+resolution, Firestore `*_i18n` maps, seed constants, checkout labels, Stripe
+Checkout locale propagation, and admin-managed catalog writes. Every current
+catalog or checkout copy source has an owner path below.
+
+Current API locale behavior:
+
+- `api/src/main.rs` owns `PublicConfig`, catalog response shaping, order
+  creation, Stripe Checkout session creation, Gemini Kanji candidate prompt
+  language handling, and fallback resolution.
+- `app_config/public` currently resolves to `supported_locales=["ja","en"]`,
+  `default_locale="ja"`, `default_currency="USD"`, and
+  `currency_by_locale={"ja":"JPY","en":"USD"}`.
+- `default_public_config()` is the runtime fallback when Firestore config is
+  missing or incomplete. `api/src/bin/seed_catalog.rs` writes the same locale
+  and currency policy into Firestore.
+- API catalog endpoints reject unsupported `locale` values after loading public
+  config. Order creation rejects unsupported `orders.locale` and
+  `contact.preferred_locale`.
+- `resolve_localized(values, requested_locale, default_locale)` falls back in
+  this order: requested locale, default locale, `ja`, then the first non-empty
+  value by sorted key.
+- `lookup_locale` accepts exact locale keys and base-language lookup for
+  hyphenated BCP-47 values.
+
+Firestore locale data inventory:
+
+| Firestore owner | Current localized fields | Runtime reader | Admin / seed writer | Migration owner path |
+| --- | --- | --- | --- | --- |
+| `app_config/public` | `supported_locales`, `default_locale`, `default_currency`, `currency_by_locale`. | `get_public_config`, `normalize_public_config`, `resolve_pricing_currency`. | `api/src/bin/seed_catalog.rs::app_config_public_document`. | `config/languages.json` as source of truth; generated/seeded public config in `M4-T01`. |
+| `materials/{material_key}` | `label_i18n`, `description_i18n`, `photos[].alt_i18n`, plus non-map fields `comparison_texture_ja`, `comparison_texture_en`, `comparison_weight_ja`, `comparison_weight_en`, `comparison_usage_ja`, `comparison_usage_en`. | `/v1/catalog` resolves label, description, photo alt; material labels also feed stone-listing cards. | `api/src/bin/seed_catalog.rs::material_document`, admin material create/update/photo flows, and mock snapshots. | `api/content/i18n/catalog/materials.json`. Convert comparison preview fields to registry-keyed maps such as `comparison_i18n.texture.<lang>`, or store the equivalent under the material JSON before seeding. |
+| `facet_tags/{facet_type:key}` | `label_i18n`; `aliases` are canonicalization/search helpers, not translated UI copy. | `/v1/catalog` and stone-listing filter builders resolve tag labels by locale. | `api/src/bin/seed_catalog.rs::facet_tag_document`, admin facet tag create/update flows, and mock snapshots. | `api/content/i18n/catalog/facet_tags.json`, with aliases kept locale-neutral unless a later search task adds localized aliases. |
+| `stone_listings/{listing_id}` | `title_i18n`, `description_i18n`, `story_i18n`, `photos[].alt_i18n`. | `/v1/catalog`, `/v1/stone-listings`, checkout order snapshots, and app/web listing cards. | `api/src/bin/seed_catalog.rs::stone_listing_document`, admin stone-listing create/update/photo flows, and mock snapshots. | `api/content/i18n/catalog/stone_listings.json` or per-listing JSON files if the list grows. Keep `facets.*`, `material_key`, `size`, and prices locale-neutral. |
+| `countries/{country_code}` | `label_i18n`. | `/v1/catalog`, order creation shipping snapshot, admin order display. | `api/src/bin/seed_catalog.rs::country_document`, admin country create/update flows, and mock snapshots. | `api/content/i18n/catalog/countries.json`. Keep ISO country code and shipping fees locale-neutral. |
+| `orders/{order_id}` | `locale`, `contact.preferred_locale`, snapshot maps `material.label_i18n`, `listing.title_i18n`, `listing.description_i18n`, `listing.primary_photo.alt_i18n`, `shipping.country_label_i18n`. | Order lookup/status, admin order detail, Stripe checkout context, receipt/support language decisions. | `create_order`, `build_order_fields`, and order status/shipping admin mutations. | Runtime order snapshots remain in Firestore. Values come from catalog maps at order creation and should preserve all available locale keys for historical display. |
+| `fonts/{font_key}` | `label` only; older `label_i18n` fallback is read for compatibility. | Catalog font list and seal renderer selection. | `api/src/bin/seed_catalog.rs::font_document`; admin font create/update uses single `label`. | No translation file in this plan. Font labels are product/style names and remain locale-neutral unless a later product decision changes that. |
+
+Seed constant inventory:
+
+| Source | Current constants | Translation ownership |
+| --- | --- | --- |
+| `api/src/bin/seed_catalog.rs::app_config_public_document` | Hard-coded `ja` / `en` locale list and `JPY` / `USD` currency map. | Generated from `config/languages.json` during `M4-T01`; no hand-maintained duplicate list after registry exists. |
+| `api/src/bin/seed_catalog.rs::font_seeds` | 6 font records with single labels and `kanji_style` values: `zen_maru_gothic`, `kosugi_maru`, `potta_one`, `kiwi_maru`, `wdxl_lubrifont_jp_n`, `ai_generated_seal`. | Locale-neutral font catalog. Do not move to ARB/JSON unless font display names become translated product copy. |
+| `api/src/bin/seed_catalog.rs::material_seeds` | 8 material master records with `label_ja`, `label_en`, `description_ja`, `description_en`: `wood`, `qingtian_stone`, `shoushan_stone`, `balin_stone`, `yili_stone`, `laos_stone`, `xixia_stone`, `frozen_stone`. | `api/content/i18n/catalog/materials.json`. Preserve Chinese-origin material names as topical content, not Chinese translations. |
+| `api/src/bin/seed_catalog.rs::stone_listing_seeds` | 3 published listing records with Japanese/English title, description, story, photo alt derived from title, facet keys, size, and USD/JPY prices. | `api/content/i18n/catalog/stone_listings.json`; keep facet keys, size, listing code, Storage paths, and prices locale-neutral. |
+| `api/src/bin/seed_catalog.rs::facet_tag_seeds` | 6 tag records with Japanese/English labels: `color:green`, `color:yellow`, `color:white`, `pattern:cloud`, `pattern:veined`, `pattern:plain`. | `api/content/i18n/catalog/facet_tags.json`; keep `key`, `facet_type`, and aliases canonical. |
+| `api/src/bin/seed_catalog.rs::country_seeds` | 6 country records with Japanese/English labels and USD/JPY shipping fees: `JP`, `US`, `CA`, `GB`, `AU`, `SG`. | `api/content/i18n/catalog/countries.json`; fees stay in `shipping_fee_by_currency`. |
+| `admin/src/main.rs::new_mock_snapshot` | Mock catalog data for admin/dev with Japanese/English maps for materials, listings, facet tags, countries, and order fixtures. | Treat as fixture data. It can either be generated from the same catalog JSON in `M5`, or kept as a small test fixture that must pass the same missing-key checks. |
+| `web/src/main.rs::new_mock_catalog_source` | Web mock/dev catalog fallback used when Firestore catalog load fails in dev. | After M3/M4, derive from the same catalog JSON or mark as fixture-only so it cannot become a hidden untranslated production source. |
+
+Checkout copy and locale propagation inventory:
+
+| Checkout owner | Current behavior | Migration owner path |
+| --- | --- | --- |
+| `api/src/main.rs::build_checkout_product_name` | Hard-coded Japanese format for `ja*`: `宝石印鑑 ({listing_label}、{shape})`; all other locales use English `Stone seal ({listing_label}; {shape})`. | `api/content/i18n/checkout/<lang>.json` with keys for product name template, separator/punctuation, and shape labels. |
+| `checkout_shape_label_ja` / `checkout_shape_label_en` | Hard-coded labels for `round` and `square`. Non-Japanese locales always use English. | `api/content/i18n/checkout/<lang>.json`, or a shared `shape_labels` map generated from registry-backed checkout copy. |
+| `build_stripe_checkout_session_form` | Adds `lang={order_locale}` to success and cancel URLs, and uses order locale for app-return URLs. Sends `customer_email` and `payment_intent_data[receipt_email]` for Stripe-native receipts. | Keep locale propagation in code, but normalize route code through `config/languages.json`. Receipt language is not currently customized beyond Stripe/customer settings. |
+| `create_order` / `validate_create_order_request` | Validates lowercase BCP-47-like `locale` and `contact.preferred_locale`, then checks both against `supported_locales`. | Registry-backed validation in `M4-T05`; route code should remain the persisted value. |
+| `OrderCheckoutContext::resolve_order_listing_fields` | Resolves listing/material label from order snapshot maps using order locale and default locale. | Keep snapshot resolution; add diagnostics in `M6` when checkout falls back for release-enabled languages. |
+| Gemini Kanji candidates | `reason_language` defaults to `en` if missing; API validates it as a short string and writes it back into candidate responses. Prompt labels support Japanese or English through `reason_language_label`. | Registry-backed `reason_language` mapping in `M4-T06`; not catalog copy, but it is a locale-dependent API field. |
+
+Fallback and preservation rules for later implementation:
+
+- `resolve_localized` currently falls back to `ja`, while this plan's general
+  target fallback is registry fallback, default route code, `en`, then first
+  non-empty value. M4 must intentionally update this order or document why API
+  catalog fallback stays Japanese-first.
+- Admin create/update flows currently edit only `ja` and `en` entries for
+  `label_i18n`, `description_i18n`, `title_i18n`, `story_i18n`, and
+  `alt_i18n`. Some updates preserve unknown keys by inserting into existing
+  maps, but Firestore writes use full map fields. M5 must audit these writes
+  before adding 68-language catalog data.
+- `comparison_texture_ja/en`, `comparison_weight_ja/en`, and
+  `comparison_usage_ja/en` are not `*_i18n` maps. They need a migration target
+  before more languages are enabled.
+- Order snapshots should not be backfilled from changed catalog translations
+  after checkout. New orders should snapshot the catalog maps available at the
+  time of order creation.
+- Existing Chinese-related catalog values are material names and origins such
+  as Qingtian, Shoushan, Balin, Yili, Xixia, Laos stone, and China production
+  references. They are English/Japanese catalog content today, not `zh` or
+  `zhtw` translations. When Chinese locale files are introduced, these values
+  should be translated or intentionally preserved via sidecars according to the
+  catalog translation policy.
 
 ### M1: Registry and Read-Only Tooling
 
