@@ -1720,7 +1720,41 @@ async fn run() -> Result<()> {
     let cfg = load_config().context("failed to load config")?;
     let state = build_state(&cfg).await?;
 
-    let app = Router::new()
+    let app = build_router(state.clone());
+
+    let addr = format!("0.0.0.0:{}", cfg.port);
+    if let Some(project_id) = cfg.firestore_project_id.as_deref() {
+        println!(
+            "hanko web listening on http://localhost:{} mode={} source={} project={} locale={} kanji_api={}",
+            cfg.port,
+            cfg.mode.as_str(),
+            state.source.label(),
+            project_id,
+            cfg.locale,
+            cfg.api_base_url
+        );
+    } else {
+        println!(
+            "hanko web listening on http://localhost:{} mode={} source={} locale={} kanji_api={}",
+            cfg.port,
+            cfg.mode.as_str(),
+            state.source.label(),
+            cfg.locale,
+            cfg.api_base_url
+        );
+    }
+
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .with_context(|| format!("failed to bind {addr}"))?;
+
+    axum::serve(listener, app)
+        .await
+        .context("web server terminated unexpectedly")
+}
+
+fn build_router(state: AppState) -> Router {
+    Router::new()
         .route("/", get(handle_top))
         .route("/robots.txt", get(handle_robots_txt))
         .route("/sitemap.xml", get(handle_sitemap_xml))
@@ -1766,37 +1800,7 @@ async fn run() -> Result<()> {
             header::CACHE_CONTROL,
             HeaderValue::from_static("no-cache, no-store, must-revalidate"),
         ))
-        .with_state(state.clone());
-
-    let addr = format!("0.0.0.0:{}", cfg.port);
-    if let Some(project_id) = cfg.firestore_project_id.as_deref() {
-        println!(
-            "hanko web listening on http://localhost:{} mode={} source={} project={} locale={} kanji_api={}",
-            cfg.port,
-            cfg.mode.as_str(),
-            state.source.label(),
-            project_id,
-            cfg.locale,
-            cfg.api_base_url
-        );
-    } else {
-        println!(
-            "hanko web listening on http://localhost:{} mode={} source={} locale={} kanji_api={}",
-            cfg.port,
-            cfg.mode.as_str(),
-            state.source.label(),
-            cfg.locale,
-            cfg.api_base_url
-        );
-    }
-
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .with_context(|| format!("failed to bind {addr}"))?;
-
-    axum::serve(listener, app)
-        .await
-        .context("web server terminated unexpectedly")
+        .with_state(state)
 }
 
 async fn build_state(cfg: &AppConfig) -> Result<AppState> {
@@ -5394,11 +5398,13 @@ fn read_array_field(data: &BTreeMap<String, JsonValue>, key: &str) -> Vec<JsonVa
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::to_bytes;
+    use axum::body::{Body, to_bytes};
     use axum::extract::Form;
+    use axum::http::Request;
     use serde_json::json;
     use std::collections::{BTreeMap, HashMap};
     use std::sync::Arc;
+    use tower::ServiceExt;
 
     const TEST_SITE_BASE_URL: &str = "https://finitefield.org";
     const TEST_ALT_SITE_BASE_URL: &str = "https://inkanfield.org";
@@ -5433,6 +5439,31 @@ mod tests {
             default_locale: "ja".to_owned(),
             site_base_url: TEST_SITE_BASE_URL.to_owned(),
         }
+    }
+
+    async fn route_get(path: &str) -> Response {
+        build_router(mock_state())
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(path)
+                    .body(Body::empty())
+                    .expect("test request should build"),
+            )
+            .await
+            .expect("router should respond")
+    }
+
+    async fn route_get_html(path: &str) -> (StatusCode, String) {
+        let response = route_get(path).await;
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should be readable");
+        (
+            status,
+            String::from_utf8(body.to_vec()).expect("response body should be utf-8"),
+        )
     }
 
     fn language_registry_entry(
@@ -5942,6 +5973,44 @@ mod tests {
             about_html.contains("STONE SIGNATURE is a service for choosing a gemstone seal online")
         );
         assert!(!about_html.contains("宝石でつくる、あなたの印鑑"));
+    }
+
+    #[tokio::test]
+    async fn web_router_resolves_supported_and_unknown_locale_prefixes() {
+        let (about_status, about_html) = route_get_html("/about").await;
+        assert_eq!(about_status, StatusCode::OK);
+        assert!(about_html.contains(r#"<html lang="en">"#));
+        assert!(
+            about_html.contains(r#"<link rel="canonical" href="https://finitefield.org/about">"#)
+        );
+        assert!(about_html.contains("Your seal, made from gemstone"));
+
+        let (ja_about_status, ja_about_html) = route_get_html("/ja/about").await;
+        assert_eq!(ja_about_status, StatusCode::OK);
+        assert!(ja_about_html.contains(r#"<html lang="ja">"#));
+        assert!(
+            ja_about_html
+                .contains(r#"<link rel="canonical" href="https://finitefield.org/ja/about">"#)
+        );
+        assert!(ja_about_html.contains("宝石でつくる、あなたの印鑑"));
+
+        let (en_about_status, en_about_html) = route_get_html("/en/about").await;
+        assert_eq!(en_about_status, StatusCode::OK);
+        assert!(en_about_html.contains(r#"<html lang="en">"#));
+        assert!(
+            en_about_html
+                .contains(r#"<link rel="canonical" href="https://finitefield.org/about">"#),
+            "/en/about must remain non-canonical English compatibility"
+        );
+
+        for path in ["/zhtw/about", "/zhtw/blog/what-is-a-hanko", "/xx/about"] {
+            let (status, body) = route_get_html(path).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{path} should 404");
+            assert!(
+                !body.contains("Your seal, made from gemstone"),
+                "{path} must not fall back to English content"
+            );
+        }
     }
 
     #[test]

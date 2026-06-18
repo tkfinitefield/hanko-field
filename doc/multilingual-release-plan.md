@@ -1993,7 +1993,7 @@ when run by itself.
   Output: `web/content/blog/<slug>/<lang>.html` plus language-keyed metadata.
   Done when: English and Japanese blog pages retain their current URLs and the
   `M0-T05` migration-safety checklist is satisfied.
-- [ ] `M3-T07` Add web routing tests.
+- [x] `M3-T07` Add web routing tests.
   Output: tests for `/about`, `/ja/about`, `/zhtw/...`, `/en/...`, and unknown
   locale prefixes.
   Done when: unknown locale prefixes return 404 instead of English content.
@@ -2286,6 +2286,40 @@ for (const slug of slugs) {
   }
 }
 NODE
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T07 Web Routing Tests
+
+Completed on 2026-06-18. Added router-level web tests for the public localized
+route behavior defined in the URL rules.
+
+Implementation notes:
+
+- Extracted the Axum router construction into `build_router(state)` so the
+  production server and tests use the same route table.
+- Added an HTTP-level test for `/about`, `/ja/about`, `/en/about`,
+  `/zhtw/about`, `/zhtw/blog/what-is-a-hanko`, and `/xx/about`.
+- Verified `/about` renders English content with the unprefixed English
+  canonical URL.
+- Verified `/ja/about` renders Japanese content with the Japanese canonical URL.
+- Preserved the current `/en/about` compatibility behavior while asserting the
+  canonical URL remains unprefixed `/about`.
+- Verified disabled or unknown locale prefixes return `404 Not Found` and do
+  not fall back to English page content.
+- Added `tower` as a web dev-dependency for `ServiceExt::oneshot` in routing
+  tests.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml web_router_resolves_supported_and_unknown_locale_prefixes
+cargo test --manifest-path web/Cargo.toml
 make i18n-registry-test
 make i18n-status-test
 make i18n-status
