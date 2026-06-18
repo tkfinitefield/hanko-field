@@ -1439,7 +1439,7 @@ Fastlane setup readiness notes:
 - [x] `M1-T04` Add registry fixtures.
   Output: focused test fixtures for `en`, `ja`, `zh`, `zhtw`, `no`, and RTL.
   Done when: fixture tests cover route code, BCP-47, Flutter, and store fields.
-- [ ] `M1-T05` Document registry update rules.
+- [x] `M1-T05` Document registry update rules.
   Output: short maintainer notes for adding, disabling, or indexing a language.
   Done when: future language changes do not require reading implementation code.
 
@@ -1543,6 +1543,76 @@ Test command:
 ```sh
 make i18n-registry-test
 ```
+
+#### M1-T05 Registry Update Rules
+
+Completed on 2026-06-18. Use these notes when changing
+`config/languages.json`; future language changes should not require reading the
+parser or status script implementation.
+
+Registry edit checklist:
+
+- Edit only `config/languages.json` for registry data changes.
+- Keep `route_code` stable once a language has shipped. It is used in file
+  names, stored settings, web URLs, checkout return URLs, diagnostics, and
+  translation sidecars.
+- Keep the array order aligned with the Section 4 route-code list unless a
+  future task deliberately redefines ordering.
+- Keep JSON, not YAML, so `no` remains the Norwegian route code and not a
+  boolean-like value.
+- Use `fallback=null` only for the default route, currently `en`. Every other
+  non-null fallback must point to an existing route code and must not point to
+  itself.
+- Use `url_prefix=""` only for `en`; every other web route uses its `route_code`
+  as the prefix.
+- Keep `zh` as Simplified Chinese with BCP-47 `zh-Hans` and Flutter
+  `languageCode=zh`, `scriptCode=Hans`.
+- Keep `zhtw` as Traditional Chinese with BCP-47 `zh-Hant` and Flutter
+  `languageCode=zh`, `scriptCode=Hant`.
+- Keep `ar`, `fa`, `he`, `ps`, and `ur` marked `rtl`; all other current entries
+  are `ltr`.
+- Use `JPY` for `ja`; use `USD` for other locales until a product or pricing
+  task explicitly changes currency behavior.
+- Store locale fields may stay null until M8 validates platform support. Do not
+  guess Google Play or App Store locale identifiers when enabling release.
+- Update `scripts/i18n/fixtures/registry-core.json` when changing `en`, `ja`,
+  `zh`, `zhtw`, `no`, or any RTL registry assumptions.
+
+Flag transitions:
+
+| Goal | Required registry fields | Required evidence |
+| --- | --- | --- |
+| Render web route for QA | `web.enabled=true`, `web.indexed=false` | `make i18n-status` lists expected web files, and the route has content or an approved fallback plan. |
+| Index web route publicly | `web.enabled=true`, `web.indexed=true` | M3 SEO, canonical, `hreflang`, sitemap, and translated page-content checks pass. |
+| Include in generated app localization | `app.enabled=true` | M2 ARB/settings assets exist, placeholder checks pass, and app startup does not fall back unexpectedly. |
+| Show in app language settings | `app.enabled=true`, `app.selectable=true` | M2 language settings UI can display the native name and preserve saved `route_code`. |
+| Generate store metadata | `release.enabled=true`, platform store locale fields set where supported | M8 metadata generation validates required fields and secret/signing guardrails are in place. |
+
+Disabling rules:
+
+- Prefer turning off the narrowest flag instead of removing the entry.
+- To stop public discovery but keep QA routes, set `web.indexed=false` and keep
+  `web.enabled=true`.
+- To stop web rendering, set `web.enabled=false` and verify no sitemap,
+  language-switcher, or checkout return path still expects that route.
+- To remove a language from app selection, set `app.selectable=false` first; set
+  `app.enabled=false` only after saved user preferences and generated assets
+  have a fallback/migration path.
+- To stop store metadata generation, set `release.enabled=false` and keep store
+  locale fields as historical mapping data unless platform support was wrong.
+- Do not delete shipped route codes without a separate migration and rollback
+  plan covering URLs, saved app settings, checkout returns, and sidecars.
+
+Required validation after any registry edit:
+
+```sh
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status
+```
+
+Run `make i18n-status-test` when changing status-report expectations, file
+layout rules, or enabled-language behavior.
 
 ### M2: Flutter App Migration
 
