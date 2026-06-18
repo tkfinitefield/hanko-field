@@ -9,16 +9,25 @@ void main() {
     final registry = await AppLanguageRegistry.load();
 
     expect(registry.selectableLanguages.map((language) => language.routeCode), [
+      'ar',
       'en',
       'ja',
+      'zh',
+      'zhtw',
     ]);
     expect(
       registry.selectableLanguages.map((language) => language.nativeName),
-      ['English', '日本語'],
+      ['العربية', 'English', '日本語', '简体中文', '繁體中文'],
     );
     expect(
       registry.selectableLanguages.map((language) => language.englishName),
-      ['English', 'Japanese'],
+      [
+        'Arabic',
+        'English',
+        'Japanese',
+        'Simplified Chinese',
+        'Traditional Chinese',
+      ],
     );
   });
 
@@ -106,19 +115,25 @@ void main() {
     expect(registry.routeCodeForLocale(const Locale('zh')), 'zh');
   });
 
-  test(
-    'resolves route code for disabled checked-in migration locales',
-    () async {
-      final registry = await AppLanguageRegistry.load();
+  test('resolves route code for checked-in pilot locales', () async {
+    final registry = await AppLanguageRegistry.load();
 
-      expect(
-        registry.routeCodeForLocale(
-          const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
-        ),
-        'zhtw',
-      );
-    },
-  );
+    expect(
+      registry.routeCodeForLocale(
+        const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+      ),
+      'zhtw',
+    );
+    expect(registry.enabledLanguageForRouteCode('ar')?.locale, Locale('ar'));
+    expect(
+      registry
+          .enabledLanguageForLocale(
+            const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
+          )
+          ?.routeCode,
+      'zh',
+    );
+  });
 
   test('fallback route code preserves traditional Chinese route code', () {
     expect(

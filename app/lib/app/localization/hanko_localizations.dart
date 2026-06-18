@@ -4,7 +4,13 @@ import '../../l10n/generated/generated_hanko_localizations.dart';
 
 typedef HankoLocalizations = GeneratedHankoLocalizations;
 
-const hankoSupportedLocales = [Locale('en'), Locale('ja')];
+const hankoSupportedLocales = [
+  Locale('en'),
+  Locale('ja'),
+  Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
+  Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+  Locale('ar'),
+];
 
 const hankoLocalizationsDelegates =
     GeneratedHankoLocalizations.localizationsDelegates;

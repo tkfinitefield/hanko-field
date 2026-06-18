@@ -3450,7 +3450,7 @@ git diff --cached --check
   Output: registry flags for `zh`, `zhtw`, and `ar` with `web.indexed=false`
   and `release.enabled=false`.
   Done when: pilot languages render in QA without public indexing.
-- [ ] `M7-T02` Fill pilot app content.
+- [x] `M7-T02` Fill pilot app content.
   Output: ARB and settings JSON for `zh`, `zhtw`, and `ar`.
   Done when: pilot app screens launch without fallback for primary UI.
 - [ ] `M7-T03` Fill pilot web and payment content.
@@ -3527,6 +3527,55 @@ cargo fmt --manifest-path web/Cargo.toml -- --check
 cargo test --manifest-path web/Cargo.toml
 git diff --check
 git diff --cached --check
+```
+
+#### M7-T02 Pilot App Content
+
+Completed on 2026-06-18. Enabled `zh`, `zhtw`, and `ar` for app runtime
+selection and added the app content files required for primary app screens to
+launch without missing localization files or English fallback routing.
+
+Implementation notes:
+
+- Updated `config/languages.json`:
+  - `zh.app.enabled=true`
+  - `zh.app.selectable=true`
+  - `zhtw.app.enabled=true`
+  - `zhtw.app.selectable=true`
+  - `ar.app.enabled=true`
+  - `ar.app.selectable=true`
+  - `release.enabled=false` remains set for all three pilot languages.
+- Added `app/lib/l10n/app_ar.arb` and regenerated Flutter localization output.
+- Kept existing `app/lib/l10n/app_zh.arb` and `app/lib/l10n/app_zh_Hant.arb`.
+- Expanded `hankoSupportedLocales` to include `ar`, `zh-Hans`, and `zh-Hant`.
+- Added Settings content JSON for `ar`, `zh`, and `zhtw`.
+- Updated Settings content loading to use route codes, so `zh` and `zhtw` do
+  not collapse into the same `zh` file.
+- Added sidecars for same-as-English pilot app and Settings values with
+  `locale_not_release_enabled`, while preserving explicit reasons for brand,
+  URL, legal-entity, and payment-provider values.
+- Updated app tests for generated localizations, registry selectability, and
+  Settings content loading.
+
+M0-T05 preservation evidence:
+
+- Existing English and Japanese app copy remains unchanged.
+- Existing Simplified and Traditional Chinese ARB files remain in place.
+- Arabic app copy is renderable but not release-ready; same-as-English values
+  are explicitly approved as `locale_not_release_enabled`.
+- Pilot languages remain `release.enabled=false`, so store metadata and
+  fastlane release paths are still inactive.
+- Rollback path: set `app.enabled=false` and `app.selectable=false` for `zh`,
+  `zhtw`, and `ar`, remove the pilot app/settings files and sidecars, rerun
+  Flutter localization generation, and reopen `M7-T02`.
+
+Validation:
+
+```sh
+flutter gen-l10n
+make i18n-check
+make i18n-ci
+flutter test test/generated_hanko_localizations_test.dart test/language_registry_test.dart test/settings_content_test.dart
 ```
 
 ### M8: Store Metadata and fastlane

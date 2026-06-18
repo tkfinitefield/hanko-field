@@ -270,7 +270,7 @@ class _SettingsDetailPage extends StatelessWidget {
           _SettingsDestination.privacy ||
           _SettingsDestination.terms ||
           _SettingsDestination.contact => _SettingsContentLoader(
-            languageCode: l10n.locale.languageCode,
+            routeCode: fallbackRouteCodeForLocale(l10n.locale),
             destination: destination,
           ),
           _SettingsDestination.version => const _VersionSettingsContent(),
@@ -282,11 +282,11 @@ class _SettingsDetailPage extends StatelessWidget {
 
 class _SettingsContentLoader extends StatelessWidget {
   const _SettingsContentLoader({
-    required this.languageCode,
+    required this.routeCode,
     required this.destination,
   });
 
-  final String languageCode;
+  final String routeCode;
   final _SettingsDestination destination;
 
   @override
@@ -294,7 +294,7 @@ class _SettingsContentLoader extends StatelessWidget {
     final l10n = context.l10n;
     return FutureBuilder<SettingsContentBundle>(
       future: SettingsContentBundle.forLanguage(
-        languageCode,
+        routeCode,
         bundle: DefaultAssetBundle.of(context),
       ),
       builder: (context, snapshot) {

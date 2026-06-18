@@ -24,6 +24,17 @@ void main() {
     expect(content.contact.options[1].value, 'dev@finitefield.org');
   });
 
+  test('loads pilot settings content from route-code JSON assets', () async {
+    for (final routeCode in ['ar', 'zh', 'zhtw']) {
+      final content = await SettingsContentBundle.forLanguage(routeCode);
+
+      expect(content.about.heading, 'Your seal, made from gemstone');
+      expect(content.howItWorks.steps, hasLength(4));
+      expect(content.faq.items, hasLength(6));
+      expect(content.contact.options[1].value, 'dev@finitefield.org');
+    }
+  });
+
   test(
     'falls back to English settings content for unsupported app locale',
     () async {

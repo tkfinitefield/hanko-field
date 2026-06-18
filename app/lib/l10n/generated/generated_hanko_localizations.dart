@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
+import 'generated_hanko_localizations_ar.dart';
 import 'generated_hanko_localizations_en.dart';
 import 'generated_hanko_localizations_ja.dart';
 import 'generated_hanko_localizations_zh.dart';
@@ -98,6 +99,7 @@ abstract class GeneratedHankoLocalizations {
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
+    Locale('ar'),
     Locale('en'),
     Locale('ja'),
     Locale('zh'),
@@ -2536,7 +2538,7 @@ class _GeneratedHankoLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      <String>['en', 'ja', 'zh'].contains(locale.languageCode);
+      <String>['ar', 'en', 'ja', 'zh'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_GeneratedHankoLocalizationsDelegate old) => false;
@@ -2557,6 +2559,8 @@ GeneratedHankoLocalizations lookupGeneratedHankoLocalizations(Locale locale) {
 
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
+    case 'ar':
+      return GeneratedHankoLocalizationsAr();
     case 'en':
       return GeneratedHankoLocalizationsEn();
     case 'ja':

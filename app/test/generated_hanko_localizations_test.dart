@@ -6,6 +6,7 @@ import 'package:hankofield/l10n/generated/generated_hanko_localizations.dart';
 void main() {
   test('generated localizations support migration baseline locales', () {
     expect(GeneratedHankoLocalizations.supportedLocales, const [
+      Locale('ar'),
       Locale('en'),
       Locale('ja'),
       Locale('zh'),
@@ -23,13 +24,27 @@ void main() {
   });
 
   test('HankoLocalizations compatibility API uses generated localization', () {
-    expect(hankoSupportedLocales, const [Locale('en'), Locale('ja')]);
+    expect(hankoSupportedLocales, const [
+      Locale('en'),
+      Locale('ja'),
+      Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
+      Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+      Locale('ar'),
+    ]);
 
     final l10n = lookupGeneratedHankoLocalizations(const Locale('ja'));
     expect(l10n.locale, const Locale('ja'));
     expect(l10n.designTipPrefix, 'ヒント: ');
     expect(l10n.orderStatusPaid, '支払い済み');
     expect(l10n.settingsVersionMessage('1.2.3'), 'バージョン 1.2.3');
+  });
+
+  test('generated lookup resolves Arabic pilot locale', () {
+    final l10n = lookupGeneratedHankoLocalizations(const Locale('ar'));
+
+    expect(l10n.localeName, 'ar');
+    expect(l10n.appTitle, 'STONE SIGNATURE');
+    expect(l10n.settingsLanguageTitle, 'App language');
   });
 
   testWidgets('generated delegate loads Chinese migration assets', (

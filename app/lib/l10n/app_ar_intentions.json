@@ -34,6 +34,8 @@
   "designGenderFemale": "locale_not_release_enabled",
   "designKanjiStyleLabel": "locale_not_release_enabled",
   "designKanjiStyleJapanese": "locale_not_release_enabled",
+  "designKanjiStyleChinese": "locale_not_release_enabled",
+  "designKanjiStyleTaiwanese": "locale_not_release_enabled",
   "suggestKanji": "locale_not_release_enabled",
   "designKanjiTipTitle": "locale_not_release_enabled",
   "designKanjiTipMessage": "locale_not_release_enabled",

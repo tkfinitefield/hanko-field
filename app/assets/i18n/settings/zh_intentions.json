@@ -1,0 +1,688 @@
+{
+  "entries": [
+    {
+      "key_path": "about.heading",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Your seal, made from gemstone",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "about.body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "STONE SIGNATURE helps you choose a gemstone seal online, design the seal impression, and place an order from the app. Review the material and one-of-a-kind stone listings as you find the seal that fits you.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "about.points[0].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Custom design",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "about.points[0].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Turn your name into a kanji-based seal design with meaning, balance, and a personal sense of intention.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "about.points[1].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Natural gemstones",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "about.points[1].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Choose the seal material while reviewing colors, patterns, and natural character unique to each stone.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "about.points[2].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Handcrafted with care",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "about.points[2].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "After payment and design confirmation, each custom seal is produced one by one by our partner workshop.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "about.tagline",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Your name. Your stone. Your signature.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.heading",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Create a one-of-a-kind seal",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.intro",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Move from name selection to a saved design, gemstone choice, checkout, and delivery without losing your place.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.steps[0].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Choose your name and kanji",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.steps[0].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Enter your name, review kanji candidates, and choose the characters that match your intention.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.steps[1].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Generate your seal design",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.steps[1].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Pick a seal style, generate design variants, and save the version you want to keep on this device.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.steps[2].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Select a gemstone",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.steps[2].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Browse one-of-a-kind stones, review details and availability, then pair a stone with your saved seal.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.steps[3].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Checkout and receive your seal",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.steps[3].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Confirm shipping details, agree to the terms, complete payment through Stripe Checkout, and track the order by order number and email.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.summaryTitle",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Handcrafted with care, delivered to you.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.summaryBody",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Each seal is made to order by our partner workshop after payment and design confirmation. Production usually takes 5-10 business days, and shipping usually takes about 7-14 days after dispatch.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.heading",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Frequently asked questions",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[0].question",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "How is kanji selected?",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[0].answer",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Kanji is suggested from your name, the desired meaning, and the balance of the seal design. You can review candidates before choosing the design direction.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[1].question",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Can I change my order after payment?",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[1].answer",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Because each seal is custom-made, changes may not be possible after production starts. Review the design, stone, shipping details, and terms before completing payment.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[2].question",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "How long does production take?",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[2].answer",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Production usually takes 5-10 business days after payment and design confirmation. Shipping usually takes about 7-14 days after dispatch.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[3].question",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Do you ship internationally?",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[3].answer",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Orders are shipped from our partner workshop in China. Customs duties, import taxes, and clearance fees may be charged on receipt and are the customer's responsibility.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[4].question",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Are gemstones one of a kind?",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[4].answer",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Yes. Natural stones vary in color, pattern, and texture. These differences are part of the material and are not treated as defects.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[5].question",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "How do I track my order?",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "faq.items[5].answer",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Use Order Lookup with your order number and email address. Tracking details will appear there when shipment information is available.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.updated",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Last updated: May 16, 2025",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.intro",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "This app displays the privacy policy in an app-friendly format and references the official web policy for the latest legal text.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.officialLinkLabel",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Official privacy policy",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.officialUrl",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "https://finitefield.org/en/privacy/",
+      "target_locale": "zh",
+      "reason_code": "url_or_email",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.sections[0].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Information we collect",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.sections[0].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "We collect information you provide directly, such as your name, email address, shipping details, and order details. Saved seal designs and preview images remain on this device until you delete them.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.sections[1].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "How we use information",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.sections[1].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "We use information to provide the service, process orders, communicate important updates, and improve the app experience.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.sections[2].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Sharing information",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.sections[2].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "We do not sell personal information. We may share information with service providers needed for payment, production, delivery, support, legal compliance, or protection of rights.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.sections[3].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Retention and local storage",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.sections[3].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Order-related information is retained as required for service operation and legal obligations. Local saved designs are stored only on this device and are not synced across devices in the MVP.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.sections[4].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Contact",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.sections[4].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "For privacy questions, use the contact guidance in Settings or the official privacy policy page.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.updated",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Last updated: May 22, 2025",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.intro",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "These terms summarize the conditions for using STONE SIGNATURE in the app. The official web terms remain the legal source of truth.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.officialLinkLabel",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Official terms of service",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.officialUrl",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "https://finitefield.org/terms",
+      "target_locale": "zh",
+      "reason_code": "url_or_email",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[0].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Scope",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[0].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "The service is operated by Finite Field, K.K. Customers are deemed to agree to the terms when they complete the order process.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[1].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Orders and contract formation",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[1].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "An order is treated as received when required information is entered and the order process is completed. A sales contract is formed when payment is confirmed and an order confirmation notice is sent.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[2].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Fees, payment, and duties",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[2].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Prices are shown on each product page. Payment is made in advance through Stripe Checkout. Customs duties, import taxes, and clearance fees may apply and are the customer's responsibility.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[3].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Production and delivery",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[3].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Each item is made to order by our partner workshop in China. Production usually takes 5-10 business days and shipping usually takes about 7-14 days after dispatch.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[4].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Cancellations, returns, and exchanges",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[4].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Because custom seals are made to order, cancellations, returns, and exchanges are not accepted after production starts, except for significant damage or engraving errors caused by our fault.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[5].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Governing law and language",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[5].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "The terms are governed by the laws of Japan. If translated versions differ, the Japanese version prevails.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.heading",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "We are here to help.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.intro",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "For order, shipping, payment, or app questions, use the official inquiry form or email support guidance below. Include your order number when the question is about an order.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.options[0].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Send an inquiry",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.options[0].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Use the official contact form for questions about orders, shipping, returns, privacy, or account support.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.options[0].value",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "https://finitefield.org/en/contact/",
+      "target_locale": "zh",
+      "reason_code": "url_or_email",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.options[1].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Email support",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.options[1].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "If your mail app is easier, include your order number, email address used at checkout, and a short description.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.options[1].value",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "dev@finitefield.org",
+      "target_locale": "zh",
+      "reason_code": "url_or_email",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.options[2].title",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Before contacting us",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.options[2].body",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Order status can be checked from Order Lookup with your order number and email address.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.options[2].value",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "Order Lookup",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.replyNote",
+      "source_file": "app/assets/i18n/settings/en.json",
+      "source_value": "We usually reply within 2 business days.",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    }
+  ]
+}

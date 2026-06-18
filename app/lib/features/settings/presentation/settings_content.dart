@@ -22,12 +22,15 @@ class SettingsContentBundle {
   static const _assetRoot = 'assets/i18n/settings';
 
   static Future<SettingsContentBundle> forLanguage(
-    String languageCode, {
+    String routeCode, {
     AssetBundle? bundle,
   }) async {
-    final normalized = languageCode.trim().toLowerCase();
+    final normalized = routeCode.trim().toLowerCase();
     final assetBundle = bundle ?? rootBundle;
-    final assetPath = '$_assetRoot/${normalized == 'ja' ? 'ja' : 'en'}.json';
+    final assetName = _supportedAssetNames.contains(normalized)
+        ? normalized
+        : 'en';
+    final assetPath = '$_assetRoot/$assetName.json';
     final source = await assetBundle.loadString(assetPath);
     return SettingsContentBundle.fromJson(_decodeObject(source, assetPath));
   }
@@ -45,6 +48,8 @@ class SettingsContentBundle {
     );
   }
 }
+
+const _supportedAssetNames = {'ar', 'en', 'ja', 'zh', 'zhtw'};
 
 class SettingsAboutContent {
   const SettingsAboutContent({
