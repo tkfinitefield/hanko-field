@@ -1,0 +1,201 @@
+{
+  "format_version": 1,
+  "task": "M9-T04",
+  "date": "2026-06-18",
+  "tier_policy": {
+    "tier1_full": "Non-English locales with web.indexed=true or release.enabled=true require full app/web/release layout QA before public release.",
+    "tier2_screenshot": "Non-English app-selectable or web-enabled locales that are not indexed or release-enabled require screenshot/layout QA before promotion.",
+    "tier3_mechanical": "Non-English disabled locales require mechanical i18n checks and stub checks until their translation batch is ready."
+  },
+  "tiers": {
+    "tier1_full": [
+      {
+        "locale": "ja",
+        "status": "pass",
+        "surfaces": [
+          "app",
+          "web"
+        ],
+        "evidence": [
+          {
+            "kind": "i18n_check",
+            "command": "make i18n-check",
+            "path": "scripts/i18n/check.mjs"
+          },
+          {
+            "kind": "app_layout",
+            "command": "cd app && flutter test test/widget_test.dart test/generated_hanko_localizations_test.dart test/pilot_layout_qa_test.dart test/rtl_overflow_test.dart",
+            "path": "app/test/widget_test.dart"
+          },
+          {
+            "kind": "web_layout",
+            "command": "cargo test --manifest-path web/Cargo.toml web_router_resolves_supported_and_unknown_locale_prefixes -- --nocapture",
+            "path": "web/src/main.rs"
+          }
+        ],
+        "notes": "Japanese is already public-indexed. Existing widget, generated-localization, and web locale routing tests cover the current indexed Japanese state."
+      }
+    ],
+    "tier2_screenshot": [
+      {
+        "locale": "ar",
+        "status": "pass",
+        "surfaces": [
+          "app",
+          "web",
+          "rtl"
+        ],
+        "evidence": [
+          {
+            "kind": "i18n_check",
+            "command": "make i18n-check LANGS=ar"
+          },
+          {
+            "kind": "app_layout",
+            "command": "cd app && flutter test test/pilot_layout_qa_test.dart test/rtl_overflow_test.dart",
+            "path": "app/test/pilot_layout_qa_test.dart"
+          },
+          {
+            "kind": "screenshot_qa",
+            "command": "sips -g pixelWidth -g pixelHeight doc/qa/m7-t05/screenshots/web-ar-about-mobile.png doc/qa/m7-t05/screenshots/web-ar-payment-success-mobile.png",
+            "path": "doc/qa/m7-t05/screenshots/web-ar-about-mobile.png"
+          }
+        ],
+        "notes": "Arabic remains noindex and release-disabled; M7-T05 records RTL web screenshots and app RTL probes."
+      },
+      {
+        "locale": "zh",
+        "status": "pass",
+        "surfaces": [
+          "app",
+          "web"
+        ],
+        "evidence": [
+          {
+            "kind": "i18n_check",
+            "command": "make i18n-check LANGS=zh"
+          },
+          {
+            "kind": "app_layout",
+            "command": "cd app && flutter test test/pilot_layout_qa_test.dart",
+            "path": "app/test/pilot_layout_qa_test.dart"
+          },
+          {
+            "kind": "screenshot_qa",
+            "command": "sips -g pixelWidth -g pixelHeight doc/qa/m7-t05/screenshots/web-zh-top-mobile.png",
+            "path": "doc/qa/m7-t05/screenshots/web-zh-top-mobile.png"
+          }
+        ],
+        "notes": "Simplified Chinese remains noindex and release-disabled; M7-T05 records the web top screenshot and app settings probe."
+      },
+      {
+        "locale": "zhtw",
+        "status": "pass",
+        "surfaces": [
+          "app",
+          "web"
+        ],
+        "evidence": [
+          {
+            "kind": "i18n_check",
+            "command": "make i18n-check LANGS=zhtw"
+          },
+          {
+            "kind": "app_layout",
+            "command": "cd app && flutter test test/pilot_layout_qa_test.dart",
+            "path": "app/test/pilot_layout_qa_test.dart"
+          },
+          {
+            "kind": "screenshot_qa",
+            "command": "sips -g pixelWidth -g pixelHeight doc/qa/m7-t05/screenshots/web-zhtw-about-mobile.png",
+            "path": "doc/qa/m7-t05/screenshots/web-zhtw-about-mobile.png"
+          }
+        ],
+        "notes": "Traditional Chinese remains noindex and release-disabled; M7-T05 records the web about screenshot and app design probe."
+      }
+    ],
+    "tier3_mechanical": [
+      {
+        "locales": [
+          "az",
+          "be",
+          "bg",
+          "bn",
+          "cs",
+          "da",
+          "de",
+          "el",
+          "es",
+          "et",
+          "fa",
+          "fi",
+          "fr",
+          "gu",
+          "he",
+          "hi",
+          "hr",
+          "hu",
+          "hy",
+          "id",
+          "is",
+          "it",
+          "ka",
+          "kk",
+          "km",
+          "kn",
+          "ko",
+          "ky",
+          "lo",
+          "lt",
+          "lv",
+          "mk",
+          "ml",
+          "mn",
+          "mr",
+          "ms",
+          "my",
+          "ne",
+          "nl",
+          "no",
+          "pa",
+          "pl",
+          "ps",
+          "pt",
+          "ro",
+          "ru",
+          "si",
+          "sk",
+          "sl",
+          "sq",
+          "sr",
+          "sv",
+          "sw",
+          "ta",
+          "te",
+          "tg",
+          "th",
+          "tl",
+          "tr",
+          "uk",
+          "ur",
+          "uz",
+          "vi"
+        ],
+        "status": "pass",
+        "evidence": [
+          {
+            "kind": "mechanical_check",
+            "command": "make i18n-check LANGS=all",
+            "path": "scripts/i18n/check.mjs"
+          },
+          {
+            "kind": "stub_check",
+            "command": "make i18n-stubs-check",
+            "path": "scripts/i18n/stubs.mjs"
+          }
+        ],
+        "notes": "These locales are not app-selectable, web-indexed, or release-enabled. They must move to Tier 2 or Tier 1 with fresh evidence before enablement."
+      }
+    ]
+  }
+}

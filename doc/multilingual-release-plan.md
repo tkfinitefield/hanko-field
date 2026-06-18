@@ -4380,7 +4380,7 @@ git diff --cached --check
   Output: intention sidecars for approved shared English or legal terms.
   Done when: non-English files have no unapproved English leftovers and the
   `M0-T05` intention sidecar gate is satisfied.
-- [ ] `M9-T04` Run tiered layout QA.
+- [x] `M9-T04` Run tiered layout QA.
   Output: full QA for Tier 1, screenshot QA for Tier 2, mechanical checks for
   Tier 3.
   Done when: layout issues are fixed before indexing or release enablement.
@@ -4546,6 +4546,81 @@ LANGS=all node scripts/i18n/intentions.mjs
 make i18n-holdouts-check
 make i18n-holdouts-test
 make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M9-T04 Tiered Layout QA
+
+Completed on 2026-06-18. Added a tiered layout QA evidence gate for
+localization release readiness.
+
+Implementation notes:
+
+- Added `scripts/i18n/layout_qa.mjs`.
+- Added `scripts/i18n/layout_qa.test.mjs`.
+- Added Make targets:
+  - `make i18n-layout-qa`
+  - `make i18n-layout-qa-check`
+  - `make i18n-layout-qa-test`
+- Added layout QA checks to `make i18n-ci`.
+- Added machine-readable QA evidence:
+  - `doc/qa/m9-t04/layout-qa.json`
+  - `doc/qa/m9-t04/README.md`
+- The checker derives expected tiers from `config/languages.json`:
+  - Tier 1: non-English locales with `web.indexed=true` or
+    `release.enabled=true`.
+  - Tier 2: non-English locales that are app-enabled/app-selectable or
+    web-enabled but not indexed or release-enabled.
+  - Tier 3: non-English locales with app, web, and release flags disabled.
+- The checker also verifies web templates bind `<html lang>` and `<html dir>`
+  to the selected locale and verifies all RTL registry languages are covered by
+  the web direction helper.
+
+Current tier results:
+
+- Tier 1 full QA: `ja`
+- Tier 2 screenshot QA: `ar`, `zh`, `zhtw`
+- Tier 3 mechanical QA: the remaining 63 non-English route languages
+- `make i18n-layout-qa-check` passes with no layout QA issues.
+
+Evidence:
+
+- Tier 1 `ja` references existing app widget/localization tests and web locale
+  routing tests.
+- Tier 2 `ar`, `zh`, and `zhtw` references the M7-T05 screenshot QA and app
+  pilot/RTL layout probes.
+- Tier 3 references `make i18n-check LANGS=all` and
+  `make i18n-stubs-check`.
+- Current `ar`, `zh`, and `zhtw` remain `noindex` and release-disabled; this
+  task does not promote them.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or release-enabled.
+- No credentials, signing files, uploads, polling, streaming, SSE, or WebSocket
+  behavior were added.
+- The gate is read-only and blocks future promotion if tier evidence is
+  missing or stale.
+- Rollback path: remove `scripts/i18n/layout_qa.*`, remove the Makefile
+  targets and `i18n-ci` entries, remove `doc/qa/m9-t04/`, and reopen
+  `M9-T04`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/layout_qa.mjs
+node --check scripts/i18n/layout_qa.test.mjs
+jq empty doc/qa/m9-t04/layout-qa.json
+make i18n-layout-qa-check
+make i18n-layout-qa-test
+cd app && flutter test test/pilot_layout_qa_test.dart test/rtl_overflow_test.dart test/generated_hanko_localizations_test.dart
+cargo test --manifest-path web/Cargo.toml web_router_resolves_supported_and_unknown_locale_prefixes -- --nocapture
+cargo test --manifest-path web/Cargo.toml pilot_payment_routes_render_localized_copy -- --nocapture
+make i18n-check
+make i18n-stubs-check
 make i18n-ci
 git diff --check
 git diff --cached --check
