@@ -1,0 +1,7 @@
+{
+  "@@locale": "en",
+  "appTitle": "STONE SIGNATURE",
+  "@appTitle": {
+    "description": "Application title shown by MaterialApp. The brand name intentionally remains in English."
+  }
+}

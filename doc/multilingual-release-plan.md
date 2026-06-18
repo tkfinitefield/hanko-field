@@ -1616,7 +1616,7 @@ layout rules, or enabled-language behavior.
 
 ### M2: Flutter App Migration
 
-- [ ] `M2-T01` Introduce Flutter `gen-l10n`.
+- [x] `M2-T01` Introduce Flutter `gen-l10n`.
   Output: `app/l10n.yaml`, `app_en.arb`, `app_ja.arb`, and generated delegates.
   Done when: app builds with generated localization for English and Japanese.
 - [ ] `M2-T02` Migrate existing Chinese app assets.
@@ -1640,6 +1640,39 @@ layout rules, or enabled-language behavior.
 - [ ] `M2-T07` Add RTL and overflow coverage.
   Output: widget tests or screenshot checks for one RTL locale and long text.
   Done when: settings, checkout, and order screens do not visibly overflow.
+
+#### M2-T01 Flutter gen-l10n Baseline
+
+Completed on 2026-06-18. Added Flutter `gen-l10n` configuration and generated
+English/Japanese delegates without replacing the existing hand-written
+`HankoLocalizations` API yet.
+
+Implementation notes:
+
+- `app/l10n.yaml` generates source files under
+  `app/lib/l10n/generated/`.
+- `app/lib/l10n/app_en.arb` and `app/lib/l10n/app_ja.arb` contain the initial
+  generated `appTitle` key.
+- `app/pubspec.yaml` sets `flutter.generate=true` and declares `intl` as a
+  direct dependency, matching Flutter's generated localization import.
+- `HankoLocalizations.localizationsDelegates` now includes
+  `GeneratedHankoLocalizations.delegate` before the existing hand-written
+  delegate.
+- M2-T03 still owns the larger replacement of `context.l10n` and hand-written
+  string accessors with generated localization access.
+
+Validation:
+
+```sh
+flutter gen-l10n
+flutter test test/generated_hanko_localizations_test.dart
+flutter analyze
+flutter build apk --debug
+```
+
+Full `flutter test` was also attempted, but existing widget tests failed on a
+pre-existing Flutter framework assertion about `ListTile` under `DecoratedBox`
+in checkout flows. The focused generated-localization test passed.
 
 ### M3: Web Copy and Route Migration
 

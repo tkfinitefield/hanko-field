@@ -1,0 +1,7 @@
+{
+  "@@locale": "ja",
+  "appTitle": "STONE SIGNATURE",
+  "@appTitle": {
+    "description": "MaterialApp に表示するアプリ名。ブランド名のため英語表記を維持する。"
+  }
+}

@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import '../../l10n/generated/generated_hanko_localizations.dart';
+
 class HankoLocalizations {
   const HankoLocalizations._(this.locale, this._strings);
 
@@ -13,6 +15,7 @@ class HankoLocalizations {
   static const delegate = _HankoLocalizationsDelegate();
 
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = [
+    GeneratedHankoLocalizations.delegate,
     delegate,
     GlobalMaterialLocalizations.delegate,
     GlobalCupertinoLocalizations.delegate,
