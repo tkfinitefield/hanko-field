@@ -3,54 +3,54 @@
     "label": {
       "en": "Green",
       "ja": "緑",
-      "zh": "Green",
-      "zhtw": "Green",
-      "ar": "Green"
+      "zh": "绿色",
+      "zhtw": "綠色",
+      "ar": "أخضر"
     }
   },
   "color:yellow": {
     "label": {
       "en": "Yellow",
       "ja": "黄",
-      "zh": "Yellow",
-      "zhtw": "Yellow",
-      "ar": "Yellow"
+      "zh": "黄色",
+      "zhtw": "黃色",
+      "ar": "أصفر"
     }
   },
   "color:white": {
     "label": {
       "en": "White",
       "ja": "白",
-      "zh": "White",
-      "zhtw": "White",
-      "ar": "White"
+      "zh": "白色",
+      "zhtw": "白色",
+      "ar": "أبيض"
     }
   },
   "pattern:cloud": {
     "label": {
       "en": "Cloud",
       "ja": "雲状",
-      "zh": "Cloud",
-      "zhtw": "Cloud",
-      "ar": "Cloud"
+      "zh": "云状纹理",
+      "zhtw": "雲狀紋理",
+      "ar": "نمط غيمي"
     }
   },
   "pattern:veined": {
     "label": {
       "en": "Veined",
       "ja": "筋",
-      "zh": "Veined",
-      "zhtw": "Veined",
-      "ar": "Veined"
+      "zh": "带纹理",
+      "zhtw": "帶紋理",
+      "ar": "مع عروق"
     }
   },
   "pattern:plain": {
     "label": {
       "en": "Plain",
       "ja": "無地",
-      "zh": "Plain",
-      "zhtw": "Plain",
-      "ar": "Plain"
+      "zh": "素面",
+      "zhtw": "素面",
+      "ar": "سادة"
     }
   }
 }

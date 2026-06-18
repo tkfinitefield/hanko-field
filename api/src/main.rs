@@ -63,6 +63,10 @@ const CHECKOUT_COPY_ZHTW_JSON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/content/i18n/checkout/zhtw.json"
 ));
+const CHECKOUT_COPY_AR_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/checkout/ar.json"
+));
 const STRIPE_CHECKOUT_SESSIONS_URL: &str = "https://api.stripe.com/v1/checkout/sessions";
 const STRIPE_CHECKOUT_API_VERSION: &str = "2025-07-30.basil";
 const STRIPE_WEBHOOK_TOLERANCE_SECONDS: i64 = 5 * 60;
@@ -6631,6 +6635,7 @@ fn checkout_copies() -> &'static HashMap<&'static str, CheckoutCopy> {
             ("ja", CHECKOUT_COPY_JA_JSON),
             ("zh", CHECKOUT_COPY_ZH_JSON),
             ("zhtw", CHECKOUT_COPY_ZHTW_JSON),
+            ("ar", CHECKOUT_COPY_AR_JSON),
         ]
         .into_iter()
         .map(|(route_code, source)| {
@@ -6649,8 +6654,10 @@ fn checkout_copy_route_code(locale: &str) -> &'static str {
     match value.as_str() {
         "zhtw" | "zh-hant" | "zh-tw" | "zh-hk" | "zh-mo" => "zhtw",
         "zh" | "zh-hans" | "zh-cn" | "zh-sg" => "zh",
+        "ar" => "ar",
         _ if language == "ja" => "ja",
         _ if language == "zh" => "zh",
+        _ if language == "ar" => "ar",
         _ => "en",
     }
 }
@@ -8048,12 +8055,24 @@ mod tests {
     #[test]
     fn default_public_config_sets_ja_to_jpy() {
         let cfg = default_public_config();
-        assert_eq!(cfg.supported_locales, vec!["en", "ja"]);
+        assert_eq!(cfg.supported_locales, vec!["ar", "en", "ja", "zh", "zhtw"]);
         assert_eq!(cfg.default_locale, "ja");
         assert_eq!(cfg.default_currency, "USD");
         assert_eq!(
             cfg.currency_by_locale.get("ja").map(String::as_str),
             Some("JPY")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("ar").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("zh").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("zhtw").map(String::as_str),
+            Some("USD")
         );
         assert_eq!(
             cfg.currency_by_locale.get("en").map(String::as_str),
@@ -8070,7 +8089,7 @@ mod tests {
             currency_by_locale: HashMap::new(),
         });
 
-        assert_eq!(cfg.supported_locales, vec!["en", "ja"]);
+        assert_eq!(cfg.supported_locales, vec!["ar", "en", "ja", "zh", "zhtw"]);
         assert_eq!(cfg.default_locale, "ja");
         assert_eq!(cfg.default_currency, "USD");
         assert_eq!(
@@ -8080,6 +8099,18 @@ mod tests {
         assert_eq!(
             cfg.currency_by_locale.get("ja").map(String::as_str),
             Some("JPY")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("ar").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("zh").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("zhtw").map(String::as_str),
+            Some("USD")
         );
     }
 
@@ -8575,6 +8606,20 @@ mod tests {
     }
 
     #[test]
+    fn build_checkout_product_name_uses_arabic_copy_for_ar_locale() {
+        let order = checkout_product_name_context("ar-EG", "حجر اليشم", "square");
+
+        assert_eq!(
+            build_checkout_product_name(&order),
+            "ختم حجر كريم (حجر اليشم؛ مربع)"
+        );
+        assert_eq!(
+            build_checkout_product_description(&order),
+            "طلب ختم حجر كريم مخصص"
+        );
+    }
+
+    #[test]
     fn stripe_checkout_return_urls_preserve_normalized_route_code() {
         let mut order = order_checkout_context_fixture();
         order.order_locale = "zh-Hant".to_owned();
@@ -8609,6 +8654,29 @@ mod tests {
         assert!(
             stripe_form_value(&form, "cancel_url").contains("lang=zhtw"),
             "cancel_url should persist normalized checkout language"
+        );
+    }
+
+    #[test]
+    fn pilot_checkout_return_urls_preserve_arabic_route_code() {
+        let mut order = order_checkout_context_fixture();
+        order.order_locale = "ar-EG".to_owned();
+        let checkout = stripe_checkout_config_fixture();
+
+        let form =
+            build_stripe_checkout_session_form(&checkout, &order, "customer@example.com", true);
+
+        assert_eq!(
+            stripe_form_value(&form, "success_url"),
+            "hankofield://checkout/success?session_id={CHECKOUT_SESSION_ID}&checkout=success&order_id=order_1&lang=ar&return_to=app"
+        );
+        assert_eq!(
+            stripe_form_value(&form, "cancel_url"),
+            "hankofield://checkout/cancel?checkout=cancel&order_id=order_1&lang=ar&return_to=app"
+        );
+        assert_eq!(
+            stripe_form_value(&form, "line_items[0][price_data][product_data][name]"),
+            "ختم حجر كريم (Rose Quartz؛ دائري)"
         );
     }
 

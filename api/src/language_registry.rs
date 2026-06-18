@@ -199,7 +199,10 @@ mod tests {
     fn checked_in_registry_generates_public_config() {
         let config = public_config_from_registry().expect("checked-in registry should load");
 
-        assert_eq!(config.supported_locales, vec!["en", "ja"]);
+        assert_eq!(
+            config.supported_locales,
+            vec!["ar", "en", "ja", "zh", "zhtw"]
+        );
         assert_eq!(config.default_locale, "ja");
         assert_eq!(config.default_currency, "USD");
         assert_eq!(
@@ -209,6 +212,18 @@ mod tests {
         assert_eq!(
             config.currency_by_locale.get("ja").map(String::as_str),
             Some("JPY")
+        );
+        assert_eq!(
+            config.currency_by_locale.get("ar").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            config.currency_by_locale.get("zh").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            config.currency_by_locale.get("zhtw").map(String::as_str),
+            Some("USD")
         );
     }
 

@@ -45,6 +45,21 @@ void main() {
     expect(localeResult?.locale, 'zhtw');
   });
 
+  test('preserves pilot checkout return route codes', () {
+    final appResult = parseCheckoutReturnRoute(
+      'hankofield://checkout/success?order_id=ord_008&session_id=cs_test_008&lang=ar',
+    );
+    final webResult = parseCheckoutReturnRoute(
+      'https://finitefield.org/ar/payment/success?checkout=success&order_id=ord_009&locale=ar',
+    );
+
+    expect(appResult?.outcome, CheckoutReturnOutcome.success);
+    expect(appResult?.locale, 'ar');
+    expect(webResult?.outcome, CheckoutReturnOutcome.success);
+    expect(webResult?.orderId, 'ord_009');
+    expect(webResult?.locale, 'ar');
+  });
+
   test('uses checkout query to distinguish Stripe cancel from failure path', () {
     final result = parseCheckoutReturnRoute(
       'https://finitefield.org/payment/failure?checkout=cancel&order_id=ord_004',

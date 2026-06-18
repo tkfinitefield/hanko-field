@@ -1,8 +1,8 @@
 {
-  "product_name_template": "Stone seal ({listing_label}; {shape_label})",
-  "product_description_template": "Custom stone seal order",
+  "product_name_template": "ختم حجر كريم ({listing_label}؛ {shape_label})",
+  "product_description_template": "طلب ختم حجر كريم مخصص",
   "shape_labels": {
-    "round": "circle",
-    "square": "square"
+    "round": "دائري",
+    "square": "مربع"
   }
 }

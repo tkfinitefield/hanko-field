@@ -3456,7 +3456,7 @@ git diff --cached --check
 - [x] `M7-T03` Fill pilot web and payment content.
   Output: page JSON, payment result copy, and SEO fields for pilot routes.
   Done when: `/zh/...`, `/zhtw/...`, and `/ar/...` render correctly.
-- [ ] `M7-T04` Fill pilot API and checkout content.
+- [x] `M7-T04` Fill pilot API and checkout content.
   Output: catalog fallback review and checkout templates for pilot languages.
   Done when: pilot checkout labels and return routes preserve locale.
 - [ ] `M7-T05` Run pilot screenshot QA.
@@ -3641,6 +3641,61 @@ make i18n-check
 make i18n-ci
 cargo fmt --manifest-path web/Cargo.toml -- --check
 cargo test --manifest-path web/Cargo.toml
+git diff --check
+git diff --cached --check
+```
+
+#### M7-T04 Pilot API and Checkout Content
+
+Completed on 2026-06-18. Filled pilot API catalog content and Arabic checkout
+copy so `zh`, `zhtw`, and `ar` no longer rely on English placeholders in API
+catalog or Stripe Checkout labels.
+
+Implementation notes:
+
+- Added translated pilot catalog values for `zh`, `zhtw`, and `ar` in:
+  - `api/content/i18n/catalog/materials.json`
+  - `api/content/i18n/catalog/stone_listings.json`
+  - `api/content/i18n/catalog/facet_tags.json`
+  - `api/content/i18n/catalog/countries.json`
+- Removed catalog sidecars that only approved the previous English placeholders.
+- Filled `api/content/i18n/checkout/ar.json` with Arabic product name,
+  product description, and shape labels.
+- Removed `api/content/i18n/checkout/ar_intentions.json` because the Arabic
+  checkout copy no longer matches English.
+- Updated the API checkout copy loader to include `ar`.
+- Updated checkout locale routing so `ar` and `ar-*` use Arabic checkout copy.
+- Updated API registry public-config tests for the pilot app-enabled locales:
+  `ar`, `en`, `ja`, `zh`, and `zhtw`.
+- Added checkout tests for Arabic product labels and `lang=ar` app return URLs.
+- Added app checkout-return parser coverage proving pilot return route codes
+  are preserved when the app receives `lang=ar` or `locale=ar`.
+
+M0-T05 preservation evidence:
+
+- Existing English and Japanese catalog values remain unchanged.
+- Existing Simplified and Traditional Chinese checkout copy remains unchanged.
+- New `zh`, `zhtw`, and `ar` catalog values are additive map entries under the
+  existing localized fields.
+- The seed merge behavior from `M4-T03` still preserves future unknown locale
+  keys in Firestore.
+- Pilot languages remain `release.enabled=false`, so store metadata and
+  fastlane release paths are still inactive.
+- Rollback path: restore the previous pilot placeholder catalog values and
+  sidecars, remove `ar` from the checkout loader, restore the Arabic checkout
+  placeholder sidecar, and reopen `M7-T04`.
+
+Validation:
+
+```sh
+jq empty api/content/i18n/catalog/*.json api/content/i18n/checkout/*.json config/languages.json
+make i18n-check
+make i18n-ci
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml checkout -- --nocapture
+cargo test --manifest-path api/Cargo.toml
+dart format --set-exit-if-changed app/test/checkout_return_test.dart
+flutter test test/checkout_return_test.dart
 git diff --check
 git diff --cached --check
 ```

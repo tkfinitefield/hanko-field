@@ -3,54 +3,54 @@
     "label": {
       "en": "Japan",
       "ja": "日本",
-      "zh": "Japan",
-      "zhtw": "Japan",
-      "ar": "Japan"
+      "zh": "日本",
+      "zhtw": "日本",
+      "ar": "اليابان"
     }
   },
   "US": {
     "label": {
       "en": "United States",
       "ja": "アメリカ",
-      "zh": "United States",
-      "zhtw": "United States",
-      "ar": "United States"
+      "zh": "美国",
+      "zhtw": "美國",
+      "ar": "الولايات المتحدة"
     }
   },
   "CA": {
     "label": {
       "en": "Canada",
       "ja": "カナダ",
-      "zh": "Canada",
-      "zhtw": "Canada",
-      "ar": "Canada"
+      "zh": "加拿大",
+      "zhtw": "加拿大",
+      "ar": "كندا"
     }
   },
   "GB": {
     "label": {
       "en": "United Kingdom",
       "ja": "イギリス",
-      "zh": "United Kingdom",
-      "zhtw": "United Kingdom",
-      "ar": "United Kingdom"
+      "zh": "英国",
+      "zhtw": "英國",
+      "ar": "المملكة المتحدة"
     }
   },
   "AU": {
     "label": {
       "en": "Australia",
       "ja": "オーストラリア",
-      "zh": "Australia",
-      "zhtw": "Australia",
-      "ar": "Australia"
+      "zh": "澳大利亚",
+      "zhtw": "澳洲",
+      "ar": "أستراليا"
     }
   },
   "SG": {
     "label": {
       "en": "Singapore",
       "ja": "シンガポール",
-      "zh": "Singapore",
-      "zhtw": "Singapore",
-      "ar": "Singapore"
+      "zh": "新加坡",
+      "zhtw": "新加坡",
+      "ar": "سنغافورة"
     }
   }
 }
