@@ -60,6 +60,23 @@ void main() {
     expect(webResult?.locale, 'ar');
   });
 
+  test('infers pilot locale from localized universal link paths', () {
+    for (final entry in const [
+      ('zh', 'https://finitefield.org/zh/payment/success'),
+      ('zhtw', 'https://finitefield.org/zhtw/payment/success'),
+      ('ar', 'https://finitefield.org/ar/payment/success'),
+    ]) {
+      final result = parseCheckoutReturnRoute(
+        '${entry.$2}?checkout=success&order_id=ord_${entry.$1}&session_id=cs_test_${entry.$1}&return_to=app',
+      );
+
+      expect(result?.outcome, CheckoutReturnOutcome.success);
+      expect(result?.orderId, 'ord_${entry.$1}');
+      expect(result?.sessionId, 'cs_test_${entry.$1}');
+      expect(result?.locale, entry.$1);
+    }
+  });
+
   test('uses checkout query to distinguish Stripe cancel from failure path', () {
     final result = parseCheckoutReturnRoute(
       'https://finitefield.org/payment/failure?checkout=cancel&order_id=ord_004',

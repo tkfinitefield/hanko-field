@@ -7339,6 +7339,44 @@ mod tests {
         );
     }
 
+    #[test]
+    fn pilot_payment_result_urls_preserve_app_return_route_codes() {
+        let query = PaymentRedirectQuery {
+            checkout: Some("success".to_owned()),
+            session_id: Some("sess_123".to_owned()),
+            order_id: Some("ord_456".to_owned()),
+            return_to: Some("app".to_owned()),
+            ..PaymentRedirectQuery::default()
+        };
+
+        for (locale, expected_path, expected_app_url) in [
+            (
+                "zh",
+                "https://finitefield.org/zh/payment/success?checkout=success&session_id=sess_123&order_id=ord_456&return_to=app",
+                "hankofield://checkout/success?checkout=success&order_id=ord_456&session_id=sess_123&lang=zh",
+            ),
+            (
+                "zhtw",
+                "https://finitefield.org/zhtw/payment/success?checkout=success&session_id=sess_123&order_id=ord_456&return_to=app",
+                "hankofield://checkout/success?checkout=success&order_id=ord_456&session_id=sess_123&lang=zhtw",
+            ),
+            (
+                "ar",
+                "https://finitefield.org/ar/payment/success?checkout=success&session_id=sess_123&order_id=ord_456&return_to=app",
+                "hankofield://checkout/success?checkout=success&order_id=ord_456&session_id=sess_123&lang=ar",
+            ),
+        ] {
+            assert_eq!(
+                payment_result_locale_url(TEST_SITE_BASE_URL, "/payment/success", &query, locale),
+                expected_path
+            );
+            assert_eq!(
+                app_checkout_return_url("success", &query, locale).as_deref(),
+                Some(expected_app_url)
+            );
+        }
+    }
+
     #[tokio::test]
     async fn app_checkout_success_page_does_not_auto_redirect_to_custom_scheme() {
         let response = handle_payment_success(

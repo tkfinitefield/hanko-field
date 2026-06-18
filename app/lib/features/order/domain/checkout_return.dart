@@ -62,7 +62,8 @@ CheckoutReturnResult? parseCheckoutReturnUri(Uri uri) {
       'sessionId',
     ]),
     locale: _normalizeCheckoutReturnLocale(
-      _firstPresentQueryValue(uri, const ['lang', 'locale']),
+      _firstPresentQueryValue(uri, const ['lang', 'locale']) ??
+          _checkoutReturnPathLocale(uri),
     ),
   );
 }
@@ -104,10 +105,33 @@ List<String> _checkoutReturnSegments(Uri uri) {
           .toList(growable: false);
 
   if (segments.isNotEmpty &&
-      (segments.first == 'en' || segments.first == 'ja')) {
+      (segments.first == 'en' ||
+          segments.first == 'ja' ||
+          segments.first == 'zh' ||
+          segments.first == 'zhtw' ||
+          segments.first == 'ar')) {
     return segments.skip(1).toList(growable: false);
   }
   return segments;
+}
+
+String? _checkoutReturnPathLocale(Uri uri) {
+  final segments =
+      <String>[
+            if (uri.scheme == 'hankofield' && uri.host.isNotEmpty) uri.host,
+            ...uri.pathSegments,
+          ]
+          .map((segment) => segment.trim())
+          .where((segment) => segment.isNotEmpty)
+          .toList(growable: false);
+  if (segments.isEmpty) {
+    return null;
+  }
+  final first = segments.first.toLowerCase();
+  return switch (first) {
+    'en' || 'ja' || 'zh' || 'zhtw' || 'ar' => first,
+    _ => null,
+  };
 }
 
 CheckoutReturnOutcome? _outcomeFromToken(String? token) {

@@ -8622,9 +8622,22 @@ mod tests {
     #[test]
     fn stripe_checkout_return_urls_preserve_normalized_route_code() {
         let mut order = order_checkout_context_fixture();
-        order.order_locale = "zh-Hant".to_owned();
         let checkout = stripe_checkout_config_fixture();
 
+        order.order_locale = "zh-Hans".to_owned();
+        let simplified_form =
+            build_stripe_checkout_session_form(&checkout, &order, "customer@example.com", true);
+
+        assert_eq!(
+            stripe_form_value(&simplified_form, "success_url"),
+            "hankofield://checkout/success?session_id={CHECKOUT_SESSION_ID}&checkout=success&order_id=order_1&lang=zh&return_to=app"
+        );
+        assert_eq!(
+            stripe_form_value(&simplified_form, "cancel_url"),
+            "hankofield://checkout/cancel?checkout=cancel&order_id=order_1&lang=zh&return_to=app"
+        );
+
+        order.order_locale = "zh-Hant".to_owned();
         let form =
             build_stripe_checkout_session_form(&checkout, &order, "customer@example.com", true);
 

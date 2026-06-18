@@ -28,6 +28,9 @@ void main() {
         '/payment',
         '/en/payment',
         '/ja/payment',
+        '/zh/payment',
+        '/zhtw/payment',
+        '/ar/payment',
       ]) {
         expect(manifest, contains('android:pathPrefix="$pathPrefix"'));
       }

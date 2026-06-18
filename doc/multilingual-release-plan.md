@@ -4789,7 +4789,7 @@ git diff --cached --check
 - [x] `M10-T02` Build iOS release candidate.
   Output: signed IPA build evidence from a signing-capable Mac.
   Done when: `flutter build ipa --release` passes.
-- [ ] `M10-T03` Verify deep links and payment return paths.
+- [x] `M10-T03` Verify deep links and payment return paths.
   Output: smoke-test results for custom scheme, Universal Links/App Links, and
   localized payment paths.
   Done when: checkout returns preserve route code across pilot languages and
@@ -4968,6 +4968,84 @@ jq empty doc/qa/m10-t02/ios-release-candidate.json
 make ios-fastlane-check
 make ios-fastlane-test
 make release-secret-guardrails-check
+git diff --check
+git diff --cached --check
+```
+
+#### M10-T03 Deep Links and Payment Return Paths
+
+Completed on 2026-06-18. Verified the repository-level deep-link and payment
+return behavior needed before internal store uploads.
+
+Implementation notes:
+
+- Added Android App Link path prefixes for both `finitefield.org` and
+  `www.finitefield.org`:
+  - `/zh/payment`
+  - `/zhtw/payment`
+  - `/ar/payment`
+- Kept existing default, English, and Japanese payment paths unchanged:
+  `/payment`, `/en/payment`, and `/ja/payment`.
+- Updated the app checkout-return parser so localized Universal Link/App Link
+  paths infer `zh`, `zhtw`, or `ar` when `lang` or `locale` is absent.
+- Kept query-based custom scheme behavior as the primary Stripe app-return
+  path.
+- Added API coverage proving normalized Stripe order locales preserve route
+  codes in custom-scheme success and cancel URLs.
+- Added web coverage proving localized payment-result URLs and app-return URLs
+  preserve `return_to=app`, `session_id`, `order_id`, and pilot route codes.
+- Updated `doc/app-release-deep-link-config.md` so release smoke testing covers
+  `en`, `ja`, `zh`, `zhtw`, and `ar` custom scheme and Universal Link routes.
+- Added machine-readable and human-readable smoke evidence:
+  - `doc/qa/m10-t03/deep-link-payment-return-smoke.json`
+  - `doc/qa/m10-t03/README.md`
+
+Smoke result:
+
+- Custom scheme: PASS for `hankofield://checkout/*` with `lang=en`, `lang=ja`,
+  `lang=zh`, `lang=zhtw`, and `lang=ar`.
+- Android App Links: PASS for repository manifest declarations covering
+  localized payment path prefixes on both configured hosts.
+- iOS Universal Links: PASS for repository entitlements and documented
+  localized payment paths.
+- App parser: PASS for pilot localized Universal Link/App Link paths without a
+  `lang` query.
+- API Stripe URLs: PASS for `zh-Hans` to `zh`, `zh-Hant` to `zhtw`, and `ar`
+  to `ar` normalization.
+- Web payment result URLs: PASS for pilot localized success URLs and app-return
+  custom scheme URLs.
+
+Known limitations:
+
+- No live installed-device deep-link test was run in this task.
+- No hosted `assetlinks.json` or AASA file was fetched from production in this
+  task.
+- No Stripe network checkout, Google Play upload, or TestFlight upload was
+  performed. Those remain covered by later M10 upload and staged-release tasks.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No signing material, upload credential, store upload, polling, streaming,
+  SSE, or WebSocket behavior was committed.
+- Rollback path: remove `doc/qa/m10-t03/`, revert the Android path-prefix,
+  app parser, API/web/app tests, and deep-link documentation changes, then
+  reopen `M10-T03`.
+
+Validation:
+
+```sh
+jq empty doc/qa/m10-t03/deep-link-payment-return-smoke.json
+cd app && flutter test test/checkout_return_test.dart test/platform_deep_link_config_test.dart
+cargo test --manifest-path api/Cargo.toml stripe_checkout_return_urls_preserve_normalized_route_code -- --nocapture
+cargo test --manifest-path api/Cargo.toml pilot_checkout_return_urls_preserve_arabic_route_code -- --nocapture
+cargo test --manifest-path web/Cargo.toml payment_result_urls_preserve_app_return_marker -- --nocapture
+cargo test --manifest-path web/Cargo.toml pilot_payment_result_urls_preserve_app_return_route_codes -- --nocapture
+cargo test --manifest-path web/Cargo.toml app_checkout_success_page_does_not_auto_redirect_to_custom_scheme -- --nocapture
+cargo test --manifest-path web/Cargo.toml pilot_payment_routes_render_localized_copy -- --nocapture
+make i18n-ci
 git diff --check
 git diff --cached --check
 ```
