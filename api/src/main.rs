@@ -8006,6 +8006,46 @@ mod tests {
     }
 
     #[test]
+    fn m4_t07_resolve_localized_falls_back_for_missing_requested_value() {
+        let values = HashMap::from([
+            ("en".to_owned(), "Jade".to_owned()),
+            ("ja".to_owned(), " ".to_owned()),
+            ("zhtw".to_owned(), "青田石".to_owned()),
+        ]);
+
+        assert_eq!(resolve_localized(&values, "fr", "zhtw"), "青田石");
+        assert_eq!(resolve_localized(&values, "ja", "en"), "Jade");
+    }
+
+    #[test]
+    fn m4_t07_requested_locale_accepts_supported_route_and_bcp47_values() {
+        assert_eq!(
+            requested_locale_route_code(Some("zh-Hant".to_owned()), "en").as_deref(),
+            Some("zhtw")
+        );
+        assert_eq!(
+            requested_locale_route_code(Some("en-US".to_owned()), "ja").as_deref(),
+            Some("en")
+        );
+        assert_eq!(
+            requested_locale_route_code(None, "ja").as_deref(),
+            Some("ja")
+        );
+    }
+
+    #[test]
+    fn m4_t07_requested_locale_rejects_unsupported_values() {
+        assert_eq!(
+            requested_locale_route_code(Some("xx".to_owned()), "en"),
+            None
+        );
+        assert_eq!(
+            requested_locale_route_code(Some("../ja".to_owned()), "en"),
+            None
+        );
+    }
+
+    #[test]
     fn default_public_config_sets_ja_to_jpy() {
         let cfg = default_public_config();
         assert_eq!(cfg.supported_locales, vec!["en", "ja"]);
@@ -8554,6 +8594,25 @@ mod tests {
     }
 
     #[test]
+    fn m4_t07_checkout_language_persistence_uses_normalized_order_route_code() {
+        let mut order = order_checkout_context_fixture();
+        order.order_locale = "zh_TW".to_owned();
+        let checkout = stripe_checkout_config_fixture();
+
+        let form =
+            build_stripe_checkout_session_form(&checkout, &order, "customer@example.com", true);
+
+        assert!(
+            stripe_form_value(&form, "success_url").contains("lang=zhtw"),
+            "success_url should persist normalized checkout language"
+        );
+        assert!(
+            stripe_form_value(&form, "cancel_url").contains("lang=zhtw"),
+            "cancel_url should persist normalized checkout language"
+        );
+    }
+
+    #[test]
     fn checkout_copy_templates_have_required_placeholders() {
         for (route_code, copy) in checkout_copies() {
             assert!(
@@ -8822,6 +8881,20 @@ mod tests {
 
         assert_eq!(input.locale, "zhtw");
         assert_eq!(input.contact.preferred_locale, "zhtw");
+    }
+
+    #[test]
+    fn m4_t07_create_order_request_rejects_unsupported_locale_values() {
+        let mut request = valid_app_create_order_request();
+        request.locale = "xx".to_owned();
+        assert_create_order_error_contains(request, "locale must map to a supported route code");
+
+        let mut request = valid_app_create_order_request();
+        request.contact.preferred_locale = "../ja".to_owned();
+        assert_create_order_error_contains(
+            request,
+            "contact.preferred_locale must map to a supported route code",
+        );
     }
 
     #[test]

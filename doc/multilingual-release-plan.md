@@ -2352,7 +2352,7 @@ git diff --cached --check
 - [x] `M4-T06` Define Gemini `reason_language` mapping.
   Output: registry-backed mapping from route code to prompt language.
   Done when: unsupported prompt languages fallback with visible diagnostics.
-- [ ] `M4-T07` Add API tests.
+- [x] `M4-T07` Add API tests.
   Output: tests for supported locale, missing value fallback, unsupported
   locale rejection, and checkout language persistence.
   Done when: API locale behavior can be changed safely.
@@ -2644,6 +2644,48 @@ cargo test --manifest-path api/Cargo.toml kanji -- --nocapture
 flutter test test/language_registry_test.dart
 cargo test --manifest-path api/Cargo.toml
 flutter test test/api_dto_test.dart test/language_registry_test.dart
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M4-T07 API Locale Regression Tests
+
+Completed on 2026-06-18. Added focused API regression tests for locale behavior
+that must remain stable while the language registry expands.
+
+Implementation notes:
+
+- Added explicit supported-locale coverage for route codes and BCP-47 aliases,
+  including Traditional Chinese normalization to `zhtw`.
+- Added explicit unsupported-locale rejection coverage for route resolution and
+  create-order request validation.
+- Added localized-value fallback coverage for missing requested values and empty
+  localized strings.
+- Added checkout return URL coverage to verify that the selected language is
+  persisted as the normalized route code.
+
+M0-T05 preservation evidence:
+
+- Existing English and Japanese locale paths remain covered by existing tests.
+- Existing BCP-47 normalization behavior is preserved for create-order requests
+  and checkout return URLs.
+- Unsupported locale-like values continue to fail validation instead of being
+  silently coerced.
+- Rollback path: remove only the `m4_t07_*` regression tests if they need to be
+  replaced by higher-level HTTP handler tests.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml m4_t07 -- --nocapture
+cargo test --manifest-path api/Cargo.toml locale -- --nocapture
+cargo test --manifest-path api/Cargo.toml checkout -- --nocapture
+cargo test --manifest-path api/Cargo.toml
 jq empty config/languages.json
 make i18n-registry-test
 make i18n-status-test
