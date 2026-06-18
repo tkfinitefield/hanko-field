@@ -3817,7 +3817,7 @@ git diff --cached --check
   `en`, `ja`, `zh`, and `zhtw`.
   Done when: required fields are validated before generation and the `M0-T05`
   store-copy preservation rules are satisfied.
-- [ ] `M8-T02` Generate Google Play metadata.
+- [x] `M8-T02` Generate Google Play metadata.
   Output: deterministic `release/store_metadata/google_play/**` folders using
   `android_store_locale`.
   Done when: unsupported Google Play locales fail with clear messages.
@@ -3907,6 +3907,77 @@ make i18n-check
 make i18n-check LANGS=ja FILE=release/store_metadata/source/ja.json
 make i18n-check LANGS=zh FILE=release/store_metadata/source/zh.json
 make i18n-check LANGS=zhtw FILE=release/store_metadata/source/zhtw.json
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T02 Google Play Metadata Generation
+
+Completed on 2026-06-18. Added deterministic Google Play metadata generation
+from the store metadata source files.
+
+Implementation notes:
+
+- Added `scripts/release/google_play_metadata.mjs` to generate fastlane
+  `supply`-style text metadata.
+- Added `scripts/release/google_play_metadata.test.mjs` to cover:
+  - generated file mapping
+  - deterministic `--check` behavior
+  - stale generated file detection
+  - clear failure when a source locale has no `android_store_locale`
+- Added Make targets:
+  - `make google-play-metadata`
+  - `make google-play-metadata-check`
+  - `make google-play-metadata-test`
+- Added Google Play metadata check and test targets to `make i18n-ci`.
+- Generated metadata under `release/store_metadata/google_play` using
+  `release.android_store_locale`:
+  - `en` -> `en-US`
+  - `ja` -> `ja-JP`
+  - `zh` -> `zh-CN`
+  - `zhtw` -> `zh-TW`
+
+Generated file layout:
+
+```text
+release/store_metadata/google_play/<android_store_locale>/title.txt
+release/store_metadata/google_play/<android_store_locale>/short_description.txt
+release/store_metadata/google_play/<android_store_locale>/full_description.txt
+release/store_metadata/google_play/<android_store_locale>/changelogs/default.txt
+```
+
+Mapping rules:
+
+- `app_name` -> `title.txt`
+- `short_description` -> `short_description.txt`
+- `full_description[]` -> `full_description.txt`, joined by blank lines
+- latest `release_notes` entry -> `changelogs/default.txt`
+- `subtitle`, `keywords`, and `screenshot_captions` stay in source JSON for
+  App Store metadata and screenshot workflows; Google Play text generation does
+  not invent unsupported files from those fields.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, and source store metadata copy remains
+  unchanged.
+- Google Play metadata is generated from source JSON only; no manual edits are
+  required under generated output.
+- `release.enabled=false` remains unchanged for all languages.
+- No fastlane lanes, signing files, private keys, uploads, polling, streaming,
+  SSE, or WebSocket behavior were added.
+- Rollback path: remove `release/store_metadata/google_play`, remove
+  `scripts/release/google_play_metadata.*`, remove the Makefile targets, and
+  reopen `M8-T02`.
+
+Validation:
+
+```sh
+make store-metadata-check
+make google-play-metadata
+make google-play-metadata-check
+make google-play-metadata-test
+make i18n-check
 make i18n-ci
 git diff --check
 git diff --cached --check

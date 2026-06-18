@@ -1,0 +1,1 @@
+Added multilingual app content and pilot store metadata source files.
