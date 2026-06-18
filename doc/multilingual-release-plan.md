@@ -2708,7 +2708,7 @@ git diff --cached --check
   Output: tests covering materials, stone listings, countries, and facet tags.
   Done when: editing Japanese values preserves `fr`, `zh`, and `zhtw` values
   and the `M0-T05` migration-safety checklist is satisfied.
-- [ ] `M5-T04` Add optional compact localized-values editor.
+- [x] `M5-T04` Add optional compact localized-values editor.
   Output: collapsed registry-driven editor if manual admin editing is needed.
   Done when: the admin does not render 68 always-visible inputs.
 - [ ] `M5-T05` Verify admin policy.
@@ -2859,6 +2859,52 @@ Validation:
 
 ```sh
 cargo fmt --manifest-path admin/Cargo.toml -- --check
+cargo test --manifest-path admin/Cargo.toml m5_t03 -- --nocapture
+cargo test --manifest-path admin/Cargo.toml
+git diff --check
+git diff --cached --check
+```
+
+#### M5-T04 Compact Localized Values Editor
+
+Completed on 2026-06-18. Added collapsed admin editors for optional manual
+localized-map edits beyond the normal `ja` / `en` fields.
+
+Implementation notes:
+
+- Added a registry-driven admin language list from `config/languages.json`.
+- The compact editor excludes the normal admin `ja` and `en` fields, leaving
+  66 additional route codes under a closed `<details>` block.
+- Added compact editors to material, stone-listing, country, and facet-tag
+  detail forms for the localized maps identified in M5-T01.
+- Added form parsing for `*_i18n__{route_code}` fields that accepts only
+  registry route codes outside `ja` / `en` and ignores blank values.
+- Updated admin edit mutations to merge non-empty compact-editor values into
+  the existing localized maps without dropping other route keys.
+- Updated localized-map Firestore update masks to include the loaded route
+  subkeys for edited maps, so saved extra route values can be persisted without
+  switching back to full-map writes.
+- Kept create forms scoped to `ja` and `en`; compact editing is available after
+  a record exists.
+
+M0-T05 preservation evidence:
+
+- Existing Japanese and English admin inputs remain unchanged and visible.
+- Additional route inputs are available only inside a collapsed details panel,
+  so admin screens do not show 68 always-visible localized inputs.
+- Blank compact-editor values are ignored and do not create empty translations.
+- Unknown or non-registry field names are ignored by the compact-editor parser.
+- No polling, SSE, or WebSocket behavior was added.
+- Rollback path: remove the compact-editor view fields, form parser, template
+  details blocks, and `m5_t04_*` tests, then reopen `M5-T04`.
+
+Validation:
+
+```sh
+jq empty config/languages.json
+cargo fmt --manifest-path admin/Cargo.toml -- --check
+cargo test --manifest-path admin/Cargo.toml m5_t04 -- --nocapture
+cargo test --manifest-path admin/Cargo.toml m5_t02 -- --nocapture
 cargo test --manifest-path admin/Cargo.toml m5_t03 -- --nocapture
 cargo test --manifest-path admin/Cargo.toml
 git diff --check
