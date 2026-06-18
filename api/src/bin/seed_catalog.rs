@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, env, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    env,
+    sync::Arc,
+};
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
@@ -8,6 +12,9 @@ use firebase_sdk_rust::firebase_firestore::{
 };
 use gcp_auth::{CustomServiceAccount, TokenProvider, provider};
 use serde_json::{Value as JsonValue, json};
+
+#[path = "../language_registry.rs"]
+mod language_registry;
 
 const DATASTORE_SCOPE: &str = "https://www.googleapis.com/auth/datastore";
 
@@ -253,20 +260,22 @@ async fn upsert_named_document(
 }
 
 fn app_config_public_document(now: DateTime<Utc>) -> Document {
+    let public_config = language_registry::public_config_from_registry()
+        .expect("checked-in language registry should generate public config");
     Document {
         fields: btree_from_pairs(vec![
             (
                 "supported_locales",
-                fs_array(vec![fs_string("ja"), fs_string("en")]),
+                fs_string_array(&public_config.supported_locales),
             ),
-            ("default_locale", fs_string("ja")),
-            ("default_currency", fs_string("USD")),
+            ("default_locale", fs_string(public_config.default_locale)),
+            (
+                "default_currency",
+                fs_string(public_config.default_currency),
+            ),
             (
                 "currency_by_locale",
-                fs_map(btree_from_pairs(vec![
-                    ("ja", fs_string("JPY")),
-                    ("en", fs_string("USD")),
-                ])),
+                fs_owned_string_map(&public_config.currency_by_locale),
             ),
             ("created_at", fs_timestamp(now)),
             ("updated_at", fs_timestamp(now)),
@@ -798,14 +807,31 @@ fn fs_array(values: Vec<JsonValue>) -> JsonValue {
     json!({ "arrayValue": { "values": values } })
 }
 
-fn fs_string_array(values: &[&str]) -> JsonValue {
-    fs_array(values.iter().map(|value| fs_string(*value)).collect())
+fn fs_string_array<T: AsRef<str>>(values: &[T]) -> JsonValue {
+    fs_array(
+        values
+            .iter()
+            .map(|value| fs_string(value.as_ref()))
+            .collect(),
+    )
 }
 
 fn fs_string_map(values: &[(&str, &str)]) -> JsonValue {
     let mut fields = BTreeMap::new();
     for (key, value) in values {
         fields.insert((*key).to_owned(), fs_string(*value));
+    }
+    fs_map(fields)
+}
+
+fn fs_owned_string_map(values: &HashMap<String, String>) -> JsonValue {
+    let mut keys = values.keys().collect::<Vec<_>>();
+    keys.sort();
+    let mut fields = BTreeMap::new();
+    for key in keys {
+        if let Some(value) = values.get(key) {
+            fields.insert(key.to_owned(), fs_string(value.clone()));
+        }
     }
     fs_map(fields)
 }
@@ -828,6 +854,44 @@ fn btree_from_pairs(pairs: Vec<(&str, JsonValue)>) -> BTreeMap<String, JsonValue
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn app_config_public_document_matches_language_registry() {
+        let now = DateTime::parse_from_rfc3339("2026-06-18T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        let document = app_config_public_document(now);
+        let registry_config = language_registry::public_config_from_registry()
+            .expect("checked-in registry should generate public config");
+
+        let supported_locales = document.fields["supported_locales"]["arrayValue"]["values"]
+            .as_array()
+            .expect("supported_locales should be an array")
+            .iter()
+            .map(|value| {
+                value["stringValue"]
+                    .as_str()
+                    .expect("supported locale should be a string")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(supported_locales, registry_config.supported_locales);
+        assert_eq!(
+            document.fields["default_locale"]["stringValue"].as_str(),
+            Some(registry_config.default_locale.as_str())
+        );
+        assert_eq!(
+            document.fields["default_currency"]["stringValue"].as_str(),
+            Some(registry_config.default_currency.as_str())
+        );
+        for (locale, currency) in registry_config.currency_by_locale {
+            assert_eq!(
+                document.fields["currency_by_locale"]["mapValue"]["fields"][&locale]["stringValue"]
+                    .as_str(),
+                Some(currency.as_str())
+            );
+        }
+    }
 
     #[test]
     fn font_seeds_include_active_ai_generated_seal_record() {

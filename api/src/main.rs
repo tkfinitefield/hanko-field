@@ -32,6 +32,7 @@ use sha2::{Digest, Sha256};
 use tokio::net::TcpListener;
 use uuid::Uuid;
 
+mod language_registry;
 mod seal_fonts;
 mod seal_renderer;
 
@@ -40,7 +41,6 @@ const MAX_REQUEST_BODY_BYTES: usize = 1 << 20;
 const DEFAULT_PORT: &str = "3050";
 const DEFAULT_LOCALE: &str = "ja";
 const DEFAULT_CURRENCY: &str = "USD";
-const DEFAULT_JA_CURRENCY: &str = "JPY";
 const DEFAULT_STRIPE_CHECKOUT_SUCCESS_URL: &str =
     "http://127.0.0.1:3052/payment/success?session_id={CHECKOUT_SESSION_ID}";
 const DEFAULT_STRIPE_CHECKOUT_CANCEL_URL: &str = "http://127.0.0.1:3052/payment/failure";
@@ -4050,23 +4050,26 @@ async fn upsert_named_document(
 }
 
 fn default_public_config() -> PublicConfig {
-    let mut currency_by_locale = HashMap::new();
-    currency_by_locale.insert("ja".to_owned(), DEFAULT_JA_CURRENCY.to_owned());
-    currency_by_locale.insert("en".to_owned(), DEFAULT_CURRENCY.to_owned());
+    public_config_from_registry()
+        .expect("checked-in language registry should generate public config")
+}
 
-    PublicConfig {
-        supported_locales: vec!["ja".to_owned(), "en".to_owned()],
-        default_locale: DEFAULT_LOCALE.to_owned(),
-        default_currency: DEFAULT_CURRENCY.to_owned(),
-        currency_by_locale,
-    }
+fn public_config_from_registry() -> Result<PublicConfig> {
+    let cfg = language_registry::public_config_from_registry()?;
+    Ok(PublicConfig {
+        supported_locales: cfg.supported_locales,
+        default_locale: cfg.default_locale,
+        default_currency: cfg.default_currency,
+        currency_by_locale: cfg.currency_by_locale,
+    })
 }
 
 fn normalize_public_config(cfg: PublicConfig) -> PublicConfig {
+    let registry_config = default_public_config();
     let mut normalized = Vec::with_capacity(cfg.supported_locales.len());
     let mut seen = HashSet::with_capacity(cfg.supported_locales.len());
     for locale in cfg.supported_locales {
-        let value = locale.trim().to_lowercase();
+        let value = language_registry::normalize_route_code(&locale);
         if value.is_empty() || seen.contains(&value) {
             continue;
         }
@@ -4075,37 +4078,41 @@ fn normalize_public_config(cfg: PublicConfig) -> PublicConfig {
     }
 
     if normalized.is_empty() {
-        normalized = vec!["ja".to_owned(), "en".to_owned()];
+        normalized = registry_config.supported_locales.clone();
     }
 
-    let mut default_locale = cfg.default_locale.trim().to_lowercase();
+    let mut default_locale = language_registry::normalize_route_code(&cfg.default_locale);
     if default_locale.is_empty() || !contains(&normalized, &default_locale) {
-        default_locale = DEFAULT_LOCALE.to_owned();
-    }
-    if !contains(&normalized, &default_locale) {
-        normalized.insert(0, default_locale.clone());
+        default_locale = if contains(&normalized, &registry_config.default_locale) {
+            registry_config.default_locale.clone()
+        } else {
+            normalized
+                .first()
+                .cloned()
+                .unwrap_or_else(|| DEFAULT_LOCALE.to_owned())
+        };
     }
 
-    let default_currency = normalize_currency_code(&cfg.default_currency)
-        .unwrap_or_else(|| DEFAULT_CURRENCY.to_owned());
+    let default_currency = language_registry::normalize_currency_code(&cfg.default_currency)
+        .unwrap_or_else(|| registry_config.default_currency.clone());
 
     let mut currency_by_locale = HashMap::new();
     for (locale, currency) in cfg.currency_by_locale {
-        let locale = locale.trim().to_lowercase();
+        let locale = language_registry::normalize_route_code(&locale);
         if locale.is_empty() || !contains(&normalized, &locale) {
             continue;
         }
-        let Some(currency) = normalize_currency_code(&currency) else {
+        let Some(currency) = language_registry::normalize_currency_code(&currency) else {
             continue;
         };
         currency_by_locale.insert(locale, currency);
     }
     for locale in &normalized {
-        let fallback_currency = if locale == DEFAULT_LOCALE {
-            DEFAULT_JA_CURRENCY.to_owned()
-        } else {
-            default_currency.clone()
-        };
+        let fallback_currency = registry_config
+            .currency_by_locale
+            .get(locale)
+            .cloned()
+            .unwrap_or_else(|| default_currency.clone());
         currency_by_locale
             .entry(locale.clone())
             .or_insert(fallback_currency);
@@ -4120,11 +4127,7 @@ fn normalize_public_config(cfg: PublicConfig) -> PublicConfig {
 }
 
 fn normalize_currency_code(raw: &str) -> Option<String> {
-    let value = raw.trim().to_uppercase();
-    if value.len() != 3 || !value.chars().all(|ch| ch.is_ascii_alphabetic()) {
-        return None;
-    }
-    Some(value)
+    language_registry::normalize_currency_code(raw)
 }
 
 fn resolve_currency_for_locale(cfg: &PublicConfig, locale: &str) -> String {
@@ -7908,6 +7911,9 @@ mod tests {
     #[test]
     fn default_public_config_sets_ja_to_jpy() {
         let cfg = default_public_config();
+        assert_eq!(cfg.supported_locales, vec!["en", "ja"]);
+        assert_eq!(cfg.default_locale, "ja");
+        assert_eq!(cfg.default_currency, "USD");
         assert_eq!(
             cfg.currency_by_locale.get("ja").map(String::as_str),
             Some("JPY")
@@ -7915,6 +7921,28 @@ mod tests {
         assert_eq!(
             cfg.currency_by_locale.get("en").map(String::as_str),
             Some("USD")
+        );
+    }
+
+    #[test]
+    fn normalize_public_config_uses_registry_defaults_for_missing_values() {
+        let cfg = normalize_public_config(PublicConfig {
+            supported_locales: Vec::new(),
+            default_locale: String::new(),
+            default_currency: String::new(),
+            currency_by_locale: HashMap::new(),
+        });
+
+        assert_eq!(cfg.supported_locales, vec!["en", "ja"]);
+        assert_eq!(cfg.default_locale, "ja");
+        assert_eq!(cfg.default_currency, "USD");
+        assert_eq!(
+            cfg.currency_by_locale.get("en").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("ja").map(String::as_str),
+            Some("JPY")
         );
     }
 

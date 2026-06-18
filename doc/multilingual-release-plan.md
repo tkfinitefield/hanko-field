@@ -1284,7 +1284,7 @@ Current API locale behavior:
 - `api/src/main.rs` owns `PublicConfig`, catalog response shaping, order
   creation, Stripe Checkout session creation, Gemini Kanji candidate prompt
   language handling, and fallback resolution.
-- `app_config/public` currently resolves to `supported_locales=["ja","en"]`,
+- `app_config/public` currently resolves to `supported_locales=["en","ja"]`,
   `default_locale="ja"`, `default_currency="USD"`, and
   `currency_by_locale={"ja":"JPY","en":"USD"}`.
 - `default_public_config()` is the runtime fallback when Firestore config is
@@ -2329,7 +2329,7 @@ git diff --cached --check
 
 ### M4: API, Catalog, and Checkout Localization
 
-- [ ] `M4-T01` Generate public config from the registry.
+- [x] `M4-T01` Generate public config from the registry.
   Output: `/v1/config/public` locales, defaults, and currency maps are
   registry-backed.
   Done when: seed and runtime config agree on supported locales.
@@ -2356,6 +2356,40 @@ git diff --cached --check
   Output: tests for supported locale, missing value fallback, unsupported
   locale rejection, and checkout language persistence.
   Done when: API locale behavior can be changed safely.
+
+#### M4-T01 Registry-Backed Public Config
+
+Completed on 2026-06-18. Generated API public config from
+`config/languages.json` for both runtime fallback and Firestore seed output.
+
+Implementation notes:
+
+- Added `api/src/language_registry.rs` as the API-side reader for the checked-in
+  language registry.
+- Public config generation now uses registry entries with `app.enabled=true`.
+- Current generated public config remains `en` and `ja`, with default locale
+  `ja`, default currency `USD`, and currency map `en=USD`, `ja=JPY`.
+- `default_public_config()` now comes from the registry instead of a hand-coded
+  locale list.
+- `normalize_public_config()` now fills missing supported locales and missing
+  locale currency values from the registry-backed defaults.
+- `api/src/bin/seed_catalog.rs::app_config_public_document` now writes the same
+  registry-backed public config to Firestore.
+- Added runtime and seed tests proving the checked-in registry and seeded
+  `app_config/public` agree.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
 
 ### M5: Admin Data Preservation
 
