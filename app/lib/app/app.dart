@@ -14,6 +14,7 @@ import '../features/order_lookup/order_lookup.dart';
 import '../features/settings/settings.dart';
 import '../features/stones/stones.dart';
 import 'localization/app_localization.dart';
+import 'localization/language_registry.dart';
 import 'navigation/app_navigation_shell.dart';
 import 'theme/app_theme.dart';
 
@@ -184,29 +185,38 @@ Future<void> _defaultMarkOnboardingSeen() {
 }
 
 Future<Locale?> _defaultLoadPreferredLocale() async {
-  final languageCode = await const AppLaunchStore().preferredLanguageCode();
-  return _supportedLocaleForLanguageCode(languageCode);
+  final routeCode = await const AppLaunchStore().preferredRouteCode();
+  if (routeCode == null) {
+    return null;
+  }
+  final registry = await AppLanguageRegistry.load();
+  return _supportedLocale(
+    registry.enabledLanguageForRouteCode(routeCode)?.locale,
+  );
 }
 
-Future<void> _defaultSavePreferredLocale(Locale locale) {
-  return const AppLaunchStore().setPreferredLanguageCode(locale.languageCode);
+Future<void> _defaultSavePreferredLocale(Locale locale) async {
+  final supportedLocale = _supportedLocale(locale);
+  if (supportedLocale == null) {
+    return;
+  }
+  final registry = await AppLanguageRegistry.load();
+  final language = registry.enabledLanguageForLocale(supportedLocale);
+  if (language == null) {
+    return;
+  }
+  await const AppLaunchStore().setPreferredRouteCode(language.routeCode);
 }
 
 Locale? _supportedLocale(Locale? locale) {
   if (locale == null) {
     return null;
   }
-  return _supportedLocaleForLanguageCode(locale.languageCode);
-}
-
-Locale? _supportedLocaleForLanguageCode(String? languageCode) {
-  final normalized = languageCode?.trim().toLowerCase();
-  if (normalized == null || normalized.isEmpty) {
-    return null;
-  }
-  for (final locale in hankoSupportedLocales) {
-    if (locale.languageCode == normalized) {
-      return locale;
+  for (final supportedLocale in hankoSupportedLocales) {
+    if (supportedLocale.languageCode == locale.languageCode &&
+        supportedLocale.scriptCode == locale.scriptCode &&
+        supportedLocale.countryCode == locale.countryCode) {
+      return supportedLocale;
     }
   }
   return null;

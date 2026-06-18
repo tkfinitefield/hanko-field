@@ -1634,7 +1634,7 @@ layout rules, or enabled-language behavior.
   Output: selectable language rows using `native_name`, `english_name`, and
   `app.selectable`.
   Done when: English/Japanese rows are no longer hard-coded.
-- [ ] `M2-T06` Persist and normalize preferred route code.
+- [x] `M2-T06` Persist and normalize preferred route code.
   Output: saved `route_code` with fallback for old `en` and `ja` values.
   Done when: restart keeps the selected language and invalid values recover.
 - [ ] `M2-T07` Add RTL and overflow coverage.
@@ -1875,6 +1875,52 @@ flutter test test/widget_test.dart \
   --plain-name "localizes non-tab feature entry screens"
 flutter analyze
 flutter build apk --debug
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+```
+
+Full `flutter test` was also attempted. It still fails on the pre-existing
+Flutter `ListTile` under `DecoratedBox` assertion in checkout widget tests. In
+that full-suite run, the settings navigation test also timed out after the
+checkout assertion failures, while the same settings navigation test passed
+when run by itself.
+
+#### M2-T06 Preferred Route Code Persistence
+
+Completed on 2026-06-18. Updated app language persistence to store the registry
+`route_code` instead of deriving storage directly from a Flutter
+`Locale.languageCode`.
+
+Implementation notes:
+
+- `AppLaunchStore` now writes the preferred language to `preferred_route_code`.
+- `AppLaunchStore.preferredRouteCode()` reads `preferred_route_code` first and
+  falls back to the legacy `preferred_language_code` key, preserving existing
+  `en` and `ja` saved values.
+- Preferred route code writes are trimmed and lowercased before storage.
+- `HankoApp` now maps saved route codes to enabled registry Flutter locales
+  through `AppLanguageRegistry`.
+- `HankoApp` maps selected Flutter locales back to enabled registry
+  `route_code` values before saving.
+- Unsupported or no-longer-enabled saved values resolve to no preferred locale,
+  allowing the app to recover to the normal locale fallback behavior.
+- `AppLaunchStore` accepts injectable database factory and path resolver values
+  so route-code migration behavior is covered without touching device storage.
+
+Validation:
+
+```sh
+flutter test test/app_launch_store_test.dart test/language_registry_test.dart
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 switches the app language from settings"
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 restores saved locale and recovers invalid values"
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 settings rows navigate to destination screens"
+flutter analyze
+flutter build apk --debug
+jq empty config/languages.json
 make i18n-registry-test
 make i18n-status-test
 make i18n-status

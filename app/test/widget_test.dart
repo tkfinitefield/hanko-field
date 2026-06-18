@@ -4206,6 +4206,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('COM-004 restores saved locale and recovers invalid values', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(432, 912);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpLaunchedApp(
+      tester,
+      loadPreferredLocale: () async => const Locale('ja'),
+    );
+
+    expect(find.text('デザイン'), findsWidgets);
+    expect(find.text('保存済み印影'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    await pumpLaunchedApp(
+      tester,
+      loadPreferredLocale: () async => const Locale('fr'),
+    );
+
+    expect(find.text('Design'), findsWidgets);
+    expect(find.text('Saved Seals'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('switches major labels with the app locale', (tester) async {
     tester.view.physicalSize = const Size(432, 912);
     tester.view.devicePixelRatio = 1;

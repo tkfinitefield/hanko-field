@@ -78,6 +78,30 @@ void main() {
       ),
       isTrue,
     );
+    expect(registry.enabledLanguageForRouteCode(' ZHTW ')?.routeCode, 'zhtw');
+    expect(
+      registry
+          .enabledLanguageForLocale(
+            const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+          )
+          ?.routeCode,
+      'zhtw',
+    );
+  });
+
+  test('does not resolve app-disabled languages for runtime locale use', () {
+    final registry = AppLanguageRegistry.fromJson([
+      _language(
+        routeCode: 'zh',
+        nativeName: '简体中文',
+        englishName: 'Simplified Chinese',
+        appEnabled: false,
+        appSelectable: false,
+      ),
+    ]);
+
+    expect(registry.enabledLanguageForRouteCode('zh'), isNull);
+    expect(registry.enabledLanguageForLocale(const Locale('zh')), isNull);
   });
 }
 

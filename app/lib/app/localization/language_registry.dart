@@ -4,8 +4,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 class AppLanguageRegistry {
-  const AppLanguageRegistry({required this.selectableLanguages});
+  const AppLanguageRegistry({
+    required this.languages,
+    required this.selectableLanguages,
+  });
 
+  final List<AppLanguageOption> languages;
   final List<AppLanguageOption> selectableLanguages;
 
   static const assetPath = '../config/languages.json';
@@ -17,14 +21,44 @@ class AppLanguageRegistry {
   }
 
   factory AppLanguageRegistry.fromJson(List<Object?> json) {
-    final languages = json
-        .map((value) => AppLanguageOption.fromJson(_objectValue(value)))
+    final languages = List<AppLanguageOption>.unmodifiable(
+      json.map((value) => AppLanguageOption.fromJson(_objectValue(value))),
+    );
+    final selectableLanguages = languages
         .where((language) => language.appEnabled && language.appSelectable)
         .toList(growable: false);
 
     return AppLanguageRegistry(
-      selectableLanguages: List<AppLanguageOption>.unmodifiable(languages),
+      languages: languages,
+      selectableLanguages: List<AppLanguageOption>.unmodifiable(
+        selectableLanguages,
+      ),
     );
+  }
+
+  AppLanguageOption? enabledLanguageForRouteCode(String? routeCode) {
+    final normalized = _normalizeRouteCode(routeCode);
+    if (normalized == null) {
+      return null;
+    }
+    for (final language in languages) {
+      if (language.appEnabled && language.routeCode == normalized) {
+        return language;
+      }
+    }
+    return null;
+  }
+
+  AppLanguageOption? enabledLanguageForLocale(Locale? locale) {
+    if (locale == null) {
+      return null;
+    }
+    for (final language in languages) {
+      if (language.appEnabled && language.matchesLocale(locale)) {
+        return language;
+      }
+    }
+    return null;
   }
 }
 
@@ -128,4 +162,12 @@ Object? _required(Map<String, Object?> json, String key) {
     return json[key];
   }
   throw FormatException('Missing required language registry key "$key".');
+}
+
+String? _normalizeRouteCode(String? routeCode) {
+  final normalized = routeCode?.trim().toLowerCase();
+  if (normalized == null || normalized.isEmpty) {
+    return null;
+  }
+  return normalized;
 }
