@@ -3836,7 +3836,7 @@ git diff --cached --check
   keystore files, passwords, and exported binaries.
   Done when: private release material cannot be staged accidentally and the
   `M0-T05` release-secret gate is satisfied.
-- [ ] `M8-T07` Add screenshot metadata workflow.
+- [x] `M8-T07` Add screenshot metadata workflow.
   Output: screenshot naming rules and optional screengrab/deliver metadata
   preparation.
   Done when: screenshots can be matched to locale and device deterministically.
@@ -4286,6 +4286,79 @@ Validation:
 node --check scripts/release/secret_guardrails.mjs
 make release-secret-guardrails-check
 make release-secret-guardrails-test
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T07 Screenshot Metadata Workflow
+
+Completed on 2026-06-18. Added deterministic screenshot slot generation for
+store metadata preparation without requiring screenshot images to exist yet.
+
+Implementation notes:
+
+- Added `doc/release-screenshot-workflow.md` with the source screenshot naming
+  rules:
+  - `release/store_metadata/screenshots/source/{route_code}/{device}/{NN}-{key}.png`
+  - devices: `phone_6_5`, `tablet_12_9`
+  - keys: `design`, `stones`, `checkout`
+  - slot files: `01-design.png`, `02-stones.png`, `03-checkout.png`
+- Added `scripts/release/screenshot_metadata.mjs` to generate and check
+  `release/store_metadata/screenshots/manifest.json`.
+- The manifest maps each source screenshot slot to:
+  - route code
+  - BCP-47 locale
+  - text direction
+  - Google Play store locale
+  - App Store locale
+  - device profile
+  - caption from `release/store_metadata/source/{route_code}.json`
+  - prepared Google Play and App Store screenshot paths
+- Added `scripts/release/screenshot_metadata.test.mjs` to cover:
+  - deterministic slot generation
+  - generated manifest check mode
+  - stale manifest detection
+  - clear failure when a source locale cannot map to store screenshot locales
+- Added Make targets:
+  - `make screenshot-metadata`
+  - `make screenshot-metadata-check`
+  - `make screenshot-metadata-test`
+- Added screenshot metadata checks and tests to `make i18n-ci`.
+
+Deterministic matching:
+
+- A screenshot can be matched by `{route_code, device, key}` before platform
+  upload preparation.
+- Platform locale paths are derived from `config/languages.json`, not entered
+  manually.
+- Screenshot captions are derived from the existing store metadata source, so
+  captions move with the same translation workflow as store copy.
+- Current Android and iOS metadata lanes still skip screenshot upload. The
+  screenshot tree remains preparation data until screenshot upload is
+  intentionally enabled in a later release milestone.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, store metadata, fastlane lanes, and release
+  secret guardrails remain unchanged except for CI integration of the new
+  screenshot metadata check.
+- `release.enabled=false` remains unchanged for all languages.
+- No screenshot image uploads, binary uploads, credentials, signing files,
+  polling, streaming, SSE, or WebSocket behavior were added.
+- Rollback path: remove `doc/release-screenshot-workflow.md`, remove
+  `scripts/release/screenshot_metadata.*`, remove
+  `release/store_metadata/screenshots/manifest.json`, remove the Makefile
+  targets and `i18n-ci` entries, and reopen `M8-T07`.
+
+Validation:
+
+```sh
+node --check scripts/release/screenshot_metadata.mjs
+make screenshot-metadata
+make screenshot-metadata-check
+make screenshot-metadata-test
 make i18n-check
 make i18n-ci
 git diff --check
