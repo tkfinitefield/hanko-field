@@ -2699,7 +2699,7 @@ git diff --cached --check
 - [x] `M5-T01` Audit admin localized form writes.
   Output: list of every form that reads or writes a `*_i18n` map.
   Done when: high-risk overwrite paths are identified.
-- [ ] `M5-T02` Add merge helpers for localized maps.
+- [x] `M5-T02` Add merge helpers for localized maps.
   Output: shared save behavior that edits selected keys without replacing the
   whole map.
   Done when: unknown locale keys are preserved by default and the `M0-T05`
@@ -2780,6 +2780,51 @@ Validation:
 ```sh
 rg -n "_i18n|label_ja|label_en|title_ja|title_en|description_ja|description_en|story_ja|story_en|photo_alt_ja|photo_alt_en" admin/src/main.rs admin/templates
 rg -n "persist_.*mutation|PatchDocumentOptions|update_mask_field_paths|fs_string_map|fs_material_photos" admin/src/main.rs
+git diff --check
+git diff --cached --check
+```
+
+#### M5-T02 Localized Map Merge Helpers
+
+Completed on 2026-06-18. Added shared admin merge behavior for localized maps
+and changed Firestore localized-map writes to target only the admin-editable
+route keys.
+
+Implementation notes:
+
+- Added `ADMIN_EDITABLE_LOCALE_KEYS` for the currently editable admin locales:
+  `ja` and `en`.
+- Added shared localized-map helpers for required text fields and optional
+  photo alt text.
+- Updated material, stone-listing, facet-tag, and country edit mutations to use
+  the shared merge helpers instead of open-coded `HashMap::insert` calls.
+- Updated Firestore persistence for `label_i18n`, `description_i18n`,
+  `title_i18n`, and `story_i18n` to use nested update masks such as
+  `label_i18n.ja` and `label_i18n.en` instead of patching the whole map field.
+- Kept create flows scoped to `ja` and `en`; broader route-code editing remains
+  deferred to M5-T04.
+- Kept stone-listing photo persistence array-based, but centralized primary
+  photo alt merging so unknown `photos[].alt_i18n` keys and non-primary photos
+  are preserved in the loaded admin snapshot.
+
+M0-T05 preservation evidence:
+
+- Existing Japanese and English admin inputs remain unchanged.
+- Firestore writes now update only the selected `ja` and `en` localized-map
+  subkeys, preserving unknown route keys by default.
+- Optional photo alt text still removes blank `ja` or `en` values as before,
+  while preserving unknown route keys.
+- No polling, SSE, or WebSocket behavior was added.
+- Rollback path: restore full-map update masks and direct `HashMap::insert`
+  calls, then reopen `M5-T02`.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path admin/Cargo.toml -- --check
+cargo test --manifest-path admin/Cargo.toml m5_t02 -- --nocapture
+cargo test --manifest-path admin/Cargo.toml
+rg -n '"(label_i18n|description_i18n|title_i18n|story_i18n)"\.to_owned\(\)|label_i18n\.ja|title_i18n\.ja|ADMIN_EDITABLE_LOCALE_KEYS|append_admin_localized_update_mask_paths|merge_admin_localized_map_values|merge_optional_admin_localized_map_values' admin/src/main.rs
 git diff --check
 git diff --cached --check
 ```

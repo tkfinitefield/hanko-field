@@ -37,6 +37,7 @@ const ADMIN_SESSION_COOKIE_NAME: &str = "hanko_admin_session";
 const ADMIN_SESSION_DURATION_SECONDS: i64 = 60 * 60 * 24 * 7;
 const ADMIN_SESSION_ISSUER: &str = "hanko-field-admin";
 const HX_REDIRECT_HEADER: &str = "hx-redirect";
+const ADMIN_EDITABLE_LOCALE_KEYS: [&str; 2] = ["ja", "en"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RunMode {
@@ -4565,8 +4566,10 @@ impl ServerState {
             };
 
             let now = Utc::now();
-            tag.label_i18n.insert("ja".to_owned(), label_ja);
-            tag.label_i18n.insert("en".to_owned(), label_en);
+            merge_admin_localized_map_values(
+                &mut tag.label_i18n,
+                &[("ja", &label_ja), ("en", &label_en)],
+            );
             tag.aliases = aliases;
             tag.is_active = input.is_active;
             tag.sort_order = input.sort_order;
@@ -4988,8 +4991,10 @@ impl ServerState {
             };
 
             let now = Utc::now();
-            country.label_i18n.insert("ja".to_owned(), label_ja);
-            country.label_i18n.insert("en".to_owned(), label_en);
+            merge_admin_localized_map_values(
+                &mut country.label_i18n,
+                &[("ja", &label_ja), ("en", &label_en)],
+            );
             country.shipping_fee_usd = input.shipping_fee_usd;
             country.shipping_fee_jpy = input.shipping_fee_jpy;
             country.sort_order = input.sort_order;
@@ -5193,14 +5198,14 @@ impl ServerState {
             };
 
             let now = Utc::now();
-            material.label_i18n.insert("ja".to_owned(), label_ja);
-            material.label_i18n.insert("en".to_owned(), label_en);
-            material
-                .description_i18n
-                .insert("ja".to_owned(), description_ja);
-            material
-                .description_i18n
-                .insert("en".to_owned(), description_en);
+            merge_admin_localized_map_values(
+                &mut material.label_i18n,
+                &[("ja", &label_ja), ("en", &label_en)],
+            );
+            merge_admin_localized_map_values(
+                &mut material.description_i18n,
+                &[("ja", &description_ja), ("en", &description_en)],
+            );
             material.is_active = input.is_active;
             material.version += 1;
             material.updated_at = now;
@@ -5734,16 +5739,18 @@ impl ServerState {
             listing.listing_code = listing_code;
             listing.material_key = material_key;
             listing.size = size;
-            listing.title_i18n.insert("ja".to_owned(), title_ja);
-            listing.title_i18n.insert("en".to_owned(), title_en);
-            listing
-                .description_i18n
-                .insert("ja".to_owned(), description_ja);
-            listing
-                .description_i18n
-                .insert("en".to_owned(), description_en);
-            listing.story_i18n.insert("ja".to_owned(), story_ja);
-            listing.story_i18n.insert("en".to_owned(), story_en);
+            merge_admin_localized_map_values(
+                &mut listing.title_i18n,
+                &[("ja", &title_ja), ("en", &title_en)],
+            );
+            merge_admin_localized_map_values(
+                &mut listing.description_i18n,
+                &[("ja", &description_ja), ("en", &description_en)],
+            );
+            merge_admin_localized_map_values(
+                &mut listing.story_i18n,
+                &[("ja", &story_ja), ("en", &story_en)],
+            );
             listing.facets.color_family = color_family;
             listing.facets.color_tags = color_tags;
             listing.facets.pattern_primary = pattern_primary;
@@ -6853,28 +6860,30 @@ impl FirestoreAdminSource {
             ..Document::default()
         };
 
+        let mut update_mask_field_paths = vec![
+            "comparison_texture_ja".to_owned(),
+            "comparison_texture_en".to_owned(),
+            "comparison_weight_ja".to_owned(),
+            "comparison_weight_en".to_owned(),
+            "comparison_usage_ja".to_owned(),
+            "comparison_usage_en".to_owned(),
+            "shape".to_owned(),
+            "photos".to_owned(),
+            "price_by_currency".to_owned(),
+            "is_active".to_owned(),
+            "sort_order".to_owned(),
+            "version".to_owned(),
+            "updated_at".to_owned(),
+        ];
+        append_admin_localized_update_mask_paths(&mut update_mask_field_paths, "label_i18n");
+        append_admin_localized_update_mask_paths(&mut update_mask_field_paths, "description_i18n");
+
         client
             .patch_document(
                 &material_name,
                 &document,
                 &PatchDocumentOptions {
-                    update_mask_field_paths: vec![
-                        "label_i18n".to_owned(),
-                        "description_i18n".to_owned(),
-                        "comparison_texture_ja".to_owned(),
-                        "comparison_texture_en".to_owned(),
-                        "comparison_weight_ja".to_owned(),
-                        "comparison_weight_en".to_owned(),
-                        "comparison_usage_ja".to_owned(),
-                        "comparison_usage_en".to_owned(),
-                        "shape".to_owned(),
-                        "photos".to_owned(),
-                        "price_by_currency".to_owned(),
-                        "is_active".to_owned(),
-                        "sort_order".to_owned(),
-                        "version".to_owned(),
-                        "updated_at".to_owned(),
-                    ],
+                    update_mask_field_paths,
                     ..PatchDocumentOptions::default()
                 },
             )
@@ -6894,33 +6903,32 @@ impl FirestoreAdminSource {
             ..Document::default()
         };
 
+        let mut update_mask_field_paths = vec![
+            "listing_code".to_owned(),
+            "material_key".to_owned(),
+            "size".to_owned(),
+            "facets".to_owned(),
+            "photos".to_owned(),
+            "price_by_currency".to_owned(),
+            "status".to_owned(),
+            "is_active".to_owned(),
+            "sort_order".to_owned(),
+            "version".to_owned(),
+            "updated_at".to_owned(),
+        ];
+        append_admin_localized_update_mask_paths(&mut update_mask_field_paths, "title_i18n");
+        append_admin_localized_update_mask_paths(&mut update_mask_field_paths, "description_i18n");
+        append_admin_localized_update_mask_paths(&mut update_mask_field_paths, "story_i18n");
+        if listing.published_at.is_some() {
+            update_mask_field_paths.push("published_at".to_owned());
+        }
+
         client
             .patch_document(
                 &listing_name,
                 &document,
                 &PatchDocumentOptions {
-                    update_mask_field_paths: {
-                        let mut fields = vec![
-                            "listing_code".to_owned(),
-                            "material_key".to_owned(),
-                            "size".to_owned(),
-                            "title_i18n".to_owned(),
-                            "description_i18n".to_owned(),
-                            "story_i18n".to_owned(),
-                            "facets".to_owned(),
-                            "photos".to_owned(),
-                            "price_by_currency".to_owned(),
-                            "status".to_owned(),
-                            "is_active".to_owned(),
-                            "sort_order".to_owned(),
-                            "version".to_owned(),
-                            "updated_at".to_owned(),
-                        ];
-                        if listing.published_at.is_some() {
-                            fields.push("published_at".to_owned());
-                        }
-                        fields
-                    },
+                    update_mask_field_paths,
                     ..PatchDocumentOptions::default()
                 },
             )
@@ -6944,21 +6952,23 @@ impl FirestoreAdminSource {
             ..Document::default()
         };
 
+        let mut update_mask_field_paths = vec![
+            "key".to_owned(),
+            "facet_type".to_owned(),
+            "aliases".to_owned(),
+            "is_active".to_owned(),
+            "sort_order".to_owned(),
+            "version".to_owned(),
+            "updated_at".to_owned(),
+        ];
+        append_admin_localized_update_mask_paths(&mut update_mask_field_paths, "label_i18n");
+
         client
             .patch_document(
                 &tag_name,
                 &document,
                 &PatchDocumentOptions {
-                    update_mask_field_paths: vec![
-                        "key".to_owned(),
-                        "facet_type".to_owned(),
-                        "label_i18n".to_owned(),
-                        "aliases".to_owned(),
-                        "is_active".to_owned(),
-                        "sort_order".to_owned(),
-                        "version".to_owned(),
-                        "updated_at".to_owned(),
-                    ],
+                    update_mask_field_paths,
                     ..PatchDocumentOptions::default()
                 },
             )
@@ -7038,19 +7048,21 @@ impl FirestoreAdminSource {
             ..Document::default()
         };
 
+        let mut update_mask_field_paths = vec![
+            "shipping_fee_by_currency".to_owned(),
+            "is_active".to_owned(),
+            "sort_order".to_owned(),
+            "version".to_owned(),
+            "updated_at".to_owned(),
+        ];
+        append_admin_localized_update_mask_paths(&mut update_mask_field_paths, "label_i18n");
+
         client
             .patch_document(
                 &country_name,
                 &document,
                 &PatchDocumentOptions {
-                    update_mask_field_paths: vec![
-                        "label_i18n".to_owned(),
-                        "shipping_fee_by_currency".to_owned(),
-                        "is_active".to_owned(),
-                        "sort_order".to_owned(),
-                        "version".to_owned(),
-                        "updated_at".to_owned(),
-                    ],
+                    update_mask_field_paths,
                     ..PatchDocumentOptions::default()
                 },
             )
@@ -7298,6 +7310,48 @@ fn form_value(form: &HashMap<String, String>, key: &str) -> String {
     form.get(key)
         .map(|value| value.trim().to_owned())
         .unwrap_or_default()
+}
+
+fn merge_admin_localized_map_values(
+    values: &mut HashMap<String, String>,
+    updates: &[(&str, &str)],
+) {
+    for (locale, value) in updates {
+        let locale = locale.trim();
+        if locale.is_empty() {
+            continue;
+        }
+        values.insert(locale.to_owned(), value.trim().to_owned());
+    }
+}
+
+fn merge_optional_admin_localized_map_values(
+    values: &mut HashMap<String, String>,
+    updates: &[(&str, &str)],
+) {
+    for (locale, value) in updates {
+        let locale = locale.trim();
+        if locale.is_empty() {
+            continue;
+        }
+        let value = value.trim();
+        if value.is_empty() {
+            values.remove(locale);
+        } else {
+            values.insert(locale.to_owned(), value.to_owned());
+        }
+    }
+}
+
+fn admin_localized_update_mask_paths(field: &str) -> Vec<String> {
+    ADMIN_EDITABLE_LOCALE_KEYS
+        .iter()
+        .map(|locale| format!("{field}.{locale}"))
+        .collect()
+}
+
+fn append_admin_localized_update_mask_paths(paths: &mut Vec<String>, field: &str) {
+    paths.extend(admin_localized_update_mask_paths(field));
 }
 
 fn next_material_sort_order(materials: &HashMap<String, Material>) -> i64 {
@@ -8508,12 +8562,7 @@ fn build_single_stone_listing_photos(
     }
 
     let mut alt_i18n = HashMap::new();
-    if !alt_ja.trim().is_empty() {
-        alt_i18n.insert("ja".to_owned(), alt_ja.trim().to_owned());
-    }
-    if !alt_en.trim().is_empty() {
-        alt_i18n.insert("en".to_owned(), alt_en.trim().to_owned());
-    }
+    merge_optional_admin_localized_map_values(&mut alt_i18n, &[("ja", alt_ja), ("en", alt_en)]);
 
     vec![MaterialPhoto {
         asset_id: format!("lst_{}_01", stone_listing_key),
@@ -8551,20 +8600,10 @@ fn merge_primary_stone_listing_photo(
         let primary = &mut photos[primary_index];
         primary.storage_path = storage_path.to_owned();
 
-        if alt_ja.trim().is_empty() {
-            primary.alt_i18n.remove("ja");
-        } else {
-            primary
-                .alt_i18n
-                .insert("ja".to_owned(), alt_ja.trim().to_owned());
-        }
-        if alt_en.trim().is_empty() {
-            primary.alt_i18n.remove("en");
-        } else {
-            primary
-                .alt_i18n
-                .insert("en".to_owned(), alt_en.trim().to_owned());
-        }
+        merge_optional_admin_localized_map_values(
+            &mut primary.alt_i18n,
+            &[("ja", alt_ja), ("en", alt_en)],
+        );
 
         if primary.asset_id.trim().is_empty() {
             primary.asset_id = format!("lst_{}_01", stone_listing_key);
@@ -11903,6 +11942,142 @@ mod tests {
         assert!(!stone_listing_should_restore_after_canceled_order(
             "archived", true,
         ));
+    }
+
+    #[test]
+    fn m5_t02_admin_localized_merge_preserves_unknown_locale_keys() {
+        let mut values = HashMap::from([
+            ("ja".to_owned(), "旧日本語".to_owned()),
+            ("en".to_owned(), "Old English".to_owned()),
+            ("fr".to_owned(), "Français".to_owned()),
+            ("zh".to_owned(), "简体中文".to_owned()),
+            ("zhtw".to_owned(), "繁體中文".to_owned()),
+        ]);
+
+        merge_admin_localized_map_values(
+            &mut values,
+            &[("ja", " 新日本語 "), ("en", " New English ")],
+        );
+
+        assert_eq!(values.get("ja").map(String::as_str), Some("新日本語"));
+        assert_eq!(values.get("en").map(String::as_str), Some("New English"));
+        assert_eq!(values.get("fr").map(String::as_str), Some("Français"));
+        assert_eq!(values.get("zh").map(String::as_str), Some("简体中文"));
+        assert_eq!(values.get("zhtw").map(String::as_str), Some("繁體中文"));
+    }
+
+    #[test]
+    fn m5_t02_optional_localized_merge_only_removes_edited_blank_keys() {
+        let mut values = HashMap::from([
+            ("ja".to_owned(), "旧日本語".to_owned()),
+            ("en".to_owned(), "Old English".to_owned()),
+            ("fr".to_owned(), "Français".to_owned()),
+            ("zh".to_owned(), "简体中文".to_owned()),
+            ("zhtw".to_owned(), "繁體中文".to_owned()),
+        ]);
+
+        merge_optional_admin_localized_map_values(
+            &mut values,
+            &[("ja", " "), ("en", " New English ")],
+        );
+
+        assert!(!values.contains_key("ja"));
+        assert_eq!(values.get("en").map(String::as_str), Some("New English"));
+        assert_eq!(values.get("fr").map(String::as_str), Some("Français"));
+        assert_eq!(values.get("zh").map(String::as_str), Some("简体中文"));
+        assert_eq!(values.get("zhtw").map(String::as_str), Some("繁體中文"));
+    }
+
+    #[test]
+    fn m5_t02_localized_update_masks_target_editable_subkeys_only() {
+        let mut paths = vec!["version".to_owned()];
+
+        append_admin_localized_update_mask_paths(&mut paths, "label_i18n");
+
+        assert_eq!(
+            paths,
+            vec![
+                "version".to_owned(),
+                "label_i18n.ja".to_owned(),
+                "label_i18n.en".to_owned(),
+            ]
+        );
+        assert!(!paths.iter().any(|path| path == "label_i18n"));
+    }
+
+    #[test]
+    fn m5_t02_primary_photo_alt_merge_preserves_unknown_locales_and_extra_photos() {
+        let existing = vec![
+            MaterialPhoto {
+                asset_id: "primary".to_owned(),
+                storage_path: "stone_listings/jade_01/primary.webp".to_owned(),
+                alt_i18n: HashMap::from([
+                    ("ja".to_owned(), "旧日本語".to_owned()),
+                    ("en".to_owned(), "Old English".to_owned()),
+                    ("fr".to_owned(), "Français".to_owned()),
+                    ("zh".to_owned(), "简体中文".to_owned()),
+                    ("zhtw".to_owned(), "繁體中文".to_owned()),
+                ]),
+                sort_order: 0,
+                is_primary: true,
+                width: 1200,
+                height: 800,
+            },
+            MaterialPhoto {
+                asset_id: "secondary".to_owned(),
+                storage_path: "stone_listings/jade_01/secondary.webp".to_owned(),
+                alt_i18n: HashMap::from([("fr".to_owned(), "Secondaire".to_owned())]),
+                sort_order: 1,
+                is_primary: false,
+                width: 900,
+                height: 600,
+            },
+        ];
+
+        let photos = merge_primary_stone_listing_photo(
+            &existing,
+            "jade_01",
+            "stone_listings/jade_01/primary-updated.webp",
+            " ",
+            " New English ",
+        );
+
+        assert_eq!(photos.len(), 2);
+        let primary = photos
+            .iter()
+            .find(|photo| photo.asset_id == "primary")
+            .expect("primary photo should remain");
+        assert_eq!(
+            primary.storage_path,
+            "stone_listings/jade_01/primary-updated.webp"
+        );
+        assert!(!primary.alt_i18n.contains_key("ja"));
+        assert_eq!(
+            primary.alt_i18n.get("en").map(String::as_str),
+            Some("New English")
+        );
+        assert_eq!(
+            primary.alt_i18n.get("fr").map(String::as_str),
+            Some("Français")
+        );
+        assert_eq!(
+            primary.alt_i18n.get("zh").map(String::as_str),
+            Some("简体中文")
+        );
+        assert_eq!(
+            primary.alt_i18n.get("zhtw").map(String::as_str),
+            Some("繁體中文")
+        );
+
+        let secondary = photos
+            .iter()
+            .find(|photo| photo.asset_id == "secondary")
+            .expect("secondary photo should remain");
+        assert!(!secondary.is_primary);
+        assert_eq!(
+            secondary.alt_i18n.get("fr").map(String::as_str),
+            Some("Secondaire")
+        );
     }
 
     #[tokio::test]
