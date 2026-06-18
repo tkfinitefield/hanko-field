@@ -2970,7 +2970,7 @@ git diff --cached --check
   Output: checks for placeholder names, metadata, plural/select syntax, and
   generated Flutter locale mapping.
   Done when: placeholder mismatch fails before runtime.
-- [ ] `M6-T04` Validate JSON shape and fallback chains.
+- [x] `M6-T04` Validate JSON shape and fallback chains.
   Output: shape comparison for settings, web copy, API content, and metadata.
   Done when: fallback chains never point to missing or disabled languages.
 - [ ] `M6-T05` Implement intention sidecar validation.
@@ -3167,6 +3167,73 @@ make i18n-status-test
 make i18n-registry-test
 node --check scripts/i18n/arb.mjs
 node --check scripts/i18n/arb.test.mjs
+node --check scripts/i18n/check.mjs
+node --check scripts/i18n/check.test.mjs
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T04 JSON Shape and Fallback Validation
+
+Completed on 2026-06-18. Added JSON shape and fallback-chain validation to the
+localization gate.
+
+Implementation notes:
+
+- Added `scripts/i18n/json_shape.mjs`.
+- Added `scripts/i18n/json_shape.test.mjs`.
+- Added root Make target:
+  - `make i18n-json-shape-test`
+- Integrated JSON shape validation into `make i18n-check`.
+- App settings JSON is compared against
+  `app/assets/i18n/settings/en.json`.
+- Web content JSON is discovered from `web/content/i18n/*/en.json` and each
+  selected target file is compared against its English source shape.
+- API checkout JSON is compared against `api/content/i18n/checkout/en.json`.
+- API catalog files validate embedded language-map values so translated route
+  values keep the same scalar type as the English value.
+- Release metadata source JSON is compared against
+  `release/store_metadata/source/en.json` when the source metadata exists.
+- Shape comparison checks object keys, extra keys, scalar/object/array type
+  mismatches, array length, and nested array item shape.
+- Registry fallback chains are checked globally for missing targets, cycles,
+  and disabled fallback targets on enabled app, web, or release surfaces.
+- `FILE=` preserves narrow workflows: only the requested JSON family is shape
+  compared, while missing target files remain reported by `i18n-todo`.
+
+Examples:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=web/content/i18n/top/zh.json
+make i18n-json-shape-test
+```
+
+M0-T05 preservation evidence:
+
+- The command is read-only and does not generate, rewrite, or normalize JSON
+  files.
+- Existing English, Japanese, Chinese, and Traditional Chinese JSON content
+  remains untouched.
+- Existing release metadata is read only when present; missing release metadata
+  is still controlled by registry enablement and later fastlane milestones.
+- Rollback path: remove `scripts/i18n/json_shape.mjs`,
+  `scripts/i18n/json_shape.test.mjs`, the Make target, and the JSON shape
+  integration in `scripts/i18n/check.mjs`, then reopen `M6-T04`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=web/content/i18n/top/zh.json
+make i18n-json-shape-test
+make i18n-check-test
+make i18n-arb-test
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
+node --check scripts/i18n/json_shape.mjs
+node --check scripts/i18n/json_shape.test.mjs
 node --check scripts/i18n/check.mjs
 node --check scripts/i18n/check.test.mjs
 git diff --check

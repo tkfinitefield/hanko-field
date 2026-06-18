@@ -101,6 +101,31 @@ test('fails when checked ARB placeholders are unsafe', async () => {
   );
 });
 
+test('fails when checked JSON shape is unsafe', async () => {
+  const rootDir = await createTempRoot();
+  await writeMinimalEnabledContent(rootDir);
+  await writeJson(rootDir, 'app/assets/i18n/settings/ja.json', {
+    about: {
+      heading: ['概要'],
+    },
+  });
+
+  const report = await buildI18nCheck({
+    rootDir,
+    file: 'app/assets/i18n/settings/ja.json',
+  });
+
+  assert.equal(report.ok, false);
+  assert.ok(
+    report.issues.some(
+      (issue) =>
+        issue.type === 'json-shape' &&
+        issue.file === 'app/assets/i18n/settings/ja.json' &&
+        issue.message.includes('about.heading'),
+    ),
+  );
+});
+
 test('validates sidecar and release metadata JSON when present', async () => {
   const rootDir = await createTempRoot();
   await writeMinimalEnabledContent(rootDir);

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { validateArbFiles } from './arb.mjs';
+import { validateJsonShapes } from './json_shape.mjs';
 import { buildI18nStatus, renderI18nStatus } from './status.mjs';
 import { buildI18nTodo, parseLangsFilter, renderI18nTodo } from './todo.mjs';
 
@@ -19,7 +20,7 @@ const VALIDATED_CONTENT_ROOTS = [
 
 /**
  * @typedef {Object} I18nCheckIssue
- * @property {'missing-file' | 'missing-key' | 'malformed-json' | 'validation-error' | 'arb'} type
+ * @property {'missing-file' | 'missing-key' | 'malformed-json' | 'validation-error' | 'arb' | 'json-shape'} type
  * @property {string} file
  * @property {string} message
  *
@@ -36,20 +37,23 @@ const VALIDATED_CONTENT_ROOTS = [
  * @returns {Promise<I18nCheckReport>}
  */
 export async function buildI18nCheck({ rootDir = REPO_ROOT, langs = null, file = null } = {}) {
-  const [statusResult, todoResult, parsedFiles, arbResult] = await Promise.all([
+  const [statusResult, todoResult, parsedFiles, arbResult, jsonShapeResult] = await Promise.all([
     settleCheckStep('status', () => buildI18nStatus({ rootDir })),
     settleCheckStep('todo', () => buildI18nTodo({ rootDir, langs, file })),
     validateJsonContentFiles({ rootDir, file }),
     settleCheckStep('arb', () => validateArbFiles({ rootDir, langs, file })),
+    settleCheckStep('json-shape', () => validateJsonShapes({ rootDir, langs, file })),
   ]);
   const status = statusResult.value ?? emptyStatus();
   const todo = todoResult.value ?? emptyTodo(langs, file);
   const arb = arbResult.value ?? emptyArb();
+  const jsonShape = jsonShapeResult.value ?? emptyJsonShape();
 
   const issues = [
     ...stepIssues(statusResult),
     ...stepIssues(todoResult),
     ...stepIssues(arbResult),
+    ...stepIssues(jsonShapeResult),
     ...statusMissingFileIssues(status),
     ...todoMissingIssues(todo),
     ...parsedFiles.flatMap((entry) =>
@@ -70,11 +74,19 @@ export async function buildI18nCheck({ rootDir = REPO_ROOT, langs = null, file =
         ? `${issue.key}: ${issue.code}: ${issue.message}`
         : `${issue.code}: ${issue.message}`,
     })),
+    ...jsonShape.issues.map((issue) => ({
+      type: 'json-shape',
+      file: issue.file,
+      message: issue.key
+        ? `${issue.key}: ${issue.code}: ${issue.message}`
+        : `${issue.code}: ${issue.message}`,
+    })),
   ];
 
   const parsedFileSet = new Set([
     ...parsedFiles.filter((entry) => entry.ok).map((entry) => entry.path),
     ...arb.parsed_files,
+    ...jsonShape.parsed_files,
   ]);
 
   return {
@@ -211,6 +223,14 @@ function emptyTodo(langs, file) {
 }
 
 function emptyArb() {
+  return {
+    ok: true,
+    issues: [],
+    parsed_files: [],
+  };
+}
+
+function emptyJsonShape() {
   return {
     ok: true,
     issues: [],
