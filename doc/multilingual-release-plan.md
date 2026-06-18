@@ -998,7 +998,7 @@ A task is complete only when:
   Output: a short inventory of Dart localization keys, long settings content,
   and any existing Chinese app copy.
   Done when: every source file that will be migrated to ARB or JSON is listed.
-- [ ] `M0-T02` Inventory existing web copy and blog content.
+- [x] `M0-T02` Inventory existing web copy and blog content.
   Output: page-by-page list of template strings, Rust inline copy, blog files,
   SEO metadata, and current `hreflang` behavior.
   Done when: every web route in the current sitemap has a migration target.
@@ -1064,6 +1064,139 @@ Existing Chinese app copy:
   content in `settings_content.dart`, such as shipping from the partner workshop
   in China. These are not Chinese translations and should migrate as part of
   `en` / `ja` settings JSON.
+
+#### M0-T02 Web Copy and Blog Inventory
+
+Completed on 2026-06-18. This inventory covers the Rust web frontend, Askama
+templates, browser-side dynamic copy, blog article files, SEO metadata, and
+current sitemap / `hreflang` behavior. Every route that is currently emitted by
+the sitemap has a migration target below.
+
+Current web locale behavior:
+
+- `web/src/main.rs` uses `SUPPORTED_LOCALES: &["en", "ja"]`.
+- `parse_supported_locale`, `parse_path_locale`, `localized_page_path`,
+  `localized_page_url`, language-switcher URL fields, sitemap generation, and
+  `hreflang` output are all tied to English and Japanese.
+- `localized_text(locale, ja, en)` owns page-level inline Rust copy such as SEO
+  title, meta description, purchase notes, and noindex payment-page metadata.
+- Askama templates render many user-visible strings through
+  `{% if selected_locale == "ja" %}` branches.
+- Sitemap entries currently emit English and Japanese alternates plus
+  `x-default`. English canonical URLs are unprefixed.
+
+Web route migration targets:
+
+| Current route | Current source files and copy owners | Current SEO / `hreflang` behavior | Migration target |
+| --- | --- | --- | --- |
+| `/`, `/{locale}`, `/{locale}/` | `render_top_page`, `web/templates/top.html`, blog card metadata from `web/blog/articles/*.html`. | Indexed. English canonical is `/`; Japanese alternate is `/ja/`; `x-default` points to English. Page title and meta description come from `localized_text`. | `web/content/i18n/top/<lang>.json`, shared header/footer/language-switcher copy in `web/content/i18n/common/<lang>.json`, and blog card metadata from migrated blog metadata. |
+| `/about`, `/{locale}/about` | `render_about_page`, `web/templates/about.html`. | Indexed. English canonical is `/about`; Japanese alternate is `/ja/about`; `x-default` points to English. Page title and meta description come from `localized_text`. | `web/content/i18n/about/<lang>.json` plus `common/<lang>.json`. |
+| `/design`, `/{locale}/design` | `render_design_page`, `web/templates/index.html`, `web/templates/kanji_suggestions.html`, `web/templates/purchase_result.html`, `web/static/app.js`, API catalog labels. | Indexed. English canonical is `/design`; Japanese alternate is `/ja/design`; `x-default` points to English. Page title, meta description, and purchase note come from `localized_text`. | `web/content/i18n/design/<lang>.json` for page and JavaScript dynamic copy, plus fragment copy either in `design/<lang>.json` or dedicated `kanji_suggestions/<lang>.json` and `purchase_result/<lang>.json`. API catalog labels remain catalog-owned. |
+| `/blog`, `/{locale}/blog` | `render_blog_index_page`, `web/templates/blog_index.html`, blog front matter card fields. | Indexed. English canonical is `/blog`; Japanese alternate is `/ja/blog`; `x-default` points to English. Page title and meta description come from `localized_text`; card metadata comes from article front matter. | `web/content/i18n/blog_index/<lang>.json`, `common/<lang>.json`, and migrated blog `metadata.json` files. |
+| `/blog/{slug}`, `/{locale}/blog/{slug}` | `render_blog_article_page`, `web/templates/blog_article.html`, English article body files, Japanese `.ja.html` body files, and front matter metadata. | Indexed for each current blog slug. Canonical URL is the localized article URL. Alternates are English, Japanese, and `x-default` English. | `web/content/blog/<slug>/<lang>.html` and `web/content/blog/<slug>/metadata.json` with language-keyed title, excerpt, meta description, date display, and image alt text. |
+| `/terms`, `/{locale}/terms` | `render_terms_page`, `web/templates/terms.html`. | Indexed. English canonical is `/terms`; Japanese alternate is `/ja/terms`; `x-default` points to English. Page title and meta description come from `localized_text`. | `web/content/i18n/terms/<lang>.json` plus intention sidecars for legal entity names, addresses, governing-law terms, URLs, and other values that should intentionally remain unchanged. |
+| `/commercial-transactions`, `/{locale}/commercial-transactions` | `render_commercial_transactions_page`, `web/templates/commercial_transactions.html`. | Indexed. English canonical is `/commercial-transactions`; Japanese alternate is `/ja/commercial-transactions`; `x-default` points to English. Page title and meta description come from `localized_text`. | `web/content/i18n/commercial_transactions/<lang>.json` plus intention sidecars for seller name, representative name, address, phone, email, production origin, payment provider names, and legal labels that should intentionally remain unchanged. |
+| `/payment/success`, `/{locale}/payment/success` | `render_payment_success_page`, `web/templates/payment_success.html`. | Not in the sitemap. Rendered with `noindex`; page title and meta description come from `localized_text`. | `web/content/i18n/payment_success/<lang>.json` plus `common/<lang>.json`. Keep localized paths compatible for checkout return URLs. |
+| `/payment/failure`, `/{locale}/payment/failure` | `render_payment_failure_page`, `web/templates/payment_failure.html`. | Not in the sitemap. Rendered with `noindex`; page title and meta description come from `localized_text`. | `web/content/i18n/payment_failure/<lang>.json` plus `common/<lang>.json`. Keep localized paths compatible for checkout return URLs. |
+| `/sitemap.xml` | `handle_sitemap_xml`, `build_sitemap_xml`, `sitemap_url_entry`, `SITEMAP_STATIC_PAGES`, and loaded blog post metadata. | Emits English and Japanese `<url>` entries for indexed static pages, the blog index, and every blog article. `hreflang` values are hard-coded to `en`, `ja`, and `x-default`. | Registry-driven sitemap builder using `web.indexed`, route-code to BCP-47 mapping, localized canonical URLs, and fallback exclusion for non-indexed QA languages. |
+| `/robots.txt` | `handle_robots_txt`, `build_robots_txt`, and sitemap URL generation. | No localized route and no page copy. Points crawlers to `/sitemap.xml`. | No translation file needed. Keep sitemap URL generation aligned with the registry-backed web base URL. |
+| `/kanji`, `/mock/kanji` | `handle_kanji_suggestions`, `web/templates/kanji_suggestions.html`. | Fragment endpoints; not in sitemap. Locale comes from request context or mock path. | Fragment copy in `web/content/i18n/design/<lang>.json` or `web/content/i18n/kanji_suggestions/<lang>.json`. |
+| `/purchase`, `/mock/purchase` | `handle_purchase_impl`, `web/templates/purchase_result.html`. | Fragment endpoints; not in sitemap. Locale comes from request context or mock path. | Fragment copy in `web/content/i18n/design/<lang>.json` or `web/content/i18n/purchase_result/<lang>.json`. |
+
+Template copy inventory:
+
+| Template | Current copy pattern | Migration target |
+| --- | --- | --- |
+| `web/templates/top.html` | 11 Japanese-locale conditional branches. | `top/<lang>.json` and `common/<lang>.json`. |
+| `web/templates/index.html` | 91 Japanese-locale conditional branches for the design page, filters, seal preview, checkout form, and supporting text. | `design/<lang>.json`, common copy, and fragment JSON where useful. |
+| `web/templates/about.html` | 19 Japanese-locale conditional branches. | `about/<lang>.json`. |
+| `web/templates/blog_index.html` | 7 Japanese-locale conditional branches. | `blog_index/<lang>.json` and blog metadata. |
+| `web/templates/blog_article.html` | 7 Japanese-locale conditional branches around article chrome and navigation. | `common/<lang>.json`, blog chrome fields, and blog metadata. |
+| `web/templates/payment_success.html` | 26 Japanese-locale conditional branches. | `payment_success/<lang>.json`. |
+| `web/templates/payment_failure.html` | 24 Japanese-locale conditional branches. | `payment_failure/<lang>.json`. |
+| `web/templates/terms.html` | 38 Japanese-locale conditional branches. | `terms/<lang>.json` plus legal intention sidecars. |
+| `web/templates/commercial_transactions.html` | 46 Japanese-locale conditional branches. | `commercial_transactions/<lang>.json` plus legal intention sidecars. |
+| `web/templates/kanji_suggestions.html` | 5 Japanese-locale conditional branches. | `design/<lang>.json` or `kanji_suggestions/<lang>.json`. |
+| `web/templates/purchase_result.html` | 7 Japanese-locale conditional branches. | `design/<lang>.json` or `purchase_result/<lang>.json`. |
+
+Rust inline copy and route owner inventory:
+
+- `TopPageTemplate`, `AboutTemplate`, `PageTemplate`, `BlogIndexTemplate`,
+  `BlogArticleTemplate`, `PaymentSuccessTemplate`, `PaymentFailureTemplate`,
+  `CommercialTransactionsTemplate`, and `TermsTemplate` carry localized SEO,
+  language-switcher URLs, and template fields.
+- `render_top_page`, `render_about_page`, `render_design_page`,
+  `render_blog_index_page`, `render_payment_success_page`,
+  `render_payment_failure_page`, `render_commercial_transactions_page`, and
+  `render_terms_page` contain page-level `localized_text` calls that should
+  move into page JSON files.
+- `render_blog_article_page` resolves language-specific article bodies and
+  metadata from `BlogPost`.
+- `handle_purchase_impl` and checkout validation helpers contain inline
+  `localized_text` error messages for form validation and purchase failures.
+  Move these to checkout or purchase-result JSON with stable keys.
+- `SUPPORTED_LOCALES`, `parse_supported_locale`, `parse_path_locale`,
+  `localized_page_path`, `localized_page_url`, `top_url`, `design_url`,
+  `blog_index_url`, `blog_article_url`, and `sitemap_url_entry` are the main
+  route and SEO functions that must become registry-backed.
+- `web/static/app.js` owns browser-side user-visible copy for filter summaries,
+  empty states, form validation, purchase submit states, htmx errors, Kanji
+  reading labels, selected Kanji messages, preview shape labels, and fallback
+  summary text. This copy must move to JSON consumed by the design page so
+  adding a language does not require editing JavaScript source.
+
+Blog content inventory:
+
+| Slug | Current files | Current metadata owner | Migration target |
+| --- | --- | --- | --- |
+| `chinese-chop-seal-vs-japanese-hanko` | `web/blog/articles/chinese-chop-seal-vs-japanese-hanko.html`, `web/blog/articles/chinese-chop-seal-vs-japanese-hanko.ja.html` | English front matter with Japanese fields. | `web/content/blog/chinese-chop-seal-vs-japanese-hanko/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `custom-jade-seal` | `web/blog/articles/custom-jade-seal.html`, `web/blog/articles/custom-jade-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/custom-jade-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `custom-stone-seal-gift` | `web/blog/articles/custom-stone-seal-gift.html`, `web/blog/articles/custom-stone-seal-gift.ja.html` | English front matter with Japanese fields. | `web/content/blog/custom-stone-seal-gift/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `english-name-kanji-seal` | `web/blog/articles/english-name-kanji-seal.html`, `web/blog/articles/english-name-kanji-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/english-name-kanji-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `hanko-vs-inkan` | `web/blog/articles/hanko-vs-inkan.html`, `web/blog/articles/hanko-vs-inkan.ja.html` | English front matter with Japanese fields. | `web/content/blog/hanko-vs-inkan/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `how-to-choose-stone-seal` | `web/blog/articles/how-to-choose-stone-seal.html`, `web/blog/articles/how-to-choose-stone-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/how-to-choose-stone-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `jade-agate-qingtian-stone-seal` | `web/blog/articles/jade-agate-qingtian-stone-seal.html`, `web/blog/articles/jade-agate-qingtian-stone-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/jade-agate-qingtian-stone-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `japanese-hanko-souvenir` | `web/blog/articles/japanese-hanko-souvenir.html`, `web/blog/articles/japanese-hanko-souvenir.ja.html` | English front matter with Japanese fields. | `web/content/blog/japanese-hanko-souvenir/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `luxury-personal-seal` | `web/blog/articles/luxury-personal-seal.html`, `web/blog/articles/luxury-personal-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/luxury-personal-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `one-of-a-kind-stone-seal` | `web/blog/articles/one-of-a-kind-stone-seal.html`, `web/blog/articles/one-of-a-kind-stone-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/one-of-a-kind-stone-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `personal-seal-symbol-of-identity` | `web/blog/articles/personal-seal-symbol-of-identity.html`, `web/blog/articles/personal-seal-symbol-of-identity.ja.html` | English front matter with Japanese fields. | `web/content/blog/personal-seal-symbol-of-identity/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `personal-seals-for-artists` | `web/blog/articles/personal-seals-for-artists.html`, `web/blog/articles/personal-seals-for-artists.ja.html` | English front matter with Japanese fields. | `web/content/blog/personal-seals-for-artists/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `what-is-a-hanko` | `web/blog/articles/what-is-a-hanko.html`, `web/blog/articles/what-is-a-hanko.ja.html` | English front matter with Japanese fields. | `web/content/blog/what-is-a-hanko/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `what-is-a-personal-seal` | `web/blog/articles/what-is-a-personal-seal.html`, `web/blog/articles/what-is-a-personal-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/what-is-a-personal-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `what-to-engrave-on-seal` | `web/blog/articles/what-to-engrave-on-seal.html`, `web/blog/articles/what-to-engrave-on-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/what-to-engrave-on-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+
+Current blog migration notes:
+
+- Each current slug has an English article file and a Japanese `.ja.html`
+  article file.
+- Current English front matter owns `title`, `excerpt`, `date`,
+  `date_display`, `meta_description`, `image_url`, and `image_alt`.
+- Current English front matter also owns Japanese metadata fields such as
+  `title_ja`, `excerpt_ja`, `date_display_ja`, `meta_description_ja`, and
+  `image_alt_ja`.
+- The existing article bodies are parallel English/Japanese files, not a
+  directory-based locale structure.
+- No standalone `zh` or `zhtw` web article translation exists today. Chinese
+  subject matter in slugs such as `chinese-chop-seal-vs-japanese-hanko`,
+  `english-name-kanji-seal`, `custom-jade-seal`, and
+  `jade-agate-qingtian-stone-seal` is topical content, not Chinese locale copy.
+
+Sitemap coverage and migration targets:
+
+- Current indexed static sitemap routes are `/`, `/about`, `/design`,
+  `/terms`, and `/commercial-transactions`, with English and Japanese URL
+  entries for each route.
+- `/blog` is indexed with English and Japanese URL entries.
+- All 15 blog article slugs above are indexed with English and Japanese URL
+  entries.
+- `/payment/success` and `/payment/failure` are localized user-visible pages
+  but are intentionally excluded from the sitemap and rendered as `noindex`.
+- `/kanji`, `/purchase`, `/mock/kanji`, `/mock/purchase`, admin proxy routes,
+  and static asset routes are not sitemap routes. They still need localized
+  fragment copy where they render user-visible UI.
+- The migration target for sitemap and `hreflang` behavior is the M3 registry
+  loader plus page availability checks. Non-indexed QA languages must be
+  renderable without being emitted in `/sitemap.xml`.
 
 ### M1: Registry and Read-Only Tooling
 
