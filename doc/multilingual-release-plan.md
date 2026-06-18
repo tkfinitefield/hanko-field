@@ -1006,7 +1006,7 @@ A task is complete only when:
   Output: list of `*_i18n` maps, seed constants, checkout labels, and fallback
   rules.
   Done when: no catalog or checkout copy is left without an owner path.
-- [ ] `M0-T04` Inventory release metadata and deep-link state.
+- [x] `M0-T04` Inventory release metadata and deep-link state.
   Output: current app identifiers, version source, signing assumptions,
   checkout return paths, and store copy locations.
   Done when: fastlane setup can proceed without rediscovering release basics.
@@ -1284,6 +1284,71 @@ Fallback and preservation rules for later implementation:
   `zhtw` translations. When Chinese locale files are introduced, these values
   should be translated or intentionally preserved via sidecars according to the
   catalog translation policy.
+
+#### M0-T04 Release Metadata and Deep-Link Inventory
+
+Completed on 2026-06-18. This inventory covers app identifiers, version source,
+release signing assumptions, checkout return paths, associated-domain state,
+and current store-copy locations. It is the baseline needed before adding
+fastlane in `M8`.
+
+Current app identifiers and version source:
+
+| Platform | Current value | Source file | Notes for fastlane |
+| --- | --- | --- | --- |
+| Android namespace | `org.finitefield.hankofield` | `app/android/app/build.gradle.kts` | Keep aligned with package name and Play Console package. |
+| Android application ID | `org.finitefield.hankofield` | `app/android/app/build.gradle.kts` | Recommended Android `Appfile` package name. |
+| Android app label | `STONE SIGNATURE` | `app/android/app/src/main/res/values/strings.xml` | Store metadata should use generated localized metadata, not this resource file. |
+| iOS bundle identifier | `org.finitefield.hankofield` | `app/ios/Runner.xcodeproj/project.pbxproj`, surfaced through `PRODUCT_BUNDLE_IDENTIFIER` in `app/ios/Runner/Info.plist`. | Recommended iOS `Appfile` app identifier. |
+| iOS display name / bundle name | `STONE SIGNATURE` | `app/ios/Runner/Info.plist` | App Store metadata should be generated separately. |
+| Flutter package version | `1.1.0+11` | `app/pubspec.yaml` | Treat this as the committed version source. Local generated Android files can drift and should not be used as release metadata source. |
+| Android version code/name | `flutter.versionCode` / `flutter.versionName` | `app/android/app/build.gradle.kts`, generated from Flutter tooling. | fastlane build lanes should call Flutter from `app/` or pass explicit build name/number from the release process. |
+| iOS build number/name | `$(FLUTTER_BUILD_NUMBER)` / `$(FLUTTER_BUILD_NAME)` | `app/ios/Runner/Info.plist`, `app/ios/Runner.xcodeproj/project.pbxproj`. | fastlane iOS lanes should rely on Flutter build args or the committed `pubspec.yaml` version. |
+
+Release signing and credential assumptions:
+
+| Area | Current state | Required handling before fastlane |
+| --- | --- | --- |
+| Android release signing | Gradle reads `app/android/key.properties` and expects `app/android/app/upload-keystore.jks` for release builds. Release builds fail with a clear `GradleException` when either file is missing. | Treat `key.properties`, keystores, passwords, and exported AAB/APK files as private local or CI-secret material. Do not commit them. |
+| Android signing fingerprint | `doc/app-release-deep-link-config.md` says `assetlinks.json` must include the release signing certificate SHA-256 fingerprint for `org.finitefield.hankofield`. | Add a fastlane/setup note for retrieving and validating the upload/app signing fingerprint before hosting association files. |
+| iOS signing | Xcode project uses automatic signing style for the test target and Runner build settings attach `Runner/Runner.entitlements` to Debug, Release, and Profile. No Apple team ID or API key is committed. | fastlane should use App Store Connect API key files or CI secrets. Do not commit API key JSON/P8 files or provisioning secrets. |
+| Secret ignore coverage | `.gitignore` currently ignores Firebase admin SDK files and `api/.secrets.local`, but Android signing files and future fastlane private files are not explicitly listed. Current signing files are local untracked files. | `M8-T06` must add ignore rules for Android key properties, keystores, Apple API keys, service account JSON, exported `.ipa`, generated AAB/APK/fastlane reports, and local screenshots if needed. |
+
+Checkout return and deep-link state:
+
+| Surface | Current route or config | Source files | Localization impact |
+| --- | --- | --- | --- |
+| Custom scheme | `hankofield://checkout/*` with host `checkout`. | `app/android/app/src/main/AndroidManifest.xml`, `app/ios/Runner/Info.plist`, `app/lib/features/order/domain/checkout_return.dart`. | Primary app-originated Stripe return path. Locale is carried by `lang` or `locale` query parameter. |
+| Android App Links | Verified HTTPS intent filters for `finitefield.org` and `www.finitefield.org`, path prefixes `/payment`, `/en/payment`, and `/ja/payment`. | `app/android/app/src/main/AndroidManifest.xml`, covered by `app/test/platform_deep_link_config_test.dart`. | Must expand from hard-coded `en` / `ja` prefixes to registry-generated payment prefixes when release-enabled web payment paths expand. |
+| iOS Universal Links | Associated domains `applinks:finitefield.org` and `applinks:www.finitefield.org`. | `app/ios/Runner/Runner.entitlements`, covered by `app/test/platform_deep_link_config_test.dart`. | Hosted AASA path list must include localized payment prefixes when they are enabled. |
+| Hosted association files | No `assetlinks.json` or `apple-app-site-association` file is committed. | `doc/app-release-deep-link-config.md` documents required hosted URLs. | Add generation or documented manual hosting before broader localized payment paths are released. |
+| Web payment pages | `/payment/success`, `/payment/failure`, `/ja/payment/success`, `/ja/payment/failure`; `/en/payment/*` is retained as compatibility in app link config. | `web/src/main.rs`, payment templates, and `doc/app-release-deep-link-config.md`. | M3/M10 must verify every release-enabled payment prefix. English canonical remains unprefixed, but `/en/payment/*` compatibility must not break existing app links. |
+| API web return URLs | `API_PSP_STRIPE_CHECKOUT_SUCCESS_URL` and `API_PSP_STRIPE_CHECKOUT_CANCEL_URL` point to public web payment pages in `.env.prod.example`. | `.env.prod.example`, `api/src/main.rs::StripeCheckoutConfig`. | Browser checkout stays on web. The API appends checkout outcome, order ID, and `lang`. |
+| API app return URLs | `API_PSP_STRIPE_APP_CHECKOUT_SUCCESS_URL=hankofield://checkout/success?session_id={CHECKOUT_SESSION_ID}` and `API_PSP_STRIPE_APP_CHECKOUT_CANCEL_URL=hankofield://checkout/cancel`. | `.env.prod.example`, `doc/app-release-deep-link-config.md`, `api/src/main.rs`. | App-originated checkout uses custom scheme when `return_to_app=true`; API appends `checkout`, `order_id`, `lang`, and `return_to=app`. |
+| App return parser | Parses `hankofield://checkout/...`, `/payment/...`, `/checkout/...`, and localized web returns; strips only leading `en` or `ja` path segments today. | `app/lib/features/order/domain/checkout_return.dart`, `app/test/checkout_return_test.dart`. | Must become registry-aware before 68 localized payment routes are enabled. |
+
+Current store-copy locations:
+
+| Copy type | Current source | Migration target |
+| --- | --- | --- |
+| App name in installed Android/iOS app | `app/android/app/src/main/res/values/strings.xml`, `app/ios/Runner/Info.plist`, app localization `appTitle`. | Keep runtime app name stable unless product decides localized names. Store listing names belong in `release/store_metadata/source/<lang>.json`. |
+| Flutter app description | `app/pubspec.yaml` contains a developer/package description, not store metadata. | Do not use as store listing copy. Generate store metadata from `release/store_metadata/source/<lang>.json`. |
+| Web app manifest copy | `app/web/manifest.json` has PWA name, short name, and description. | Not a mobile store metadata source; include in web/PWA localization only if the web app surface is released. |
+| App Store Review explanation | `doc/app-mvp-screen-design.md` has Japanese App Store Review notes explaining native app value. | Use as a reference when drafting `review_notes` / reviewer instructions, but not as localized public metadata. |
+| Public legal/support URLs | App settings content and web templates point to finitefield.org privacy/contact/legal pages. | Store metadata source should carry support URL, marketing URL, and privacy policy URL per platform/locale. |
+| Existing fastlane/store metadata files | No `app/android/fastlane`, `app/ios/fastlane`, `Gemfile`, or `release/store_metadata/**` files are present. | `M8` creates source JSON, generated Google Play/App Store metadata folders, Bundler files, and metadata-only lanes. |
+
+Fastlane setup readiness notes:
+
+- Android fastlane can use `package_name("org.finitefield.hankofield")`.
+- iOS fastlane can use `app_identifier("org.finitefield.hankofield")`.
+- Metadata generation must validate platform-specific locale support before
+  writing Google Play or App Store folders.
+- Binary upload lanes must remain separate from metadata-only lanes.
+- Production lanes must require manual confirmation after internal Google Play
+  and TestFlight lanes are proven.
+- Deep-link association files and platform manifests must be updated from the
+  language registry before release-enabled localized payment paths go live.
 
 ### M1: Registry and Read-Only Tooling
 
