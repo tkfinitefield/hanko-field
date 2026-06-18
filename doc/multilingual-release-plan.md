@@ -3828,7 +3828,7 @@ git diff --cached --check
 - [x] `M8-T04` Add Android fastlane with Bundler.
   Output: `app/android/Gemfile`, `Appfile`, and metadata/internal lanes.
   Done when: metadata-only Android lane runs without uploading binaries.
-- [ ] `M8-T05` Add iOS fastlane with Bundler.
+- [x] `M8-T05` Add iOS fastlane with Bundler.
   Output: `app/ios/Gemfile`, `Appfile`, and metadata/TestFlight lanes.
   Done when: metadata-only iOS lane runs without uploading binaries.
 - [ ] `M8-T06` Add secret and signing guardrails.
@@ -4139,6 +4139,87 @@ ruby -c app/android/fastlane/Appfile
 BUNDLE_PATH=/tmp/hanko-field-android-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-android-bundle-config bundle install
 BUNDLE_PATH=/tmp/hanko-field-android-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-android-bundle-config bundle exec fastlane android metadata
 make google-play-metadata-check
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T05 iOS fastlane with Bundler
+
+Completed on 2026-06-18. Added iOS fastlane setup with Bundler and
+metadata-safe lanes.
+
+Implementation notes:
+
+- Added `app/ios/Gemfile` and `app/ios/Gemfile.lock`.
+- Pinned fastlane to `2.228.0` to match Android fastlane and the local macOS
+  Ruby `2.6.10` runtime.
+- Added `app/ios/fastlane/Appfile` with:
+  - `app_identifier("org.finitefield.hankofield")`
+- Added `app/ios/fastlane/Fastfile` with:
+  - `ios metadata_check`: runs `make app-store-metadata-check` locally
+    without App Store Connect credentials.
+  - `ios metadata`: runs `metadata_check` locally, then calls `deliver` only
+    when `APP_STORE_CONNECT_API_KEY_PATH` is set. The App Store Connect call
+    uses `metadata_path` pointing at `release/store_metadata/app_store`,
+    `skip_binary_upload: true`, `skip_screenshots: true`,
+    `submit_for_review: false`, and `force: true`.
+  - `ios testflight_upload`: builds a release IPA and uploads it to
+    TestFlight. The lane requires `APP_STORE_CONNECT_API_KEY_PATH` and defaults
+    to `skip_submission` unless `TESTFLIGHT_SKIP_SUBMISSION=false` is set.
+- Added `scripts/release/ios_fastlane_config.mjs` to validate that the iOS
+  fastlane setup keeps metadata and binary lanes separate.
+- Added `scripts/release/ios_fastlane_config.test.mjs` to cover:
+  - valid iOS fastlane configuration shape
+  - failure when the metadata lane can upload an IPA
+  - failure when App Store Connect credential material is committed in
+    `Appfile`
+- Added Make targets:
+  - `make ios-fastlane-check`
+  - `make ios-fastlane-test`
+- Added iOS fastlane checks to `make i18n-ci`.
+
+Credential and upload behavior:
+
+- `APP_STORE_CONNECT_API_KEY_PATH` is required only for lanes that contact App
+  Store Connect or TestFlight.
+- No App Store Connect API key JSON, `.p8` key, issuer ID, key ID, exported
+  IPA, fastlane report, polling, streaming, SSE, or WebSocket behavior was
+  added.
+- The completed local lane for M8-T05 is `bundle exec fastlane ios metadata`
+  from `app/ios`; without `APP_STORE_CONNECT_API_KEY_PATH`, it validates
+  generated metadata and does not contact App Store Connect or upload metadata,
+  screenshots, or binaries.
+- The `metadata` lane is prepared as an App Store metadata lane. It cannot
+  upload binaries because binary upload is explicitly skipped and guarded by
+  `make ios-fastlane-check`.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, source store metadata, Google Play
+  generated metadata, App Store generated metadata, and Android fastlane files
+  remain unchanged.
+- iOS signing assets and App Store Connect API keys remain external to the
+  repository.
+- `release.enabled=false` remains unchanged for all languages.
+- Binary upload remains separated into the `testflight_upload` lane for later
+  M10 validation.
+- Rollback path: remove `app/ios/Gemfile`, `app/ios/Gemfile.lock`,
+  `app/ios/fastlane`, `scripts/release/ios_fastlane_config.*`, remove the
+  Makefile targets, and reopen `M8-T05`.
+
+Validation:
+
+```sh
+node --check scripts/release/ios_fastlane_config.mjs
+make ios-fastlane-check
+make ios-fastlane-test
+ruby -c app/ios/fastlane/Fastfile
+ruby -c app/ios/fastlane/Appfile
+BUNDLE_PATH=/tmp/hanko-field-ios-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-ios-bundle-config bundle install
+BUNDLE_PATH=/tmp/hanko-field-ios-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-ios-bundle-config bundle exec fastlane ios metadata
+make app-store-metadata-check
 make i18n-check
 make i18n-ci
 git diff --check
