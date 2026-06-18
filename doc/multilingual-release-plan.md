@@ -2696,7 +2696,7 @@ git diff --cached --check
 
 ### M5: Admin Data Preservation
 
-- [ ] `M5-T01` Audit admin localized form writes.
+- [x] `M5-T01` Audit admin localized form writes.
   Output: list of every form that reads or writes a `*_i18n` map.
   Done when: high-risk overwrite paths are identified.
 - [ ] `M5-T02` Add merge helpers for localized maps.
@@ -2715,6 +2715,74 @@ git diff --cached --check
   Output: review note confirming no polling, SSE, or WebSocket behavior was
   added.
   Done when: admin remains aligned with repository policy.
+
+#### M5-T01 Admin Localized Form Write Audit
+
+Completed on 2026-06-18. Audited admin forms, views, server mutations, and
+Firestore persistence paths that read or write localized maps.
+
+Audited source areas:
+
+- `admin/src/main.rs` data models, view models, form handlers, mutation methods,
+  Firestore serializers, and mock fixtures.
+- `admin/templates/*` create, edit, detail, and list templates that expose
+  localized fields.
+- Firestore write helpers that patch full localized map fields with
+  `PatchDocumentOptions.update_mask_field_paths`.
+
+Localized map inventory:
+
+| Admin area | Form or view | Reads | Writes | Current write behavior | Risk |
+| --- | --- | --- | --- | --- | --- |
+| Materials | `material_create.html`, `handle_material_create`, `create_material` | none for new form | `label_i18n`, `description_i18n` | Creates maps with only `ja` and `en` keys. | Low for new records; expected to start with editable admin languages only. |
+| Materials | `materials_list.html`, `material_detail.html`, `handle_material_patch`, `update_material` | `label_i18n.ja`, `label_i18n.en`, `description_i18n.ja`, `description_i18n.en` | `label_i18n`, `description_i18n` | Inserts `ja` and `en` into the loaded maps, then patches the full map fields. | High: full-map patch can overwrite concurrent or externally added locale keys if the admin snapshot is stale or parsing drops values. |
+| Stone listings | `stone_listing_create.html`, `handle_stone_listing_create`, `create_stone_listing` | none for new form | `title_i18n`, `description_i18n`, `story_i18n`, `photos[].alt_i18n` | Creates text maps with only `ja` and `en`; creates primary photo `alt_i18n` only for non-empty `ja` and `en`. | Medium: new records intentionally start narrow, but empty photo alt inputs omit keys. |
+| Stone listings | `stone_listings_list.html`, `stone_listing_detail.html`, `handle_stone_listing_patch`, `update_stone_listing` | `title_i18n.ja`, `title_i18n.en`, `description_i18n.ja`, `description_i18n.en`, `story_i18n.ja`, `story_i18n.en`, primary `photos[].alt_i18n.ja`, primary `photos[].alt_i18n.en` | `title_i18n`, `description_i18n`, `story_i18n`, `photos[].alt_i18n` through full `photos` array | Inserts `ja` and `en` into loaded text maps; primary photo alt removes `ja` or `en` when blank and otherwise updates those keys; persistence patches the full text maps and full `photos` array. | High: full-map and full-array patches are the broadest overwrite path, especially for `photos[].alt_i18n` and extra photo records. |
+| Facet tags | `facet_tag_create.html`, `handle_facet_tag_create`, `create_facet_tag` | none for new form | `label_i18n` | Creates map with only `ja` and `en` keys. | Low for new records; expected to start with editable admin languages only. |
+| Facet tags | `facet_tags_list.html`, `facet_tag_detail.html`, `handle_facet_tag_patch`, `update_facet_tag` | `label_i18n.ja`, `label_i18n.en` | `label_i18n` | Inserts `ja` and `en` into the loaded map, then patches the full map field. | High: full-map patch can overwrite locale keys not present in the loaded admin snapshot. |
+| Countries | `country_create.html`, `handle_country_create`, `create_country` | none for new form | `label_i18n` | Creates map with only `ja` and `en` keys. | Low for new records; expected to start with editable admin languages only. |
+| Countries | `countries_list.html`, `country_detail.html`, `handle_country_patch`, `update_country` | `label_i18n.ja`, `label_i18n.en` | `label_i18n` | Inserts `ja` and `en` into the loaded map, then patches the full map field. | High: full-map patch can overwrite locale keys not present in the loaded admin snapshot. |
+
+Non-target admin forms:
+
+- Orders status and shipping forms do not read or write `*_i18n` maps.
+- Fonts create and edit forms use a single `label` field, not `label_i18n`.
+- Material and stone-listing photo upload endpoints write storage paths only;
+  localized alt text is written by the stone-listing create and edit forms.
+- Delete forms remove entire records and are outside localized-map merge
+  behavior.
+
+High-risk paths to address in M5-T02:
+
+1. Add localized-map merge helpers for `label_i18n`, `description_i18n`,
+   `title_i18n`, and `story_i18n` that update selected route keys without
+   replacing the whole map.
+2. Add a photo-array merge helper for stone-listing primary photo alt text so
+   `photos[].alt_i18n` preserves unknown locale keys and non-primary photos by
+   default.
+3. Keep create flows scoped to `ja` and `en` unless M5-T04 introduces a compact
+   registry-driven editor for additional route codes.
+4. Add preservation tests in M5-T03 for materials, stone listings, countries,
+   and facet tags, including `fr`, `zh`, and `zhtw` keys.
+
+M0-T05 preservation evidence:
+
+- This task did not change runtime behavior or data writes.
+- Existing English and Japanese admin fields remain the only visible admin
+  inputs.
+- Unknown locale keys were identified as values that must be preserved by
+  M5-T02 merge helpers before broader 68-language content is introduced.
+- Rollback path: revert this documentation-only audit section and reopen
+  `M5-T01`.
+
+Validation:
+
+```sh
+rg -n "_i18n|label_ja|label_en|title_ja|title_en|description_ja|description_en|story_ja|story_en|photo_alt_ja|photo_alt_en" admin/src/main.rs admin/templates
+rg -n "persist_.*mutation|PatchDocumentOptions|update_mask_field_paths|fs_string_map|fs_material_photos" admin/src/main.rs
+git diff --check
+git diff --cached --check
+```
 
 ### M6: Translation Workflow Tooling
 
