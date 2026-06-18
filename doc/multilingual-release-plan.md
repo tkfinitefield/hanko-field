@@ -2973,7 +2973,7 @@ git diff --cached --check
 - [x] `M6-T04` Validate JSON shape and fallback chains.
   Output: shape comparison for settings, web copy, API content, and metadata.
   Done when: fallback chains never point to missing or disabled languages.
-- [ ] `M6-T05` Implement intention sidecar validation.
+- [x] `M6-T05` Implement intention sidecar validation.
   Output: allowed reason code checks and per-key suppression.
   Done when: English leftovers are allowed only with approved sidecars.
 - [ ] `M6-T06` Add export/import helpers.
@@ -3234,6 +3234,81 @@ make i18n-status-test
 make i18n-registry-test
 node --check scripts/i18n/json_shape.mjs
 node --check scripts/i18n/json_shape.test.mjs
+node --check scripts/i18n/check.mjs
+node --check scripts/i18n/check.test.mjs
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T05 Intention Sidecar Validation
+
+Completed on 2026-06-18. Added intention sidecar validation to the localization
+gate so same-as-English target values require an explicit per-key approval.
+
+Implementation notes:
+
+- Added `scripts/i18n/intentions.mjs`.
+- Added `scripts/i18n/intentions.test.mjs`.
+- Added root Make target:
+  - `make i18n-intentions-test`
+- Integrated intention validation into `make i18n-check`.
+- The validator accepts both sidecar shapes already present in the repository:
+  - compact map form such as `{ "appTitle": "brand_name" }`
+  - `entries` form with `key_path`, `target_locale`, and `reason_code`
+- Allowed reason codes include the M0 preservation codes and the Section 10
+  sidecar codes, including `brand_name`, `legal_entity`, `legal_entity_name`,
+  `url_or_email`, `url`, `email`, `code_literal`, `technical_identifier`,
+  `payment_provider`, `product_name`, and `intentionally_english`.
+- Exact same-as-English string values are checked for app ARB, app settings
+  JSON, web content JSON, API checkout JSON, API catalog language maps, and
+  release metadata source JSON when release metadata exists.
+- Empty strings are ignored as non-actionable placeholders.
+- API catalog approvals may use either `key.targetLocale` or an `entries`
+  record with `key_path` plus `target_locale`.
+- Added current Japanese sidecars for intentional holdouts in:
+  - `app/lib/l10n/app_ja_intentions.json`
+  - `web/content/i18n/common/ja_intentions.json`
+- Translated two Japanese legal-page labels that were ordinary copy rather
+  than intentional English holdouts:
+  - `commercial_transactions_025`: `製作地`
+  - `commercial_transactions_027`: `お届け目安`
+
+Examples:
+
+```sh
+make i18n-check
+make i18n-intentions-test
+node scripts/i18n/intentions.mjs
+```
+
+M0-T05 preservation evidence:
+
+- The command is read-only and does not generate, rewrite, or normalize
+  sidecars.
+- Existing sidecar files are validated for allowed reason codes before they can
+  suppress a same-as-English value.
+- Existing English source content remains untouched.
+- Japanese sidecars were added only for exact-English values that are intended
+  to remain shared labels, identifiers, or support values.
+- Rollback path: remove `scripts/i18n/intentions.mjs`,
+  `scripts/i18n/intentions.test.mjs`, the Make target, the new Japanese
+  sidecars, the Japanese label edits, and the intention integration in
+  `scripts/i18n/check.mjs`, then reopen `M6-T05`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-intentions-test
+make i18n-check-test
+make i18n-json-shape-test
+make i18n-arb-test
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
+node scripts/i18n/intentions.mjs
+node --check scripts/i18n/intentions.mjs
+node --check scripts/i18n/intentions.test.mjs
 node --check scripts/i18n/check.mjs
 node --check scripts/i18n/check.test.mjs
 git diff --check

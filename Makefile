@@ -16,7 +16,7 @@ GCP_PROD_REGION ?= asia-northeast1
 ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_ADMIN_MODE);,)
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -42,6 +42,7 @@ help:
 	@echo "  make i18n-check     # Validate localization registry, files, and missing keys"
 	@echo "  make i18n-arb-test  # Validate ARB placeholder and ICU checks"
 	@echo "  make i18n-json-shape-test # Validate JSON shape and fallback checks"
+	@echo "  make i18n-intentions-test # Validate intention sidecar checks"
 	@echo "  make i18n-registry-test # Validate the language registry parser"
 	@echo ""
 	@echo "Options:"
@@ -103,3 +104,6 @@ i18n-arb-test:
 
 i18n-json-shape-test:
 	node --test scripts/i18n/json_shape.test.mjs
+
+i18n-intentions-test:
+	node --test scripts/i18n/intentions.test.mjs

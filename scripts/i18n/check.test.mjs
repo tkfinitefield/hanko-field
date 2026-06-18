@@ -126,6 +126,36 @@ test('fails when checked JSON shape is unsafe', async () => {
   );
 });
 
+test('fails when checked content has unapproved English leftovers', async () => {
+  const rootDir = await createTempRoot();
+  await writeMinimalEnabledContent(rootDir);
+  await writeJson(rootDir, 'app/lib/l10n/app_en.arb', {
+    '@@locale': 'en',
+    appTitle: 'STONE SIGNATURE',
+    hello: 'Hello',
+  });
+  await writeJson(rootDir, 'app/lib/l10n/app_ja.arb', {
+    '@@locale': 'ja',
+    appTitle: 'STONE SIGNATURE',
+    hello: 'こんにちは',
+  });
+
+  const report = await buildI18nCheck({
+    rootDir,
+    file: 'app/lib/l10n/app_ja.arb',
+  });
+
+  assert.equal(report.ok, false);
+  assert.ok(
+    report.issues.some(
+      (issue) =>
+        issue.type === 'intention' &&
+        issue.file === 'app/lib/l10n/app_ja.arb' &&
+        issue.message.includes('appTitle'),
+    ),
+  );
+});
+
 test('validates sidecar and release metadata JSON when present', async () => {
   const rootDir = await createTempRoot();
   await writeMinimalEnabledContent(rootDir);
