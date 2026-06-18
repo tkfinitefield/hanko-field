@@ -2704,7 +2704,7 @@ git diff --cached --check
   whole map.
   Done when: unknown locale keys are preserved by default and the `M0-T05`
   migration-safety checklist is satisfied.
-- [ ] `M5-T03` Add preservation tests.
+- [x] `M5-T03` Add preservation tests.
   Output: tests covering materials, stone listings, countries, and facet tags.
   Done when: editing Japanese values preserves `fr`, `zh`, and `zhtw` values
   and the `M0-T05` migration-safety checklist is satisfied.
@@ -2825,6 +2825,42 @@ cargo fmt --manifest-path admin/Cargo.toml -- --check
 cargo test --manifest-path admin/Cargo.toml m5_t02 -- --nocapture
 cargo test --manifest-path admin/Cargo.toml
 rg -n '"(label_i18n|description_i18n|title_i18n|story_i18n)"\.to_owned\(\)|label_i18n\.ja|title_i18n\.ja|ADMIN_EDITABLE_LOCALE_KEYS|append_admin_localized_update_mask_paths|merge_admin_localized_map_values|merge_optional_admin_localized_map_values' admin/src/main.rs
+git diff --check
+git diff --cached --check
+```
+
+#### M5-T03 Admin Localized Map Preservation Tests
+
+Completed on 2026-06-18. Added admin regression tests proving that localized
+map edits preserve non-visible route keys.
+
+Implementation notes:
+
+- Added material edit coverage for `label_i18n` and `description_i18n`.
+- Added stone-listing edit coverage for `title_i18n`, `description_i18n`,
+  `story_i18n`, and primary `photos[].alt_i18n`.
+- Added country edit coverage for `label_i18n`.
+- Added facet-tag edit coverage for `label_i18n`.
+- Each test injects `fr`, `zh`, and `zhtw` values into the existing mock
+  snapshot, edits the normal admin `ja` / `en` fields, and asserts the injected
+  values remain after the mutation.
+
+M0-T05 preservation evidence:
+
+- Existing Japanese and English admin edit behavior remains covered by the
+  updated assertions.
+- Hidden `fr`, `zh`, and `zhtw` localized-map keys are now covered across all
+  M5-T01 high-risk admin areas.
+- No runtime UI, polling, SSE, or WebSocket behavior changed.
+- Rollback path: remove the `m5_t03_*` tests and reopen `M5-T03`; the M5-T02
+  merge implementation remains independently covered by `m5_t02_*` tests.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path admin/Cargo.toml -- --check
+cargo test --manifest-path admin/Cargo.toml m5_t03 -- --nocapture
+cargo test --manifest-path admin/Cargo.toml
 git diff --check
 git diff --cached --check
 ```

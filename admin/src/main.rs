@@ -12080,6 +12080,219 @@ mod tests {
         );
     }
 
+    fn insert_preservation_locales(values: &mut HashMap<String, String>, prefix: &str) {
+        values.insert("fr".to_owned(), format!("{prefix} français"));
+        values.insert("zh".to_owned(), format!("{prefix} 简体中文"));
+        values.insert("zhtw".to_owned(), format!("{prefix} 繁體中文"));
+    }
+
+    fn assert_preservation_locales(values: &HashMap<String, String>, prefix: &str) {
+        assert_eq!(
+            values.get("fr").map(String::as_str),
+            Some(format!("{prefix} français").as_str())
+        );
+        assert_eq!(
+            values.get("zh").map(String::as_str),
+            Some(format!("{prefix} 简体中文").as_str())
+        );
+        assert_eq!(
+            values.get("zhtw").map(String::as_str),
+            Some(format!("{prefix} 繁體中文").as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn m5_t03_update_material_preserves_fr_zh_and_zhtw_values() {
+        let state = mock_server_state();
+
+        {
+            let mut data = state.data.write().await;
+            let material = data
+                .materials
+                .get_mut("jade")
+                .expect("jade material should exist");
+            insert_preservation_locales(&mut material.label_i18n, "material label");
+            insert_preservation_locales(&mut material.description_i18n, "material description");
+        }
+
+        let result = state
+            .update_material(
+                "jade",
+                MaterialPatchInput {
+                    label_ja: "翡翠 更新".to_owned(),
+                    label_en: "Jade Updated".to_owned(),
+                    description_ja: "更新された説明です。".to_owned(),
+                    description_en: "Updated description.".to_owned(),
+                    is_active: true,
+                },
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let data = state.data.read().await;
+        let material = data
+            .materials
+            .get("jade")
+            .expect("jade material should remain");
+        assert_eq!(
+            material.label_i18n.get("ja").map(String::as_str),
+            Some("翡翠 更新")
+        );
+        assert_eq!(
+            material.label_i18n.get("en").map(String::as_str),
+            Some("Jade Updated")
+        );
+        assert_preservation_locales(&material.label_i18n, "material label");
+        assert_preservation_locales(&material.description_i18n, "material description");
+    }
+
+    #[tokio::test]
+    async fn m5_t03_update_stone_listing_preserves_fr_zh_and_zhtw_values() {
+        let state = mock_server_state();
+
+        {
+            let mut data = state.data.write().await;
+            let listing = data
+                .stone_listings
+                .get_mut("jade_01")
+                .expect("jade_01 listing should exist");
+            insert_preservation_locales(&mut listing.title_i18n, "listing title");
+            insert_preservation_locales(&mut listing.description_i18n, "listing description");
+            insert_preservation_locales(&mut listing.story_i18n, "listing story");
+            let primary = listing
+                .photos
+                .iter_mut()
+                .find(|photo| photo.is_primary)
+                .expect("primary photo should exist");
+            insert_preservation_locales(&mut primary.alt_i18n, "listing photo alt");
+        }
+
+        let mut input = valid_stone_listing_patch_input();
+        input.title_ja = "翡翠の一点物 01 更新".to_owned();
+        input.title_en = "Updated One-of-a-kind Jade 01".to_owned();
+        input.description_ja = "更新された一点物説明です。".to_owned();
+        input.description_en = "Updated listing description.".to_owned();
+        input.story_ja = "更新されたストーリーです。".to_owned();
+        input.story_en = "Updated story.".to_owned();
+        input.photo_alt_ja = "更新された翡翠写真".to_owned();
+        input.photo_alt_en = "Updated jade photo".to_owned();
+
+        let result = state.update_stone_listing("jade_01", input).await;
+
+        assert!(result.is_ok());
+        let data = state.data.read().await;
+        let listing = data
+            .stone_listings
+            .get("jade_01")
+            .expect("jade_01 listing should remain");
+        assert_eq!(
+            listing.title_i18n.get("ja").map(String::as_str),
+            Some("翡翠の一点物 01 更新")
+        );
+        assert_eq!(
+            listing.title_i18n.get("en").map(String::as_str),
+            Some("Updated One-of-a-kind Jade 01")
+        );
+        assert_preservation_locales(&listing.title_i18n, "listing title");
+        assert_preservation_locales(&listing.description_i18n, "listing description");
+        assert_preservation_locales(&listing.story_i18n, "listing story");
+        let primary = listing
+            .photos
+            .iter()
+            .find(|photo| photo.is_primary)
+            .expect("primary photo should remain");
+        assert_eq!(
+            primary.alt_i18n.get("ja").map(String::as_str),
+            Some("更新された翡翠写真")
+        );
+        assert_eq!(
+            primary.alt_i18n.get("en").map(String::as_str),
+            Some("Updated jade photo")
+        );
+        assert_preservation_locales(&primary.alt_i18n, "listing photo alt");
+    }
+
+    #[tokio::test]
+    async fn m5_t03_update_country_preserves_fr_zh_and_zhtw_values() {
+        let state = mock_server_state();
+
+        {
+            let mut data = state.data.write().await;
+            let country = data.countries.get_mut("JP").expect("JP should exist");
+            insert_preservation_locales(&mut country.label_i18n, "country label");
+        }
+
+        let result = state
+            .update_country(
+                "JP",
+                CountryPatchInput {
+                    label_ja: "日本国内".to_owned(),
+                    label_en: "Japan Domestic".to_owned(),
+                    shipping_fee_usd: 900,
+                    shipping_fee_jpy: 1200,
+                    sort_order: 15,
+                    is_active: true,
+                },
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let data = state.data.read().await;
+        let country = data.countries.get("JP").expect("JP should remain");
+        assert_eq!(
+            country.label_i18n.get("ja").map(String::as_str),
+            Some("日本国内")
+        );
+        assert_eq!(
+            country.label_i18n.get("en").map(String::as_str),
+            Some("Japan Domestic")
+        );
+        assert_preservation_locales(&country.label_i18n, "country label");
+    }
+
+    #[tokio::test]
+    async fn m5_t03_update_facet_tag_preserves_fr_zh_and_zhtw_values() {
+        let state = mock_server_state();
+
+        {
+            let mut data = state.data.write().await;
+            let tag = data
+                .facet_tags
+                .get_mut("color:soft_pink")
+                .expect("soft pink tag should exist");
+            insert_preservation_locales(&mut tag.label_i18n, "facet label");
+        }
+
+        let result = state
+            .update_facet_tag(
+                "color:soft_pink",
+                FacetTagPatchInput {
+                    label_ja: "淡桃 更新".to_owned(),
+                    label_en: "Soft Pink Updated".to_owned(),
+                    aliases: vec!["light_pink".to_owned()],
+                    sort_order: 25,
+                    is_active: true,
+                },
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let data = state.data.read().await;
+        let tag = data
+            .facet_tags
+            .get("color:soft_pink")
+            .expect("soft pink tag should remain");
+        assert_eq!(
+            tag.label_i18n.get("ja").map(String::as_str),
+            Some("淡桃 更新")
+        );
+        assert_eq!(
+            tag.label_i18n.get("en").map(String::as_str),
+            Some("Soft Pink Updated")
+        );
+        assert_preservation_locales(&tag.label_i18n, "facet label");
+    }
+
     #[tokio::test]
     async fn create_material_accepts_master_fields_only() {
         let form = HashMap::from([
