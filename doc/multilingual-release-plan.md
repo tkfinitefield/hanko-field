@@ -1433,7 +1433,7 @@ Fastlane setup readiness notes:
 - [x] `M1-T02` Add a registry parser shared by scripts.
   Output: one typed parser or data model used by status/check commands.
   Done when: duplicate route codes and invalid fallback values fail tests.
-- [ ] `M1-T03` Add `make i18n-status`.
+- [x] `M1-T03` Add `make i18n-status`.
   Output: read-only status report for app, web, API, and release metadata.
   Done when: it reports missing files without modifying the working tree.
 - [ ] `M1-T04` Add registry fixtures.
@@ -1490,6 +1490,31 @@ Test command:
 ```sh
 make i18n-registry-test
 ```
+
+#### M1-T03 I18n Status Command
+
+Completed on 2026-06-18. Added `scripts/i18n/status.mjs` and the root
+`make i18n-status` target.
+
+Status contract:
+
+- The command reads `config/languages.json` through the shared registry parser.
+- It reports enabled app, web, and release languages.
+- It reports missing app ARB files and settings JSON for `app.enabled`
+  languages.
+- It reports missing web page-copy JSON files for `web.enabled` languages.
+- It reports missing API catalog and checkout content files for `web.enabled`
+  languages.
+- It reports release metadata source files only for `release.enabled`
+  languages, so M1 does not require future store metadata before M8.
+- The command exits successfully when files are missing because this is a
+  read-only status report, not the later blocking `i18n-check` gate.
+- `make i18n-status-test` covers missing-file reporting and confirms the status
+  builder does not modify the inspected workspace.
+
+Current expected M1 output reports missing files for the existing enabled
+English and Japanese app, web, and API targets. That is intentional until M2,
+M3, and M4 move content into the new file layout.
 
 ### M2: Flutter App Migration
 
