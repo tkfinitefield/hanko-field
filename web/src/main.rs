@@ -1048,6 +1048,11 @@ macro_rules! impl_template_copy_methods {
                     ""
                 }
             }
+
+            #[allow(dead_code)]
+            fn html_dir(&self) -> &str {
+                html_dir_for_locale(&self.selected_locale)
+            }
         }
     };
 }
@@ -1063,6 +1068,13 @@ impl_template_copy_methods!(CommercialTransactionsTemplate, "commercial_transact
 impl_template_copy_methods!(TermsTemplate, "terms");
 impl_template_copy_methods!(BlogIndexTemplate, "blog_index");
 impl_template_copy_methods!(BlogArticleTemplate, "blog_article");
+
+fn html_dir_for_locale(locale: &str) -> &'static str {
+    match locale.trim().to_ascii_lowercase().as_str() {
+        "ar" | "fa" | "he" | "ps" | "ur" => "rtl",
+        _ => "ltr",
+    }
+}
 
 #[derive(Debug, Deserialize, Default)]
 struct PaymentRedirectQuery {
@@ -6000,7 +6012,7 @@ mod tests {
         )
         .expect("top body should be utf-8");
 
-        assert!(top_html.contains(r#"<html lang="en">"#));
+        assert!(top_html.contains(r#"<html lang="en" dir="ltr">"#));
         assert!(top_html.contains(r#"<span class="top-brand__subtitle">Seal Field</span>"#));
         assert!(top_html.contains("A gemstone seal made just for you."));
         assert!(!top_html.contains("あなただけの宝石印鑑"));
@@ -6015,7 +6027,7 @@ mod tests {
         )
         .expect("about body should be utf-8");
 
-        assert!(about_html.contains(r#"<html lang="en">"#));
+        assert!(about_html.contains(r#"<html lang="en" dir="ltr">"#));
         assert!(about_html.contains(r#"<span class="top-brand__subtitle">Seal Field</span>"#));
         assert!(about_html.contains("Your seal, made from gemstone"));
         assert!(
@@ -6028,7 +6040,7 @@ mod tests {
     async fn web_router_resolves_supported_and_unknown_locale_prefixes() {
         let (about_status, about_html) = route_get_html("/about").await;
         assert_eq!(about_status, StatusCode::OK);
-        assert!(about_html.contains(r#"<html lang="en">"#));
+        assert!(about_html.contains(r#"<html lang="en" dir="ltr">"#));
         assert!(
             about_html.contains(r#"<link rel="canonical" href="https://finitefield.org/about">"#)
         );
@@ -6036,7 +6048,7 @@ mod tests {
 
         let (ja_about_status, ja_about_html) = route_get_html("/ja/about").await;
         assert_eq!(ja_about_status, StatusCode::OK);
-        assert!(ja_about_html.contains(r#"<html lang="ja">"#));
+        assert!(ja_about_html.contains(r#"<html lang="ja" dir="ltr">"#));
         assert!(
             ja_about_html
                 .contains(r#"<link rel="canonical" href="https://finitefield.org/ja/about">"#)
@@ -6045,17 +6057,18 @@ mod tests {
 
         let (en_about_status, en_about_html) = route_get_html("/en/about").await;
         assert_eq!(en_about_status, StatusCode::OK);
-        assert!(en_about_html.contains(r#"<html lang="en">"#));
+        assert!(en_about_html.contains(r#"<html lang="en" dir="ltr">"#));
         assert!(
             en_about_html
                 .contains(r#"<link rel="canonical" href="https://finitefield.org/about">"#),
             "/en/about must remain non-canonical English compatibility"
         );
 
-        for (path, html_lang, expected_title, expected_seo_title, expected_meta) in [
+        for (path, html_lang, html_dir, expected_title, expected_seo_title, expected_meta) in [
             (
                 "/zh/about",
                 "zh",
+                "ltr",
                 "用宝石制作你的印章",
                 "关于 STONE SIGNATURE | STONE SIGNATURE",
                 "了解 STONE SIGNATURE 如何让你在线选择宝石印章、设计印面并完成下单。",
@@ -6063,6 +6076,7 @@ mod tests {
             (
                 "/zhtw/about",
                 "zhtw",
+                "ltr",
                 "用寶石製作你的印章",
                 "關於 STONE SIGNATURE | STONE SIGNATURE",
                 "了解 STONE SIGNATURE 如何讓你線上選擇寶石印章、設計印面並完成下單。",
@@ -6070,6 +6084,7 @@ mod tests {
             (
                 "/ar/about",
                 "ar",
+                "rtl",
                 "ختمك مصنوع من حجر كريم",
                 "عن STONE SIGNATURE | STONE SIGNATURE",
                 "تعرف على طريقة اختيار ختم من حجر كريم عبر STONE SIGNATURE، وتصميم طبعة الختم، وإرسال طلبك.",
@@ -6077,7 +6092,7 @@ mod tests {
         ] {
             let (status, body) = route_get_html(path).await;
             assert_eq!(status, StatusCode::OK, "{path} should render for QA");
-            assert!(body.contains(&format!(r#"<html lang="{html_lang}">"#)));
+            assert!(body.contains(&format!(r#"<html lang="{html_lang}" dir="{html_dir}">"#)));
             assert!(
                 body.contains(expected_title),
                 "{path} must render pilot locale page content"
@@ -6537,7 +6552,7 @@ mod tests {
         )
         .expect("blog index body should be utf-8");
 
-        assert!(index_html.contains(r#"<html lang="ja">"#));
+        assert!(index_html.contains(r#"<html lang="ja" dir="ltr">"#));
         assert!(index_html.contains("<title>ジャーナル | STONE SIGNATURE</title>"));
         assert!(index_html.contains("ハンコとは？日本のパーソナルシール完全ガイド"));
         assert!(index_html.contains("ハンコと印鑑の違いとは？"));
@@ -7013,39 +7028,45 @@ mod tests {
 
     #[tokio::test]
     async fn pilot_payment_routes_render_localized_copy() {
-        for (path, expected_title, expected_seo_title, expected_meta) in [
+        for (path, expected_dir, expected_title, expected_seo_title, expected_meta) in [
             (
                 "/zh/payment/success",
+                "ltr",
                 "付款已完成",
                 "付款完成 | STONE SIGNATURE",
                 "你的付款已收到。请查看 Stripe 付款收据，确认订单详情和下一步。",
             ),
             (
                 "/zhtw/payment/success",
+                "ltr",
                 "付款已完成",
                 "付款完成 | STONE SIGNATURE",
                 "你的付款已收到。請查看 Stripe 付款收據，確認訂單詳情和下一步。",
             ),
             (
                 "/ar/payment/success",
+                "rtl",
                 "اكتمل الدفع",
                 "اكتمل الدفع | STONE SIGNATURE",
                 "تم استلام دفعتك. راجع إيصال الدفع من Stripe لمعرفة تفاصيل الطلب والخطوات التالية.",
             ),
             (
                 "/zh/payment/failure",
+                "ltr",
                 "付款未完成",
                 "付款未完成 | STONE SIGNATURE",
                 "付款未完成。请检查银行卡信息，并返回购买页面重试。",
             ),
             (
                 "/zhtw/payment/failure",
+                "ltr",
                 "付款未完成",
                 "付款未完成 | STONE SIGNATURE",
                 "付款未完成。請檢查卡片資訊，並返回購買頁面重試。",
             ),
             (
                 "/ar/payment/failure",
+                "rtl",
                 "لم يكتمل الدفع",
                 "الدفع غير مكتمل | STONE SIGNATURE",
                 "لم يكتمل الدفع. تحقق من بيانات البطاقة وعد إلى صفحة الشراء للمحاولة مرة أخرى.",
@@ -7053,6 +7074,10 @@ mod tests {
         ] {
             let (status, body) = route_get_html(path).await;
             assert_eq!(status, StatusCode::OK, "{path} should render for QA");
+            assert!(
+                body.contains(&format!(r#"dir="{expected_dir}""#)),
+                "{path} must render the expected text direction"
+            );
             assert!(
                 body.contains(expected_title),
                 "{path} must render localized payment result copy"

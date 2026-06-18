@@ -1,0 +1,84 @@
+{
+  "task": "M7-T05",
+  "date": "2026-06-18",
+  "result": "pass_with_tracked_tooling_limitation",
+  "screenshots": [
+    {
+      "surface": "web_top",
+      "locale": "zh",
+      "url": "http://localhost:3054/zh/",
+      "file": "screenshots/web-zh-top-mobile.png",
+      "width": 1000,
+      "height": 1688,
+      "dir": "ltr",
+      "horizontal_overflow": false,
+      "result": "pass"
+    },
+    {
+      "surface": "web_about",
+      "locale": "zhtw",
+      "url": "http://localhost:3054/zhtw/about",
+      "file": "screenshots/web-zhtw-about-mobile.png",
+      "width": 1000,
+      "height": 1688,
+      "dir": "ltr",
+      "horizontal_overflow": false,
+      "result": "pass"
+    },
+    {
+      "surface": "web_payment_success",
+      "locale": "ar",
+      "url": "http://localhost:3054/ar/payment/success?checkout=success&order_id=ord_m7_t05&session_id=cs_test_m7_t05",
+      "file": "screenshots/web-ar-payment-success-mobile.png",
+      "width": 1000,
+      "height": 1688,
+      "dir": "rtl",
+      "horizontal_overflow": false,
+      "result": "pass"
+    },
+    {
+      "surface": "web_about_rtl",
+      "locale": "ar",
+      "url": "http://localhost:3054/ar/about",
+      "file": "screenshots/web-ar-about-mobile.png",
+      "width": 1000,
+      "height": 1688,
+      "dir": "rtl",
+      "horizontal_overflow": false,
+      "result": "pass"
+    }
+  ],
+  "app_layout_probes": [
+    {
+      "surface": "settings",
+      "locale": "zh",
+      "command": "flutter test test/pilot_layout_qa_test.dart",
+      "result": "pass"
+    },
+    {
+      "surface": "design",
+      "locale": "zhtw",
+      "command": "flutter test test/pilot_layout_qa_test.dart",
+      "result": "pass"
+    },
+    {
+      "surface": "checkout",
+      "locale": "ar",
+      "command": "flutter test test/pilot_layout_qa_test.dart",
+      "result": "pass"
+    },
+    {
+      "surface": "rtl_overflow",
+      "locale": "ar",
+      "command": "flutter test test/rtl_overflow_test.dart",
+      "result": "pass"
+    }
+  ],
+  "tracked_limitations": [
+    {
+      "surface": "app_png_capture",
+      "status": "tracked",
+      "detail": "RenderRepaintBoundary.toImage did not return under local flutter test; app QA is covered by focused layout probes for this task."
+    }
+  ]
+}

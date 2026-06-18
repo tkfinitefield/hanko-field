@@ -3459,7 +3459,7 @@ git diff --cached --check
 - [x] `M7-T04` Fill pilot API and checkout content.
   Output: catalog fallback review and checkout templates for pilot languages.
   Done when: pilot checkout labels and return routes preserve locale.
-- [ ] `M7-T05` Run pilot screenshot QA.
+- [x] `M7-T05` Run pilot screenshot QA.
   Output: screenshots for app settings, design, checkout, web top/about/payment,
   and RTL pages.
   Done when: overflow and directionality findings are fixed or tracked.
@@ -3696,6 +3696,66 @@ cargo test --manifest-path api/Cargo.toml checkout -- --nocapture
 cargo test --manifest-path api/Cargo.toml
 dart format --set-exit-if-changed app/test/checkout_return_test.dart
 flutter test test/checkout_return_test.dart
+git diff --check
+git diff --cached --check
+```
+
+#### M7-T05 Pilot Screenshot QA
+
+Completed on 2026-06-18. Ran pilot QA for app settings, app design, app
+checkout, web top, web about, web payment, and RTL pages for `zh`, `zhtw`,
+and `ar`.
+
+Implementation notes:
+
+- Added web HTML direction handling so Arabic web routes render with
+  `dir="rtl"` and other current pilot routes render with `dir="ltr"`.
+- Updated web route tests to verify both `lang` and `dir` for pilot routes.
+- Captured web pilot screenshots under `doc/qa/m7-t05/screenshots`:
+  - `web-zh-top-mobile.png`
+  - `web-zhtw-about-mobile.png`
+  - `web-ar-payment-success-mobile.png`
+  - `web-ar-about-mobile.png`
+- Added `doc/qa/m7-t05/README.md` and `doc/qa/m7-t05/manifest.json` to record
+  screenshot metadata, DOM checks, app layout coverage, and the tracked app
+  PNG capture limitation.
+- Added focused Flutter layout QA for pilot app Settings, Design, Checkout,
+  and RTL directionality in `app/test/pilot_layout_qa_test.dart`.
+
+Findings and disposition:
+
+- Web Arabic pages lacked explicit document direction. Fixed by adding
+  `dir="{{ self.html_dir() }}"` to web root templates and mapping Arabic to
+  `rtl`.
+- Web screenshot probes found no horizontal overflow for `zh`, `zhtw`, or
+  `ar`.
+- App pilot layout probes found no Flutter overflow errors for Settings,
+  Design, Checkout, or existing RTL probes.
+- App PNG screenshot capture from local `flutter test` was attempted, but
+  `RenderRepaintBoundary.toImage()` did not return in this tester
+  environment. This limitation is tracked in `doc/qa/m7-t05/README.md`; app
+  evidence for this task is the focused layout probe.
+
+M0-T05 preservation evidence:
+
+- Existing English, Japanese, and Chinese translation values remain unchanged.
+- Pilot languages remain controlled by the registry state from `M7-T01` to
+  `M7-T04`; this task only adds QA coverage and web document direction.
+- No release, store metadata, signing, fastlane, polling, streaming, SSE, or
+  WebSocket behavior was added.
+- Rollback path: remove the `dir` helper and template attributes, remove
+  `app/test/pilot_layout_qa_test.dart`, remove `doc/qa/m7-t05`, and reopen
+  `M7-T05`.
+
+Validation:
+
+```sh
+jq empty doc/qa/m7-t05/manifest.json
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+flutter test test/pilot_layout_qa_test.dart test/rtl_overflow_test.dart
+make i18n-check
+sips -g pixelWidth -g pixelHeight doc/qa/m7-t05/screenshots/*.png
 git diff --check
 git diff --cached --check
 ```
