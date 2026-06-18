@@ -33,10 +33,6 @@ const LANGUAGE_REGISTRY_JSON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../config/languages.json"
 ));
-const WEB_COPY_JSON: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/content/i18n/web-copy.json"
-));
 const EXTERNAL_LEGAL_BASE_URL: &str = "https://finitefield.org";
 const DEFAULT_LOCALE: &str = "en";
 static WEB_LANGUAGE_REGISTRY: OnceLock<WebLanguageRegistry> = OnceLock::new();
@@ -236,7 +232,7 @@ struct LanguageLink {
     is_indexed: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 struct WebCopyDocument {
     common: LocalizedCopySection,
     about: LocalizedCopySection,
@@ -252,7 +248,50 @@ struct WebCopyDocument {
     top: LocalizedCopySection,
 }
 
+macro_rules! web_copy_section {
+    ($section:literal) => {
+        LocalizedCopySection::from_sources(
+            $section,
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/content/i18n/",
+                $section,
+                "/en.json"
+            )),
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/content/i18n/",
+                $section,
+                "/ja.json"
+            )),
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/content/i18n/",
+                $section,
+                "/zh.json"
+            )),
+        )
+    };
+}
+
 impl WebCopyDocument {
+    fn load() -> Self {
+        Self {
+            common: web_copy_section!("common"),
+            about: web_copy_section!("about"),
+            blog_article: web_copy_section!("blog_article"),
+            blog_index: web_copy_section!("blog_index"),
+            commercial_transactions: web_copy_section!("commercial_transactions"),
+            design: web_copy_section!("design"),
+            kanji_suggestions: web_copy_section!("kanji_suggestions"),
+            payment_failure: web_copy_section!("payment_failure"),
+            payment_success: web_copy_section!("payment_success"),
+            purchase_result: web_copy_section!("purchase_result"),
+            terms: web_copy_section!("terms"),
+            top: web_copy_section!("top"),
+        }
+    }
+
     fn section(&self, section: &str) -> &LocalizedCopySection {
         match section {
             "common" => &self.common,
@@ -272,10 +311,59 @@ impl WebCopyDocument {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct LocalizedCopySection {
     en: HashMap<String, String>,
     ja: HashMap<String, String>,
+    zh: HashMap<String, String>,
+}
+
+impl LocalizedCopySection {
+    fn from_sources(section: &str, en: &str, ja: &str, zh: &str) -> Self {
+        let en = parse_web_copy_locale(section, "en", en);
+        let ja = parse_web_copy_locale(section, "ja", ja);
+        let zh = parse_web_copy_locale(section, "zh", zh);
+        assert_web_copy_key_parity(section, &en, &[("ja", &ja), ("zh", &zh)]);
+        Self { en, ja, zh }
+    }
+
+    fn for_locale(&self, locale: &str) -> &HashMap<String, String> {
+        match web_copy_locale_key(locale) {
+            "ja" => &self.ja,
+            "zh" => &self.zh,
+            _ => &self.en,
+        }
+    }
+}
+
+fn parse_web_copy_locale(section: &str, locale: &str, source: &str) -> HashMap<String, String> {
+    serde_json::from_str(source).unwrap_or_else(|error| {
+        panic!("checked-in web copy JSON must be valid: {section}/{locale}: {error}")
+    })
+}
+
+fn assert_web_copy_key_parity(
+    section: &str,
+    en: &HashMap<String, String>,
+    localized_maps: &[(&str, &HashMap<String, String>)],
+) {
+    let en_keys = en.keys().collect::<HashSet<_>>();
+    for (locale, localized) in localized_maps {
+        let localized_keys = localized.keys().collect::<HashSet<_>>();
+        if localized_keys != en_keys {
+            let missing = en_keys
+                .difference(&localized_keys)
+                .map(|key| key.as_str())
+                .collect::<Vec<_>>();
+            let extra = localized_keys
+                .difference(&en_keys)
+                .map(|key| key.as_str())
+                .collect::<Vec<_>>();
+            panic!(
+                "web copy key mismatch in {section}/{locale}: missing={missing:?} extra={extra:?}"
+            );
+        }
+    }
 }
 
 fn web_language_registry() -> &'static WebLanguageRegistry {
@@ -286,19 +374,24 @@ fn web_language_registry() -> &'static WebLanguageRegistry {
 }
 
 fn web_copy_document() -> &'static WebCopyDocument {
-    WEB_COPY_DOCUMENT.get_or_init(|| {
-        serde_json::from_str(WEB_COPY_JSON).expect("checked-in web copy JSON must be valid")
-    })
+    WEB_COPY_DOCUMENT.get_or_init(WebCopyDocument::load)
+}
+
+fn web_copy_locale_key(locale: &str) -> &'static str {
+    let normalized = normalize_registry_code(locale).replace('_', "-");
+    if normalized == "ja" || normalized == "jp" || normalized.starts_with("ja-") {
+        return "ja";
+    }
+    if normalized == "zh" || normalized == "zhtw" || normalized.starts_with("zh-") {
+        return "zh";
+    }
+    "en"
 }
 
 fn web_copy_text(section: &str, locale: &str, key: &str) -> &'static str {
     let section_name = section;
     let section = web_copy_document().section(section);
-    let localized = if is_japanese_locale(locale) {
-        &section.ja
-    } else {
-        &section.en
-    };
+    let localized = section.for_locale(locale);
     localized
         .get(key)
         .or_else(|| section.en.get(key))
@@ -6452,6 +6545,7 @@ mod tests {
         let copy = web_copy_document();
         assert_eq!(copy.common.en["brand_subtitle"], "Seal Field");
         assert_eq!(copy.common.ja["brand_subtitle"], "印鑑フィールド");
+        assert_eq!(copy.common.zh["brand_subtitle"], "Seal Field");
         assert_eq!(
             web_copy_text("top", "en", "seo_title"),
             "Custom gemstone seals | STONE SIGNATURE"
@@ -6464,6 +6558,45 @@ mod tests {
             web_copy_text("commercial_transactions", "en", "seo_title"),
             "Legal Notice | STONE SIGNATURE"
         );
+        assert_eq!(
+            web_copy_text("top", "zh-Hans", "seo_title"),
+            "Custom gemstone seals | STONE SIGNATURE"
+        );
+        assert_eq!(
+            web_copy_text("top", "fr", "seo_title"),
+            "Custom gemstone seals | STONE SIGNATURE"
+        );
+    }
+
+    #[test]
+    fn web_copy_locale_files_keep_matching_keys() {
+        let copy = web_copy_document();
+        for (section_name, section) in [
+            ("common", &copy.common),
+            ("about", &copy.about),
+            ("blog_article", &copy.blog_article),
+            ("blog_index", &copy.blog_index),
+            ("commercial_transactions", &copy.commercial_transactions),
+            ("design", &copy.design),
+            ("kanji_suggestions", &copy.kanji_suggestions),
+            ("payment_failure", &copy.payment_failure),
+            ("payment_success", &copy.payment_success),
+            ("purchase_result", &copy.purchase_result),
+            ("terms", &copy.terms),
+            ("top", &copy.top),
+        ] {
+            let en_keys = section.en.keys().collect::<HashSet<_>>();
+            assert_eq!(
+                section.ja.keys().collect::<HashSet<_>>(),
+                en_keys,
+                "{section_name}/ja keys must match en"
+            );
+            assert_eq!(
+                section.zh.keys().collect::<HashSet<_>>(),
+                en_keys,
+                "{section_name}/zh keys must match en"
+            );
+        }
     }
 
     #[test]

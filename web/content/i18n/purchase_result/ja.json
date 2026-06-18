@@ -1,0 +1,12 @@
+{
+  "purchase_result_001": "データソース",
+  "purchase_result_002": "印影",
+  "purchase_result_003": "配送先",
+  "purchase_result_004": "住所",
+  "purchase_result_005": "小計",
+  "purchase_result_006": "送料",
+  "purchase_result_007": "合計",
+  "purchase_result_008": "確認メール送信先",
+  "purchase_result_009": "注文を受け付けました（モック）",
+  "purchase_result_010": "注文内容を受け付けました（検証）"
+}

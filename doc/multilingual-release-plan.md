@@ -1979,7 +1979,7 @@ when run by itself.
   Output: JSON-backed structs for common layout, SEO, top, design, about, blog,
   payment, terms, and commercial transaction pages.
   Done when: templates render data fields instead of locale conditionals.
-- [ ] `M3-T03` Extract existing English, Japanese, and Chinese web copy.
+- [x] `M3-T03` Extract existing English, Japanese, and Chinese web copy.
   Output: localized JSON files under `web/content/i18n/`.
   Done when: current visible copy is preserved after extraction and the
   `M0-T05` migration-safety checklist is satisfied.
@@ -2089,6 +2089,70 @@ for (const [file, section] of Object.entries(sections)) {
       if (!copy[section]?.[lang]?.[match[1]]) {
         throw new Error(`${file}:${match[1]}:${lang}`);
       }
+    }
+  }
+}
+NODE
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T03 Web Copy Extraction
+
+Completed on 2026-06-18. Replaced the interim single web copy document with
+localized JSON files under `web/content/i18n/<section>/<locale>.json`.
+
+Implementation notes:
+
+- Split `web/content/i18n/web-copy.json` into per-section files for `en`, `ja`,
+  and `zh`.
+- Added runtime loading for the split files while preserving the typed
+  `WebCopyDocument` surface used by templates.
+- Added `zh` copy files with the same key shape as English and Japanese. No
+  standalone Chinese web source existed before this migration, so `zh` is a
+  baseline extraction file for later translation and remains disabled for web
+  routing until a later rollout task.
+- Kept current visible English and Japanese page copy, SEO titles, and SEO
+  descriptions unchanged after extraction.
+- Added key-parity checks for every loaded web copy section so translation work
+  can proceed by editing JSON values without adding Rust fields.
+- Removed the obsolete `web/content/i18n/web-copy.json` source.
+
+M0-T05 preservation evidence:
+
+- Inventory rows touched: web template-visible page copy, SEO metadata, payment
+  result copy, terms/commercial-transaction copy, kanji suggestion fragments,
+  and purchase-result fragments.
+- English and Japanese disposition: existing strings were copied into matching
+  `en.json` and `ja.json` files and remain the only enabled web routes.
+- Chinese disposition: no standalone Chinese web locale source existed; `zh`
+  files preserve key parity for the future Simplified Chinese translation pass
+  without changing current routing.
+- Rollback path: restore `web/content/i18n/web-copy.json`, revert the
+  `WebCopyDocument::load` split-file loader, and remove the section
+  directories.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+jq empty config/languages.json web/content/i18n/*/*.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+! rg -n 'selected_locale == "ja"|selected_locale == "en"' web/templates
+node - <<'NODE'
+const fs = require('fs');
+const sections = fs.readdirSync('web/content/i18n')
+  .filter((name) => fs.statSync(`web/content/i18n/${name}`).isDirectory())
+  .sort();
+for (const section of sections) {
+  const base = Object.keys(JSON.parse(fs.readFileSync(`web/content/i18n/${section}/en.json`, 'utf8'))).sort();
+  for (const lang of ['ja', 'zh']) {
+    const keys = Object.keys(JSON.parse(fs.readFileSync(`web/content/i18n/${section}/${lang}.json`, 'utf8'))).sort();
+    if (JSON.stringify(keys) !== JSON.stringify(base)) {
+      throw new Error(`${section}/${lang} keys do not match en`);
     }
   }
 }
