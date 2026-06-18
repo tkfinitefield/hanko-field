@@ -62,8 +62,9 @@ Future<void> _pumpPilotSurface(
   await tester.pumpWidget(
     MaterialApp(
       locale: locale,
-      supportedLocales: hankoSupportedLocales,
-      localizationsDelegates: hankoLocalizationsDelegates,
+      supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+      localizationsDelegates:
+          GeneratedHankoLocalizations.localizationsDelegates,
       theme: HankoTheme.light(),
       home: MediaQuery(
         data: MediaQueryData(size: viewport),

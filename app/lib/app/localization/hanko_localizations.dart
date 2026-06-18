@@ -2,24 +2,11 @@ import 'package:flutter/widgets.dart';
 
 import '../../l10n/generated/generated_hanko_localizations.dart';
 
-typedef HankoLocalizations = GeneratedHankoLocalizations;
-
-const hankoSupportedLocales = [
-  Locale('en'),
-  Locale('ja'),
-  Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
-  Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
-  Locale('ar'),
-];
-
-const hankoLocalizationsDelegates =
-    GeneratedHankoLocalizations.localizationsDelegates;
-
-extension HankoLocalizationsBuildContext on BuildContext {
-  HankoLocalizations get l10n => HankoLocalizations.of(this);
+extension GeneratedHankoLocalizationsBuildContext on BuildContext {
+  GeneratedHankoLocalizations get l10n => GeneratedHankoLocalizations.of(this);
 }
 
-extension HankoLocalizationsLocale on HankoLocalizations {
+extension GeneratedHankoLocalizationsLocale on GeneratedHankoLocalizations {
   Locale get locale {
     final parts = localeName.split('_');
     return Locale.fromSubtags(

@@ -585,7 +585,7 @@ String _formatWholeNumber(int value) {
   return buffer.toString();
 }
 
-String _statusLabel(HankoLocalizations l10n, String value) {
+String _statusLabel(GeneratedHankoLocalizations l10n, String value) {
   final normalized = value.trim().toLowerCase();
   return switch (normalized) {
     'paid' => l10n.orderStatusPaid,

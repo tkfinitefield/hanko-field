@@ -1042,7 +1042,7 @@ class _AttributeChip extends StatelessWidget {
   }
 }
 
-String _sealStyleNameLabel(HankoLocalizations l10n, String style) {
+String _sealStyleNameLabel(GeneratedHankoLocalizations l10n, String style) {
   return switch (style) {
     'traditional' => l10n.sealStyleTraditional,
     'elegant' => l10n.sealStyleElegant,
@@ -1052,7 +1052,7 @@ String _sealStyleNameLabel(HankoLocalizations l10n, String style) {
   };
 }
 
-String _sealShapeLabel(HankoLocalizations l10n, String shape) {
+String _sealShapeLabel(GeneratedHankoLocalizations l10n, String shape) {
   return switch (shape) {
     'square' => l10n.sealShapeSquare,
     'round' => l10n.sealShapeRound,
@@ -1060,7 +1060,10 @@ String _sealShapeLabel(HankoLocalizations l10n, String shape) {
   };
 }
 
-String _sealStrokeWeightLabel(HankoLocalizations l10n, String strokeWeight) {
+String _sealStrokeWeightLabel(
+  GeneratedHankoLocalizations l10n,
+  String strokeWeight,
+) {
   return switch (strokeWeight) {
     'standard' => l10n.sealStrokeStandard,
     'bold' => l10n.sealStrokeBold,
@@ -1068,7 +1071,7 @@ String _sealStrokeWeightLabel(HankoLocalizations l10n, String strokeWeight) {
   };
 }
 
-String _sealBalanceLabel(HankoLocalizations l10n, String balance) {
+String _sealBalanceLabel(GeneratedHankoLocalizations l10n, String balance) {
   return switch (balance) {
     'airy' => l10n.sealBalanceAiry,
     'balanced' => l10n.sealBalanceBalanced,

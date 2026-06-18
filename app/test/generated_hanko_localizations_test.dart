@@ -3,8 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hankofield/app/localization/hanko_localizations.dart';
-import 'package:hankofield/l10n/generated/generated_hanko_localizations.dart';
+import 'package:hankofield/app/localization/app_localization.dart';
 
 void main() {
   test('generated localizations support registry route locales', () {
@@ -20,21 +19,16 @@ void main() {
     expect(l10n.designKanjiStyleTaiwanese, '台湾风格');
   });
 
-  test('HankoLocalizations compatibility API uses generated localization', () {
-    expect(hankoSupportedLocales, const [
-      Locale('en'),
-      Locale('ja'),
-      Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
-      Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
-      Locale('ar'),
-    ]);
-
-    final l10n = lookupGeneratedHankoLocalizations(const Locale('ja'));
-    expect(l10n.locale, const Locale('ja'));
-    expect(l10n.designTipPrefix, 'ヒント: ');
-    expect(l10n.orderStatusPaid, '支払い済み');
-    expect(l10n.settingsVersionMessage('1.2.3'), 'バージョン 1.2.3');
-  });
+  test(
+    'generated localization exposes locale helper directly',
+    () {
+      final l10n = lookupGeneratedHankoLocalizations(const Locale('ja'));
+      expect(l10n.locale, const Locale('ja'));
+      expect(l10n.designTipPrefix, 'ヒント: ');
+      expect(l10n.orderStatusPaid, '支払い済み');
+      expect(l10n.settingsVersionMessage('1.2.3'), 'バージョン 1.2.3');
+    },
+  );
 
   test('generated lookup resolves Arabic pilot locale', () {
     final l10n = lookupGeneratedHankoLocalizations(const Locale('ar'));

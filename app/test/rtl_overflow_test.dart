@@ -94,8 +94,9 @@ Future<void> _pumpRtlProbe(WidgetTester tester, Widget child) async {
   await tester.pumpWidget(
     MaterialApp(
       locale: const Locale('en'),
-      supportedLocales: hankoSupportedLocales,
-      localizationsDelegates: hankoLocalizationsDelegates,
+      supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+      localizationsDelegates:
+          GeneratedHankoLocalizations.localizationsDelegates,
       theme: HankoTheme.light(),
       home: MediaQuery(
         data: const MediaQueryData(

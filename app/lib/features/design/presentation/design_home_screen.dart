@@ -2558,7 +2558,10 @@ String _reasonLanguageFor(BuildContext context) {
   return fallbackRouteCodeForLocale(context.l10n.locale);
 }
 
-String _genderLabel(HankoLocalizations l10n, KanjiCandidateGender gender) {
+String _genderLabel(
+  GeneratedHankoLocalizations l10n,
+  KanjiCandidateGender gender,
+) {
   return switch (gender) {
     KanjiCandidateGender.unspecified => l10n.designGenderUnspecified,
     KanjiCandidateGender.male => l10n.designGenderMale,
@@ -2566,7 +2569,10 @@ String _genderLabel(HankoLocalizations l10n, KanjiCandidateGender gender) {
   };
 }
 
-String _kanjiStyleLabel(HankoLocalizations l10n, KanjiNameStyle style) {
+String _kanjiStyleLabel(
+  GeneratedHankoLocalizations l10n,
+  KanjiNameStyle style,
+) {
   return switch (style) {
     KanjiNameStyle.japanese => l10n.designKanjiStyleJapanese,
     KanjiNameStyle.chinese => l10n.designKanjiStyleChinese,
@@ -2574,14 +2580,17 @@ String _kanjiStyleLabel(HankoLocalizations l10n, KanjiNameStyle style) {
   };
 }
 
-String _sealShapeLabel(HankoLocalizations l10n, SealShape shape) {
+String _sealShapeLabel(GeneratedHankoLocalizations l10n, SealShape shape) {
   return switch (shape) {
     SealShape.square => l10n.sealShapeSquare,
     SealShape.round => l10n.sealShapeRound,
   };
 }
 
-String _sealStyleNameLabel(HankoLocalizations l10n, SealStyleName style) {
+String _sealStyleNameLabel(
+  GeneratedHankoLocalizations l10n,
+  SealStyleName style,
+) {
   return switch (style) {
     SealStyleName.traditional => l10n.sealStyleTraditional,
     SealStyleName.elegant => l10n.sealStyleElegant,
@@ -2591,7 +2600,7 @@ String _sealStyleNameLabel(HankoLocalizations l10n, SealStyleName style) {
 }
 
 String _sealStrokeWeightLabel(
-  HankoLocalizations l10n,
+  GeneratedHankoLocalizations l10n,
   SealStrokeWeight strokeWeight,
 ) {
   return switch (strokeWeight) {
@@ -2600,7 +2609,10 @@ String _sealStrokeWeightLabel(
   };
 }
 
-String _sealBalanceLabel(HankoLocalizations l10n, SealBalance balance) {
+String _sealBalanceLabel(
+  GeneratedHankoLocalizations l10n,
+  SealBalance balance,
+) {
   return switch (balance) {
     SealBalance.airy => l10n.sealBalanceAiry,
     SealBalance.balanced => l10n.sealBalanceBalanced,

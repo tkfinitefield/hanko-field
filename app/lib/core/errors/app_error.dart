@@ -99,7 +99,7 @@ class HankoAppError {
   final String? code;
   final Object? cause;
 
-  String title(HankoLocalizations l10n) {
+  String title(GeneratedHankoLocalizations l10n) {
     return switch (kind) {
       HankoAppErrorKind.network => l10n.commonNetworkErrorTitle,
       HankoAppErrorKind.server => l10n.commonServerErrorTitle,
@@ -109,7 +109,7 @@ class HankoAppError {
     };
   }
 
-  String message(HankoLocalizations l10n) {
+  String message(GeneratedHankoLocalizations l10n) {
     return switch (kind) {
       HankoAppErrorKind.network => l10n.commonNetworkErrorMessage,
       HankoAppErrorKind.server => l10n.commonServerErrorMessage,

@@ -1395,7 +1395,7 @@ class _PaymentStatusIcon extends StatelessWidget {
 }
 
 String _paymentStatusTitle(
-  HankoLocalizations l10n,
+  GeneratedHankoLocalizations l10n,
   PaymentStatusStep step,
   bool hasError,
 ) {
@@ -1411,7 +1411,7 @@ String _paymentStatusTitle(
 }
 
 String _paymentStatusMessage(
-  HankoLocalizations l10n,
+  GeneratedHankoLocalizations l10n,
   PaymentStatusStep step,
   bool hasError,
 ) {
@@ -1427,7 +1427,7 @@ String _paymentStatusMessage(
 }
 
 String _stripeCheckoutStatusTitle(
-  HankoLocalizations l10n,
+  GeneratedHankoLocalizations l10n,
   StripeCheckoutExternalStep step,
   CheckoutReturnResult? returnResult,
   bool hasError,
@@ -1457,7 +1457,7 @@ String _stripeCheckoutStatusTitle(
 }
 
 String _stripeCheckoutStatusMessage(
-  HankoLocalizations l10n,
+  GeneratedHankoLocalizations l10n,
   StripeCheckoutExternalStep step,
   CheckoutReturnResult? returnResult,
   bool hasError,
@@ -2787,7 +2787,7 @@ String _stoneSubtitle(OrderDraftStoneSelection selection) {
   return '$material / $size';
 }
 
-String _sealShapeLabel(HankoLocalizations l10n, String value) {
+String _sealShapeLabel(GeneratedHankoLocalizations l10n, String value) {
   return switch (value.trim().toLowerCase()) {
     'square' => l10n.sealShapeSquare,
     'round' => l10n.sealShapeRound,
@@ -2795,7 +2795,7 @@ String _sealShapeLabel(HankoLocalizations l10n, String value) {
   };
 }
 
-String _sealStyleLabel(HankoLocalizations l10n, String value) {
+String _sealStyleLabel(GeneratedHankoLocalizations l10n, String value) {
   return switch (value.trim().toLowerCase()) {
     'traditional' => l10n.sealStyleTraditional,
     'elegant' => l10n.sealStyleElegant,

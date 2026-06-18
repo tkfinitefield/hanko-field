@@ -5137,7 +5137,7 @@ git diff --cached --check
 - [x] `M11-T03` Patch high-priority translation issues.
   Output: small content-only fixes with `i18n-check` evidence.
   Done when: store-release-enabled languages remain clean after patches.
-- [ ] `M11-T04` Remove temporary migration wrappers.
+- [x] `M11-T04` Remove temporary migration wrappers.
   Output: cleanup PR for compatibility code that is no longer needed.
   Done when: generated localization and registry paths are the only active
   localization mechanisms.
@@ -5337,6 +5337,81 @@ make i18n-translation-patches-test
 jq empty doc/qa/m11-t03/translation-patch-review.json
 make i18n-check
 make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M11-T04 Migration Wrapper Cleanup
+
+Completed on 2026-06-18. Removed temporary Flutter localization migration
+wrappers and added a cleanup gate to keep generated localization and registry
+paths as the active localization mechanisms.
+
+Implementation notes:
+
+- Removed the `HankoLocalizations` typedef.
+- Removed the hardcoded `hankoSupportedLocales` constant.
+- Removed the `hankoLocalizationsDelegates` constant.
+- Updated `MaterialApp` and app/widget tests to use:
+  - `GeneratedHankoLocalizations.supportedLocales`
+  - `GeneratedHankoLocalizations.localizationsDelegates`
+- Updated localized helper type annotations from `HankoLocalizations` to
+  `GeneratedHankoLocalizations`.
+- Added `scripts/i18n/migration_cleanup.mjs` to validate:
+  - removed wrapper names do not return
+  - `MaterialApp` uses generated localization delegates and supported locales
+  - the app language registry still loads `config/languages.json`
+  - M11-T04 cleanup evidence is present
+- Added `scripts/i18n/migration_cleanup.test.mjs` covering:
+  - checked-in evidence acceptance
+  - returning `HankoLocalizations` typedef
+  - leaving generated localization delegates
+  - incomplete removed-wrapper evidence
+- Added Make targets:
+  - `make i18n-migration-cleanup`
+  - `make i18n-migration-cleanup-check`
+  - `make i18n-migration-cleanup-test`
+- Added the migration cleanup checks to `make i18n-ci`.
+- Added cleanup evidence:
+  - `doc/qa/m11-t04/README.md`
+  - `doc/qa/m11-t04/migration-cleanup.json`
+
+Retained compatibility:
+
+- `preferred_language_code` upgrade fallback remains intentionally retained.
+  It preserves previously saved language preferences for upgraded installs and
+  is not used as a translation lookup source.
+
+Current review result:
+
+- Active Flutter localization path:
+  `app/lib/l10n/generated/generated_hanko_localizations.dart`.
+- Active language registry path:
+  `config/languages.json`.
+- Temporary localization wrappers removed: 3.
+- Production rollout has not started.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, production support exports, polling, streaming, SSE, or
+  WebSocket behavior was committed.
+- Rollback path: restore the removed app localization wrappers, remove
+  `doc/qa/m11-t04/`, remove the migration cleanup script, tests, Make targets,
+  and `i18n-ci` entries, then reopen `M11-T04`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/migration_cleanup.mjs
+make i18n-migration-cleanup-check
+make i18n-migration-cleanup-test
+jq empty doc/qa/m11-t04/migration-cleanup.json
+make i18n-check
+make i18n-ci
+cd app && flutter test test/generated_hanko_localizations_test.dart
 git diff --check
 git diff --cached --check
 ```

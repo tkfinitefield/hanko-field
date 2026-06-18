@@ -1004,7 +1004,7 @@ enum _SettingsDestination {
     };
   }
 
-  String title(HankoLocalizations l10n) {
+  String title(GeneratedHankoLocalizations l10n) {
     return switch (this) {
       _SettingsDestination.language => l10n.language,
       _SettingsDestination.about => l10n.about,

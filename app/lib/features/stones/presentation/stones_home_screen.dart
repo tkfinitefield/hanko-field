@@ -163,7 +163,7 @@ enum _StoneSortOrder {
   }
 }
 
-String _sortLabel(HankoLocalizations l10n, _StoneSortOrder sortOrder) {
+String _sortLabel(GeneratedHankoLocalizations l10n, _StoneSortOrder sortOrder) {
   return switch (sortOrder) {
     _StoneSortOrder.recommended => l10n.stoneSortRecommended,
     _StoneSortOrder.newest => l10n.stoneSortNewest,
