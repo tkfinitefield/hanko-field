@@ -3831,7 +3831,7 @@ git diff --cached --check
 - [x] `M8-T05` Add iOS fastlane with Bundler.
   Output: `app/ios/Gemfile`, `Appfile`, and metadata/TestFlight lanes.
   Done when: metadata-only iOS lane runs without uploading binaries.
-- [ ] `M8-T06` Add secret and signing guardrails.
+- [x] `M8-T06` Add secret and signing guardrails.
   Output: `.gitignore` and setup notes for service accounts, Apple API keys,
   keystore files, passwords, and exported binaries.
   Done when: private release material cannot be staged accidentally and the
@@ -4220,6 +4220,72 @@ ruby -c app/ios/fastlane/Appfile
 BUNDLE_PATH=/tmp/hanko-field-ios-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-ios-bundle-config bundle install
 BUNDLE_PATH=/tmp/hanko-field-ios-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-ios-bundle-config bundle exec fastlane ios metadata
 make app-store-metadata-check
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T06 Secret and Signing Guardrails
+
+Completed on 2026-06-18. Added release-secret ignore rules, setup notes, and
+mechanical checks for signing and fastlane private material.
+
+Implementation notes:
+
+- Added root `.gitignore` rules for:
+  - Android `key.properties`
+  - Android `.jks` and `.keystore` files
+  - Google Play service account JSON files
+  - App Store Connect `AuthKey*.p8` files
+  - App Store Connect API key JSON files
+  - Apple provisioning profiles
+  - exported `.aab`, `.apk`, and `.ipa` binaries
+  - local fastlane `report.xml` files and generated fastlane `README.md`
+    files
+- Added `doc/release-secret-guardrails.md` with local and CI setup notes for
+  Android signing, Google Play service account paths, App Store Connect API
+  key paths, TestFlight, and release-binary handling.
+- Added `scripts/release/secret_guardrails.mjs` to validate that known private
+  release paths are ignored and forbidden release material is not tracked.
+- Added `scripts/release/secret_guardrails.test.mjs` to cover:
+  - checked-in guardrail configuration
+  - failure when a required private release path is not ignored
+  - failure when forbidden release material is already tracked
+- Added Make targets:
+  - `make release-secret-guardrails-check`
+  - `make release-secret-guardrails-test`
+- Added release-secret guardrails to `make i18n-ci`.
+
+Guarded material:
+
+- `app/android/key.properties`
+- `app/android/app/upload-keystore.jks`
+- Google Play service account JSON files
+- App Store Connect `.p8` keys and API key JSON files
+- Apple provisioning profiles
+- exported Android and iOS release binaries
+- local fastlane reports and generated lane docs
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, store metadata, Android fastlane, and iOS
+  fastlane behavior remains unchanged.
+- Current local signing files stay untracked and ignored.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, keystores, provisioning profiles, exported release binaries,
+  polling, streaming, SSE, or WebSocket behavior were added.
+- Rollback path: remove the M8-T06 `.gitignore` block, remove
+  `doc/release-secret-guardrails.md`, remove
+  `scripts/release/secret_guardrails.*`, remove the Makefile targets, and
+  reopen `M8-T06`.
+
+Validation:
+
+```sh
+node --check scripts/release/secret_guardrails.mjs
+make release-secret-guardrails-check
+make release-secret-guardrails-test
 make i18n-check
 make i18n-ci
 git diff --check

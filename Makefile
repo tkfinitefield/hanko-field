@@ -16,7 +16,7 @@ GCP_PROD_REGION ?= asia-northeast1
 ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_ADMIN_MODE);,)
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod store-metadata-check store-metadata-test google-play-metadata google-play-metadata-check google-play-metadata-test app-store-metadata app-store-metadata-check app-store-metadata-test android-fastlane-check android-fastlane-test ios-fastlane-check ios-fastlane-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-export i18n-import i18n-handoff-test i18n-ci
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod store-metadata-check store-metadata-test google-play-metadata google-play-metadata-check google-play-metadata-test app-store-metadata app-store-metadata-check app-store-metadata-test android-fastlane-check android-fastlane-test ios-fastlane-check ios-fastlane-test release-secret-guardrails-check release-secret-guardrails-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-export i18n-import i18n-handoff-test i18n-ci
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -49,6 +49,8 @@ help:
 	@echo "  make android-fastlane-test # Test Android fastlane config checks"
 	@echo "  make ios-fastlane-check # Validate iOS fastlane metadata lanes"
 	@echo "  make ios-fastlane-test # Test iOS fastlane config checks"
+	@echo "  make release-secret-guardrails-check # Validate release secret ignore rules"
+	@echo "  make release-secret-guardrails-test # Test release secret guardrails"
 	@echo "  make i18n-status    # Report localization registry and missing files"
 	@echo "  make i18n-todo      # Report missing localization keys"
 	@echo "  make i18n-check     # Validate localization registry, files, and missing keys"
@@ -169,6 +171,12 @@ ios-fastlane-check:
 ios-fastlane-test:
 	node --test scripts/release/ios_fastlane_config.test.mjs
 
+release-secret-guardrails-check:
+	node scripts/release/secret_guardrails.mjs
+
+release-secret-guardrails-test:
+	node --test scripts/release/secret_guardrails.test.mjs
+
 i18n-ci:
 	node --check scripts/i18n/registry.mjs
 	node --check scripts/i18n/status.mjs
@@ -183,12 +191,14 @@ i18n-ci:
 	node --check scripts/release/app_store_metadata.mjs
 	node --check scripts/release/android_fastlane_config.mjs
 	node --check scripts/release/ios_fastlane_config.mjs
+	node --check scripts/release/secret_guardrails.mjs
 	$(MAKE) i18n-check
 	$(MAKE) store-metadata-check
 	$(MAKE) google-play-metadata-check
 	$(MAKE) app-store-metadata-check
 	$(MAKE) android-fastlane-check
 	$(MAKE) ios-fastlane-check
+	$(MAKE) release-secret-guardrails-check
 	$(MAKE) i18n-check-test
 	$(MAKE) i18n-arb-test
 	$(MAKE) i18n-json-shape-test
@@ -202,3 +212,4 @@ i18n-ci:
 	$(MAKE) app-store-metadata-test
 	$(MAKE) android-fastlane-test
 	$(MAKE) ios-fastlane-test
+	$(MAKE) release-secret-guardrails-test
