@@ -279,7 +279,9 @@ async fn upsert_named_document(
         .get_document(&name, &GetDocumentOptions::default())
         .await
     {
-        Ok(_) => {
+        Ok(existing) => {
+            let mut document = document;
+            preserve_existing_localized_maps(&existing.fields, &mut document.fields);
             client
                 .patch_document(&name, &document, &PatchDocumentOptions::default())
                 .await
@@ -304,6 +306,104 @@ async fn upsert_named_document(
 
     println!("  upserted {collection}/{doc_id}");
     Ok(())
+}
+
+fn preserve_existing_localized_maps(
+    existing_fields: &BTreeMap<String, JsonValue>,
+    next_fields: &mut BTreeMap<String, JsonValue>,
+) {
+    for (field_name, next_value) in next_fields {
+        if let Some(existing_value) = existing_fields.get(field_name) {
+            preserve_existing_localized_value(field_name, existing_value, next_value);
+        }
+    }
+}
+
+fn preserve_existing_localized_value(
+    field_name: &str,
+    existing_value: &JsonValue,
+    next_value: &mut JsonValue,
+) {
+    if is_localized_string_map_field(field_name) {
+        preserve_missing_string_map_entries(existing_value, next_value);
+        return;
+    }
+
+    if let (Some(existing_fields), Some(next_fields)) = (
+        firestore_map_fields(existing_value),
+        firestore_map_fields_mut(next_value),
+    ) {
+        for (nested_field_name, nested_next_value) in next_fields {
+            if let Some(nested_existing_value) = existing_fields.get(nested_field_name) {
+                preserve_existing_localized_value(
+                    nested_field_name,
+                    nested_existing_value,
+                    nested_next_value,
+                );
+            }
+        }
+        return;
+    }
+
+    if let (Some(existing_values), Some(next_values)) = (
+        firestore_array_values(existing_value),
+        firestore_array_values_mut(next_value),
+    ) {
+        for (index, next_item) in next_values.iter_mut().enumerate() {
+            if let Some(existing_item) = existing_values.get(index) {
+                preserve_existing_localized_value(field_name, existing_item, next_item);
+            }
+        }
+    }
+}
+
+fn preserve_missing_string_map_entries(existing_value: &JsonValue, next_value: &mut JsonValue) {
+    let Some(existing_fields) = firestore_map_fields(existing_value) else {
+        return;
+    };
+    let Some(next_fields) = firestore_map_fields_mut(next_value) else {
+        return;
+    };
+
+    for (locale, existing_locale_value) in existing_fields {
+        next_fields
+            .entry(locale.clone())
+            .or_insert_with(|| existing_locale_value.clone());
+    }
+}
+
+fn is_localized_string_map_field(field_name: &str) -> bool {
+    field_name == "alt_i18n" || field_name.ends_with("_i18n")
+}
+
+fn firestore_map_fields(value: &JsonValue) -> Option<&serde_json::Map<String, JsonValue>> {
+    value
+        .get("mapValue")
+        .and_then(|map| map.get("fields"))
+        .and_then(JsonValue::as_object)
+}
+
+fn firestore_map_fields_mut(
+    value: &mut JsonValue,
+) -> Option<&mut serde_json::Map<String, JsonValue>> {
+    value
+        .get_mut("mapValue")
+        .and_then(|map| map.get_mut("fields"))
+        .and_then(JsonValue::as_object_mut)
+}
+
+fn firestore_array_values(value: &JsonValue) -> Option<&Vec<JsonValue>> {
+    value
+        .get("arrayValue")
+        .and_then(|array| array.get("values"))
+        .and_then(JsonValue::as_array)
+}
+
+fn firestore_array_values_mut(value: &mut JsonValue) -> Option<&mut Vec<JsonValue>> {
+    value
+        .get_mut("arrayValue")
+        .and_then(|array| array.get_mut("values"))
+        .and_then(JsonValue::as_array_mut)
 }
 
 fn app_config_public_document(now: DateTime<Utc>) -> Document {
@@ -960,6 +1060,72 @@ mod tests {
             assert!(copy.label.contains_key("en"));
             assert!(copy.label.contains_key("ja"));
         }
+    }
+
+    #[test]
+    fn seed_patch_preserves_unknown_locale_keys_in_localized_maps() {
+        let existing = btree_from_pairs(vec![
+            (
+                "label_i18n",
+                fs_owned_string_map(&HashMap::from([
+                    ("en".to_owned(), "Old Wood".to_owned()),
+                    ("ja".to_owned(), "古い木材".to_owned()),
+                    ("fr".to_owned(), "Bois".to_owned()),
+                    ("zh".to_owned(), "木材".to_owned()),
+                    ("zhtw".to_owned(), "木材".to_owned()),
+                ])),
+            ),
+            (
+                "photos",
+                fs_array(vec![fs_map(btree_from_pairs(vec![(
+                    "alt_i18n",
+                    fs_owned_string_map(&HashMap::from([
+                        ("en".to_owned(), "Old photo".to_owned()),
+                        ("ja".to_owned(), "古い写真".to_owned()),
+                        ("zhtw".to_owned(), "照片".to_owned()),
+                    ])),
+                )]))]),
+            ),
+        ]);
+        let mut next = btree_from_pairs(vec![
+            (
+                "label_i18n",
+                fs_owned_string_map(&HashMap::from([
+                    ("en".to_owned(), "Wood".to_owned()),
+                    ("ja".to_owned(), "木材".to_owned()),
+                ])),
+            ),
+            (
+                "photos",
+                fs_array(vec![fs_map(btree_from_pairs(vec![(
+                    "alt_i18n",
+                    fs_owned_string_map(&HashMap::from([
+                        ("en".to_owned(), "New photo".to_owned()),
+                        ("ja".to_owned(), "新しい写真".to_owned()),
+                    ])),
+                )]))]),
+            ),
+        ]);
+
+        preserve_existing_localized_maps(&existing, &mut next);
+
+        let label_fields = next["label_i18n"]["mapValue"]["fields"]
+            .as_object()
+            .expect("label_i18n should be a Firestore map");
+        assert_eq!(label_fields["en"]["stringValue"], "Wood");
+        assert_eq!(label_fields["ja"]["stringValue"], "木材");
+        assert_eq!(label_fields["fr"]["stringValue"], "Bois");
+        assert_eq!(label_fields["zh"]["stringValue"], "木材");
+        assert_eq!(label_fields["zhtw"]["stringValue"], "木材");
+
+        let photo_alt_fields =
+            next["photos"]["arrayValue"]["values"][0]["mapValue"]["fields"]["alt_i18n"]["mapValue"]
+                ["fields"]
+                .as_object()
+                .expect("alt_i18n should be a Firestore map");
+        assert_eq!(photo_alt_fields["en"]["stringValue"], "New photo");
+        assert_eq!(photo_alt_fields["ja"]["stringValue"], "新しい写真");
+        assert_eq!(photo_alt_fields["zhtw"]["stringValue"], "照片");
     }
 
     #[test]

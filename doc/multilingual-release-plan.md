@@ -2338,7 +2338,7 @@ git diff --cached --check
   per-language Rust struct fields.
   Done when: adding `fr` does not require a new Rust field and the `M0-T05`
   migration-safety checklist is satisfied.
-- [ ] `M4-T03` Preserve unknown locale keys in API writes.
+- [x] `M4-T03` Preserve unknown locale keys in API writes.
   Output: merge behavior for localized Firestore maps.
   Done when: existing `fr`, `zh`, or `zhtw` keys survive updates to `ja`.
 - [ ] `M4-T04` Localize checkout product labels.
@@ -2431,6 +2431,49 @@ cargo fmt --manifest-path api/Cargo.toml -- --check
 cargo test --manifest-path api/Cargo.toml --bin seed_catalog
 cargo test --manifest-path api/Cargo.toml
 jq empty api/content/i18n/catalog/*.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M4-T03 Localized Map Preservation
+
+Completed on 2026-06-18. Added merge behavior for localized Firestore maps
+when catalog seed documents update existing Firestore records.
+
+Implementation notes:
+
+- Updated `api/src/bin/seed_catalog.rs::upsert_named_document` so existing
+  documents are read before patching and localized maps are merged into the
+  outgoing patch.
+- Preserved unknown locale keys in top-level `*_i18n` maps, such as
+  `label_i18n`, `description_i18n`, `title_i18n`, and `story_i18n`.
+- Preserved unknown locale keys in nested `photos[].alt_i18n` maps.
+- Kept seed-owned `en` and `ja` values authoritative, so edited English or
+  Japanese copy still updates on reseed while `fr`, `zh`, `zhtw`, or future
+  locale keys survive.
+- Added a seed test proving `fr`, `zh`, and `zhtw` keys survive a patch that
+  updates `en` and `ja`.
+
+M0-T05 preservation evidence:
+
+- English and Japanese seed output remains generated from the M4-T02 catalog
+  JSON files.
+- Locale-neutral catalog fields remain unchanged.
+- Chinese disposition: existing `zh` and `zhtw` Firestore values are preserved
+  during reseed even though no standalone Chinese catalog source exists yet.
+- Rollback path: remove the merge helper and return seed patching to direct
+  document replacement for localized maps.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml --bin seed_catalog
+cargo test --manifest-path api/Cargo.toml
+jq empty config/languages.json api/content/i18n/catalog/*.json
 make i18n-registry-test
 make i18n-status-test
 make i18n-status
