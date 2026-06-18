@@ -266,7 +266,8 @@ Field rules:
   `zh-Hans` and `zh-Hant`; otherwise it can be null.
 - `flutter.countryCode` should be null unless a region is necessary.
 - `text_direction` must be `ltr` or `rtl`.
-- `fallback` must point to another `route_code`, usually `en`.
+- `fallback` must point to another `route_code`, usually `en`; the default
+  route can use null to terminate fallback chains.
 - `currency` is the default pricing currency for this locale. Use `JPY` for
   `ja`; use `USD` for all others unless a business rule says otherwise.
 - `web.enabled` controls URL parsing and page rendering.
@@ -634,7 +635,7 @@ Options:
 Checks:
 
 - `config/languages.json` parses and contains unique route codes.
-- Every fallback points to an existing route code.
+- Every non-null fallback points to an existing route code.
 - Every route code has valid BCP-47 output metadata.
 - RTL languages are marked correctly.
 - App ARB files have identical keys.
@@ -1425,7 +1426,7 @@ Fastlane setup readiness notes:
 
 ### M1: Registry and Read-Only Tooling
 
-- [ ] `M1-T01` Add `config/languages.json`.
+- [x] `M1-T01` Add `config/languages.json`.
   Output: all 68 route codes with BCP-47, Flutter, text direction, fallback,
   currency, web, app, and release fields.
   Done when: `no`, `zh`, `zhtw`, and RTL entries validate correctly.
@@ -1441,6 +1442,31 @@ Fastlane setup readiness notes:
 - [ ] `M1-T05` Document registry update rules.
   Output: short maintainer notes for adding, disabling, or indexing a language.
   Done when: future language changes do not require reading implementation code.
+
+#### M1-T01 Language Registry
+
+Completed on 2026-06-18. Added `config/languages.json` with the full 68-code
+route list from Section 4 in the same order.
+
+Initial flag policy:
+
+- `en` and `ja` are the only initially enabled, indexed, and selectable
+  languages because they match the current app and web behavior.
+- The other 66 route codes are registered but start with `web.enabled=false`,
+  `app.enabled=false`, and `release.enabled=false` so M1 does not expose
+  unfinished routes, app locales, or store metadata.
+- `zh` maps to `zh-Hans` with Flutter `scriptCode=Hans`.
+- `zhtw` maps to `zh-Hant` with Flutter `scriptCode=Hant`.
+- `no` stays a JSON string route code and BCP-47 value.
+- `ar`, `fa`, `he`, `ps`, and `ur` are marked `rtl`; all other entries are
+  `ltr`.
+- English has `url_prefix=""` and `fallback=null` to terminate fallback chains.
+  Every other language uses its route code as `url_prefix` and falls back to
+  `en`.
+- `ja` uses `JPY`; all other entries use `USD` until a business rule changes.
+- Store locale fields are filled only for `en`, `ja`, `zh`, and `zhtw` in this
+  baseline. Other languages keep null store locale fields until M8 validates
+  platform support.
 
 ### M2: Flutter App Migration
 
