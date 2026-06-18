@@ -1971,7 +1971,7 @@ when run by itself.
 
 ### M3: Web Copy and Route Migration
 
-- [ ] `M3-T01` Add a web registry loader.
+- [x] `M3-T01` Add a web registry loader.
   Output: web-side language model for route parsing, links, `hreflang`, and
   sitemap generation.
   Done when: `SUPPORTED_LOCALES` is no longer the source of truth.
@@ -1997,6 +1997,39 @@ when run by itself.
   Output: tests for `/about`, `/ja/about`, `/zhtw/...`, `/en/...`, and unknown
   locale prefixes.
   Done when: unknown locale prefixes return 404 instead of English content.
+
+#### M3-T01 Web Registry Loader
+
+Completed on 2026-06-18. Added a web-side language registry model backed by the
+checked-in 68-language `config/languages.json` file.
+
+Implementation notes:
+
+- Removed the `SUPPORTED_LOCALES` constant from `web/src/main.rs`.
+- Added `WebLanguageRegistry`, `WebLanguage`, and `LanguageLink` helpers for
+  web route-code parsing, path-prefix parsing, localized URL generation,
+  link generation, and indexed `hreflang`/sitemap generation.
+- Kept the current public URL behavior: English remains unprefixed, Japanese
+  remains under `/ja/`, and disabled route codes such as `zhtw` still do not
+  become routable web locales.
+- Preserved the legacy `jp` alias for Japanese route parsing.
+- Switched sitemap alternate generation from hard-coded `en`/`ja` strings to
+  registry languages where `web.indexed=true`.
+- Added tests that load the checked-in 68-language registry, verify the enabled
+  web language set, and confirm non-indexed enabled languages can be linkable
+  without entering indexed `hreflang` output.
+
+Validation:
+
+```sh
+cargo test --manifest-path web/Cargo.toml
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
 
 ### M4: API, Catalog, and Checkout Localization
 

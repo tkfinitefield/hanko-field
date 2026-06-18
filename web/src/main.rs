@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     env,
     path::Path as FsPath,
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
@@ -29,9 +29,13 @@ const ADMIN_PROXY_MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 const HX_REDIRECT_HEADER: &str = "hx-redirect";
 const WEB_STATIC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/static");
 const WEB_BLOG_ARTICLES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/blog/articles");
+const LANGUAGE_REGISTRY_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../config/languages.json"
+));
 const EXTERNAL_LEGAL_BASE_URL: &str = "https://finitefield.org";
 const DEFAULT_LOCALE: &str = "en";
-const SUPPORTED_LOCALES: &[&str] = &["en", "ja"];
+static WEB_LANGUAGE_REGISTRY: OnceLock<WebLanguageRegistry> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RunMode {
@@ -48,6 +52,194 @@ impl RunMode {
             Self::Prod => "prod",
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WebLanguageRegistry {
+    languages: Vec<WebLanguage>,
+    default_route_code: String,
+}
+
+impl WebLanguageRegistry {
+    fn from_json(source: &str) -> Result<Self> {
+        let entries: Vec<LanguageRegistryEntry> =
+            serde_json::from_str(source).context("failed to parse language registry JSON")?;
+        Self::from_entries(entries)
+    }
+
+    fn from_entries(entries: Vec<LanguageRegistryEntry>) -> Result<Self> {
+        let mut route_codes = HashSet::new();
+        let mut enabled_prefixes = HashSet::new();
+        let mut languages = Vec::new();
+
+        for entry in entries {
+            let route_code = normalize_registry_code(&entry.route_code);
+            if route_code.is_empty() {
+                bail!("language registry route_code must not be empty");
+            }
+            if !route_codes.insert(route_code.clone()) {
+                bail!("duplicate language registry route_code: {route_code}");
+            }
+            if entry.web.indexed && !entry.web.enabled {
+                bail!("indexed web language must also be enabled: {route_code}");
+            }
+            if !entry.web.enabled {
+                continue;
+            }
+
+            let url_prefix = entry.web.url_prefix.trim().trim_matches('/').to_lowercase();
+            if route_code != DEFAULT_LOCALE && url_prefix.is_empty() {
+                bail!("non-default enabled web language must define url_prefix: {route_code}");
+            }
+            if !url_prefix.is_empty() && !enabled_prefixes.insert(url_prefix.clone()) {
+                bail!("duplicate enabled web url_prefix: {url_prefix}");
+            }
+
+            languages.push(WebLanguage {
+                route_code,
+                bcp47: entry.bcp47.trim().to_owned(),
+                native_name: entry.native_name.trim().to_owned(),
+                english_name: entry.english_name.trim().to_owned(),
+                text_direction: entry.text_direction,
+                url_prefix,
+                indexed: entry.web.indexed,
+            });
+        }
+
+        if languages.is_empty() {
+            bail!("language registry must include at least one enabled web language");
+        }
+
+        let Some(default_language) = languages
+            .iter()
+            .find(|language| language.route_code == DEFAULT_LOCALE)
+        else {
+            bail!("language registry must include enabled default locale {DEFAULT_LOCALE}");
+        };
+        if !default_language.url_prefix.is_empty() {
+            bail!("default web language must use an empty url_prefix");
+        }
+
+        Ok(Self {
+            languages,
+            default_route_code: DEFAULT_LOCALE.to_owned(),
+        })
+    }
+
+    fn enabled_languages(&self) -> &[WebLanguage] {
+        &self.languages
+    }
+
+    fn indexed_languages(&self) -> impl Iterator<Item = &WebLanguage> {
+        self.languages.iter().filter(|language| language.indexed)
+    }
+
+    fn default_language(&self) -> &WebLanguage {
+        self.enabled_language_exact(&self.default_route_code)
+            .expect("default web language must exist")
+    }
+
+    fn enabled_language_exact(&self, route_code: &str) -> Option<&WebLanguage> {
+        let normalized = normalize_registry_code(route_code);
+        self.languages
+            .iter()
+            .find(|language| language.route_code == normalized)
+    }
+
+    fn enabled_language_for_input(&self, raw: &str) -> Option<&WebLanguage> {
+        let normalized = normalize_registry_code(raw);
+        if normalized.is_empty() {
+            return None;
+        }
+        if normalized == "jp" {
+            return self.enabled_language_exact("ja");
+        }
+        if let Some(language) = self.enabled_language_exact(&normalized) {
+            return Some(language);
+        }
+        if let Some(language) = self
+            .languages
+            .iter()
+            .find(|language| normalize_registry_code(&language.bcp47) == normalized)
+        {
+            return Some(language);
+        }
+        let language = normalized
+            .split(['-', '_'])
+            .next()
+            .unwrap_or(normalized.as_str());
+        self.enabled_language_exact(language)
+    }
+
+    fn enabled_language_for_path_segment(&self, raw: &str) -> Option<&WebLanguage> {
+        let normalized = normalize_registry_code(raw);
+        if normalized.is_empty() {
+            return None;
+        }
+        if normalized == "jp" {
+            return self.enabled_language_exact("ja");
+        }
+        self.languages.iter().find(|language| {
+            language.route_code == normalized
+                || (!language.url_prefix.is_empty() && language.url_prefix == normalized)
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WebLanguage {
+    route_code: String,
+    bcp47: String,
+    native_name: String,
+    english_name: String,
+    text_direction: RegistryTextDirection,
+    url_prefix: String,
+    indexed: bool,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum RegistryTextDirection {
+    Ltr,
+    Rtl,
+}
+
+#[derive(Debug, Deserialize)]
+struct LanguageRegistryEntry {
+    route_code: String,
+    bcp47: String,
+    native_name: String,
+    english_name: String,
+    text_direction: RegistryTextDirection,
+    web: LanguageRegistryWebConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct LanguageRegistryWebConfig {
+    enabled: bool,
+    indexed: bool,
+    url_prefix: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LanguageLink {
+    route_code: String,
+    bcp47: String,
+    label: String,
+    url: String,
+    is_default: bool,
+    is_indexed: bool,
+}
+
+fn web_language_registry() -> &'static WebLanguageRegistry {
+    WEB_LANGUAGE_REGISTRY.get_or_init(|| {
+        WebLanguageRegistry::from_json(LANGUAGE_REGISTRY_JSON)
+            .expect("checked-in language registry must be valid for web")
+    })
+}
+
+fn normalize_registry_code(raw: &str) -> String {
+    raw.trim().to_lowercase()
 }
 
 #[derive(Debug, Clone)]
@@ -3809,36 +4001,15 @@ fn resolve_request_locale(requested: Option<&str>, locale: &str, default_locale:
 }
 
 fn parse_supported_locale(raw: &str) -> Option<&'static str> {
-    let normalized = raw.trim().to_lowercase();
-    if normalized.is_empty() {
-        return None;
-    }
-    if normalized == "jp" {
-        return Some("ja");
-    }
-    if let Some(locale) = supported_locale_exact(&normalized) {
-        return Some(locale);
-    }
-    let language = normalized
-        .split(['-', '_'])
-        .next()
-        .unwrap_or(normalized.as_str());
-    supported_locale_exact(language)
+    web_language_registry()
+        .enabled_language_for_input(raw)
+        .map(|language| language.route_code.as_str())
 }
 
 fn parse_path_locale(raw: &str) -> Option<&'static str> {
-    let normalized = raw.trim().to_lowercase();
-    if normalized == "jp" {
-        return Some("ja");
-    }
-    supported_locale_exact(&normalized)
-}
-
-fn supported_locale_exact(locale: &str) -> Option<&'static str> {
-    SUPPORTED_LOCALES
-        .iter()
-        .copied()
-        .find(|supported| *supported == locale)
+    web_language_registry()
+        .enabled_language_for_path_segment(raw)
+        .map(|language| language.route_code.as_str())
 }
 
 fn is_japanese_locale(locale: &str) -> bool {
@@ -3897,25 +4068,74 @@ fn locale_query_params(locale: &str) -> Vec<String> {
 }
 
 fn localized_page_path(path: &str, locale: &str) -> String {
-    let normalized = parse_supported_locale(locale).unwrap_or(DEFAULT_LOCALE);
-    if normalized == DEFAULT_LOCALE {
+    let registry = web_language_registry();
+    let language = registry
+        .enabled_language_for_input(locale)
+        .unwrap_or_else(|| registry.default_language());
+    localized_page_path_for_language(path, language)
+}
+
+fn localized_page_path_for_language(path: &str, language: &WebLanguage) -> String {
+    if language.route_code == DEFAULT_LOCALE {
         return path.to_owned();
     }
 
     let path = if path.is_empty() { "/" } else { path };
     if path == "/" {
-        return format!("/{normalized}/");
+        return format!("/{}/", language.url_prefix);
     }
 
     if let Some(path) = path.strip_prefix('/') {
-        format!("/{normalized}/{path}")
+        format!("/{}/{path}", language.url_prefix)
     } else {
-        format!("/{normalized}/{path}")
+        format!("/{}/{path}", language.url_prefix)
     }
 }
 
 fn localized_page_url(base_url: &str, path: &str, locale: &str) -> String {
     site_url(base_url, &localized_page_path(path, locale))
+}
+
+fn language_links_for_path(base_url: &str, path: &str) -> Vec<LanguageLink> {
+    language_links_for_path_with_registry(web_language_registry(), base_url, path)
+}
+
+fn language_links_for_path_with_registry(
+    registry: &WebLanguageRegistry,
+    base_url: &str,
+    path: &str,
+) -> Vec<LanguageLink> {
+    registry
+        .enabled_languages()
+        .iter()
+        .map(|language| language_link_for_path(base_url, path, language))
+        .collect()
+}
+
+fn indexed_hreflang_links_for_path(base_url: &str, path: &str) -> Vec<LanguageLink> {
+    indexed_hreflang_links_for_path_with_registry(web_language_registry(), base_url, path)
+}
+
+fn indexed_hreflang_links_for_path_with_registry(
+    registry: &WebLanguageRegistry,
+    base_url: &str,
+    path: &str,
+) -> Vec<LanguageLink> {
+    registry
+        .indexed_languages()
+        .map(|language| language_link_for_path(base_url, path, language))
+        .collect()
+}
+
+fn language_link_for_path(base_url: &str, path: &str, language: &WebLanguage) -> LanguageLink {
+    LanguageLink {
+        route_code: language.route_code.clone(),
+        bcp47: language.bcp47.clone(),
+        label: language.native_name.clone(),
+        url: site_url(base_url, &localized_page_path_for_language(path, language)),
+        is_default: language.route_code == DEFAULT_LOCALE,
+        is_indexed: language.indexed,
+    }
 }
 
 #[cfg(test)]
@@ -4036,11 +4256,28 @@ fn sitemap_url_entry(base_url: &str, path: &str, lastmod: &str) -> Result<String
     ensure_canonical_sitemap_path(path)?;
     ensure_valid_sitemap_lastmod(lastmod)?;
 
-    let en_url = localized_page_url(base_url, path, "en");
-    let ja_url = localized_page_url(base_url, path, "ja");
-    Ok(format!(
-        "  <url>\n    <loc>{en_url}</loc>\n    <lastmod>{lastmod}</lastmod>\n    <xhtml:link rel=\"alternate\" hreflang=\"en\" href=\"{en_url}\" />\n    <xhtml:link rel=\"alternate\" hreflang=\"ja\" href=\"{ja_url}\" />\n    <xhtml:link rel=\"alternate\" hreflang=\"x-default\" href=\"{en_url}\" />\n  </url>\n  <url>\n    <loc>{ja_url}</loc>\n    <lastmod>{lastmod}</lastmod>\n    <xhtml:link rel=\"alternate\" hreflang=\"en\" href=\"{en_url}\" />\n    <xhtml:link rel=\"alternate\" hreflang=\"ja\" href=\"{ja_url}\" />\n    <xhtml:link rel=\"alternate\" hreflang=\"x-default\" href=\"{en_url}\" />\n  </url>\n"
-    ))
+    let links = indexed_hreflang_links_for_path(base_url, path);
+    let Some(default_link) = links.iter().find(|link| link.is_default) else {
+        bail!("sitemap path requires an indexed default language: {path}");
+    };
+    let mut entry = String::new();
+    for loc_link in &links {
+        entry.push_str("  <url>\n");
+        entry.push_str(&format!("    <loc>{}</loc>\n", loc_link.url));
+        entry.push_str(&format!("    <lastmod>{lastmod}</lastmod>\n"));
+        for alternate in &links {
+            entry.push_str(&format!(
+                "    <xhtml:link rel=\"alternate\" hreflang=\"{}\" href=\"{}\" />\n",
+                alternate.bcp47, alternate.url
+            ));
+        }
+        entry.push_str(&format!(
+            "    <xhtml:link rel=\"alternate\" hreflang=\"x-default\" href=\"{}\" />\n",
+            default_link.url
+        ));
+        entry.push_str("  </url>\n");
+    }
+    Ok(entry)
 }
 
 fn build_sitemap_xml(base_url: &str) -> Result<String> {
@@ -4972,6 +5209,30 @@ mod tests {
             locale: "ja".to_owned(),
             default_locale: "ja".to_owned(),
             site_base_url: TEST_SITE_BASE_URL.to_owned(),
+        }
+    }
+
+    fn language_registry_entry(
+        route_code: &str,
+        bcp47: &str,
+        native_name: &str,
+        english_name: &str,
+        text_direction: RegistryTextDirection,
+        enabled: bool,
+        indexed: bool,
+        url_prefix: &str,
+    ) -> LanguageRegistryEntry {
+        LanguageRegistryEntry {
+            route_code: route_code.to_owned(),
+            bcp47: bcp47.to_owned(),
+            native_name: native_name.to_owned(),
+            english_name: english_name.to_owned(),
+            text_direction,
+            web: LanguageRegistryWebConfig {
+                enabled,
+                indexed,
+                url_prefix: url_prefix.to_owned(),
+            },
         }
     }
 
@@ -6025,6 +6286,118 @@ mod tests {
         let failure_html = render_html(&failure_template).expect("payment failure should render");
         assert!(failure_html.contains(r#"<title>Payment incomplete | STONE SIGNATURE</title>"#));
         assert!(failure_html.contains(r#"<meta name="robots" content="noindex,follow">"#));
+    }
+
+    #[test]
+    fn web_language_registry_loads_checked_in_route_model() {
+        let entries: Vec<LanguageRegistryEntry> =
+            serde_json::from_str(LANGUAGE_REGISTRY_JSON).expect("registry should parse");
+        assert_eq!(entries.len(), 68);
+
+        let registry =
+            WebLanguageRegistry::from_json(LANGUAGE_REGISTRY_JSON).expect("registry should load");
+        assert_eq!(
+            registry
+                .enabled_languages()
+                .iter()
+                .map(|language| language.route_code.as_str())
+                .collect::<Vec<_>>(),
+            vec!["en", "ja"]
+        );
+
+        let english = registry
+            .enabled_language_exact("en")
+            .expect("English should be enabled for web");
+        assert_eq!(english.bcp47, "en");
+        assert_eq!(english.url_prefix, "");
+        assert_eq!(english.text_direction, RegistryTextDirection::Ltr);
+
+        let japanese = registry
+            .enabled_language_for_path_segment("jp")
+            .expect("legacy jp path segment should resolve to Japanese");
+        assert_eq!(japanese.route_code, "ja");
+        assert_eq!(japanese.url_prefix, "ja");
+        assert_eq!(japanese.english_name, "Japanese");
+
+        assert_eq!(parse_supported_locale("ja-JP"), Some("ja"));
+        assert_eq!(parse_path_locale("ja"), Some("ja"));
+        assert_eq!(parse_path_locale("zhtw"), None);
+
+        let links = language_links_for_path(TEST_SITE_BASE_URL, "/about");
+        assert_eq!(
+            links
+                .iter()
+                .map(|link| (
+                    link.route_code.as_str(),
+                    link.label.as_str(),
+                    link.is_default
+                ))
+                .collect::<Vec<_>>(),
+            vec![("en", "English", true), ("ja", "日本語", false)]
+        );
+    }
+
+    #[test]
+    fn registry_backed_links_include_non_indexed_enabled_languages() {
+        let registry = WebLanguageRegistry::from_entries(vec![
+            language_registry_entry(
+                "en",
+                "en",
+                "English",
+                "English",
+                RegistryTextDirection::Ltr,
+                true,
+                true,
+                "",
+            ),
+            language_registry_entry(
+                "fr",
+                "fr",
+                "Français",
+                "French",
+                RegistryTextDirection::Ltr,
+                true,
+                false,
+                "fr",
+            ),
+            language_registry_entry(
+                "ja",
+                "ja",
+                "日本語",
+                "Japanese",
+                RegistryTextDirection::Ltr,
+                true,
+                true,
+                "ja",
+            ),
+        ])
+        .expect("fixture registry should load");
+
+        let links = language_links_for_path_with_registry(&registry, TEST_SITE_BASE_URL, "/about");
+        assert_eq!(
+            links
+                .iter()
+                .map(|link| (link.route_code.as_str(), link.url.as_str(), link.is_indexed))
+                .collect::<Vec<_>>(),
+            vec![
+                ("en", "https://finitefield.org/about", true),
+                ("fr", "https://finitefield.org/fr/about", false),
+                ("ja", "https://finitefield.org/ja/about", true),
+            ]
+        );
+
+        let indexed_links =
+            indexed_hreflang_links_for_path_with_registry(&registry, TEST_SITE_BASE_URL, "/about");
+        assert_eq!(
+            indexed_links
+                .iter()
+                .map(|link| (link.bcp47.as_str(), link.url.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("en", "https://finitefield.org/about"),
+                ("ja", "https://finitefield.org/ja/about"),
+            ]
+        );
     }
 
     #[test]
