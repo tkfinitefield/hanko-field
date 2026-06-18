@@ -1010,10 +1010,83 @@ A task is complete only when:
   Output: current app identifiers, version source, signing assumptions,
   checkout return paths, and store copy locations.
   Done when: fastlane setup can proceed without rediscovering release basics.
-- [ ] `M0-T05` Record migration safety rules.
+- [x] `M0-T05` Record migration safety rules.
   Output: checklist for preserving existing English, Japanese, and Chinese
   content during each migration PR.
   Done when: the checklist is referenced from later migration issues.
+
+#### M0-T05 Migration Safety Rules
+
+Completed on 2026-06-18. Use this checklist in every migration PR that moves
+localized app strings, web copy, blog content, API seed data, catalog maps,
+checkout copy, release metadata, deep-link paths, or store metadata.
+
+Preservation gates:
+
+- Scope gate: list the M0 inventory rows touched by the PR and identify the
+  source files being replaced, moved, or deleted.
+- Source snapshot gate: before moving copy, record the current `en`, `ja`,
+  `zh`, and `zhtw` state for every affected key, route, catalog item, checkout
+  label, store field, or metadata field.
+- English and Japanese gate: existing English and Japanese values must move
+  mechanically to the new ARB, JSON, HTML, or Firestore-map target unless the PR
+  explicitly documents a product-copy change.
+- Chinese asset gate: any existing Chinese source value must be assigned to
+  `zh` or `zhtw`, duplicated intentionally when the source script is ambiguous,
+  or recorded in an intention sidecar before the old source is removed.
+- Intention sidecar gate: brand names, legal entity names, URLs, email
+  addresses, product codes, font names, country codes, currency codes, order
+  IDs, Storage paths, Stripe identifiers, Firebase identifiers, bundle IDs, and
+  package IDs can remain unchanged only when the target file has a nearby
+  sidecar entry with a reason code.
+- Placeholder gate: placeholders, ICU arguments, HTML anchors, route names,
+  query parameters, Stripe return placeholders such as `{CHECKOUT_SESSION_ID}`,
+  and Firebase/Storage paths must be preserved exactly.
+- Route and deep-link gate: English canonical web URLs remain unprefixed,
+  `/en/payment/*` compatibility remains until explicitly removed, and every
+  non-English route code must resolve through the registry.
+- Firestore map gate: API and admin writes must merge localized maps without
+  dropping unknown locale keys.
+- Release secret gate: keystore files, passwords, service account JSON, Apple
+  API keys, fastlane reports that contain private data, exported binaries, and
+  signing certificates must not be committed or copied into public metadata.
+- Fallback gate: release-enabled locales must not silently fall back for
+  user-visible copy unless the fallback is recorded in an approved intention
+  sidecar and visible in diagnostics.
+- Validation gate: each migration PR must include the narrow validation command
+  that proves the moved content still parses, renders, or seeds correctly.
+- Dirty-worktree gate: stage only files owned by the migration PR and preserve
+  unrelated local changes.
+
+Until dedicated sidecar tooling exists, place intention sidecars beside the
+target file and include the stable key path, source file, source value, target
+locale, reason code, reviewer, and date. Use a small controlled reason list:
+`brand_name`, `legal_entity`, `url_or_email`, `code_or_identifier`,
+`product_model_or_font`, `payment_provider`, `source_not_available`,
+`pending_human_translation`, and `locale_not_release_enabled`.
+
+Each later migration issue or PR checklist must reference `M0-T05` and state:
+
+- M0 inventory rows touched
+- source files removed or replaced
+- target files created or updated
+- English and Japanese preservation evidence
+- Chinese `zh` and `zhtw` disposition
+- intentional holdout sidecars updated
+- validation commands run
+- rollback path for user-visible behavior
+
+Later task reference map:
+
+| Task | Required M0-T05 use |
+| --- | --- |
+| `M2-T02`, `M2-T04` | Preserve current app ARB and settings content while moving Chinese assets and long-form settings JSON. |
+| `M3-T03`, `M3-T06` | Preserve current web copy, SEO metadata, and blog URLs during JSON and blog layout extraction. |
+| `M4-T02`, `M4-T04`, `M4-T05` | Preserve catalog, checkout, Stripe return, and route-code behavior while moving API content to data files. |
+| `M5-T02`, `M5-T03` | Prove admin/API localized-map writes keep unknown locale keys. |
+| `M8-T01`, `M8-T06` | Preserve store copy ownership and keep signing or fastlane private material out of the repository. |
+| `M9-T01`, `M9-T03`, `M9-T06` | Keep generated locale files, holdouts, and frozen release-candidate translations reviewable. |
+| `M10-T03` | Verify localized payment paths and deep links without breaking existing return routes. |
 
 #### M0-T01 App String Inventory
 
@@ -1376,13 +1449,15 @@ Fastlane setup readiness notes:
   Done when: app builds with generated localization for English and Japanese.
 - [ ] `M2-T02` Migrate existing Chinese app assets.
   Output: `app_zh.arb`, `app_zh_Hant.arb`, or approved fallback sidecars.
-  Done when: existing Chinese product copy is not lost during ARB migration.
+  Done when: existing Chinese product copy is not lost during ARB migration and
+  the `M0-T05` migration-safety checklist is satisfied.
 - [ ] `M2-T03` Replace hand-written localization accessors.
   Output: generated localization access in `HankoApp` and feature screens.
   Done when: compatibility wrapper is removed or documented as temporary.
 - [ ] `M2-T04` Move long settings content to JSON assets.
   Output: registry-keyed JSON files under `app/assets/i18n/settings/`.
-  Done when: settings content can be translated without editing Dart source.
+  Done when: settings content can be translated without editing Dart source and
+  the `M0-T05` migration-safety checklist is satisfied.
 - [ ] `M2-T05` Render language settings from the registry.
   Output: selectable language rows using `native_name`, `english_name`, and
   `app.selectable`.
@@ -1406,7 +1481,8 @@ Fastlane setup readiness notes:
   Done when: templates render data fields instead of locale conditionals.
 - [ ] `M3-T03` Extract existing English, Japanese, and Chinese web copy.
   Output: localized JSON files under `web/content/i18n/`.
-  Done when: current visible copy is preserved after extraction.
+  Done when: current visible copy is preserved after extraction and the
+  `M0-T05` migration-safety checklist is satisfied.
 - [ ] `M3-T04` Replace language switcher fields.
   Output: `LanguageLink` list replacing `lang_ja_url` and `lang_en_url`.
   Done when: the switcher can render more than two languages.
@@ -1415,7 +1491,8 @@ Fastlane setup readiness notes:
   Done when: non-indexed QA languages render but do not enter the sitemap.
 - [ ] `M3-T06` Migrate blog content layout.
   Output: `web/content/blog/<slug>/<lang>.html` plus language-keyed metadata.
-  Done when: English and Japanese blog pages retain their current URLs.
+  Done when: English and Japanese blog pages retain their current URLs and the
+  `M0-T05` migration-safety checklist is satisfied.
 - [ ] `M3-T07` Add web routing tests.
   Output: tests for `/about`, `/ja/about`, `/zhtw/...`, `/en/...`, and unknown
   locale prefixes.
@@ -1430,16 +1507,19 @@ Fastlane setup readiness notes:
 - [ ] `M4-T02` Move seed catalog copy to data files or map-based structures.
   Output: materials, stone listings, countries, and facet tags no longer need
   per-language Rust struct fields.
-  Done when: adding `fr` does not require a new Rust field.
+  Done when: adding `fr` does not require a new Rust field and the `M0-T05`
+  migration-safety checklist is satisfied.
 - [ ] `M4-T03` Preserve unknown locale keys in API writes.
   Output: merge behavior for localized Firestore maps.
   Done when: existing `fr`, `zh`, or `zhtw` keys survive updates to `ja`.
 - [ ] `M4-T04` Localize checkout product labels.
   Output: data-driven checkout title and description templates.
-  Done when: checkout labels support at least `en`, `ja`, `zh`, and `zhtw`.
+  Done when: checkout labels support at least `en`, `ja`, `zh`, and `zhtw` and
+  the `M0-T05` migration-safety checklist is satisfied.
 - [ ] `M4-T05` Normalize checkout return locale handling.
   Output: consistent handling for `lang`, `locale`, and preferred locale.
-  Done when: Stripe return URLs preserve the selected route code.
+  Done when: Stripe return URLs preserve the selected route code and the
+  `M0-T05` migration-safety checklist is satisfied.
 - [ ] `M4-T06` Define Gemini `reason_language` mapping.
   Output: registry-backed mapping from route code to prompt language.
   Done when: unsupported prompt languages fallback with visible diagnostics.
@@ -1456,10 +1536,12 @@ Fastlane setup readiness notes:
 - [ ] `M5-T02` Add merge helpers for localized maps.
   Output: shared save behavior that edits selected keys without replacing the
   whole map.
-  Done when: unknown locale keys are preserved by default.
+  Done when: unknown locale keys are preserved by default and the `M0-T05`
+  migration-safety checklist is satisfied.
 - [ ] `M5-T03` Add preservation tests.
   Output: tests covering materials, stone listings, countries, and facet tags.
-  Done when: editing Japanese values preserves `fr`, `zh`, and `zhtw` values.
+  Done when: editing Japanese values preserves `fr`, `zh`, and `zhtw` values
+  and the `M0-T05` migration-safety checklist is satisfied.
 - [ ] `M5-T04` Add optional compact localized-values editor.
   Output: collapsed registry-driven editor if manual admin editing is needed.
   Done when: the admin does not render 68 always-visible inputs.
@@ -1524,7 +1606,8 @@ Fastlane setup readiness notes:
 - [ ] `M8-T01` Define store metadata source schema.
   Output: `release/store_metadata/source/*.json` schema and examples for
   `en`, `ja`, `zh`, and `zhtw`.
-  Done when: required fields are validated before generation.
+  Done when: required fields are validated before generation and the `M0-T05`
+  store-copy preservation rules are satisfied.
 - [ ] `M8-T02` Generate Google Play metadata.
   Output: deterministic `release/store_metadata/google_play/**` folders using
   `android_store_locale`.
@@ -1542,7 +1625,8 @@ Fastlane setup readiness notes:
 - [ ] `M8-T06` Add secret and signing guardrails.
   Output: `.gitignore` and setup notes for service accounts, Apple API keys,
   keystore files, passwords, and exported binaries.
-  Done when: private release material cannot be staged accidentally.
+  Done when: private release material cannot be staged accidentally and the
+  `M0-T05` release-secret gate is satisfied.
 - [ ] `M8-T07` Add screenshot metadata workflow.
   Output: screenshot naming rules and optional screengrab/deliver metadata
   preparation.
@@ -1553,14 +1637,16 @@ Fastlane setup readiness notes:
 - [ ] `M9-T01` Create all missing locale files.
   Output: ARB, settings JSON, web JSON, API content, and metadata source
   stubs for every enabled language.
-  Done when: `i18n-todo` reports missing keys instead of missing files.
+  Done when: `i18n-todo` reports missing keys instead of missing files and the
+  `M0-T05` migration-safety checklist is satisfied.
 - [ ] `M9-T02` Translate in script-family batches.
   Output: reviewed translations for Latin, Cyrillic, Indic, Southeast Asian,
   CJK, and RTL groups.
   Done when: each batch passes `make i18n-check LANGS=<batch>`.
 - [ ] `M9-T03` Review brand, legal, and product-name holdouts.
   Output: intention sidecars for approved shared English or legal terms.
-  Done when: non-English files have no unapproved English leftovers.
+  Done when: non-English files have no unapproved English leftovers and the
+  `M0-T05` intention sidecar gate is satisfied.
 - [ ] `M9-T04` Run tiered layout QA.
   Output: full QA for Tier 1, screenshot QA for Tier 2, mechanical checks for
   Tier 3.
@@ -1571,7 +1657,8 @@ Fastlane setup readiness notes:
   Done when: each flag change has validation evidence.
 - [ ] `M9-T06` Freeze release candidate translations.
   Output: language set and metadata baseline for the next app release.
-  Done when: translation changes after freeze require explicit review.
+  Done when: translation changes after freeze require explicit review and the
+  `M0-T05` preservation gates are recorded in the freeze notes.
 
 ### M10: Release QA and Staged Launch
 
@@ -1584,7 +1671,8 @@ Fastlane setup readiness notes:
 - [ ] `M10-T03` Verify deep links and payment return paths.
   Output: smoke-test results for custom scheme, Universal Links/App Links, and
   localized payment paths.
-  Done when: checkout returns preserve route code across pilot languages.
+  Done when: checkout returns preserve route code across pilot languages and
+  the `M0-T05` route and deep-link gate is satisfied.
 - [ ] `M10-T04` Upload to internal Google Play track.
   Output: fastlane internal upload evidence.
   Done when: internal testers can install the build.
