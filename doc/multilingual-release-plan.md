@@ -5131,7 +5131,7 @@ git diff --cached --check
   Output: review of unsupported locale, fallback, missing content, checkout
   locale, and malformed translation logs.
   Done when: no release-enabled locale has unexpected fallback spikes.
-- [ ] `M11-T02` Triage support feedback by locale.
+- [x] `M11-T02` Triage support feedback by locale.
   Output: issue list grouped by language, platform, and screen.
   Done when: translation and layout fixes have owners.
 - [ ] `M11-T03` Patch high-priority translation issues.
@@ -5202,6 +5202,68 @@ node --check scripts/i18n/diagnostics.mjs
 make i18n-diagnostics-check
 make i18n-diagnostics-test
 jq empty doc/qa/m11-t01/locale-diagnostics-review.json
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M11-T02 Support Feedback Triage
+
+Completed on 2026-06-18. Added a support feedback triage gate and recorded the
+first multilingual support review state.
+
+Implementation notes:
+
+- Added `scripts/i18n/support_triage.mjs` to validate support triage evidence
+  against `config/languages.json`.
+- Added `scripts/i18n/support_triage.test.mjs` covering:
+  - checked-in evidence acceptance
+  - missing translation or layout owners
+  - triage groups with unknown locale codes
+  - missing required support sources
+- Added Make targets:
+  - `make i18n-support-triage`
+  - `make i18n-support-triage-check`
+  - `make i18n-support-triage-test`
+- Added the support triage checks to `make i18n-ci`.
+- Added triage evidence:
+  - `doc/qa/m11-t02/README.md`
+  - `doc/qa/m11-t02/support-feedback-triage.json`
+
+Reviewed sources:
+
+- Support email.
+- Support form or customer contact exports.
+- Google Play reviews.
+- App Store Connect reviews.
+
+Current review result:
+
+- Production rollout has not started.
+- Support feedback records reviewed in this pre-rollout gate: 0.
+- Translation issues requiring owners: 0.
+- Layout issues requiring owners: 0.
+- Missing owners: 0.
+- Future M11 runs must replace the zero-count local review with real support
+  and store-review exports after staged rollout begins.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, production support exports, polling, streaming, SSE, or
+  WebSocket behavior was committed.
+- Rollback path: remove `doc/qa/m11-t02/`, remove the support triage script,
+  tests, Make targets, and `i18n-ci` entries, then reopen `M11-T02`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/support_triage.mjs
+make i18n-support-triage-check
+make i18n-support-triage-test
+jq empty doc/qa/m11-t02/support-feedback-triage.json
 make i18n-ci
 git diff --check
 git diff --cached --check
