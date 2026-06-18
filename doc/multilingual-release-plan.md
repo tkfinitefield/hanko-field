@@ -4367,7 +4367,7 @@ git diff --cached --check
 
 ### M9: 68-Language Content Production
 
-- [ ] `M9-T01` Create all missing locale files.
+- [x] `M9-T01` Create all missing locale files.
   Output: ARB, settings JSON, web JSON, API content, and metadata source
   stubs for every enabled language.
   Done when: `i18n-todo` reports missing keys instead of missing files and the
@@ -4392,6 +4392,83 @@ git diff --cached --check
   Output: language set and metadata baseline for the next app release.
   Done when: translation changes after freeze require explicit review and the
   `M0-T05` preservation gates are recorded in the freeze notes.
+
+#### M9-T01 Missing Locale File Stubs
+
+Completed on 2026-06-18. Added missing locale stub files for the full
+68-language registry so translation work can proceed as missing keys instead
+of missing files.
+
+Implementation notes:
+
+- Added `scripts/i18n/stubs.mjs` to create missing locale files without
+  overwriting existing translated or pilot files.
+- Added `scripts/i18n/stubs.test.mjs` to cover:
+  - ARB stubs with target `@@locale` and metadata preserved
+  - JSON stubs that keep non-string structure while leaving strings missing
+  - check mode before and after generation
+  - `i18n-todo` reporting missing keys instead of missing files
+- Added Make targets:
+  - `make i18n-stubs`
+  - `make i18n-stubs-check`
+  - `make i18n-stubs-test`
+- Added stub script checks to `make i18n-ci`.
+- Generated 945 missing stub files across:
+  - app ARB files
+  - app settings JSON files
+  - web content JSON files
+  - API checkout JSON files
+
+Stub behavior:
+
+- Existing `en`, `ja`, `zh`, `zhtw`, and `ar` files remain untouched.
+- ARB stubs preserve `@@locale` and `@message` metadata but intentionally omit
+  message values until translation.
+- JSON stubs preserve non-string containers and scalar values needed for stable
+  shape, while string values remain absent until translation.
+- API catalog files were already present as embedded language maps; remaining
+  catalog work is reported as missing keys.
+- Store metadata source files were not expanded in this task because
+  `release.enabled=false` for all languages and only `en`, `ja`, `zh`, and
+  `zhtw` currently have platform store locale mappings. Adding unsupported
+  release metadata source files would break the existing Google Play and App
+  Store generation checks before those languages are release-enabled.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, catalog, store metadata, fastlane lanes,
+  and release secret guardrails remain unchanged except for translation stub
+  files and the new stub helper.
+- Registry flags remain unchanged; no language was made app-selectable,
+  web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, signing files, uploads, polling, streaming, SSE, or
+  WebSocket behavior were added.
+- Rollback path: remove `scripts/i18n/stubs.*`, remove the Makefile targets
+  and `i18n-ci` entries, remove generated stub files for non-pilot languages,
+  and reopen `M9-T01`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/stubs.mjs
+node --check scripts/i18n/stubs.test.mjs
+make i18n-stubs
+make i18n-stubs-check
+make i18n-stubs-test
+make i18n-check
+make i18n-ci
+node --input-type=module - <<'NODE'
+import { buildI18nTodo } from './scripts/i18n/todo.mjs';
+const report = await buildI18nTodo({ langs: ['all'] });
+const counts = new Map();
+for (const item of report.items) counts.set(item.type, (counts.get(item.type) ?? 0) + 1);
+const missingFiles = new Set(report.items.filter((item) => item.type === 'missing-file').map((item) => item.file));
+console.log({ items: report.items.length, counts: Object.fromEntries(counts), missing_file_paths: missingFiles.size });
+NODE
+git diff --check
+git diff --cached --check
+```
 
 ### M10: Release QA and Staged Launch
 
