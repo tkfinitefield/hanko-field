@@ -2348,7 +2348,7 @@ class _StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = available ? const Color(0xFF5F8F57) : HankoColors.error;
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.13),
@@ -2361,7 +2361,14 @@ class _StatusPill extends StatelessWidget {
             children: [
               Icon(Icons.circle, size: 10, color: color),
               const SizedBox(width: 8),
-              Text(label, style: HankoTextStyles.label.copyWith(color: color)),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: HankoTextStyles.label.copyWith(color: color),
+                ),
+              ),
             ],
           ),
         ),

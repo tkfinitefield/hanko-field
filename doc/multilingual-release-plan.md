@@ -1637,7 +1637,7 @@ layout rules, or enabled-language behavior.
 - [x] `M2-T06` Persist and normalize preferred route code.
   Output: saved `route_code` with fallback for old `en` and `ja` values.
   Done when: restart keeps the selected language and invalid values recover.
-- [ ] `M2-T07` Add RTL and overflow coverage.
+- [x] `M2-T07` Add RTL and overflow coverage.
   Output: widget tests or screenshot checks for one RTL locale and long text.
   Done when: settings, checkout, and order screens do not visibly overflow.
 
@@ -1924,6 +1924,43 @@ jq empty config/languages.json
 make i18n-registry-test
 make i18n-status-test
 make i18n-status
+```
+
+Full `flutter test` was also attempted. It still fails on the pre-existing
+Flutter `ListTile` under `DecoratedBox` assertion in checkout widget tests. In
+that full-suite run, the settings navigation test also timed out after the
+checkout assertion failures, while the same settings navigation test passed
+when run by itself.
+
+#### M2-T07 RTL and Overflow Coverage
+
+Completed on 2026-06-18. Added focused RTL and large-text probes for the app
+screens that are most likely to regress during the route-wide language rollout.
+
+Implementation notes:
+
+- Added `app/test/rtl_overflow_test.dart` to render settings, checkout input,
+  order lookup, and order review screens with RTL direction, 320 px width, and
+  1.3x text scaling.
+- The RTL probe captures Flutter framework errors, including `RenderFlex` and
+  overflow exceptions, so visible layout regressions are caught as tests.
+- Added `text_direction` parsing to `AppLanguageRegistry`, with an assertion
+  that the checked-in `ar` registry entry parses as `TextDirection.rtl`.
+- Fixed the order review status pill found by the new probe by using
+  `AlignmentDirectional.centerStart` and a flexible two-line ellipsized label.
+
+Validation:
+
+```sh
+flutter test test/language_registry_test.dart test/rtl_overflow_test.dart
+flutter analyze
+flutter build apk --debug
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
 ```
 
 Full `flutter test` was also attempted. It still fails on the pre-existing

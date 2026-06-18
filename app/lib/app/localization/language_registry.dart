@@ -68,6 +68,7 @@ class AppLanguageOption {
     required this.locale,
     required this.nativeName,
     required this.englishName,
+    required this.textDirection,
     required this.appEnabled,
     required this.appSelectable,
   });
@@ -76,6 +77,7 @@ class AppLanguageOption {
   final Locale locale;
   final String nativeName;
   final String englishName;
+  final TextDirection textDirection;
   final bool appEnabled;
   final bool appSelectable;
 
@@ -105,6 +107,7 @@ class AppLanguageOption {
       ),
       nativeName: _string(json, 'native_name'),
       englishName: _string(json, 'english_name'),
+      textDirection: _textDirection(json, 'text_direction'),
       appEnabled: _bool(app, 'enabled'),
       appSelectable: _bool(app, 'selectable'),
     );
@@ -155,6 +158,16 @@ bool _bool(Map<String, Object?> json, String key) {
     return value;
   }
   throw FormatException('Expected boolean for "$key".');
+}
+
+TextDirection _textDirection(Map<String, Object?> json, String key) {
+  return switch (_string(json, key)) {
+    'ltr' => TextDirection.ltr,
+    'rtl' => TextDirection.rtl,
+    final value => throw FormatException(
+      'Expected "ltr" or "rtl" for "$key", got "$value".',
+    ),
+  };
 }
 
 Object? _required(Map<String, Object?> json, String key) {

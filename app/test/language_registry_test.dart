@@ -72,6 +72,7 @@ void main() {
     );
     expect(language.nativeName, '繁體中文');
     expect(language.englishNameLabel, 'Traditional Chinese');
+    expect(language.textDirection, TextDirection.ltr);
     expect(
       language.matchesLocale(
         const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
@@ -103,6 +104,15 @@ void main() {
     expect(registry.enabledLanguageForRouteCode('zh'), isNull);
     expect(registry.enabledLanguageForLocale(const Locale('zh')), isNull);
   });
+
+  test('parses RTL registry entries for layout probes', () async {
+    final registry = await AppLanguageRegistry.load();
+    final arabic = registry.languages.singleWhere(
+      (language) => language.routeCode == 'ar',
+    );
+
+    expect(arabic.textDirection, TextDirection.rtl);
+  });
 }
 
 Map<String, Object?> _language({
@@ -112,6 +122,7 @@ Map<String, Object?> _language({
   String? countryCode,
   required String nativeName,
   required String englishName,
+  TextDirection textDirection = TextDirection.ltr,
   required bool appEnabled,
   required bool appSelectable,
 }) {
@@ -124,6 +135,7 @@ Map<String, Object?> _language({
     },
     'native_name': nativeName,
     'english_name': englishName,
+    'text_direction': textDirection == TextDirection.rtl ? 'rtl' : 'ltr',
     'app': {'enabled': appEnabled, 'selectable': appSelectable},
   };
 }
