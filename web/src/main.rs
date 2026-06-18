@@ -269,6 +269,18 @@ macro_rules! web_copy_section {
                 $section,
                 "/zh.json"
             )),
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/content/i18n/",
+                $section,
+                "/zhtw.json"
+            )),
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/content/i18n/",
+                $section,
+                "/ar.json"
+            )),
         )
     };
 }
@@ -315,21 +327,37 @@ struct LocalizedCopySection {
     en: HashMap<String, String>,
     ja: HashMap<String, String>,
     zh: HashMap<String, String>,
+    zhtw: HashMap<String, String>,
+    ar: HashMap<String, String>,
 }
 
 impl LocalizedCopySection {
-    fn from_sources(section: &str, en: &str, ja: &str, zh: &str) -> Self {
+    fn from_sources(section: &str, en: &str, ja: &str, zh: &str, zhtw: &str, ar: &str) -> Self {
         let en = parse_web_copy_locale(section, "en", en);
         let ja = parse_web_copy_locale(section, "ja", ja);
         let zh = parse_web_copy_locale(section, "zh", zh);
-        assert_web_copy_key_parity(section, &en, &[("ja", &ja), ("zh", &zh)]);
-        Self { en, ja, zh }
+        let zhtw = parse_web_copy_locale(section, "zhtw", zhtw);
+        let ar = parse_web_copy_locale(section, "ar", ar);
+        assert_web_copy_key_parity(
+            section,
+            &en,
+            &[("ja", &ja), ("zh", &zh), ("zhtw", &zhtw), ("ar", &ar)],
+        );
+        Self {
+            en,
+            ja,
+            zh,
+            zhtw,
+            ar,
+        }
     }
 
     fn for_locale(&self, locale: &str) -> &HashMap<String, String> {
         match web_copy_locale_key(locale) {
             "ja" => &self.ja,
             "zh" => &self.zh,
+            "zhtw" => &self.zhtw,
+            "ar" => &self.ar,
             _ => &self.en,
         }
     }
@@ -381,8 +409,20 @@ fn web_copy_locale_key(locale: &str) -> &'static str {
     if normalized == "ja" || normalized == "jp" || normalized.starts_with("ja-") {
         return "ja";
     }
-    if normalized == "zh" || normalized == "zhtw" || normalized.starts_with("zh-") {
+    if normalized == "zhtw"
+        || normalized == "zh-hant"
+        || normalized == "zh-tw"
+        || normalized == "zh-hk"
+        || normalized == "zh-mo"
+        || normalized.starts_with("zh-hant-")
+    {
+        return "zhtw";
+    }
+    if normalized == "zh" || normalized == "zh-hans" || normalized.starts_with("zh-") {
         return "zh";
+    }
+    if normalized == "ar" || normalized.starts_with("ar-") {
+        return "ar";
     }
     "en"
 }
@@ -6012,9 +6052,46 @@ mod tests {
             "/en/about must remain non-canonical English compatibility"
         );
 
-        for path in ["/zh/about", "/zhtw/about", "/ar/about"] {
+        for (path, html_lang, expected_title, expected_seo_title, expected_meta) in [
+            (
+                "/zh/about",
+                "zh",
+                "用宝石制作你的印章",
+                "关于 STONE SIGNATURE | STONE SIGNATURE",
+                "了解 STONE SIGNATURE 如何让你在线选择宝石印章、设计印面并完成下单。",
+            ),
+            (
+                "/zhtw/about",
+                "zhtw",
+                "用寶石製作你的印章",
+                "關於 STONE SIGNATURE | STONE SIGNATURE",
+                "了解 STONE SIGNATURE 如何讓你線上選擇寶石印章、設計印面並完成下單。",
+            ),
+            (
+                "/ar/about",
+                "ar",
+                "ختمك مصنوع من حجر كريم",
+                "عن STONE SIGNATURE | STONE SIGNATURE",
+                "تعرف على طريقة اختيار ختم من حجر كريم عبر STONE SIGNATURE، وتصميم طبعة الختم، وإرسال طلبك.",
+            ),
+        ] {
             let (status, body) = route_get_html(path).await;
             assert_eq!(status, StatusCode::OK, "{path} should render for QA");
+            assert!(body.contains(&format!(r#"<html lang="{html_lang}">"#)));
+            assert!(
+                body.contains(expected_title),
+                "{path} must render pilot locale page content"
+            );
+            assert!(
+                body.contains(&format!("<title>{expected_seo_title}</title>")),
+                "{path} must render pilot locale SEO title"
+            );
+            assert!(
+                body.contains(&format!(
+                    r#"<meta name="description" content="{expected_meta}">"#
+                )),
+                "{path} must render pilot locale meta description"
+            );
             assert!(
                 body.contains(r#"<meta name="robots" content="noindex,follow">"#),
                 "{path} must remain non-indexed while in pilot"
@@ -6856,7 +6933,9 @@ mod tests {
         let copy = web_copy_document();
         assert_eq!(copy.common.en["brand_subtitle"], "Seal Field");
         assert_eq!(copy.common.ja["brand_subtitle"], "印鑑フィールド");
-        assert_eq!(copy.common.zh["brand_subtitle"], "Seal Field");
+        assert_eq!(copy.common.zh["brand_subtitle"], "印章设计");
+        assert_eq!(copy.common.zhtw["brand_subtitle"], "印章設計");
+        assert_eq!(copy.common.ar["brand_subtitle"], "تصميم الأختام");
         assert_eq!(
             web_copy_text("top", "en", "seo_title"),
             "Custom gemstone seals | STONE SIGNATURE"
@@ -6871,7 +6950,19 @@ mod tests {
         );
         assert_eq!(
             web_copy_text("top", "zh-Hans", "seo_title"),
-            "Custom gemstone seals | STONE SIGNATURE"
+            "在线定制宝石印章 | STONE SIGNATURE"
+        );
+        assert_eq!(
+            web_copy_text("top", "zh-Hant", "seo_title"),
+            "線上訂製寶石印章 | STONE SIGNATURE"
+        );
+        assert_eq!(
+            web_copy_text("top", "zhtw", "seo_title"),
+            "線上訂製寶石印章 | STONE SIGNATURE"
+        );
+        assert_eq!(
+            web_copy_text("top", "ar", "seo_title"),
+            "أختام أحجار كريمة مخصصة | STONE SIGNATURE"
         );
         assert_eq!(
             web_copy_text("top", "fr", "seo_title"),
@@ -6906,6 +6997,79 @@ mod tests {
                 section.zh.keys().collect::<HashSet<_>>(),
                 en_keys,
                 "{section_name}/zh keys must match en"
+            );
+            assert_eq!(
+                section.zhtw.keys().collect::<HashSet<_>>(),
+                en_keys,
+                "{section_name}/zhtw keys must match en"
+            );
+            assert_eq!(
+                section.ar.keys().collect::<HashSet<_>>(),
+                en_keys,
+                "{section_name}/ar keys must match en"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn pilot_payment_routes_render_localized_copy() {
+        for (path, expected_title, expected_seo_title, expected_meta) in [
+            (
+                "/zh/payment/success",
+                "付款已完成",
+                "付款完成 | STONE SIGNATURE",
+                "你的付款已收到。请查看 Stripe 付款收据，确认订单详情和下一步。",
+            ),
+            (
+                "/zhtw/payment/success",
+                "付款已完成",
+                "付款完成 | STONE SIGNATURE",
+                "你的付款已收到。請查看 Stripe 付款收據，確認訂單詳情和下一步。",
+            ),
+            (
+                "/ar/payment/success",
+                "اكتمل الدفع",
+                "اكتمل الدفع | STONE SIGNATURE",
+                "تم استلام دفعتك. راجع إيصال الدفع من Stripe لمعرفة تفاصيل الطلب والخطوات التالية.",
+            ),
+            (
+                "/zh/payment/failure",
+                "付款未完成",
+                "付款未完成 | STONE SIGNATURE",
+                "付款未完成。请检查银行卡信息，并返回购买页面重试。",
+            ),
+            (
+                "/zhtw/payment/failure",
+                "付款未完成",
+                "付款未完成 | STONE SIGNATURE",
+                "付款未完成。請檢查卡片資訊，並返回購買頁面重試。",
+            ),
+            (
+                "/ar/payment/failure",
+                "لم يكتمل الدفع",
+                "الدفع غير مكتمل | STONE SIGNATURE",
+                "لم يكتمل الدفع. تحقق من بيانات البطاقة وعد إلى صفحة الشراء للمحاولة مرة أخرى.",
+            ),
+        ] {
+            let (status, body) = route_get_html(path).await;
+            assert_eq!(status, StatusCode::OK, "{path} should render for QA");
+            assert!(
+                body.contains(expected_title),
+                "{path} must render localized payment result copy"
+            );
+            assert!(
+                body.contains(&format!("<title>{expected_seo_title}</title>")),
+                "{path} must render localized payment SEO title"
+            );
+            assert!(
+                body.contains(&format!(
+                    r#"<meta name="description" content="{expected_meta}">"#
+                )),
+                "{path} must render localized payment meta description"
+            );
+            assert!(
+                body.contains(r#"<meta name="robots" content="noindex,follow">"#),
+                "{path} must remain non-indexed while in pilot"
             );
         }
     }

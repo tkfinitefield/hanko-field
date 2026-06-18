@@ -3453,7 +3453,7 @@ git diff --cached --check
 - [x] `M7-T02` Fill pilot app content.
   Output: ARB and settings JSON for `zh`, `zhtw`, and `ar`.
   Done when: pilot app screens launch without fallback for primary UI.
-- [ ] `M7-T03` Fill pilot web and payment content.
+- [x] `M7-T03` Fill pilot web and payment content.
   Output: page JSON, payment result copy, and SEO fields for pilot routes.
   Done when: `/zh/...`, `/zhtw/...`, and `/ar/...` render correctly.
 - [ ] `M7-T04` Fill pilot API and checkout content.
@@ -3576,6 +3576,73 @@ flutter gen-l10n
 make i18n-check
 make i18n-ci
 flutter test test/generated_hanko_localizations_test.dart test/language_registry_test.dart test/settings_content_test.dart
+```
+
+#### M7-T03 Pilot Web and Payment Content
+
+Completed on 2026-06-18. Filled the pilot web copy files for `zh`, `zhtw`, and
+`ar`, and wired the web copy loader so pilot routes use their own JSON instead
+of collapsing `zhtw` into `zh` or `ar` into English.
+
+Implementation notes:
+
+- Added translated pilot copy for all web JSON namespaces:
+  - `common`
+  - `top`
+  - `about`
+  - `blog_index`
+  - `blog_article`
+  - `design`
+  - `kanji_suggestions`
+  - `payment_success`
+  - `payment_failure`
+  - `purchase_result`
+  - `terms`
+  - `commercial_transactions`
+- Filled localized SEO title and description fields for pilot routes.
+- Filled payment result copy for `/payment/success` and `/payment/failure`.
+- Updated the web copy loader to parse `zh`, `zhtw`, and `ar` JSON files as
+  distinct locale buckets.
+- Updated web locale aliasing:
+  - `zh`, `zh-Hans`, and generic `zh-*` use Simplified Chinese copy.
+  - `zhtw`, `zh-Hant`, `zh-TW`, `zh-HK`, and `zh-MO` use Traditional Chinese
+    copy.
+  - `ar` and `ar-*` use Arabic copy.
+- Kept `web.indexed=false` and `release.enabled=false` for all three pilot
+  languages.
+- Kept full blog article HTML body localization out of this task. The page
+  chrome, listing copy, article UI copy, and SEO JSON are covered here; full
+  article body translation should be handled separately if required.
+- Removed pilot sidecar files where values no longer match English, and kept
+  intention sidecars only for values that intentionally remain unchanged such
+  as brand, payment provider, URL, contact, and legal entity fields.
+- Added route tests that verify `/zh/about`, `/zhtw/about`, `/ar/about`,
+  `/zh/payment/success`, `/zhtw/payment/success`, `/ar/payment/success`,
+  `/zh/payment/failure`, `/zhtw/payment/failure`, and `/ar/payment/failure`
+  render localized body copy, localized SEO fields, and `noindex,follow`.
+
+M0-T05 preservation evidence:
+
+- Existing English and Japanese web copy remains unchanged.
+- Existing Simplified Chinese content remains in `zh`; Traditional Chinese is
+  kept separately in `zhtw`.
+- Arabic pilot copy is renderable but remains non-release because
+  `release.enabled=false`.
+- Same-as-English values are explicitly approved only where the value is a
+  brand, provider name, legal entity, URL, email, phone, ID label, or other
+  intentional literal.
+- Rollback path: restore the previous pilot placeholder JSON and sidecars,
+  remove `zhtw` and `ar` from the web copy loader, and reopen `M7-T03`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-ci
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+git diff --check
+git diff --cached --check
 ```
 
 ### M8: Store Metadata and fastlane

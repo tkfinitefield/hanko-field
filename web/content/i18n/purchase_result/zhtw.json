@@ -1,12 +1,12 @@
 {
-  "purchase_result_001": "Source",
-  "purchase_result_002": "Seal",
-  "purchase_result_003": "Shipping to",
-  "purchase_result_004": "Address",
-  "purchase_result_005": "Subtotal",
-  "purchase_result_006": "Shipping",
-  "purchase_result_007": "Total",
-  "purchase_result_008": "Confirmation email",
-  "purchase_result_009": "Order received (mock)",
-  "purchase_result_010": "Order details accepted (validation)"
+  "purchase_result_001": "資料來源",
+  "purchase_result_002": "印章",
+  "purchase_result_003": "收貨地址",
+  "purchase_result_004": "地址",
+  "purchase_result_005": "小計",
+  "purchase_result_006": "運費",
+  "purchase_result_007": "合計",
+  "purchase_result_008": "確認郵件",
+  "purchase_result_009": "已接收訂單（模擬）",
+  "purchase_result_010": "已接收訂單詳情（驗證）"
 }
