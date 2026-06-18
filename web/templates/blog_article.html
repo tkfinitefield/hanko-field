@@ -7,7 +7,7 @@
   <meta name="description" content="{{ meta_description }}">
   <meta name="robots" content="{{ robots_meta }}">
   <link rel="canonical" href="{{ canonical_url }}">
-  {% for language_link in language_links %}
+  {% for language_link in seo_language_links %}
   <link rel="alternate" hreflang="{{ language_link.bcp47 }}" href="{{ language_link.url }}">
   {% endfor %}
   <link rel="alternate" hreflang="x-default" href="{{ x_default_url }}">

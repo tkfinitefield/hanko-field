@@ -1986,7 +1986,7 @@ when run by itself.
 - [x] `M3-T04` Replace language switcher fields.
   Output: `LanguageLink` list replacing `lang_ja_url` and `lang_en_url`.
   Done when: the switcher can render more than two languages.
-- [ ] `M3-T05` Generate `hreflang`, canonical URLs, and sitemap entries.
+- [x] `M3-T05` Generate `hreflang`, canonical URLs, and sitemap entries.
   Output: registry-driven SEO output using `web.indexed`.
   Done when: non-indexed QA languages render but do not enter the sitemap.
 - [ ] `M3-T06` Migrate blog content layout.
@@ -2190,6 +2190,40 @@ make i18n-registry-test
 make i18n-status-test
 make i18n-status
 rg -n 'lang_ja_url|lang_en_url' web/src/main.rs web/templates
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T05 Indexed SEO Output
+
+Completed on 2026-06-18. Split UI language-switcher links from SEO alternate
+links and made canonical URLs follow the registry's indexed language state.
+
+Implementation notes:
+
+- Added `seo_language_links` to page templates so `<link rel="alternate">`
+  output is generated only from `web.indexed=true` languages.
+- Kept `language_links` as the UI switcher source, so non-indexed enabled
+  languages can still render for QA without becoming indexable alternates.
+- Added `x_default_url` separately from `canonical_url`, allowing localized
+  indexed pages such as `/ja/about` to use a Japanese canonical while
+  `x-default` continues to point to English.
+- Added canonical helpers that use the selected locale when it is indexed and
+  fallback to the default language when an enabled QA locale is not indexed.
+- Made sitemap entry generation testable with an injected registry and verified
+  that a non-indexed enabled `fr` fixture is excluded from sitemap output.
+- Preserved existing English and Japanese sitemap entries for static pages,
+  blog index, and blog articles.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+rg -n 'for language_link in seo_language_links|x_default_url' web/templates
 git diff --check
 git diff --cached --check
 ```

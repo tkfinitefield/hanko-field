@@ -656,6 +656,8 @@ struct TopPageTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
     language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
@@ -676,6 +678,8 @@ struct AboutTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
     language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
@@ -703,6 +707,8 @@ struct PageTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
     language_links: Vec<LanguageLink>,
     company_url: String,
     purchase_action_url: String,
@@ -846,6 +852,8 @@ struct PaymentSuccessTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
     language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
@@ -868,6 +876,8 @@ struct PaymentFailureTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
     language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
@@ -887,6 +897,8 @@ struct CommercialTransactionsTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
     language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
@@ -906,6 +918,8 @@ struct TermsTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
     language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
@@ -923,6 +937,8 @@ struct BlogIndexTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
     language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
@@ -941,6 +957,7 @@ struct BlogArticleTemplate {
     robots_meta: String,
     canonical_url: String,
     x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
     language_links: Vec<LanguageLink>,
     og_image_url: String,
     company_url: String,
@@ -2753,7 +2770,9 @@ async fn render_top_page(
         page_title: web_copy_text("top", &selected_locale, "seo_title").to_owned(),
         meta_description: web_copy_text("top", &selected_locale, "seo_description").to_owned(),
         robots_meta: "index,follow".to_owned(),
-        canonical_url: top_url(site_base_url, "en"),
+        canonical_url: canonical_url_for_path(site_base_url, "/", &selected_locale),
+        x_default_url: x_default_url_for_path(site_base_url, "/"),
+        seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/"),
         language_links: language_links_for_path(site_base_url, "/"),
         company_url: company_url(site_base_url),
         selected_locale: selected_locale.clone(),
@@ -2811,7 +2830,9 @@ async fn render_about_page(
         page_title: web_copy_text("about", &selected_locale, "seo_title").to_owned(),
         meta_description: web_copy_text("about", &selected_locale, "seo_description").to_owned(),
         robots_meta: "index,follow".to_owned(),
-        canonical_url: about_url(site_base_url, "en"),
+        canonical_url: canonical_url_for_path(site_base_url, "/about", &selected_locale),
+        x_default_url: x_default_url_for_path(site_base_url, "/about"),
+        seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/about"),
         language_links: language_links_for_path(site_base_url, "/about"),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
@@ -2924,7 +2945,9 @@ async fn render_design_page(
             },
         )
         .to_owned(),
-        canonical_url: design_url(site_base_url, "en"),
+        canonical_url: canonical_url_for_path(site_base_url, "/design", &selected_locale),
+        x_default_url: x_default_url_for_path(site_base_url, "/design"),
+        seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/design"),
         language_links: language_links_with_urls(|language| {
             design_url_with_filters(site_base_url, &language.route_code, &material_filter_state)
         }),
@@ -2994,7 +3017,9 @@ async fn render_blog_index_page(
         meta_description: web_copy_text("blog_index", &selected_locale, "seo_description")
             .to_owned(),
         robots_meta: "index,follow".to_owned(),
-        canonical_url: blog_index_url(site_base_url, "en"),
+        canonical_url: canonical_url_for_path(site_base_url, "/blog", &selected_locale),
+        x_default_url: x_default_url_for_path(site_base_url, "/blog"),
+        seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/blog"),
         language_links: language_links_for_path(site_base_url, "/blog"),
         company_url: company_url(site_base_url),
         selected_locale: selected_locale.clone(),
@@ -3077,8 +3102,15 @@ async fn render_blog_article_page(
         page_title: format!("{} | STONE SIGNATURE", &localized_post.title),
         meta_description: localized_post.meta_description.clone(),
         robots_meta: "index,follow".to_owned(),
-        canonical_url: blog_article_url(site_base_url, &post.slug, &selected_locale),
+        canonical_url: canonical_url_for_path(
+            site_base_url,
+            &format!("/blog/{}", post.slug),
+            &selected_locale,
+        ),
         x_default_url: blog_article_url(site_base_url, &post.slug, "en"),
+        seo_language_links: seo_language_links_with_urls(|language| {
+            blog_article_url(site_base_url, &post.slug, &language.route_code)
+        }),
         language_links: language_links_with_urls(|language| {
             blog_article_url(site_base_url, &post.slug, &language.route_code)
         }),
@@ -3412,6 +3444,15 @@ async fn render_payment_success_page(
         session_id,
         has_app_redirect_url,
         app_redirect_url,
+        x_default_url: payment_result_locale_url(site_base_url, "/payment/success", &query, "en"),
+        seo_language_links: seo_language_links_with_urls(|language| {
+            payment_result_locale_url(
+                site_base_url,
+                "/payment/success",
+                &query,
+                &language.route_code,
+            )
+        }),
         language_links: language_links_with_urls(|language| {
             payment_result_locale_url(
                 site_base_url,
@@ -3496,6 +3537,15 @@ async fn render_payment_failure_page(
         order_id,
         has_app_redirect_url,
         app_redirect_url,
+        x_default_url: payment_result_locale_url(site_base_url, "/payment/failure", &query, "en"),
+        seo_language_links: seo_language_links_with_urls(|language| {
+            payment_result_locale_url(
+                site_base_url,
+                "/payment/failure",
+                &query,
+                &language.route_code,
+            )
+        }),
         language_links: language_links_with_urls(|language| {
             payment_result_locale_url(
                 site_base_url,
@@ -3562,7 +3612,16 @@ async fn render_commercial_transactions_page(
         )
         .to_owned(),
         robots_meta: "index,follow".to_owned(),
-        canonical_url: commercial_transactions_url(site_base_url, "en"),
+        canonical_url: canonical_url_for_path(
+            site_base_url,
+            "/commercial-transactions",
+            &selected_locale,
+        ),
+        x_default_url: x_default_url_for_path(site_base_url, "/commercial-transactions"),
+        seo_language_links: indexed_hreflang_links_for_path(
+            site_base_url,
+            "/commercial-transactions",
+        ),
         language_links: language_links_for_path(site_base_url, "/commercial-transactions"),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
@@ -3618,7 +3677,9 @@ async fn render_terms_page(
         page_title: web_copy_text("terms", &selected_locale, "seo_title").to_owned(),
         meta_description: web_copy_text("terms", &selected_locale, "seo_description").to_owned(),
         robots_meta: "index,follow".to_owned(),
-        canonical_url: terms_url(site_base_url, "en"),
+        canonical_url: canonical_url_for_path(site_base_url, "/terms", &selected_locale),
+        x_default_url: x_default_url_for_path(site_base_url, "/terms"),
+        seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/terms"),
         language_links: language_links_for_path(site_base_url, "/terms"),
         company_url: company_url(site_base_url),
         terms_url: localized_navigation_page_url(site_base_url, "/terms", &selected_locale),
@@ -4245,6 +4306,16 @@ where
         .collect()
 }
 
+fn seo_language_links_with_urls<F>(url_for_language: F) -> Vec<LanguageLink>
+where
+    F: Fn(&WebLanguage) -> String,
+{
+    web_language_registry()
+        .indexed_languages()
+        .map(|language| language_link_with_url(language, url_for_language(language)))
+        .collect()
+}
+
 fn language_links_for_path_with_registry(
     registry: &WebLanguageRegistry,
     base_url: &str,
@@ -4255,6 +4326,30 @@ fn language_links_for_path_with_registry(
         .iter()
         .map(|language| language_link_for_path(base_url, path, language))
         .collect()
+}
+
+fn canonical_url_for_path(base_url: &str, path: &str, locale: &str) -> String {
+    canonical_url_for_path_with_registry(web_language_registry(), base_url, path, locale)
+}
+
+fn canonical_url_for_path_with_registry(
+    registry: &WebLanguageRegistry,
+    base_url: &str,
+    path: &str,
+    locale: &str,
+) -> String {
+    let language = registry
+        .enabled_language_exact(locale)
+        .filter(|language| language.indexed)
+        .unwrap_or_else(|| registry.default_language());
+    site_url(base_url, &localized_page_path_for_language(path, language))
+}
+
+fn x_default_url_for_path(base_url: &str, path: &str) -> String {
+    site_url(
+        base_url,
+        &localized_page_path_for_language(path, web_language_registry().default_language()),
+    )
 }
 
 fn indexed_hreflang_links_for_path(base_url: &str, path: &str) -> Vec<LanguageLink> {
@@ -4405,10 +4500,19 @@ fn build_robots_txt(base_url: &str) -> String {
 }
 
 fn sitemap_url_entry(base_url: &str, path: &str, lastmod: &str) -> Result<String> {
+    sitemap_url_entry_with_registry(web_language_registry(), base_url, path, lastmod)
+}
+
+fn sitemap_url_entry_with_registry(
+    registry: &WebLanguageRegistry,
+    base_url: &str,
+    path: &str,
+    lastmod: &str,
+) -> Result<String> {
     ensure_canonical_sitemap_path(path)?;
     ensure_valid_sitemap_lastmod(lastmod)?;
 
-    let links = indexed_hreflang_links_for_path(base_url, path);
+    let links = indexed_hreflang_links_for_path_with_registry(registry, base_url, path);
     let Some(default_link) = links.iter().find(|link| link.is_default) else {
         bail!("sitemap path requires an indexed default language: {path}");
     };
@@ -5883,6 +5987,8 @@ mod tests {
                     .to_owned(),
             robots_meta: "index,follow".to_owned(),
             canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
+            x_default_url: top_url(TEST_SITE_BASE_URL, "en"),
+            seo_language_links: indexed_hreflang_links_for_path(TEST_SITE_BASE_URL, "/"),
             language_links: language_links_for_path(TEST_SITE_BASE_URL, "/"),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "en"),
@@ -5965,6 +6071,12 @@ mod tests {
                     .to_owned(),
             robots_meta: "index,follow".to_owned(),
             canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
+            x_default_url: top_url(TEST_SITE_BASE_URL, "en"),
+            seo_language_links: indexed_hreflang_links_for_path_with_registry(
+                &registry,
+                TEST_SITE_BASE_URL,
+                "/",
+            ),
             language_links: language_links_for_path_with_registry(
                 &registry,
                 TEST_SITE_BASE_URL,
@@ -5984,6 +6096,9 @@ mod tests {
         let html = render_html(&template).expect("top page should render");
 
         assert_eq!(html.matches("data-language-option=").count(), 3);
+        assert!(!html.contains(
+            r#"<link rel="alternate" hreflang="fr" href="https://finitefield.org/fr/">"#
+        ));
         assert!(html.contains(
             r#"class="top-language-switcher__item is-active" href="https://finitefield.org/fr/" hreflang="fr" data-language-option="fr">Français</a>"#
         ));
@@ -5999,6 +6114,8 @@ mod tests {
                     .to_owned(),
             robots_meta: "index,follow".to_owned(),
             canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
+            x_default_url: top_url(TEST_SITE_BASE_URL, "en"),
+            seo_language_links: indexed_hreflang_links_for_path(TEST_SITE_BASE_URL, "/"),
             language_links: language_links_for_path(TEST_SITE_BASE_URL, "/"),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "en"),
@@ -6090,6 +6207,8 @@ mod tests {
                 "宝石印鑑をオンラインでデザインして、日本語または英語で注文できます。".to_owned(),
             robots_meta: "index,follow".to_owned(),
             canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
+            x_default_url: top_url(TEST_SITE_BASE_URL, "en"),
+            seo_language_links: indexed_hreflang_links_for_path(TEST_SITE_BASE_URL, "/"),
             language_links: language_links_for_path(TEST_SITE_BASE_URL, "/"),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "ja"),
@@ -6389,6 +6508,12 @@ mod tests {
         assert!(english_html.contains("Gemstone"));
         assert!(english_html.contains("Seal design"));
         assert!(english_html.contains("One of a kind"));
+        assert!(
+            english_html.contains(r#"<link rel="canonical" href="https://finitefield.org/about">"#)
+        );
+        assert!(english_html.contains(
+            r#"<link rel="alternate" hreflang="x-default" href="https://finitefield.org/about">"#
+        ));
         assert!(english_html.contains(r#"href="https://finitefield.org/about""#));
         assert!(english_html.contains("window.location.href='https://finitefield.org/design'"));
 
@@ -6414,6 +6539,13 @@ mod tests {
         assert!(japanese_html.contains("宝石印鑑を、もっと選びやすく。"));
         assert!(japanese_html.contains("宝石を使った印鑑をオンラインで選び"));
         assert!(japanese_html.contains("天然石ならではの色や模様"));
+        assert!(
+            japanese_html
+                .contains(r#"<link rel="canonical" href="https://finitefield.org/ja/about">"#)
+        );
+        assert!(japanese_html.contains(
+            r#"<link rel="alternate" hreflang="x-default" href="https://finitefield.org/about">"#
+        ));
         assert!(japanese_html.contains(r#"href="https://finitefield.org/ja/about""#));
         assert!(japanese_html.contains("window.location.href='https://finitefield.org/ja/design'"));
     }
@@ -6437,6 +6569,20 @@ mod tests {
                 &PaymentRedirectQuery::default(),
                 "en",
             ),
+            x_default_url: payment_result_locale_url(
+                TEST_SITE_BASE_URL,
+                "/payment/success",
+                &PaymentRedirectQuery::default(),
+                "en",
+            ),
+            seo_language_links: seo_language_links_with_urls(|language| {
+                payment_result_locale_url(
+                    TEST_SITE_BASE_URL,
+                    "/payment/success",
+                    &PaymentRedirectQuery::default(),
+                    &language.route_code,
+                )
+            }),
             language_links: language_links_with_urls(|language| {
                 payment_result_locale_url(
                     TEST_SITE_BASE_URL,
@@ -6473,6 +6619,20 @@ mod tests {
                 &PaymentRedirectQuery::default(),
                 "en",
             ),
+            x_default_url: payment_result_locale_url(
+                TEST_SITE_BASE_URL,
+                "/payment/failure",
+                &PaymentRedirectQuery::default(),
+                "en",
+            ),
+            seo_language_links: seo_language_links_with_urls(|language| {
+                payment_result_locale_url(
+                    TEST_SITE_BASE_URL,
+                    "/payment/failure",
+                    &PaymentRedirectQuery::default(),
+                    &language.route_code,
+                )
+            }),
             language_links: language_links_with_urls(|language| {
                 payment_result_locale_url(
                     TEST_SITE_BASE_URL,
@@ -6606,6 +6766,22 @@ mod tests {
                 ("ja", "https://finitefield.org/ja/about"),
             ]
         );
+
+        assert_eq!(
+            canonical_url_for_path_with_registry(&registry, TEST_SITE_BASE_URL, "/about", "fr"),
+            "https://finitefield.org/about"
+        );
+        assert_eq!(
+            canonical_url_for_path_with_registry(&registry, TEST_SITE_BASE_URL, "/about", "ja"),
+            "https://finitefield.org/ja/about"
+        );
+
+        let sitemap_entry =
+            sitemap_url_entry_with_registry(&registry, TEST_SITE_BASE_URL, "/about", "2026-05-11")
+                .expect("fixture sitemap entry should build");
+        assert!(sitemap_entry.contains("<loc>https://finitefield.org/about</loc>"));
+        assert!(sitemap_entry.contains("<loc>https://finitefield.org/ja/about</loc>"));
+        assert!(!sitemap_entry.contains("https://finitefield.org/fr/about"));
     }
 
     #[test]
