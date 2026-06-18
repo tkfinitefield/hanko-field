@@ -2966,7 +2966,7 @@ git diff --cached --check
   Output: one validation gate for registry, ARB, JSON, web copy, API content,
   sidecars, and release metadata.
   Done when: missing or malformed content returns non-zero.
-- [ ] `M6-T03` Validate ARB placeholders and ICU syntax.
+- [x] `M6-T03` Validate ARB placeholders and ICU syntax.
   Output: checks for placeholder names, metadata, plural/select syntax, and
   generated Flutter locale mapping.
   Done when: placeholder mismatch fails before runtime.
@@ -3097,6 +3097,76 @@ make i18n-check-test
 make i18n-todo-test
 make i18n-status-test
 make i18n-registry-test
+node --check scripts/i18n/check.mjs
+node --check scripts/i18n/check.test.mjs
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T03 ARB Placeholder and ICU Validation
+
+Completed on 2026-06-18. Added ARB-specific validation to the localization
+gate so Flutter message issues fail before runtime.
+
+Implementation notes:
+
+- Added `scripts/i18n/arb.mjs`.
+- Added `scripts/i18n/arb.test.mjs`.
+- Added root Make target:
+  - `make i18n-arb-test`
+- Integrated ARB validation into `make i18n-check`.
+- The validator compares each target ARB message placeholder set against the
+  English source message.
+- English source messages with placeholders must define matching
+  `@messageKey.placeholders` metadata.
+- Existing metadata placeholder names must match the placeholders actually used
+  by the message value.
+- Basic ICU plural/select syntax is checked, including balanced braces, valid
+  selectors, supported ICU types, and required `other` options.
+- Registry Flutter locale mapping is checked against the expected ARB file and
+  `@@locale` value. For example, `zhtw` maps to `app_zh_Hant.arb` and
+  `@@locale: "zh_Hant"`.
+- Generated Flutter `supportedLocales` in
+  `app/lib/l10n/generated/generated_hanko_localizations.dart` is checked when
+  the generated file exists.
+- `FILE=` preserves narrow workflows: ARB validation runs for ARB file filters,
+  and non-ARB file filters continue to validate only the requested JSON/content
+  path.
+
+Examples:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=app/lib/l10n/app_zh.arb
+make i18n-check LANGS=zhtw FILE=app/lib/l10n/app_zh_Hant.arb
+make i18n-arb-test
+```
+
+M0-T05 preservation evidence:
+
+- The command is read-only and does not generate, rewrite, or normalize ARB
+  files.
+- Existing English, Japanese, Chinese, and Traditional Chinese ARB content
+  remains untouched.
+- Existing generated Flutter localization files are read for mapping
+  validation, not regenerated.
+- Rollback path: remove `scripts/i18n/arb.mjs`,
+  `scripts/i18n/arb.test.mjs`, the Make target, and the ARB integration in
+  `scripts/i18n/check.mjs`, then reopen `M6-T03`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=app/lib/l10n/app_zh.arb
+make i18n-check LANGS=zhtw FILE=app/lib/l10n/app_zh_Hant.arb
+make i18n-arb-test
+make i18n-check-test
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
+node --check scripts/i18n/arb.mjs
+node --check scripts/i18n/arb.test.mjs
 node --check scripts/i18n/check.mjs
 node --check scripts/i18n/check.test.mjs
 git diff --check

@@ -16,7 +16,7 @@ GCP_PROD_REGION ?= asia-northeast1
 ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_ADMIN_MODE);,)
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -40,6 +40,7 @@ help:
 	@echo "  make i18n-status    # Report localization registry and missing files"
 	@echo "  make i18n-todo      # Report missing localization keys"
 	@echo "  make i18n-check     # Validate localization registry, files, and missing keys"
+	@echo "  make i18n-arb-test  # Validate ARB placeholder and ICU checks"
 	@echo "  make i18n-registry-test # Validate the language registry parser"
 	@echo ""
 	@echo "Options:"
@@ -95,3 +96,6 @@ i18n-check:
 
 i18n-check-test:
 	node --test scripts/i18n/check.test.mjs
+
+i18n-arb-test:
+	node --test scripts/i18n/arb.test.mjs

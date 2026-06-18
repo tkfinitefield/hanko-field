@@ -71,6 +71,36 @@ test('fails when checked content is malformed JSON', async () => {
   );
 });
 
+test('fails when checked ARB placeholders are unsafe', async () => {
+  const rootDir = await createTempRoot();
+  await writeMinimalEnabledContent(rootDir);
+  await writeJson(rootDir, 'app/lib/l10n/app_ja.arb', {
+    '@@locale': 'ja',
+    hello: 'こんにちは',
+    '@hello': {
+      description: 'Greeting with the user name.',
+      placeholders: {
+        name: {
+          type: 'String',
+          example: 'Yuki',
+        },
+      },
+    },
+  });
+
+  const report = await buildI18nCheck({
+    rootDir,
+    file: 'app/lib/l10n/app_ja.arb',
+  });
+
+  assert.equal(report.ok, false);
+  assert.ok(
+    report.issues.some(
+      (issue) => issue.type === 'arb' && issue.file === 'app/lib/l10n/app_ja.arb',
+    ),
+  );
+});
+
 test('validates sidecar and release metadata JSON when present', async () => {
   const rootDir = await createTempRoot();
   await writeMinimalEnabledContent(rootDir);
@@ -129,8 +159,38 @@ async function createTempRoot() {
 
 async function writeMinimalEnabledContent(rootDir, { skip = new Set() } = {}) {
   const files = new Map([
-    ['app/lib/l10n/app_en.arb', { hello: 'Hello' }],
-    ['app/lib/l10n/app_ja.arb', { hello: 'こんにちは' }],
+    [
+      'app/lib/l10n/app_en.arb',
+      {
+        '@@locale': 'en',
+        hello: 'Hello {name}',
+        '@hello': {
+          description: 'Greeting with the user name.',
+          placeholders: {
+            name: {
+              type: 'String',
+              example: 'Yuki',
+            },
+          },
+        },
+      },
+    ],
+    [
+      'app/lib/l10n/app_ja.arb',
+      {
+        '@@locale': 'ja',
+        hello: 'こんにちは {name}',
+        '@hello': {
+          description: 'Greeting with the user name.',
+          placeholders: {
+            name: {
+              type: 'String',
+              example: 'Yuki',
+            },
+          },
+        },
+      },
+    ],
     ['app/assets/i18n/settings/en.json', { about: { heading: 'About' } }],
     ['app/assets/i18n/settings/ja.json', { about: { heading: '概要' } }],
     ['api/content/i18n/checkout/en.json', { product_name_template: 'Stone seal' }],
