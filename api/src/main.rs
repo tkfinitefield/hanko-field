@@ -4,7 +4,7 @@ use std::{
     io::Cursor,
     net::SocketAddr,
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::Duration as StdDuration,
 };
 
@@ -47,6 +47,22 @@ const DEFAULT_STRIPE_CHECKOUT_CANCEL_URL: &str = "http://127.0.0.1:3052/payment/
 const DEFAULT_STRIPE_APP_CHECKOUT_SUCCESS_URL: &str =
     "hankofield://checkout/success?session_id={CHECKOUT_SESSION_ID}";
 const DEFAULT_STRIPE_APP_CHECKOUT_CANCEL_URL: &str = "hankofield://checkout/cancel";
+const CHECKOUT_COPY_EN_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/checkout/en.json"
+));
+const CHECKOUT_COPY_JA_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/checkout/ja.json"
+));
+const CHECKOUT_COPY_ZH_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/checkout/zh.json"
+));
+const CHECKOUT_COPY_ZHTW_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/checkout/zhtw.json"
+));
 const STRIPE_CHECKOUT_SESSIONS_URL: &str = "https://api.stripe.com/v1/checkout/sessions";
 const STRIPE_CHECKOUT_API_VERSION: &str = "2025-07-30.basil";
 const STRIPE_WEBHOOK_TOLERANCE_SECONDS: i64 = 5 * 60;
@@ -417,6 +433,13 @@ struct OrderCheckoutContext {
     total: i64,
     currency: String,
     contact_email: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CheckoutCopy {
+    product_name_template: String,
+    product_description_template: String,
+    shape_labels: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -6385,6 +6408,7 @@ fn build_stripe_checkout_session_form(
     return_to_app: bool,
 ) -> Vec<(String, String)> {
     let product_name = build_checkout_product_name(order);
+    let product_description = build_checkout_product_description(order);
     let checkout_currency = stripe_checkout_currency(&order.currency);
     let success_base_url = if return_to_app {
         &stripe_checkout.app_success_url
@@ -6430,6 +6454,10 @@ fn build_stripe_checkout_session_form(
         (
             "line_items[0][price_data][product_data][name]".to_owned(),
             product_name,
+        ),
+        (
+            "line_items[0][price_data][product_data][description]".to_owned(),
+            product_description,
         ),
         ("metadata[order_id]".to_owned(), order.order_id.clone()),
         (
@@ -6532,42 +6560,78 @@ fn append_query_params(base_url: &str, params: &[(&str, &str)]) -> String {
 }
 
 fn build_checkout_product_name(order: &OrderCheckoutContext) -> String {
-    let listing_label = order.listing_label.trim();
-    if is_japanese_locale(&order.order_locale) {
-        let shape_label = checkout_shape_label_ja(&order.seal_shape);
-        return format!(
-            "宝石印鑑 ({}、{})",
-            display_or_dash(listing_label),
-            display_or_dash(shape_label),
-        );
-    }
+    let copy = checkout_copy_for_locale(&order.order_locale);
+    let listing_label = display_or_dash(order.listing_label.trim());
+    let shape_label = display_or_dash(checkout_shape_label(copy, &order.seal_shape));
 
-    let shape_label = checkout_shape_label_en(&order.seal_shape);
-    format!(
-        "Stone seal ({}; {})",
-        display_or_dash(listing_label),
-        display_or_dash(shape_label),
-    )
+    render_checkout_product_name_template(&copy.product_name_template, listing_label, shape_label)
 }
 
-fn is_japanese_locale(locale: &str) -> bool {
-    locale.trim().to_lowercase().starts_with("ja")
+fn build_checkout_product_description(order: &OrderCheckoutContext) -> String {
+    checkout_copy_for_locale(&order.order_locale)
+        .product_description_template
+        .clone()
 }
 
-fn checkout_shape_label_ja(shape: &str) -> &str {
-    match shape.trim().to_lowercase().as_str() {
-        "round" => "丸",
-        "square" => "角",
-        _ => "",
+fn checkout_copy_for_locale(locale: &str) -> &'static CheckoutCopy {
+    let route_code = checkout_copy_route_code(locale);
+    let copies = checkout_copies();
+
+    copies
+        .get(route_code)
+        .or_else(|| copies.get("en"))
+        .expect("checkout copy map must contain en")
+}
+
+fn checkout_copies() -> &'static HashMap<&'static str, CheckoutCopy> {
+    static CHECKOUT_COPIES: OnceLock<HashMap<&'static str, CheckoutCopy>> = OnceLock::new();
+
+    CHECKOUT_COPIES.get_or_init(|| {
+        [
+            ("en", CHECKOUT_COPY_EN_JSON),
+            ("ja", CHECKOUT_COPY_JA_JSON),
+            ("zh", CHECKOUT_COPY_ZH_JSON),
+            ("zhtw", CHECKOUT_COPY_ZHTW_JSON),
+        ]
+        .into_iter()
+        .map(|(route_code, source)| {
+            let copy = serde_json::from_str::<CheckoutCopy>(source)
+                .unwrap_or_else(|error| panic!("invalid checkout copy for {route_code}: {error}"));
+            (route_code, copy)
+        })
+        .collect()
+    })
+}
+
+fn checkout_copy_route_code(locale: &str) -> &'static str {
+    let value = locale.trim().to_lowercase().replace('_', "-");
+    let language = value.split('-').next().unwrap_or_default();
+
+    match value.as_str() {
+        "zhtw" | "zh-hant" | "zh-tw" | "zh-hk" | "zh-mo" => "zhtw",
+        "zh" | "zh-hans" | "zh-cn" | "zh-sg" => "zh",
+        _ if language == "ja" => "ja",
+        _ if language == "zh" => "zh",
+        _ => "en",
     }
 }
 
-fn checkout_shape_label_en(shape: &str) -> &str {
-    match shape.trim().to_lowercase().as_str() {
-        "round" => "circle",
-        "square" => "square",
-        _ => "",
-    }
+fn checkout_shape_label<'a>(copy: &'a CheckoutCopy, shape: &str) -> &'a str {
+    let shape_key = shape.trim().to_lowercase();
+    copy.shape_labels
+        .get(shape_key.as_str())
+        .map(String::as_str)
+        .unwrap_or_default()
+}
+
+fn render_checkout_product_name_template(
+    template: &str,
+    listing_label: &str,
+    shape_label: &str,
+) -> String {
+    template
+        .replace("{listing_label}", listing_label)
+        .replace("{shape_label}", shape_label)
 }
 
 fn build_payment_intent_shipping(order: &OrderCheckoutContext) -> Option<JsonValue> {
@@ -8349,6 +8413,13 @@ mod tests {
             "Stone seal (Rose Quartz; circle)"
         );
         assert_eq!(
+            stripe_form_value(
+                &form,
+                "line_items[0][price_data][product_data][description]"
+            ),
+            "Custom stone seal order"
+        );
+        assert_eq!(
             stripe_form_value(&form, "payment_intent_data[shipping][address][country]"),
             "US"
         );
@@ -8375,14 +8446,80 @@ mod tests {
 
     #[test]
     fn build_checkout_product_name_uses_japanese_format_for_ja_locale() {
-        let order = OrderCheckoutContext {
+        let order = checkout_product_name_context("ja", "翡翠", "square");
+
+        assert_eq!(build_checkout_product_name(&order), "宝石印鑑 (翡翠、角)");
+    }
+
+    #[test]
+    fn build_checkout_product_name_uses_english_format_for_non_ja_locale() {
+        let order = checkout_product_name_context("en", "Jade", "round");
+
+        assert_eq!(
+            build_checkout_product_name(&order),
+            "Stone seal (Jade; circle)"
+        );
+    }
+
+    #[test]
+    fn build_checkout_product_name_uses_simplified_chinese_copy_for_zh_locale() {
+        let order = checkout_product_name_context("zh-CN", "青田石", "round");
+
+        assert_eq!(
+            build_checkout_product_name(&order),
+            "宝石印章（青田石，圆）"
+        );
+    }
+
+    #[test]
+    fn build_checkout_product_name_uses_traditional_chinese_copy_for_zhtw_locale() {
+        let order = checkout_product_name_context("zh_Hant", "青田石", "square");
+
+        assert_eq!(
+            build_checkout_product_name(&order),
+            "寶石印章（青田石，方）"
+        );
+    }
+
+    #[test]
+    fn checkout_copy_templates_have_required_placeholders() {
+        for (route_code, copy) in checkout_copies() {
+            assert!(
+                copy.product_name_template.contains("{listing_label}"),
+                "{route_code} checkout template must contain listing_label placeholder"
+            );
+            assert!(
+                copy.product_name_template.contains("{shape_label}"),
+                "{route_code} checkout template must contain shape_label placeholder"
+            );
+            assert!(
+                !copy.product_description_template.trim().is_empty(),
+                "{route_code} checkout description template must not be empty"
+            );
+            assert!(
+                copy.shape_labels.contains_key("round"),
+                "{route_code} checkout shape labels must include round"
+            );
+            assert!(
+                copy.shape_labels.contains_key("square"),
+                "{route_code} checkout shape labels must include square"
+            );
+        }
+    }
+
+    fn checkout_product_name_context(
+        order_locale: &str,
+        listing_label: &str,
+        seal_shape: &str,
+    ) -> OrderCheckoutContext {
+        OrderCheckoutContext {
             order_id: "order_1".to_owned(),
-            order_locale: "ja".to_owned(),
+            order_locale: order_locale.to_owned(),
             status: "pending_payment".to_owned(),
             payment_status: "unpaid".to_owned(),
             listing_key: String::new(),
-            listing_label: "翡翠".to_owned(),
-            seal_shape: "square".to_owned(),
+            listing_label: listing_label.to_owned(),
+            seal_shape: seal_shape.to_owned(),
             shipping_country_code: "JP".to_owned(),
             shipping_recipient_name: "田中 太郎".to_owned(),
             shipping_phone: "09000001111".to_owned(),
@@ -8394,38 +8531,7 @@ mod tests {
             total: 12345,
             currency: DEFAULT_CURRENCY.to_owned(),
             contact_email: "buyer@example.com".to_owned(),
-        };
-
-        assert_eq!(build_checkout_product_name(&order), "宝石印鑑 (翡翠、角)");
-    }
-
-    #[test]
-    fn build_checkout_product_name_uses_english_format_for_non_ja_locale() {
-        let order = OrderCheckoutContext {
-            order_id: "order_1".to_owned(),
-            order_locale: "en".to_owned(),
-            status: "pending_payment".to_owned(),
-            payment_status: "unpaid".to_owned(),
-            listing_key: String::new(),
-            listing_label: "Jade".to_owned(),
-            seal_shape: "round".to_owned(),
-            shipping_country_code: "US".to_owned(),
-            shipping_recipient_name: "John Doe".to_owned(),
-            shipping_phone: "5551234567".to_owned(),
-            shipping_postal_code: "10001".to_owned(),
-            shipping_state: "NY".to_owned(),
-            shipping_city: "New York".to_owned(),
-            shipping_address_line1: "1 Main St".to_owned(),
-            shipping_address_line2: "Suite 101".to_owned(),
-            total: 12345,
-            currency: DEFAULT_CURRENCY.to_owned(),
-            contact_email: "buyer@example.com".to_owned(),
-        };
-
-        assert_eq!(
-            build_checkout_product_name(&order),
-            "Stone seal (Jade; circle)"
-        );
+        }
     }
 
     #[test]

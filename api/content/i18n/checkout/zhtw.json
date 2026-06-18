@@ -1,0 +1,8 @@
+{
+  "product_name_template": "寶石印章（{listing_label}，{shape_label}）",
+  "product_description_template": "寶石印章客製訂單",
+  "shape_labels": {
+    "round": "圓",
+    "square": "方"
+  }
+}

@@ -2341,7 +2341,7 @@ git diff --cached --check
 - [x] `M4-T03` Preserve unknown locale keys in API writes.
   Output: merge behavior for localized Firestore maps.
   Done when: existing `fr`, `zh`, or `zhtw` keys survive updates to `ja`.
-- [ ] `M4-T04` Localize checkout product labels.
+- [x] `M4-T04` Localize checkout product labels.
   Output: data-driven checkout title and description templates.
   Done when: checkout labels support at least `en`, `ja`, `zh`, and `zhtw` and
   the `M0-T05` migration-safety checklist is satisfied.
@@ -2474,6 +2474,57 @@ cargo fmt --manifest-path api/Cargo.toml -- --check
 cargo test --manifest-path api/Cargo.toml --bin seed_catalog
 cargo test --manifest-path api/Cargo.toml
 jq empty config/languages.json api/content/i18n/catalog/*.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M4-T04 Checkout Product Label Copy
+
+Completed on 2026-06-18. Moved Stripe Checkout product labels from hard-coded
+Rust branches to data-driven checkout copy files.
+
+Implementation notes:
+
+- Added `api/content/i18n/checkout/en.json` for the English product name,
+  product description, and shape labels.
+- Added `api/content/i18n/checkout/ja.json` for the Japanese product name,
+  product description, and shape labels.
+- Added `api/content/i18n/checkout/zh.json` and
+  `api/content/i18n/checkout/zhtw.json` so Checkout labels are ready for the
+  existing simplified and traditional Chinese route codes.
+- Updated `api/src/main.rs::build_checkout_product_name` to render the selected
+  template with `{listing_label}` and `{shape_label}` placeholders.
+- Updated Stripe Checkout form generation to send the selected
+  `product_data[description]` value from the same checkout copy file.
+- Added Checkout locale normalization for `ja*`, `zh`, `zh-CN`, `zh-Hans`,
+  `zh-Hant`, `zh-TW`, and `zhtw`, with English fallback for unsupported
+  locales.
+- Added tests for English, Japanese, simplified Chinese, traditional Chinese,
+  and required Checkout copy placeholders.
+
+M0-T05 preservation evidence:
+
+- Existing English output remains `Stone seal ({listing_label}; {shape_label})`.
+- Existing Japanese output remains `宝石印鑑 ({listing_label}、{shape_label})`.
+- Existing `round` and `square` shape labels for English and Japanese are
+  preserved.
+- Product descriptions are new data-driven copy; no previous description field
+  existed in the Stripe Checkout form.
+- Chinese disposition: simplified and traditional Chinese Checkout labels were
+  added as new JSON copy because no prior Chinese Checkout copy existed.
+- Rollback path: restore the previous hard-coded `build_checkout_product_name`
+  locale branch and remove `api/content/i18n/checkout/*.json`.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml checkout -- --nocapture
+cargo test --manifest-path api/Cargo.toml
+jq empty api/content/i18n/checkout/*.json config/languages.json
 make i18n-registry-test
 make i18n-status-test
 make i18n-status
