@@ -5127,7 +5127,7 @@ git diff --cached --check
 
 ### M11: Post-Release Monitoring and Cleanup
 
-- [ ] `M11-T01` Monitor locale diagnostics.
+- [x] `M11-T01` Monitor locale diagnostics.
   Output: review of unsupported locale, fallback, missing content, checkout
   locale, and malformed translation logs.
   Done when: no release-enabled locale has unexpected fallback spikes.
@@ -5145,6 +5145,67 @@ git diff --cached --check
   Output: final notes for adding future languages, store metadata updates, and
   fastlane release steps.
   Done when: the next localized release does not need rediscovery.
+
+#### M11-T01 Locale Diagnostics Monitoring
+
+Completed on 2026-06-18. Added a locale diagnostics monitoring gate and
+recorded the first post-release diagnostic review state.
+
+Implementation notes:
+
+- Added `scripts/i18n/diagnostics.mjs` to validate locale diagnostics review
+  evidence against `config/languages.json`.
+- Added `scripts/i18n/diagnostics.test.mjs` covering:
+  - checked-in evidence acceptance
+  - required diagnostic stream omissions
+  - release-enabled fallback spikes
+  - release-enabled locale mismatches between evidence and registry
+- Added Make targets:
+  - `make i18n-diagnostics`
+  - `make i18n-diagnostics-check`
+  - `make i18n-diagnostics-test`
+- Added the diagnostics checks to `make i18n-ci`.
+- Added monitoring evidence:
+  - `doc/qa/m11-t01/README.md`
+  - `doc/qa/m11-t01/locale-diagnostics-review.json`
+
+Reviewed streams:
+
+- Unsupported locale requests.
+- Fallback locale decisions and fallback reasons.
+- Missing content files or missing localized keys.
+- Checkout locale, preferred locale, and route code.
+- Malformed translation or catalog parse failures.
+
+Current review result:
+
+- Current release-enabled locales: none.
+- Unexpected fallback spikes for release-enabled locales: none.
+- Because `M10-T04`, `M10-T05`, and `M10-T07` are not complete, no production
+  log export is available yet. The evidence records this as a local release-gate
+  review and requires a live log refresh after staged rollout begins.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, production log exports, polling, streaming, SSE, or WebSocket
+  behavior was committed.
+- Rollback path: remove `doc/qa/m11-t01/`, remove the diagnostics script,
+  tests, Make targets, and `i18n-ci` entries, then reopen `M11-T01`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/diagnostics.mjs
+make i18n-diagnostics-check
+make i18n-diagnostics-test
+jq empty doc/qa/m11-t01/locale-diagnostics-review.json
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
 
 ### Suggested PR Slices
 
