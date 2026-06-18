@@ -5134,7 +5134,7 @@ git diff --cached --check
 - [x] `M11-T02` Triage support feedback by locale.
   Output: issue list grouped by language, platform, and screen.
   Done when: translation and layout fixes have owners.
-- [ ] `M11-T03` Patch high-priority translation issues.
+- [x] `M11-T03` Patch high-priority translation issues.
   Output: small content-only fixes with `i18n-check` evidence.
   Done when: store-release-enabled languages remain clean after patches.
 - [ ] `M11-T04` Remove temporary migration wrappers.
@@ -5264,6 +5264,78 @@ node --check scripts/i18n/support_triage.mjs
 make i18n-support-triage-check
 make i18n-support-triage-test
 jq empty doc/qa/m11-t02/support-feedback-triage.json
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M11-T03 High-Priority Translation Patch Review
+
+Completed on 2026-06-18. Added a high-priority translation patch gate and
+recorded the current patch review state.
+
+Implementation notes:
+
+- Added `scripts/i18n/translation_patches.mjs` to validate high-priority
+  translation patch evidence against:
+  - `config/languages.json`
+  - `doc/qa/m11-t02/support-feedback-triage.json`
+  - store-release-enabled locale flags
+- Added `scripts/i18n/translation_patches.test.mjs` covering:
+  - checked-in evidence acceptance
+  - high-priority translation issues without patches
+  - valid content-only translation patches
+  - non-content file paths in patch evidence
+  - missing `make i18n-check` evidence
+- Added Make targets:
+  - `make i18n-translation-patches`
+  - `make i18n-translation-patches-check`
+  - `make i18n-translation-patches-test`
+- Added the translation patch checks to `make i18n-ci`.
+- Added patch review evidence:
+  - `doc/qa/m11-t03/README.md`
+  - `doc/qa/m11-t03/translation-patch-review.json`
+
+Patch contract:
+
+- Every `critical` or `high` severity `translation` issue from M11-T02 must
+  have a patch entry.
+- Patch entries must include an owner, source issue id, locale, status,
+  touched content files, and passing `make i18n-check` evidence.
+- Patch files are limited to localization content roots:
+  - `app/lib/l10n/`
+  - `app/assets/i18n/`
+  - `api/content/i18n/`
+  - `web/content/i18n/`
+  - `release/store_metadata/source/`
+
+Current review result:
+
+- Source triage evidence: `doc/qa/m11-t02/support-feedback-triage.json`.
+- High-priority translation issues found in M11-T02: 0.
+- Content-only translation patches applied: 0.
+- Store-release-enabled locales: none.
+- Future M11 runs must replace the zero-count local review with real support
+  issue data after staged rollout begins.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, production support exports, polling, streaming, SSE, or
+  WebSocket behavior was committed.
+- Rollback path: remove `doc/qa/m11-t03/`, remove the translation patch script,
+  tests, Make targets, and `i18n-ci` entries, then reopen `M11-T03`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/translation_patches.mjs
+make i18n-translation-patches-check
+make i18n-translation-patches-test
+jq empty doc/qa/m11-t03/translation-patch-review.json
+make i18n-check
 make i18n-ci
 git diff --check
 git diff --cached --check
