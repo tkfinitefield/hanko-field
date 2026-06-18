@@ -208,6 +208,35 @@ Future<void> _defaultSavePreferredLocale(Locale locale) async {
   await const AppLaunchStore().setPreferredRouteCode(language.routeCode);
 }
 
+Future<String> _checkoutRouteCodeForLocale(Locale locale) async {
+  try {
+    final registry = await AppLanguageRegistry.load();
+    return registry.routeCodeForLocale(locale) ??
+        _fallbackCheckoutRouteCodeForLocale(locale);
+  } catch (error) {
+    debugPrint('failed to load checkout locale registry: $error');
+    return _fallbackCheckoutRouteCodeForLocale(locale);
+  }
+}
+
+String _fallbackCheckoutRouteCodeForLocale(Locale locale) {
+  final languageCode = locale.languageCode.trim().toLowerCase();
+  final scriptCode = locale.scriptCode?.trim().toLowerCase();
+  final countryCode = locale.countryCode?.trim().toLowerCase();
+
+  if (languageCode == 'zh') {
+    if (scriptCode == 'hant' ||
+        countryCode == 'tw' ||
+        countryCode == 'hk' ||
+        countryCode == 'mo') {
+      return 'zhtw';
+    }
+    return 'zh';
+  }
+
+  return languageCode.isEmpty ? 'en' : languageCode;
+}
+
 Locale? _supportedLocale(Locale? locale) {
   if (locale == null) {
     return null;
@@ -551,6 +580,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
   Object? _checkoutProcessingError;
   CreatedOrder? _checkoutCreatedOrder;
   CheckoutSession? _checkoutSession;
+  String? _checkoutRouteCode;
   var _stripeCheckoutStep = StripeCheckoutExternalStep.opening;
   Object? _stripeCheckoutLaunchError;
   CheckoutReturnResult? _checkoutReturnResult;
@@ -1785,6 +1815,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
       _checkoutProcessingError = null;
       _checkoutCreatedOrder = null;
       _checkoutSession = null;
+      _checkoutRouteCode = null;
       _stripeCheckoutStep = StripeCheckoutExternalStep.opening;
       _stripeCheckoutLaunchError = null;
       _checkoutDeepLinkError = null;
@@ -1798,9 +1829,16 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
     });
 
     try {
+      final checkoutRouteCode = await _checkoutRouteCodeForLocale(
+        Localizations.localeOf(context),
+      );
+      if (!mounted) {
+        return;
+      }
+      _checkoutRouteCode = checkoutRouteCode;
       final orderDraft = _sealOrderDraftFromOrderDraft(
         draft,
-        locale: Localizations.localeOf(context).languageCode,
+        locale: checkoutRouteCode,
         idempotencyKey: idempotencyKey,
         confirmedAt: confirmedAt,
       );
@@ -1903,6 +1941,9 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
       return;
     }
 
+    final checkoutRouteCode =
+        _checkoutRouteCode ??
+        _fallbackCheckoutRouteCodeForLocale(Localizations.localeOf(context));
     final sourceUri = Uri(
       scheme: 'hankofield',
       host: 'checkout',
@@ -1910,7 +1951,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
       queryParameters: {
         'order_id': order.orderId,
         'session_id': session.sessionId,
-        'lang': Localizations.localeOf(context).languageCode,
+        'lang': checkoutRouteCode,
       },
     );
     _beginPaymentStatusCheck(
@@ -1919,7 +1960,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
         sourceUri: sourceUri,
         orderId: order.orderId,
         sessionId: session.sessionId,
-        locale: Localizations.localeOf(context).languageCode,
+        locale: checkoutRouteCode,
       ),
     );
   }

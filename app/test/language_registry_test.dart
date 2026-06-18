@@ -103,7 +103,22 @@ void main() {
 
     expect(registry.enabledLanguageForRouteCode('zh'), isNull);
     expect(registry.enabledLanguageForLocale(const Locale('zh')), isNull);
+    expect(registry.routeCodeForLocale(const Locale('zh')), 'zh');
   });
+
+  test(
+    'resolves route code for disabled checked-in migration locales',
+    () async {
+      final registry = await AppLanguageRegistry.load();
+
+      expect(
+        registry.routeCodeForLocale(
+          const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+        ),
+        'zhtw',
+      );
+    },
+  );
 
   test('parses RTL registry entries for layout probes', () async {
     final registry = await AppLanguageRegistry.load();

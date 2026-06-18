@@ -21,6 +21,7 @@ pub struct RegistryPublicConfig {
 #[derive(Debug, Deserialize)]
 struct LanguageRegistryEntry {
     route_code: String,
+    bcp47: String,
     currency: String,
     app: LanguageRegistryAppConfig,
 }
@@ -84,9 +85,64 @@ pub fn normalize_route_code(raw: &str) -> String {
     raw.trim().to_lowercase()
 }
 
+pub fn route_code_for_locale(raw: &str) -> Option<String> {
+    let value = normalize_locale_token(raw)?;
+    let entries = registry_entries().ok()?;
+
+    for entry in &entries {
+        if normalize_route_code(&entry.route_code) == value {
+            return Some(normalize_route_code(&entry.route_code));
+        }
+    }
+
+    for entry in &entries {
+        if normalize_locale_token(&entry.bcp47).as_deref() == Some(value.as_str()) {
+            return Some(normalize_route_code(&entry.route_code));
+        }
+    }
+
+    match value.as_str() {
+        "zh-hans" | "zh-cn" | "zh-sg" => return Some("zh".to_owned()),
+        "zh-hant" | "zh-tw" | "zh-hk" | "zh-mo" => return Some("zhtw".to_owned()),
+        _ => {}
+    }
+
+    let primary = value.split('-').next().unwrap_or_default();
+    let mut primary_matches = entries
+        .iter()
+        .filter(|entry| normalize_locale_token(&entry.bcp47).is_some_and(|bcp47| bcp47 == primary))
+        .map(|entry| normalize_route_code(&entry.route_code))
+        .collect::<Vec<_>>();
+    primary_matches.sort();
+    primary_matches.dedup();
+
+    if primary_matches.len() == 1 {
+        primary_matches.pop()
+    } else {
+        None
+    }
+}
+
 pub fn normalize_currency_code(raw: &str) -> Option<String> {
     let value = raw.trim().to_uppercase();
     if value.len() != 3 || !value.chars().all(|ch| ch.is_ascii_alphabetic()) {
+        return None;
+    }
+    Some(value)
+}
+
+fn registry_entries() -> Result<Vec<LanguageRegistryEntry>> {
+    serde_json::from_str::<Vec<LanguageRegistryEntry>>(LANGUAGE_REGISTRY_JSON)
+        .context("failed to parse language registry")
+}
+
+fn normalize_locale_token(raw: &str) -> Option<String> {
+    let value = raw.trim().replace('_', "-").to_lowercase();
+    if value.is_empty()
+        || !value
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+    {
         return None;
     }
     Some(value)
@@ -116,10 +172,10 @@ mod tests {
     #[test]
     fn public_config_uses_app_enabled_registry_entries() {
         let source = r#"[
-          {"route_code":"en","currency":"USD","app":{"enabled":true}},
-          {"route_code":"fr","currency":"EUR","app":{"enabled":true}},
-          {"route_code":"ja","currency":"JPY","app":{"enabled":false}},
-          {"route_code":"zhtw","currency":"USD","app":{"enabled":true}}
+          {"route_code":"en","bcp47":"en","currency":"USD","app":{"enabled":true}},
+          {"route_code":"fr","bcp47":"fr","currency":"EUR","app":{"enabled":true}},
+          {"route_code":"ja","bcp47":"ja","currency":"JPY","app":{"enabled":false}},
+          {"route_code":"zhtw","bcp47":"zh-Hant","currency":"USD","app":{"enabled":true}}
         ]"#;
 
         let config =
@@ -131,5 +187,15 @@ mod tests {
             config.currency_by_locale.get("fr").map(String::as_str),
             Some("EUR")
         );
+    }
+
+    #[test]
+    fn route_code_for_locale_accepts_route_and_bcp47_values() {
+        assert_eq!(route_code_for_locale(" ZHTW ").as_deref(), Some("zhtw"));
+        assert_eq!(route_code_for_locale("zh_Hant").as_deref(), Some("zhtw"));
+        assert_eq!(route_code_for_locale("zh-TW").as_deref(), Some("zhtw"));
+        assert_eq!(route_code_for_locale("zh-CN").as_deref(), Some("zh"));
+        assert_eq!(route_code_for_locale("ja-JP").as_deref(), Some("ja"));
+        assert_eq!(route_code_for_locale("xx").as_deref(), None);
     }
 }

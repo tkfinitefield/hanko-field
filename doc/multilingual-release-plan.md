@@ -2345,7 +2345,7 @@ git diff --cached --check
   Output: data-driven checkout title and description templates.
   Done when: checkout labels support at least `en`, `ja`, `zh`, and `zhtw` and
   the `M0-T05` migration-safety checklist is satisfied.
-- [ ] `M4-T05` Normalize checkout return locale handling.
+- [x] `M4-T05` Normalize checkout return locale handling.
   Output: consistent handling for `lang`, `locale`, and preferred locale.
   Done when: Stripe return URLs preserve the selected route code and the
   `M0-T05` migration-safety checklist is satisfied.
@@ -2531,6 +2531,66 @@ make i18n-status
 git diff --check
 git diff --cached --check
 ```
+
+#### M4-T05 Checkout Return Locale Normalization
+
+Completed on 2026-06-18. Normalized Checkout locale values to registry route
+codes before order persistence, Stripe return URL generation, and app return
+parsing.
+
+Implementation notes:
+
+- Added API-side registry lookup from route code and BCP-47-like locale tags to
+  canonical route codes.
+- Normalized `CreateOrderRequest.locale` and `contact.preferred_locale` before
+  storing order input, so values such as `zh-Hant` and `zh_TW` become `zhtw`.
+- Normalized public config and API catalog/listing `locale` query handling so
+  BCP-47 variants map to route codes without accepting unknown locales.
+- Updated Stripe Checkout success and cancel URLs to emit the normalized route
+  code in `lang`.
+- Added app-side registry lookup from `Locale` to route code for Checkout order
+  creation and manual Checkout resume handling.
+- Kept Checkout return parsing compatible with both `lang` and `locale`, and
+  normalized common BCP-47 variants such as `zh_Hant` and `zh-TW` to `zhtw`.
+- Added Rust and Flutter tests for route-code normalization, Checkout return
+  URLs, and app return parsing.
+
+M0-T05 preservation evidence:
+
+- Existing `en` and `ja` Checkout return URLs are unchanged.
+- Existing app return parsing still accepts `lang`.
+- Existing compatibility with `locale` query values is preserved and now
+  normalized to route codes.
+- Unknown API `locale` query values still return `invalid_locale` rather than
+  silently falling back.
+- Chinese disposition: Traditional Chinese route handling now preserves `zhtw`
+  instead of collapsing to `zh` when BCP-47 or Flutter locale forms are used.
+- Rollback path: remove the registry locale normalization helpers and return
+  API/app Checkout locale handling to raw lowercased language codes.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+dart format --set-exit-if-changed app/lib/app/app.dart app/lib/app/localization/language_registry.dart app/lib/features/order/domain/checkout_return.dart app/test/checkout_return_test.dart app/test/language_registry_test.dart
+cargo test --manifest-path api/Cargo.toml locale -- --nocapture
+cargo test --manifest-path api/Cargo.toml checkout -- --nocapture
+flutter test test/checkout_return_test.dart test/language_registry_test.dart
+cargo test --manifest-path api/Cargo.toml
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+Full Flutter suite note:
+
+- `flutter test` was attempted on 2026-06-18 and is blocked by existing
+  `ListTile background color or ink splashes may be invisible` assertions in
+  widget tests that exercise pre-existing decorated selection rows. The
+  M4-T05-specific Flutter tests above pass.
 
 ### M5: Admin Data Preservation
 

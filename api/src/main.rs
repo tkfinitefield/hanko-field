@@ -1284,11 +1284,14 @@ async fn handle_catalog(
         }
     };
 
-    let requested_locale = query
-        .locale
-        .unwrap_or_else(|| cfg.default_locale.clone())
-        .trim()
-        .to_lowercase();
+    let Some(requested_locale) = requested_locale_route_code(query.locale, &cfg.default_locale)
+    else {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_locale",
+            "unsupported locale",
+        );
+    };
     let pricing_currency = resolve_pricing_currency(&cfg, &requested_locale);
 
     if !cfg
@@ -1473,11 +1476,14 @@ async fn handle_stone_listings(
         }
     };
 
-    let requested_locale = query
-        .locale
-        .unwrap_or_else(|| cfg.default_locale.clone())
-        .trim()
-        .to_lowercase();
+    let Some(requested_locale) = requested_locale_route_code(query.locale, &cfg.default_locale)
+    else {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_locale",
+            "unsupported locale",
+        );
+    };
     let pricing_currency = resolve_pricing_currency(&cfg, &requested_locale);
 
     if !cfg
@@ -1599,11 +1605,14 @@ async fn handle_stone_listing_detail(
         }
     };
 
-    let requested_locale = query
-        .locale
-        .unwrap_or_else(|| cfg.default_locale.clone())
-        .trim()
-        .to_lowercase();
+    let Some(requested_locale) = requested_locale_route_code(query.locale, &cfg.default_locale)
+    else {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_locale",
+            "unsupported locale",
+        );
+    };
     let pricing_currency = resolve_pricing_currency(&cfg, &requested_locale);
 
     if !cfg
@@ -4092,7 +4101,7 @@ fn normalize_public_config(cfg: PublicConfig) -> PublicConfig {
     let mut normalized = Vec::with_capacity(cfg.supported_locales.len());
     let mut seen = HashSet::with_capacity(cfg.supported_locales.len());
     for locale in cfg.supported_locales {
-        let value = language_registry::normalize_route_code(&locale);
+        let value = normalize_locale_route_code(&locale).unwrap_or_default();
         if value.is_empty() || seen.contains(&value) {
             continue;
         }
@@ -4104,7 +4113,7 @@ fn normalize_public_config(cfg: PublicConfig) -> PublicConfig {
         normalized = registry_config.supported_locales.clone();
     }
 
-    let mut default_locale = language_registry::normalize_route_code(&cfg.default_locale);
+    let mut default_locale = normalize_locale_route_code(&cfg.default_locale).unwrap_or_default();
     if default_locale.is_empty() || !contains(&normalized, &default_locale) {
         default_locale = if contains(&normalized, &registry_config.default_locale) {
             registry_config.default_locale.clone()
@@ -4121,7 +4130,7 @@ fn normalize_public_config(cfg: PublicConfig) -> PublicConfig {
 
     let mut currency_by_locale = HashMap::new();
     for (locale, currency) in cfg.currency_by_locale {
-        let locale = language_registry::normalize_route_code(&locale);
+        let locale = normalize_locale_route_code(&locale).unwrap_or_default();
         if locale.is_empty() || !contains(&normalized, &locale) {
             continue;
         }
@@ -4151,6 +4160,16 @@ fn normalize_public_config(cfg: PublicConfig) -> PublicConfig {
 
 fn normalize_currency_code(raw: &str) -> Option<String> {
     language_registry::normalize_currency_code(raw)
+}
+
+fn normalize_locale_route_code(raw: &str) -> Option<String> {
+    language_registry::route_code_for_locale(raw)
+}
+
+fn requested_locale_route_code(raw: Option<String>, default_locale: &str) -> Option<String> {
+    raw.as_deref()
+        .map(normalize_locale_route_code)
+        .unwrap_or_else(|| Some(default_locale.to_owned()))
 }
 
 fn resolve_currency_for_locale(cfg: &PublicConfig, locale: &str) -> String {
@@ -4270,7 +4289,8 @@ fn normalize_create_order_input(input: CreateOrderInput) -> CreateOrderInput {
 
     CreateOrderInput {
         channel: input.channel.trim().to_lowercase(),
-        locale: input.locale.trim().to_lowercase(),
+        locale: normalize_locale_route_code(&input.locale)
+            .unwrap_or_else(|| input.locale.trim().to_lowercase()),
         idempotency_key: input.idempotency_key.trim().to_owned(),
         terms_agreed: input.terms_agreed,
         seal: SealInput {
@@ -4309,7 +4329,8 @@ fn normalize_create_order_input(input: CreateOrderInput) -> CreateOrderInput {
         },
         contact: ContactInput {
             email: input.contact.email.trim().to_owned(),
-            preferred_locale: input.contact.preferred_locale.trim().to_lowercase(),
+            preferred_locale: normalize_locale_route_code(&input.contact.preferred_locale)
+                .unwrap_or_else(|| input.contact.preferred_locale.trim().to_lowercase()),
         },
         customer_confirmation: input.customer_confirmation.map(|customer_confirmation| {
             CustomerConfirmationInput {
@@ -6409,6 +6430,7 @@ fn build_stripe_checkout_session_form(
 ) -> Vec<(String, String)> {
     let product_name = build_checkout_product_name(order);
     let product_description = build_checkout_product_description(order);
+    let return_locale = checkout_return_locale(order);
     let checkout_currency = stripe_checkout_currency(&order.currency);
     let success_base_url = if return_to_app {
         &stripe_checkout.app_success_url
@@ -6424,12 +6446,12 @@ fn build_stripe_checkout_session_form(
     let mut success_params = vec![
         ("checkout", "success"),
         ("order_id", order.order_id.as_str()),
-        ("lang", order.order_locale.as_str()),
+        ("lang", return_locale.as_str()),
     ];
     let mut cancel_params = vec![
         ("checkout", "cancel"),
         ("order_id", order.order_id.as_str()),
-        ("lang", order.order_locale.as_str()),
+        ("lang", return_locale.as_str()),
     ];
     if return_to_app {
         success_params.push(("return_to", "app"));
@@ -6571,6 +6593,10 @@ fn build_checkout_product_description(order: &OrderCheckoutContext) -> String {
     checkout_copy_for_locale(&order.order_locale)
         .product_description_template
         .clone()
+}
+
+fn checkout_return_locale(order: &OrderCheckoutContext) -> String {
+    normalize_locale_route_code(&order.order_locale).unwrap_or_else(|| DEFAULT_LOCALE.to_owned())
 }
 
 fn checkout_copy_for_locale(locale: &str) -> &'static CheckoutCopy {
@@ -6755,18 +6781,14 @@ fn stripe_order_id_from_object(object: &JsonValue) -> String {
 fn validate_create_order_request(request: CreateOrderRequest) -> Result<CreateOrderInput> {
     let idempotency_key_pattern =
         Regex::new(r"^[A-Za-z0-9_-]{8,128}$").expect("idempotency key regex must compile");
-    let locale_pattern =
-        Regex::new(r"^[a-z]{2,3}(-[a-z0-9]{2,8})*$").expect("locale regex must compile");
 
     let channel = request.channel.trim().to_lowercase();
     if channel != "app" && channel != "web" {
         bail!("channel must be one of app or web");
     }
 
-    let locale = request.locale.trim().to_lowercase();
-    if !locale_pattern.is_match(&locale) {
-        bail!("locale must be a valid BCP-47 lowercase tag");
-    }
+    let locale = normalize_locale_route_code(&request.locale)
+        .ok_or_else(|| anyhow!("locale must map to a supported route code"))?;
 
     let idempotency_key = request.idempotency_key.trim().to_owned();
     if !idempotency_key_pattern.is_match(&idempotency_key) {
@@ -6850,10 +6872,8 @@ fn validate_create_order_request(request: CreateOrderRequest) -> Result<CreateOr
         bail!("contact.email must be valid");
     }
 
-    let preferred_locale = request.contact.preferred_locale.trim().to_lowercase();
-    if !locale_pattern.is_match(&preferred_locale) {
-        bail!("contact.preferred_locale must be a valid BCP-47 lowercase tag");
-    }
+    let preferred_locale = normalize_locale_route_code(&request.contact.preferred_locale)
+        .ok_or_else(|| anyhow!("contact.preferred_locale must map to a supported route code"))?;
 
     Ok(CreateOrderInput {
         channel,
@@ -8011,6 +8031,26 @@ mod tests {
     }
 
     #[test]
+    fn normalize_public_config_maps_bcp47_locales_to_route_codes() {
+        let cfg = normalize_public_config(PublicConfig {
+            supported_locales: vec!["EN-US".to_owned(), "zh-Hant".to_owned()],
+            default_locale: "zh_Hant".to_owned(),
+            default_currency: "usd".to_owned(),
+            currency_by_locale: HashMap::from([
+                ("en-US".to_owned(), "usd".to_owned()),
+                ("zh-Hant".to_owned(), "usd".to_owned()),
+            ]),
+        });
+
+        assert_eq!(cfg.supported_locales, vec!["en", "zhtw"]);
+        assert_eq!(cfg.default_locale, "zhtw");
+        assert_eq!(
+            cfg.currency_by_locale.get("zhtw").map(String::as_str),
+            Some("USD")
+        );
+    }
+
+    #[test]
     fn stone_listing_status_helper_requires_published() {
         assert!(stone_listing_is_published("published"));
         assert!(stone_listing_is_published(" Published "));
@@ -8482,6 +8522,25 @@ mod tests {
     }
 
     #[test]
+    fn stripe_checkout_return_urls_preserve_normalized_route_code() {
+        let mut order = order_checkout_context_fixture();
+        order.order_locale = "zh-Hant".to_owned();
+        let checkout = stripe_checkout_config_fixture();
+
+        let form =
+            build_stripe_checkout_session_form(&checkout, &order, "customer@example.com", true);
+
+        assert_eq!(
+            stripe_form_value(&form, "success_url"),
+            "hankofield://checkout/success?session_id={CHECKOUT_SESSION_ID}&checkout=success&order_id=order_1&lang=zhtw&return_to=app"
+        );
+        assert_eq!(
+            stripe_form_value(&form, "cancel_url"),
+            "hankofield://checkout/cancel?checkout=cancel&order_id=order_1&lang=zhtw&return_to=app"
+        );
+    }
+
+    #[test]
     fn checkout_copy_templates_have_required_placeholders() {
         for (route_code, copy) in checkout_copies() {
             assert!(
@@ -8738,6 +8797,18 @@ mod tests {
 
         let input = validate_create_order_request(request).expect("request must be valid");
         assert_eq!(input.shipping.country_code, "JP");
+    }
+
+    #[test]
+    fn validate_create_order_request_normalizes_bcp47_locale_to_route_code() {
+        let mut request = valid_app_create_order_request();
+        request.locale = "zh-Hant".to_owned();
+        request.contact.preferred_locale = "zh_TW".to_owned();
+
+        let input = validate_create_order_request(request).expect("request must be valid");
+
+        assert_eq!(input.locale, "zhtw");
+        assert_eq!(input.contact.preferred_locale, "zhtw");
     }
 
     #[test]

@@ -61,7 +61,9 @@ CheckoutReturnResult? parseCheckoutReturnUri(Uri uri) {
       'checkout_session_id',
       'sessionId',
     ]),
-    locale: _firstPresentQueryValue(uri, const ['lang', 'locale']),
+    locale: _normalizeCheckoutReturnLocale(
+      _firstPresentQueryValue(uri, const ['lang', 'locale']),
+    ),
   );
 }
 
@@ -125,4 +127,19 @@ String? _firstPresentQueryValue(Uri uri, List<String> keys) {
     }
   }
   return null;
+}
+
+String? _normalizeCheckoutReturnLocale(String? locale) {
+  final value = locale?.trim().replaceAll('_', '-').toLowerCase();
+  if (value == null || value.isEmpty) {
+    return null;
+  }
+
+  return switch (value) {
+    'zh-hant' || 'zh-tw' || 'zh-hk' || 'zh-mo' => 'zhtw',
+    'zh-hans' || 'zh-cn' || 'zh-sg' => 'zh',
+    'en-us' || 'en-gb' => 'en',
+    'ja-jp' => 'ja',
+    _ => value,
+  };
 }

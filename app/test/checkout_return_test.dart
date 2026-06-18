@@ -33,6 +33,18 @@ void main() {
     expect(result?.locale, 'en');
   });
 
+  test('normalizes lang and locale query values to route codes', () {
+    final langResult = parseCheckoutReturnRoute(
+      'hankofield://checkout/success?order_id=ord_006&session_id=cs_test_006&lang=zh_Hant',
+    );
+    final localeResult = parseCheckoutReturnRoute(
+      'https://finitefield.org/zhtw/payment/success?checkout=success&order_id=ord_007&locale=zh-TW',
+    );
+
+    expect(langResult?.locale, 'zhtw');
+    expect(localeResult?.locale, 'zhtw');
+  });
+
   test('uses checkout query to distinguish Stripe cancel from failure path', () {
     final result = parseCheckoutReturnRoute(
       'https://finitefield.org/payment/failure?checkout=cancel&order_id=ord_004',

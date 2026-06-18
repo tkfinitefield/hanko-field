@@ -60,6 +60,22 @@ class AppLanguageRegistry {
     }
     return null;
   }
+
+  AppLanguageOption? languageForLocale(Locale? locale) {
+    if (locale == null) {
+      return null;
+    }
+    for (final language in languages) {
+      if (language.matchesLocale(locale)) {
+        return language;
+      }
+    }
+    return null;
+  }
+
+  String? routeCodeForLocale(Locale? locale) {
+    return languageForLocale(locale)?.routeCode;
+  }
 }
 
 class AppLanguageOption {
