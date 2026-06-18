@@ -1,0 +1,282 @@
+[
+  {
+    "route_code": "en",
+    "bcp47": "en",
+    "flutter": {
+      "languageCode": "en",
+      "scriptCode": null,
+      "countryCode": null
+    },
+    "native_name": "English",
+    "english_name": "English",
+    "text_direction": "ltr",
+    "fallback": null,
+    "currency": "USD",
+    "web": {
+      "enabled": true,
+      "indexed": true,
+      "url_prefix": ""
+    },
+    "app": {
+      "enabled": true,
+      "selectable": true
+    },
+    "release": {
+      "enabled": false,
+      "android_store_locale": "en-US",
+      "ios_store_locale": "en-US"
+    }
+  },
+  {
+    "route_code": "ja",
+    "bcp47": "ja",
+    "flutter": {
+      "languageCode": "ja",
+      "scriptCode": null,
+      "countryCode": null
+    },
+    "native_name": "日本語",
+    "english_name": "Japanese",
+    "text_direction": "ltr",
+    "fallback": "en",
+    "currency": "JPY",
+    "web": {
+      "enabled": true,
+      "indexed": true,
+      "url_prefix": "ja"
+    },
+    "app": {
+      "enabled": true,
+      "selectable": true
+    },
+    "release": {
+      "enabled": false,
+      "android_store_locale": "ja-JP",
+      "ios_store_locale": "ja"
+    }
+  },
+  {
+    "route_code": "zh",
+    "bcp47": "zh-Hans",
+    "flutter": {
+      "languageCode": "zh",
+      "scriptCode": "Hans",
+      "countryCode": null
+    },
+    "native_name": "简体中文",
+    "english_name": "Simplified Chinese",
+    "text_direction": "ltr",
+    "fallback": "en",
+    "currency": "USD",
+    "web": {
+      "enabled": false,
+      "indexed": false,
+      "url_prefix": "zh"
+    },
+    "app": {
+      "enabled": false,
+      "selectable": false
+    },
+    "release": {
+      "enabled": false,
+      "android_store_locale": "zh-CN",
+      "ios_store_locale": "zh-Hans"
+    }
+  },
+  {
+    "route_code": "zhtw",
+    "bcp47": "zh-Hant",
+    "flutter": {
+      "languageCode": "zh",
+      "scriptCode": "Hant",
+      "countryCode": null
+    },
+    "native_name": "繁體中文",
+    "english_name": "Traditional Chinese",
+    "text_direction": "ltr",
+    "fallback": "en",
+    "currency": "USD",
+    "web": {
+      "enabled": false,
+      "indexed": false,
+      "url_prefix": "zhtw"
+    },
+    "app": {
+      "enabled": false,
+      "selectable": false
+    },
+    "release": {
+      "enabled": false,
+      "android_store_locale": "zh-TW",
+      "ios_store_locale": "zh-Hant"
+    }
+  },
+  {
+    "route_code": "no",
+    "bcp47": "no",
+    "flutter": {
+      "languageCode": "no",
+      "scriptCode": null,
+      "countryCode": null
+    },
+    "native_name": "Norsk",
+    "english_name": "Norwegian",
+    "text_direction": "ltr",
+    "fallback": "en",
+    "currency": "USD",
+    "web": {
+      "enabled": false,
+      "indexed": false,
+      "url_prefix": "no"
+    },
+    "app": {
+      "enabled": false,
+      "selectable": false
+    },
+    "release": {
+      "enabled": false,
+      "android_store_locale": null,
+      "ios_store_locale": null
+    }
+  },
+  {
+    "route_code": "ar",
+    "bcp47": "ar",
+    "flutter": {
+      "languageCode": "ar",
+      "scriptCode": null,
+      "countryCode": null
+    },
+    "native_name": "العربية",
+    "english_name": "Arabic",
+    "text_direction": "rtl",
+    "fallback": "en",
+    "currency": "USD",
+    "web": {
+      "enabled": false,
+      "indexed": false,
+      "url_prefix": "ar"
+    },
+    "app": {
+      "enabled": false,
+      "selectable": false
+    },
+    "release": {
+      "enabled": false,
+      "android_store_locale": null,
+      "ios_store_locale": null
+    }
+  },
+  {
+    "route_code": "fa",
+    "bcp47": "fa",
+    "flutter": {
+      "languageCode": "fa",
+      "scriptCode": null,
+      "countryCode": null
+    },
+    "native_name": "فارسی",
+    "english_name": "Persian",
+    "text_direction": "rtl",
+    "fallback": "en",
+    "currency": "USD",
+    "web": {
+      "enabled": false,
+      "indexed": false,
+      "url_prefix": "fa"
+    },
+    "app": {
+      "enabled": false,
+      "selectable": false
+    },
+    "release": {
+      "enabled": false,
+      "android_store_locale": null,
+      "ios_store_locale": null
+    }
+  },
+  {
+    "route_code": "he",
+    "bcp47": "he",
+    "flutter": {
+      "languageCode": "he",
+      "scriptCode": null,
+      "countryCode": null
+    },
+    "native_name": "עברית",
+    "english_name": "Hebrew",
+    "text_direction": "rtl",
+    "fallback": "en",
+    "currency": "USD",
+    "web": {
+      "enabled": false,
+      "indexed": false,
+      "url_prefix": "he"
+    },
+    "app": {
+      "enabled": false,
+      "selectable": false
+    },
+    "release": {
+      "enabled": false,
+      "android_store_locale": null,
+      "ios_store_locale": null
+    }
+  },
+  {
+    "route_code": "ps",
+    "bcp47": "ps",
+    "flutter": {
+      "languageCode": "ps",
+      "scriptCode": null,
+      "countryCode": null
+    },
+    "native_name": "پښتو",
+    "english_name": "Pashto",
+    "text_direction": "rtl",
+    "fallback": "en",
+    "currency": "USD",
+    "web": {
+      "enabled": false,
+      "indexed": false,
+      "url_prefix": "ps"
+    },
+    "app": {
+      "enabled": false,
+      "selectable": false
+    },
+    "release": {
+      "enabled": false,
+      "android_store_locale": null,
+      "ios_store_locale": null
+    }
+  },
+  {
+    "route_code": "ur",
+    "bcp47": "ur",
+    "flutter": {
+      "languageCode": "ur",
+      "scriptCode": null,
+      "countryCode": null
+    },
+    "native_name": "اردو",
+    "english_name": "Urdu",
+    "text_direction": "rtl",
+    "fallback": "en",
+    "currency": "USD",
+    "web": {
+      "enabled": false,
+      "indexed": false,
+      "url_prefix": "ur"
+    },
+    "app": {
+      "enabled": false,
+      "selectable": false
+    },
+    "release": {
+      "enabled": false,
+      "android_store_locale": null,
+      "ios_store_locale": null
+    }
+  }
+]

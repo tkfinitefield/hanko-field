@@ -1436,7 +1436,7 @@ Fastlane setup readiness notes:
 - [x] `M1-T03` Add `make i18n-status`.
   Output: read-only status report for app, web, API, and release metadata.
   Done when: it reports missing files without modifying the working tree.
-- [ ] `M1-T04` Add registry fixtures.
+- [x] `M1-T04` Add registry fixtures.
   Output: focused test fixtures for `en`, `ja`, `zh`, `zhtw`, `no`, and RTL.
   Done when: fixture tests cover route code, BCP-47, Flutter, and store fields.
 - [ ] `M1-T05` Document registry update rules.
@@ -1515,6 +1515,34 @@ Status contract:
 Current expected M1 output reports missing files for the existing enabled
 English and Japanese app, web, and API targets. That is intentional until M2,
 M3, and M4 move content into the new file layout.
+
+#### M1-T04 Registry Fixtures
+
+Completed on 2026-06-18. Added `scripts/i18n/fixtures/registry-core.json` as a
+focused fixture for the language entries that are most likely to break parser
+or platform mapping assumptions.
+
+Fixture coverage:
+
+- `en`: default route with empty URL prefix, null fallback, Flutter `en`, and
+  `en-US` store locale fields.
+- `ja`: existing enabled app/web locale with `JPY`, Flutter `ja`, and Japanese
+  store locale fields.
+- `zh`: Simplified Chinese route mapped to BCP-47 `zh-Hans`, Flutter
+  `languageCode=zh`, `scriptCode=Hans`, and `zh-CN` / `zh-Hans` store locale
+  fields.
+- `zhtw`: Traditional Chinese route mapped to BCP-47 `zh-Hant`, Flutter
+  `languageCode=zh`, `scriptCode=Hant`, and `zh-TW` / `zh-Hant` store locale
+  fields.
+- `no`: JSON-safe Norwegian route code and BCP-47 value.
+- `ar`, `fa`, `he`, `ps`, and `ur`: RTL entries with null store locale fields
+  until M8 platform support validation.
+
+Test command:
+
+```sh
+make i18n-registry-test
+```
 
 ### M2: Flutter App Migration
 
