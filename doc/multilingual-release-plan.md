@@ -2711,7 +2711,7 @@ git diff --cached --check
 - [x] `M5-T04` Add optional compact localized-values editor.
   Output: collapsed registry-driven editor if manual admin editing is needed.
   Done when: the admin does not render 68 always-visible inputs.
-- [ ] `M5-T05` Verify admin policy.
+- [x] `M5-T05` Verify admin policy.
   Output: review note confirming no polling, SSE, or WebSocket behavior was
   added.
   Done when: admin remains aligned with repository policy.
@@ -2906,6 +2906,51 @@ cargo fmt --manifest-path admin/Cargo.toml -- --check
 cargo test --manifest-path admin/Cargo.toml m5_t04 -- --nocapture
 cargo test --manifest-path admin/Cargo.toml m5_t02 -- --nocapture
 cargo test --manifest-path admin/Cargo.toml m5_t03 -- --nocapture
+cargo test --manifest-path admin/Cargo.toml
+git diff --check
+git diff --cached --check
+```
+
+#### M5-T05 Admin Policy Verification
+
+Completed on 2026-06-18. Verified that the M5 admin localization work remains
+aligned with the repository policy: admin screens must not add polling,
+streaming, SSE, or WebSocket behavior.
+
+Reviewed source areas:
+
+- `AGENTS.md` and `doc/design.md` policy statements for admin/web screens.
+- `admin/src/main.rs` admin routes, handlers, and response helpers.
+- `admin/templates/*.html` htmx attributes and localized editor markup.
+- `admin/static/admin.js` browser-side behavior.
+- `admin/Cargo.toml` and `admin/Cargo.lock` dependency surface for streaming
+  or WebSocket-specific additions.
+
+Findings:
+
+- No admin `setInterval`, recurring `setTimeout`, EventSource, WebSocket,
+  server-sent event, or streaming response behavior is present.
+- Existing htmx `hx-trigger="... from:body"` usage is event-driven refresh
+  after local admin mutations, not polling or streaming.
+- Existing photo upload JavaScript uses one-shot `fetch` calls triggered by
+  user file selection or submit preparation, not long-lived connections.
+- M5-T04 compact localized editor is static form markup under closed
+  `<details>` elements and does not add any background network behavior.
+- Admin dependencies do not add a WebSocket or SSE crate surface for this work.
+
+M0-T05 preservation evidence:
+
+- Admin remains a request/response htmx interface with user-triggered actions.
+- No polling, SSE, WebSocket, or streaming behavior was added in M5.
+- Rollback path: if a future admin change introduces continuous refresh or
+  streaming behavior, remove that behavior and reopen `M5-T05`.
+
+Validation:
+
+```sh
+rg -n "poll|setInterval|setTimeout|EventSource|WebSocket|websocket|SSE|server-sent|stream|streaming|hx-trigger|hx-sse|hx-ws|ws://|wss://|tokio_stream|BroadcastStream|Sse|KeepAlive" admin admin/Cargo.toml admin/Cargo.lock
+rg -n "polling|streaming|SSE|WebSocket|admin|管理画面" doc/design.md AGENTS.md doc/multilingual-release-plan.md
+cargo fmt --manifest-path admin/Cargo.toml -- --check
 cargo test --manifest-path admin/Cargo.toml
 git diff --check
 git diff --cached --check
