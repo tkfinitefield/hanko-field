@@ -5141,7 +5141,7 @@ git diff --cached --check
   Output: cleanup PR for compatibility code that is no longer needed.
   Done when: generated localization and registry paths are the only active
   localization mechanisms.
-- [ ] `M11-T05` Update the release runbook.
+- [x] `M11-T05` Update the release runbook.
   Output: final notes for adding future languages, store metadata updates, and
   fastlane release steps.
   Done when: the next localized release does not need rediscovery.
@@ -5412,6 +5412,76 @@ jq empty doc/qa/m11-t04/migration-cleanup.json
 make i18n-check
 make i18n-ci
 cd app && flutter test test/generated_hanko_localizations_test.dart
+git diff --check
+git diff --cached --check
+```
+
+#### M11-T05 Release Runbook Update
+
+Completed on 2026-06-18. Added a localized release runbook and a validation
+gate so future language additions, store metadata updates, fastlane release
+steps, and post-release cleanup can proceed without rediscovering the workflow.
+
+Implementation notes:
+
+- Added `doc/localized-release-runbook.md` covering:
+  - future language addition from `config/languages.json`
+  - translation content roots and intention sidecars
+  - staged flag progression from disabled to store-release-enabled
+  - store metadata source and generated output paths
+  - Android fastlane metadata, internal, and production lanes
+  - iOS fastlane metadata, TestFlight, and production lanes
+  - production secret and signoff inputs
+  - M11 diagnostics, support triage, translation patch, and cleanup checks
+  - rollback paths for content, release-enabled, app-selectable, and indexed
+    web-language issues
+- Added `scripts/i18n/release_runbook.mjs` to validate:
+  - the runbook includes required operational sections
+  - future language, store metadata, fastlane, and M11 cleanup commands are
+    documented
+  - M11-T05 evidence is present
+  - the evidence route-code count matches `config/languages.json`
+- Added `scripts/i18n/release_runbook.test.mjs` covering:
+  - checked-in runbook acceptance
+  - missing fastlane release steps
+  - route-code count drift
+  - missing store metadata path evidence
+- Added Make targets:
+  - `make i18n-release-runbook`
+  - `make i18n-release-runbook-check`
+  - `make i18n-release-runbook-test`
+- Added the release runbook checks to `make i18n-ci`.
+- Added runbook evidence:
+  - `doc/qa/m11-t05/README.md`
+  - `doc/qa/m11-t05/release-runbook-review.json`
+
+Current review result:
+
+- Canonical runbook path: `doc/localized-release-runbook.md`.
+- Registered route-code count: 68.
+- Required M11-T05 sections: language addition, store metadata update,
+  fastlane release, post-release monitoring and cleanup, rollback.
+- Production rollout has not started.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, production support exports, polling, streaming, SSE, or
+  WebSocket behavior was committed.
+- Rollback path: remove `doc/localized-release-runbook.md`, remove
+  `doc/qa/m11-t05/`, remove the release runbook script, tests, Make targets,
+  and `i18n-ci` entries, then reopen `M11-T05`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/release_runbook.mjs
+make i18n-release-runbook-check
+make i18n-release-runbook-test
+jq empty doc/qa/m11-t05/release-runbook-review.json
+make i18n-ci
 git diff --check
 git diff --cached --check
 ```

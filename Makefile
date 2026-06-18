@@ -16,7 +16,7 @@ GCP_PROD_REGION ?= asia-northeast1
 ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_ADMIN_MODE);,)
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod store-metadata-check store-metadata-test google-play-metadata google-play-metadata-check google-play-metadata-test app-store-metadata app-store-metadata-check app-store-metadata-test screenshot-metadata screenshot-metadata-check screenshot-metadata-test android-fastlane-check android-fastlane-test ios-fastlane-check ios-fastlane-test release-secret-guardrails-check release-secret-guardrails-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-stubs i18n-stubs-check i18n-stubs-test i18n-holdouts i18n-holdouts-check i18n-holdouts-test i18n-layout-qa i18n-layout-qa-check i18n-layout-qa-test i18n-flag-stages i18n-flag-stages-check i18n-flag-stages-test i18n-freeze i18n-freeze-check i18n-freeze-manifest i18n-freeze-test i18n-diagnostics i18n-diagnostics-check i18n-diagnostics-test i18n-support-triage i18n-support-triage-check i18n-support-triage-test i18n-translation-patches i18n-translation-patches-check i18n-translation-patches-test i18n-migration-cleanup i18n-migration-cleanup-check i18n-migration-cleanup-test i18n-export i18n-import i18n-handoff-test i18n-ci
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod store-metadata-check store-metadata-test google-play-metadata google-play-metadata-check google-play-metadata-test app-store-metadata app-store-metadata-check app-store-metadata-test screenshot-metadata screenshot-metadata-check screenshot-metadata-test android-fastlane-check android-fastlane-test ios-fastlane-check ios-fastlane-test release-secret-guardrails-check release-secret-guardrails-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-stubs i18n-stubs-check i18n-stubs-test i18n-holdouts i18n-holdouts-check i18n-holdouts-test i18n-layout-qa i18n-layout-qa-check i18n-layout-qa-test i18n-flag-stages i18n-flag-stages-check i18n-flag-stages-test i18n-freeze i18n-freeze-check i18n-freeze-manifest i18n-freeze-test i18n-diagnostics i18n-diagnostics-check i18n-diagnostics-test i18n-support-triage i18n-support-triage-check i18n-support-triage-test i18n-translation-patches i18n-translation-patches-check i18n-translation-patches-test i18n-migration-cleanup i18n-migration-cleanup-check i18n-migration-cleanup-test i18n-release-runbook i18n-release-runbook-check i18n-release-runbook-test i18n-export i18n-import i18n-handoff-test i18n-ci
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -88,6 +88,9 @@ help:
 	@echo "  make i18n-migration-cleanup # Report migration wrapper cleanup evidence"
 	@echo "  make i18n-migration-cleanup-check # Check migration wrapper cleanup evidence"
 	@echo "  make i18n-migration-cleanup-test # Validate migration wrapper cleanup helper"
+	@echo "  make i18n-release-runbook # Report localized release runbook evidence"
+	@echo "  make i18n-release-runbook-check # Check localized release runbook evidence"
+	@echo "  make i18n-release-runbook-test # Validate localized release runbook helper"
 	@echo "  make i18n-export    # Export translation handoff JSON"
 	@echo "  make i18n-import    # Import translation handoff JSON with IN=<file>"
 	@echo "  make i18n-handoff-test # Validate translation handoff helpers"
@@ -241,6 +244,15 @@ i18n-migration-cleanup-check:
 i18n-migration-cleanup-test:
 	node --test scripts/i18n/migration_cleanup.test.mjs
 
+i18n-release-runbook:
+	node scripts/i18n/release_runbook.mjs
+
+i18n-release-runbook-check:
+	node scripts/i18n/release_runbook.mjs
+
+i18n-release-runbook-test:
+	node --test scripts/i18n/release_runbook.test.mjs
+
 i18n-export:
 	@node scripts/i18n/handoff.mjs export
 
@@ -318,6 +330,7 @@ i18n-ci:
 	node --check scripts/i18n/support_triage.mjs
 	node --check scripts/i18n/translation_patches.mjs
 	node --check scripts/i18n/migration_cleanup.mjs
+	node --check scripts/i18n/release_runbook.mjs
 	node --check scripts/i18n/handoff.mjs
 	node --check scripts/release/store_metadata.mjs
 	node --check scripts/release/google_play_metadata.mjs
@@ -336,6 +349,7 @@ i18n-ci:
 	$(MAKE) i18n-support-triage-check
 	$(MAKE) i18n-translation-patches-check
 	$(MAKE) i18n-migration-cleanup-check
+	$(MAKE) i18n-release-runbook-check
 	$(MAKE) store-metadata-check
 	$(MAKE) google-play-metadata-check
 	$(MAKE) app-store-metadata-check
@@ -356,6 +370,7 @@ i18n-ci:
 	$(MAKE) i18n-support-triage-test
 	$(MAKE) i18n-translation-patches-test
 	$(MAKE) i18n-migration-cleanup-test
+	$(MAKE) i18n-release-runbook-test
 	$(MAKE) i18n-handoff-test
 	$(MAKE) i18n-todo-test
 	$(MAKE) i18n-status-test
