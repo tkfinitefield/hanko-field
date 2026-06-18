@@ -9,6 +9,7 @@ default_platform(:ios)
 REPO_ROOT = File.expand_path("../../..", __dir__)
 APP_ROOT = File.join(REPO_ROOT, "app")
 APP_STORE_METADATA_PATH = File.join(REPO_ROOT, "release/store_metadata/app_store")
+IOS_EXPORT_OPTIONS_PATH = File.join(APP_ROOT, "ios/ExportOptions.plist")
 APP_IDENTIFIER = "org.finitefield.hankofield"
 
 def required_env(name)
@@ -54,7 +55,7 @@ platform :ios do
 
   desc "Build the release IPA and upload it to TestFlight."
   lane :testflight_upload do
-    sh("cd #{Shellwords.escape(APP_ROOT)} && flutter build ipa --release")
+    sh("cd #{Shellwords.escape(APP_ROOT)} && flutter build ipa --release --export-options-plist=#{Shellwords.escape(IOS_EXPORT_OPTIONS_PATH)}")
     upload_to_testflight(
       app_identifier: APP_IDENTIFIER,
       api_key_path: required_env("APP_STORE_CONNECT_API_KEY_PATH"),

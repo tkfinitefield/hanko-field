@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const IOS_FASTLANE_FILES = {
   gemfile: 'app/ios/Gemfile',
+  exportOptions: 'app/ios/ExportOptions.plist',
   appfile: 'app/ios/fastlane/Appfile',
   fastfile: 'app/ios/fastlane/Fastfile',
 };
@@ -50,6 +51,12 @@ export async function validateIosFastlaneConfig({ rootDir = REPO_ROOT } = {}) {
     rejectPattern(appfile, /api_key|issuer_id|key_id|private_key|\.p8/i, IOS_FASTLANE_FILES.appfile, 'secret', issues);
   }
 
+  const exportOptions = await readText(rootDir, IOS_FASTLANE_FILES.exportOptions, issues);
+  if (exportOptions !== null) {
+    parsedFiles.push(IOS_FASTLANE_FILES.exportOptions);
+    validateExportOptions(exportOptions, issues);
+  }
+
   const fastfile = await readText(rootDir, IOS_FASTLANE_FILES.fastfile, issues);
   if (fastfile !== null) {
     parsedFiles.push(IOS_FASTLANE_FILES.fastfile);
@@ -82,9 +89,10 @@ function validateFastfile(fastfile, issues) {
   requirePattern(fastfile, /^default_platform\(:ios\)$/m, file, 'default_platform', issues);
   requirePattern(fastfile, /APP_IDENTIFIER = "org\.finitefield\.hankofield"/, file, 'APP_IDENTIFIER', issues);
   requirePattern(fastfile, /APP_STORE_METADATA_PATH = File\.join\(REPO_ROOT, "release\/store_metadata\/app_store"\)/, file, 'APP_STORE_METADATA_PATH', issues);
+  requirePattern(fastfile, /IOS_EXPORT_OPTIONS_PATH = File\.join\(APP_ROOT, "ios\/ExportOptions\.plist"\)/, file, 'IOS_EXPORT_OPTIONS_PATH', issues);
   requirePattern(fastfile, /lane :metadata_check do[\s\S]*make app-store-metadata-check[\s\S]*end/, file, 'metadata_check', issues);
   requirePattern(fastfile, /lane :metadata do[\s\S]*deliver\(/, file, 'metadata', issues);
-  requirePattern(fastfile, /lane :testflight_upload do[\s\S]*flutter build ipa --release[\s\S]*upload_to_testflight\(/, file, 'testflight_upload', issues);
+  requirePattern(fastfile, /lane :testflight_upload do[\s\S]*flutter build ipa --release --export-options-plist=\#\{Shellwords\.escape\(IOS_EXPORT_OPTIONS_PATH\)\}[\s\S]*upload_to_testflight\(/, file, 'testflight_upload', issues);
 
   const metadataLane = extractLane(fastfile, 'metadata');
   if (metadataLane === null) {
@@ -120,6 +128,15 @@ function validateFastfile(fastfile, issues) {
   }
 
   rejectPattern(fastfile, /BEGIN PRIVATE KEY|issuer_id|key_id|private_key|\.p8/i, file, 'secret', issues);
+}
+
+function validateExportOptions(exportOptions, issues) {
+  const file = IOS_FASTLANE_FILES.exportOptions;
+  requirePattern(exportOptions, /<key>method<\/key>\s*<string>app-store-connect<\/string>/, file, 'method', issues);
+  requirePattern(exportOptions, /<key>teamID<\/key>\s*<string>5267S9U4PR<\/string>/, file, 'teamID', issues);
+  requirePattern(exportOptions, /<key>signingStyle<\/key>\s*<string>automatic<\/string>/, file, 'signingStyle', issues);
+  requirePattern(exportOptions, /<key>manageAppVersionAndBuildNumber<\/key>\s*<false\/>/, file, 'manageAppVersionAndBuildNumber', issues);
+  rejectPattern(exportOptions, /api_key|issuer_id|key_id|private_key|\.p8|BEGIN PRIVATE KEY/i, file, 'secret', issues);
 }
 
 function extractLane(fastfile, laneName) {

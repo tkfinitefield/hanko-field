@@ -4786,7 +4786,7 @@ git diff --cached --check
 - [x] `M10-T01` Build Android release candidate.
   Output: signed AAB build evidence.
   Done when: `flutter build appbundle --release` passes with release signing.
-- [ ] `M10-T02` Build iOS release candidate.
+- [x] `M10-T02` Build iOS release candidate.
   Output: signed IPA build evidence from a signing-capable Mac.
   Done when: `flutter build ipa --release` passes.
 - [ ] `M10-T03` Verify deep links and payment return paths.
@@ -4880,6 +4880,94 @@ jarsigner -verify -verbose -certs app/build/app/outputs/bundle/release/app-relea
 jarsigner -verify -strict app/build/app/outputs/bundle/release/app-release.aab
 cd app && flutter test test/generated_hanko_localizations_test.dart
 cd app && flutter test test/language_registry_test.dart
+git diff --check
+git diff --cached --check
+```
+
+#### M10-T02 iOS Release Candidate
+
+Completed on 2026-06-18. Built and verified the signed iOS release candidate
+IPA for the current multilingual release baseline.
+
+Implementation notes:
+
+- Ran `cd app && flutter build ipa --release --export-options-plist=ios/ExportOptions.plist`.
+- Generated local ignored artifact:
+  `app/build/ios/ipa/STONE SIGNATURE.ipa`.
+- Added machine-readable release evidence:
+  - `doc/qa/m10-t02/ios-release-candidate.json`
+  - `doc/qa/m10-t02/README.md`
+- Committed release-build source updates:
+  - Registered the existing iOS project in `app/.metadata`, so Flutter treats
+    the project as iOS-capable.
+  - Added automatic signing team `5267S9U4PR` to the Runner iOS build
+    configurations.
+  - Added `app/ios/ExportOptions.plist` so App Store IPA export preserves
+    `pubspec.yaml` build number `11`.
+  - Updated the iOS fastlane TestFlight lane to use the same export options.
+  - Accepted Flutter/Xcode Swift Package Manager integration changes generated
+    during the iOS release build.
+- The IPA, App Store Connect API keys, provisioning profiles, and local Xcode
+  wrapper remain ignored or outside the repository.
+
+Release artifact:
+
+- Path: `app/build/ios/ipa/STONE SIGNATURE.ipa`
+- Size: 31,355,322 bytes, reported by Flutter as 31.5MB
+- SHA-256:
+  `b74de0d4c300acfbdfba44f1c6423693835b999a2ea876b835cca1684349c427`
+- Version: `1.1.0+11`
+- Bundle identifier: `org.finitefield.hankofield`
+- Archive path: `app/build/ios/archive/Runner.xcarchive`
+- Archive size: 193.7MB
+
+Signing evidence:
+
+- `codesign --verify --deep --strict --verbose=2` reports the app is valid on
+  disk and satisfies its designated requirement.
+- Signer:
+  `Apple Distribution: Finite Field, K.K. (5267S9U4PR)`
+- Team identifier: `5267S9U4PR`
+- Provisioning profile:
+  `iOS Team Store Provisioning Profile: org.finitefield.hankofield`
+- Provisioning profile expiration: 2027-05-04 15:57:13 JST.
+- Signed time: 2026-06-18 22:30:54 JST.
+
+Known warnings:
+
+- This Mac's global active developer directory is
+  `/Library/Developer/CommandLineTools`, so the local build used
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` plus a temporary
+  `xcrun` wrapper. No local absolute Xcode path is committed.
+- Flutter reports that all iOS plugins are Swift Packages while the project
+  still has CocoaPods integration. Removing CocoaPods can improve build time,
+  but the signed IPA build passed with the current project.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No IPA artifact, App Store Connect credential, provisioning profile, polling,
+  streaming, SSE, or WebSocket behavior was committed.
+- No App Store Connect or TestFlight upload was performed.
+- Rollback path: remove `doc/qa/m10-t02/`, revert the iOS metadata/signing,
+  export options, fastlane, and generated Xcode project changes, then reopen
+  `M10-T02`.
+
+Validation:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer flutter doctor -v
+cd app && flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+shasum -a 256 "app/build/ios/ipa/STONE SIGNATURE.ipa"
+codesign --verify --deep --strict --verbose=2 Payload/Runner.app
+codesign -dv --verbose=4 Payload/Runner.app
+security cms -D -i Payload/Runner.app/embedded.mobileprovision
+jq empty doc/qa/m10-t02/ios-release-candidate.json
+make ios-fastlane-check
+make ios-fastlane-test
+make release-secret-guardrails-check
 git diff --check
 git diff --cached --check
 ```

@@ -12,6 +12,7 @@ test('accepts the checked-in iOS fastlane configuration shape', async () => {
   assert.equal(report.ok, true);
   assert.deepEqual(report.issues, []);
   assert.deepEqual(report.parsed_files, [
+    'app/ios/ExportOptions.plist',
     'app/ios/Gemfile',
     'app/ios/fastlane/Appfile',
     'app/ios/fastlane/Fastfile',
@@ -58,6 +59,7 @@ test('rejects committed App Store Connect credential material in Appfile', async
 async function createTempRoot() {
   const rootDir = await mkdtemp(join(tmpdir(), 'hanko-field-ios-fastlane-'));
   await mkdir(join(rootDir, 'app/ios/fastlane'), { recursive: true });
+  await writeFile(join(rootDir, 'app/ios/ExportOptions.plist'), validExportOptions());
   await writeFile(
     join(rootDir, 'app/ios/Gemfile'),
     'source "https://rubygems.org"\n\ngem "fastlane", "2.228.0"\n',
@@ -82,6 +84,7 @@ default_platform(:ios)
 REPO_ROOT = File.expand_path("../../..", __dir__)
 APP_ROOT = File.join(REPO_ROOT, "app")
 APP_STORE_METADATA_PATH = File.join(REPO_ROOT, "release/store_metadata/app_store")
+IOS_EXPORT_OPTIONS_PATH = File.join(APP_ROOT, "ios/ExportOptions.plist")
 APP_IDENTIFIER = "org.finitefield.hankofield"
 
 def required_env(name)
@@ -127,7 +130,7 @@ platform :ios do
 
   desc "Build the release IPA and upload it to TestFlight."
   lane :testflight_upload do
-    sh("cd \#{Shellwords.escape(APP_ROOT)} && flutter build ipa --release")
+    sh("cd \#{Shellwords.escape(APP_ROOT)} && flutter build ipa --release --export-options-plist=\#{Shellwords.escape(IOS_EXPORT_OPTIONS_PATH)}")
     upload_to_testflight(
       app_identifier: APP_IDENTIFIER,
       api_key_path: required_env("APP_STORE_CONNECT_API_KEY_PATH"),
@@ -136,5 +139,33 @@ platform :ios do
     )
   end
 end
+`;
+}
+
+function validExportOptions() {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+\t<key>destination</key>
+\t<string>export</string>
+\t<key>generateAppStoreInformation</key>
+\t<false/>
+\t<key>manageAppVersionAndBuildNumber</key>
+\t<false/>
+\t<key>method</key>
+\t<string>app-store-connect</string>
+\t<key>signingStyle</key>
+\t<string>automatic</string>
+\t<key>stripSwiftSymbols</key>
+\t<true/>
+\t<key>teamID</key>
+\t<string>5267S9U4PR</string>
+\t<key>testFlightInternalTestingOnly</key>
+\t<false/>
+\t<key>uploadSymbols</key>
+\t<true/>
+</dict>
+</plist>
 `;
 }
