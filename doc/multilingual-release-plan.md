@@ -4376,7 +4376,7 @@ git diff --cached --check
   Output: reviewed translations for Latin, Cyrillic, Indic, Southeast Asian,
   CJK, and RTL groups.
   Done when: each batch passes `make i18n-check LANGS=<batch>`.
-- [ ] `M9-T03` Review brand, legal, and product-name holdouts.
+- [x] `M9-T03` Review brand, legal, and product-name holdouts.
   Output: intention sidecars for approved shared English or legal terms.
   Done when: non-English files have no unapproved English leftovers and the
   `M0-T05` intention sidecar gate is satisfied.
@@ -4466,6 +4466,87 @@ for (const item of report.items) counts.set(item.type, (counts.get(item.type) ??
 const missingFiles = new Set(report.items.filter((item) => item.type === 'missing-file').map((item) => item.file));
 console.log({ items: report.items.length, counts: Object.fromEntries(counts), missing_file_paths: missingFiles.size });
 NODE
+git diff --check
+git diff --cached --check
+```
+
+#### M9-T03 Brand, Legal, and Product-Name Holdout Review
+
+Completed on 2026-06-18. Added a repository-level holdout review gate so
+approved English, brand, legal, URL, payment-provider, and code-literal terms
+remain explicit in intention sidecars before more languages are enabled.
+
+Implementation notes:
+
+- Added `scripts/i18n/holdouts.mjs`.
+- Added `scripts/i18n/holdouts.test.mjs`.
+- Added Make targets:
+  - `make i18n-holdouts`
+  - `make i18n-holdouts-check`
+  - `make i18n-holdouts-test`
+- Added holdout script checks to `make i18n-ci`.
+- The holdout check reuses `validateIntentions({ LANGS=all })`, so any
+  non-English exact same-as-English value without an approved intention sidecar
+  fails before release enablement.
+- Existing intention sidecars were reviewed and no new sidecar approval was
+  required for this task.
+
+Current holdout review summary:
+
+- `LANGS=all` intention validation passes with zero unapproved same-as-English
+  leftovers.
+- 21 sidecar files are parsed for the review.
+- 1,484 non-English approved holdout entries are tracked.
+- 51 entries are reviewed shared English/legal holdouts.
+- 1,433 entries are deferred because the target locale is not release-enabled
+  yet.
+- Reviewed holdout reason counts:
+  - `brand_name`: 9
+  - `code_literal`: 4
+  - `email`: 1
+  - `intentionally_english`: 2
+  - `legal_entity`: 3
+  - `payment_provider`: 1
+  - `url`: 9
+  - `url_or_email`: 22
+
+Holdout policy:
+
+- `brand_name` approvals cover `STONE SIGNATURE` where the exact English brand
+  name is intentionally retained.
+- `legal_entity` approvals cover legal company-name strings such as
+  `Finite Field, K.K.`.
+- `payment_provider` approvals cover provider names such as `Stripe Checkout`.
+- `url`, `url_or_email`, and `email` approvals cover support, legal, privacy,
+  and contact targets that must remain literal.
+- `code_literal` and `intentionally_english` approvals cover UI labels or
+  lookup literals that are intentionally not translated.
+- `locale_not_release_enabled` is not release-ready translation approval; it is
+  a temporary deferral that must be cleared or re-reviewed before its locale is
+  made app-selectable, web-indexed, or release-enabled.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- Existing intention sidecars remain the source of truth for approved same-as-
+  English values.
+- No language was made app-selectable, web-indexed, or release-enabled.
+- No credentials, signing files, uploads, polling, streaming, SSE, or WebSocket
+  behavior were added.
+- Rollback path: remove `scripts/i18n/holdouts.*`, remove the Makefile targets
+  and `i18n-ci` entries, and reopen `M9-T03`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/holdouts.mjs
+node --check scripts/i18n/holdouts.test.mjs
+node scripts/i18n/intentions.mjs
+LANGS=all node scripts/i18n/intentions.mjs
+make i18n-holdouts-check
+make i18n-holdouts-test
+make i18n-check
+make i18n-ci
 git diff --check
 git diff --cached --check
 ```
