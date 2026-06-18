@@ -1,0 +1,154 @@
+{
+  "format_version": 1,
+  "task": "M10-T06",
+  "date": "2026-06-18",
+  "result": "pass",
+  "scope": "production release signoff gate and release checklist",
+  "manual_confirmation": {
+    "required": true,
+    "required_phrase": "I confirm the Stone Signature production release",
+    "recorded_by_lane_inputs": [
+      "RELEASE_SIGNOFF_PATH",
+      "RELEASE_SIGNOFF_CONFIRMATION"
+    ],
+    "signoff_record_path": "doc/qa/m10-t06/production-release-signoff.json",
+    "lane_json_checks": [
+      "manual_confirmation.required_phrase",
+      "approval.approved_for_m10_t07_execution"
+    ]
+  },
+  "production_lanes": {
+    "android": {
+      "lane": "app/android/fastlane/Fastfile android production",
+      "requires_signoff_path": true,
+      "requires_confirmation_phrase": true,
+      "requires_store_credentials": "SUPPLY_JSON_KEY",
+      "target": "Google Play production track",
+      "default_release_status": "draft",
+      "status": "guarded",
+      "rejects_current_record_until_m10_t07_approval": true
+    },
+    "ios": {
+      "lane": "app/ios/fastlane/Fastfile ios production",
+      "requires_signoff_path": true,
+      "requires_confirmation_phrase": true,
+      "requires_store_credentials": "APP_STORE_CONNECT_API_KEY_PATH",
+      "target": "App Store Connect production upload",
+      "submit_for_review": false,
+      "status": "guarded",
+      "rejects_current_record_until_m10_t07_approval": true
+    }
+  },
+  "checklist": {
+    "android_release_candidate": {
+      "task": "M10-T01",
+      "status": "pass",
+      "evidence": "doc/qa/m10-t01/android-release-candidate.json"
+    },
+    "ios_release_candidate": {
+      "task": "M10-T02",
+      "status": "pass",
+      "evidence": "doc/qa/m10-t02/ios-release-candidate.json"
+    },
+    "deep_links_and_payment_returns": {
+      "task": "M10-T03",
+      "status": "pass",
+      "evidence": "doc/qa/m10-t03/deep-link-payment-return-smoke.json"
+    },
+    "google_play_internal_upload": {
+      "task": "M10-T04",
+      "status": "pending_credentials",
+      "blocker": "SUPPLY_JSON_KEY is not available in the local environment."
+    },
+    "testflight_upload": {
+      "task": "M10-T05",
+      "status": "pending_credentials",
+      "blocker": "APP_STORE_CONNECT_API_KEY_PATH is not available in the local environment."
+    },
+    "screenshots": {
+      "status": "pass",
+      "evidence": [
+        "doc/qa/m7-t05",
+        "release/store_metadata/screenshot_metadata.json"
+      ]
+    },
+    "metadata": {
+      "status": "pass",
+      "evidence": [
+        "release/store_metadata/google_play",
+        "release/store_metadata/app_store"
+      ]
+    },
+    "rollback": {
+      "status": "defined",
+      "notes": "Hold Google Play production release as draft unless intentionally changed during M10-T07; App Store production lane uploads with submit_for_review=false."
+    },
+    "support_readiness": {
+      "status": "ready_for_m10_t07_review",
+      "notes": "Support URLs and store metadata source are generated and checked; live store tester availability depends on M10-T04 and M10-T05."
+    }
+  },
+  "approval": {
+    "approved_for_m10_t07_execution": false,
+    "reason": "M10-T04 and M10-T05 remain pending because store credentials are not available in this environment.",
+    "release_owner_must_update_before_m10_t07": true
+  },
+  "validation": [
+    {
+      "command": "node --check scripts/release/android_fastlane_config.mjs",
+      "status": "pass"
+    },
+    {
+      "command": "node --check scripts/release/ios_fastlane_config.mjs",
+      "status": "pass"
+    },
+    {
+      "command": "make android-fastlane-check",
+      "status": "pass"
+    },
+    {
+      "command": "make android-fastlane-test",
+      "status": "pass"
+    },
+    {
+      "command": "make ios-fastlane-check",
+      "status": "pass"
+    },
+    {
+      "command": "make ios-fastlane-test",
+      "status": "pass"
+    },
+    {
+      "command": "make release-secret-guardrails-check",
+      "status": "pass"
+    },
+    {
+      "command": "make release-secret-guardrails-test",
+      "status": "pass"
+    },
+    {
+      "command": "jq empty doc/qa/m10-t06/production-release-signoff.json",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-ci",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --cached --check",
+      "status": "pass"
+    }
+  ],
+  "preservation": {
+    "registry_flags_changed": false,
+    "translation_values_changed": false,
+    "release_enabled_changed": false,
+    "credentials_changed": false,
+    "production_upload_performed": false,
+    "polling_streaming_sse_websocket_changed": false
+  }
+}

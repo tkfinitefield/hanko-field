@@ -90,9 +90,12 @@ function validateFastfile(fastfile, issues) {
   requirePattern(fastfile, /APP_IDENTIFIER = "org\.finitefield\.hankofield"/, file, 'APP_IDENTIFIER', issues);
   requirePattern(fastfile, /APP_STORE_METADATA_PATH = File\.join\(REPO_ROOT, "release\/store_metadata\/app_store"\)/, file, 'APP_STORE_METADATA_PATH', issues);
   requirePattern(fastfile, /IOS_EXPORT_OPTIONS_PATH = File\.join\(APP_ROOT, "ios\/ExportOptions\.plist"\)/, file, 'IOS_EXPORT_OPTIONS_PATH', issues);
+  requirePattern(fastfile, /SIGNOFF_CONFIRMATION_PHRASE = "I confirm the Stone Signature production release"/, file, 'SIGNOFF_CONFIRMATION_PHRASE', issues);
+  requirePattern(fastfile, /def require_release_signoff\(platform\)[\s\S]*RELEASE_SIGNOFF_PATH[\s\S]*RELEASE_SIGNOFF_CONFIRMATION[\s\S]*SIGNOFF_CONFIRMATION_PHRASE[\s\S]*File\.file\?\(signoff_path\)[\s\S]*JSON\.parse\(File\.read\(signoff_path\)\)[\s\S]*manual_confirmation[\s\S]*required_phrase[\s\S]*approval[\s\S]*approved_for_m10_t07_execution[\s\S]*end/, file, 'require_release_signoff', issues);
   requirePattern(fastfile, /lane :metadata_check do[\s\S]*make app-store-metadata-check[\s\S]*end/, file, 'metadata_check', issues);
   requirePattern(fastfile, /lane :metadata do[\s\S]*deliver\(/, file, 'metadata', issues);
   requirePattern(fastfile, /lane :testflight_upload do[\s\S]*flutter build ipa --release --export-options-plist=\#\{Shellwords\.escape\(IOS_EXPORT_OPTIONS_PATH\)\}[\s\S]*upload_to_testflight\(/, file, 'testflight_upload', issues);
+  requirePattern(fastfile, /lane :production do[\s\S]*require_release_signoff\("ios"\)[\s\S]*flutter build ipa --release --export-options-plist=\#\{Shellwords\.escape\(IOS_EXPORT_OPTIONS_PATH\)\}[\s\S]*upload_to_app_store\(/, file, 'production', issues);
 
   const metadataLane = extractLane(fastfile, 'metadata');
   if (metadataLane === null) {
@@ -125,6 +128,22 @@ function validateFastfile(fastfile, issues) {
     requirePattern(testflightLane, /api_key_path: required_env\("APP_STORE_CONNECT_API_KEY_PATH"\)/, file, 'testflight_upload.api_key_path', issues);
     requirePattern(testflightLane, /ipa: latest_ipa_path/, file, 'testflight_upload.ipa', issues);
     requirePattern(testflightLane, /skip_submission: ENV\.fetch\("TESTFLIGHT_SKIP_SUBMISSION", "true"\) != "false"/, file, 'testflight_upload.skip_submission_default', issues);
+  }
+
+  const productionLane = extractLane(fastfile, 'production');
+  if (productionLane === null) {
+    issues.push({
+      code: 'ios-fastlane-missing-lane',
+      file,
+      key: 'production',
+      message: 'production lane is missing',
+    });
+  } else {
+    requirePattern(productionLane, /require_release_signoff\("ios"\)/, file, 'production.signoff', issues);
+    requirePattern(productionLane, /api_key_path: required_env\("APP_STORE_CONNECT_API_KEY_PATH"\)/, file, 'production.api_key_path', issues);
+    requirePattern(productionLane, /ipa: latest_ipa_path/, file, 'production.ipa', issues);
+    requirePattern(productionLane, /submit_for_review: false/, file, 'production.submit_for_review_default', issues);
+    rejectPattern(productionLane, /upload_to_testflight|pilot\(/, file, 'production.testflight_upload', issues);
   }
 
   rejectPattern(fastfile, /BEGIN PRIVATE KEY|issuer_id|key_id|private_key|\.p8/i, file, 'secret', issues);

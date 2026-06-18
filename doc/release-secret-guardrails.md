@@ -19,6 +19,11 @@ committed.
   until the Google Play internal lane is intentionally allowed to upload.
 - `TESTFLIGHT_SKIP_SUBMISSION`: optional iOS override. Leave unset or `true`
   until TestFlight submission behavior is intentionally changed.
+- `RELEASE_SIGNOFF_PATH`: path to the checked production signoff record used by
+  production fastlane lanes.
+- `RELEASE_SIGNOFF_CONFIRMATION`: exact manual confirmation phrase required by
+  production fastlane lanes. The current required value is
+  `I confirm the Stone Signature production release`.
 
 ## Files That Must Not Be Committed
 
@@ -60,3 +65,7 @@ make i18n-ci
 These checks confirm that known release-secret paths are ignored and that
 tracked files do not include signing secrets, store credentials, exported
 release binaries, or local fastlane reports.
+
+Production fastlane lanes must also require `RELEASE_SIGNOFF_PATH` and
+`RELEASE_SIGNOFF_CONFIRMATION` before contacting Google Play production or App
+Store Connect production upload paths.

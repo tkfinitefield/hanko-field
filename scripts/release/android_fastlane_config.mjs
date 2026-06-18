@@ -82,9 +82,12 @@ function validateFastfile(fastfile, issues) {
   requirePattern(fastfile, /^default_platform\(:android\)$/m, file, 'default_platform', issues);
   requirePattern(fastfile, /PACKAGE_NAME = "org\.finitefield\.hankofield"/, file, 'PACKAGE_NAME', issues);
   requirePattern(fastfile, /GOOGLE_PLAY_METADATA_PATH = File\.join\(REPO_ROOT, "release\/store_metadata\/google_play"\)/, file, 'GOOGLE_PLAY_METADATA_PATH', issues);
+  requirePattern(fastfile, /SIGNOFF_CONFIRMATION_PHRASE = "I confirm the Stone Signature production release"/, file, 'SIGNOFF_CONFIRMATION_PHRASE', issues);
+  requirePattern(fastfile, /def require_release_signoff\(platform\)[\s\S]*RELEASE_SIGNOFF_PATH[\s\S]*RELEASE_SIGNOFF_CONFIRMATION[\s\S]*SIGNOFF_CONFIRMATION_PHRASE[\s\S]*File\.file\?\(signoff_path\)[\s\S]*JSON\.parse\(File\.read\(signoff_path\)\)[\s\S]*manual_confirmation[\s\S]*required_phrase[\s\S]*approval[\s\S]*approved_for_m10_t07_execution[\s\S]*end/, file, 'require_release_signoff', issues);
   requirePattern(fastfile, /lane :metadata_check do[\s\S]*make google-play-metadata-check[\s\S]*end/, file, 'metadata_check', issues);
   requirePattern(fastfile, /lane :metadata do[\s\S]*upload_to_play_store\(/, file, 'metadata', issues);
   requirePattern(fastfile, /lane :internal do[\s\S]*flutter build appbundle --release[\s\S]*upload_to_play_store\(/, file, 'internal', issues);
+  requirePattern(fastfile, /lane :production do[\s\S]*require_release_signoff\("android"\)[\s\S]*flutter build appbundle --release[\s\S]*upload_to_play_store\(/, file, 'production', issues);
 
   const metadataLane = extractLane(fastfile, 'metadata');
   if (metadataLane === null) {
@@ -118,6 +121,21 @@ function validateFastfile(fastfile, issues) {
     requirePattern(internalLane, /track: "internal"/, file, 'internal.track', issues);
     requirePattern(internalLane, /aab: RELEASE_AAB_PATH/, file, 'internal.aab', issues);
     requirePattern(internalLane, /validate_only: ENV\.fetch\("SUPPLY_VALIDATE_ONLY", "true"\) != "false"/, file, 'internal.validate_only_default', issues);
+  }
+
+  const productionLane = extractLane(fastfile, 'production');
+  if (productionLane === null) {
+    issues.push({
+      code: 'android-fastlane-missing-lane',
+      file,
+      key: 'production',
+      message: 'production lane is missing',
+    });
+  } else {
+    requirePattern(productionLane, /require_release_signoff\("android"\)/, file, 'production.signoff', issues);
+    requirePattern(productionLane, /track: "production"/, file, 'production.track', issues);
+    requirePattern(productionLane, /aab: RELEASE_AAB_PATH/, file, 'production.aab', issues);
+    requirePattern(productionLane, /release_status: ENV\.fetch\("SUPPLY_PRODUCTION_RELEASE_STATUS", "draft"\)/, file, 'production.release_status_default', issues);
   }
 
   rejectPattern(fastfile, /BEGIN PRIVATE KEY|private_key|client_secret|upload-keystore|key\.properties/i, file, 'secret', issues);

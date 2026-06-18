@@ -4800,7 +4800,7 @@ git diff --cached --check
 - [ ] `M10-T05` Upload to TestFlight.
   Output: fastlane TestFlight upload evidence.
   Done when: TestFlight testers can install the build.
-- [ ] `M10-T06` Run production release signoff.
+- [x] `M10-T06` Run production release signoff.
   Output: checklist covering validation gates, screenshots, metadata, rollback,
   and support readiness.
   Done when: production lane requires and records explicit manual confirmation.
@@ -5045,6 +5045,81 @@ cargo test --manifest-path web/Cargo.toml payment_result_urls_preserve_app_retur
 cargo test --manifest-path web/Cargo.toml pilot_payment_result_urls_preserve_app_return_route_codes -- --nocapture
 cargo test --manifest-path web/Cargo.toml app_checkout_success_page_does_not_auto_redirect_to_custom_scheme -- --nocapture
 cargo test --manifest-path web/Cargo.toml pilot_payment_routes_render_localized_copy -- --nocapture
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M10-T06 Production Release Signoff
+
+Completed on 2026-06-18. Added guarded production fastlane lanes and recorded
+the production release checklist state before staged production execution.
+
+Implementation notes:
+
+- Added Android `production` lane in `app/android/fastlane/Fastfile`.
+  - Builds the release AAB.
+  - Uploads to the Google Play `production` track only after explicit signoff.
+  - Defaults `SUPPLY_PRODUCTION_RELEASE_STATUS` to `draft`.
+- Added iOS `production` lane in `app/ios/fastlane/Fastfile`.
+  - Builds the release IPA.
+  - Uploads a production App Store Connect binary only after explicit signoff.
+  - Keeps `submit_for_review: false` so App Store review submission remains a
+    separate release-owner action.
+- Added shared production signoff requirements:
+  - `RELEASE_SIGNOFF_PATH` must point to an existing signoff record.
+  - `RELEASE_SIGNOFF_CONFIRMATION` must exactly equal
+    `I confirm the Stone Signature production release`.
+  - The signoff JSON must record the same confirmation phrase and set
+    `approval.approved_for_m10_t07_execution=true`; the committed M10-T06
+    record intentionally keeps that value `false` until M10-T07.
+- Updated Android and iOS fastlane config validators so production lanes must
+  call `require_release_signoff`.
+- Added regression tests proving production lanes fail validation if the manual
+  signoff call is removed.
+- Updated `doc/release-secret-guardrails.md` with production signoff inputs.
+- Added signoff evidence:
+  - `doc/qa/m10-t06/README.md`
+  - `doc/qa/m10-t06/production-release-signoff.json`
+
+Checklist state:
+
+- `M10-T01` Android release candidate evidence is present.
+- `M10-T02` iOS release candidate evidence is present.
+- `M10-T03` deep-link and payment-return evidence is present.
+- Store metadata, screenshots, i18n checks, fastlane config checks, and release
+  secret guardrails are covered by automated gates.
+- `M10-T04` Google Play internal upload remains pending because
+  `SUPPLY_JSON_KEY` is not available in this environment.
+- `M10-T05` TestFlight upload remains pending because
+  `APP_STORE_CONNECT_API_KEY_PATH` is not available in this environment.
+- `M10-T07` must not execute production release until the release owner updates
+  the signoff record after internal/TestFlight evidence is available. The
+  production lanes reject the current M10-T06 signoff JSON until that happens.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No signing material, upload credential, production upload, polling,
+  streaming, SSE, or WebSocket behavior was committed.
+- Rollback path: remove `doc/qa/m10-t06/`, revert the production fastlane lane,
+  validator, test, and guardrail documentation changes, then reopen
+  `M10-T06`.
+
+Validation:
+
+```sh
+node --check scripts/release/android_fastlane_config.mjs
+node --check scripts/release/ios_fastlane_config.mjs
+make android-fastlane-check
+make android-fastlane-test
+make ios-fastlane-check
+make ios-fastlane-test
+make release-secret-guardrails-check
+make release-secret-guardrails-test
+jq empty doc/qa/m10-t06/production-release-signoff.json
 make i18n-ci
 git diff --check
 git diff --cached --check
