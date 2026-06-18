@@ -212,29 +212,11 @@ Future<String> _checkoutRouteCodeForLocale(Locale locale) async {
   try {
     final registry = await AppLanguageRegistry.load();
     return registry.routeCodeForLocale(locale) ??
-        _fallbackCheckoutRouteCodeForLocale(locale);
+        fallbackRouteCodeForLocale(locale);
   } catch (error) {
     debugPrint('failed to load checkout locale registry: $error');
-    return _fallbackCheckoutRouteCodeForLocale(locale);
+    return fallbackRouteCodeForLocale(locale);
   }
-}
-
-String _fallbackCheckoutRouteCodeForLocale(Locale locale) {
-  final languageCode = locale.languageCode.trim().toLowerCase();
-  final scriptCode = locale.scriptCode?.trim().toLowerCase();
-  final countryCode = locale.countryCode?.trim().toLowerCase();
-
-  if (languageCode == 'zh') {
-    if (scriptCode == 'hant' ||
-        countryCode == 'tw' ||
-        countryCode == 'hk' ||
-        countryCode == 'mo') {
-      return 'zhtw';
-    }
-    return 'zh';
-  }
-
-  return languageCode.isEmpty ? 'en' : languageCode;
 }
 
 Locale? _supportedLocale(Locale? locale) {
@@ -1943,7 +1925,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
 
     final checkoutRouteCode =
         _checkoutRouteCode ??
-        _fallbackCheckoutRouteCodeForLocale(Localizations.localeOf(context));
+        fallbackRouteCodeForLocale(Localizations.localeOf(context));
     final sourceUri = Uri(
       scheme: 'hankofield',
       host: 'checkout',
@@ -2225,7 +2207,7 @@ SealStyleSelection _sealStyleSelectionFromLocalSealDesign(
 }
 
 String _reasonLanguageForCurrentLocale(BuildContext context) {
-  return Localizations.localeOf(context).languageCode == 'ja' ? 'ja' : 'en';
+  return fallbackRouteCodeForLocale(Localizations.localeOf(context));
 }
 
 SealShape _sealShapeFromApiValue(String value) {

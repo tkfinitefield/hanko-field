@@ -2349,7 +2349,7 @@ git diff --cached --check
   Output: consistent handling for `lang`, `locale`, and preferred locale.
   Done when: Stripe return URLs preserve the selected route code and the
   `M0-T05` migration-safety checklist is satisfied.
-- [ ] `M4-T06` Define Gemini `reason_language` mapping.
+- [x] `M4-T06` Define Gemini `reason_language` mapping.
   Output: registry-backed mapping from route code to prompt language.
   Done when: unsupported prompt languages fallback with visible diagnostics.
 - [ ] `M4-T07` Add API tests.
@@ -2591,6 +2591,66 @@ Full Flutter suite note:
   `ListTile background color or ink splashes may be invisible` assertions in
   widget tests that exercise pre-existing decorated selection rows. The
   M4-T05-specific Flutter tests above pass.
+
+#### M4-T06 Gemini Reason Language Mapping
+
+Completed on 2026-06-18. Added registry-backed `reason_language` resolution for
+Gemini Kanji candidate prompts and surfaced fallback diagnostics in API
+responses.
+
+Implementation notes:
+
+- Added API-side `reason_language_for_locale` resolution on top of
+  `config/languages.json` route-code and BCP-47 lookup.
+- Kept Gemini prompt languages limited to `en` and `ja` until prompt quality is
+  explicitly approved for additional languages.
+- Mapped supported route and BCP-47 values such as `en`, `en-US`, `ja`, and
+  `ja-JP` to their prompt languages.
+- Mapped known but unsupported prompt locales such as `zh`, `zhtw`,
+  `zh-Hans`, and `zh-Hant` to `en` with
+  `unsupported_prompt_language` fallback diagnostics.
+- Mapped unknown locale-like values to `en` with `unknown_locale` fallback
+  diagnostics instead of sending unsupported prompt language strings to Gemini.
+- Added API response diagnostics:
+  `reason_language_requested`, `reason_language_route_code`, and
+  `reason_language_fallback`.
+- Updated app-side reason-language selection to send route codes derived from
+  the Flutter locale, preserving `zhtw` for Traditional Chinese forms.
+- Added Rust and Flutter tests for supported prompt-language mapping,
+  unsupported fallback, unknown fallback, and Traditional Chinese route-code
+  preservation.
+
+M0-T05 preservation evidence:
+
+- Existing English requests still use `reason_language=en`.
+- Existing Japanese requests still use `reason_language=ja` and produce
+  Japanese prompt instructions.
+- Existing missing `reason_language` behavior remains English default.
+- Existing legacy aliases `english` and `japanese` remain accepted.
+- Chinese disposition: `zh` and `zhtw` are now preserved as requested route
+  context, but Gemini prompt copy falls back to English until Chinese prompt
+  quality is approved.
+- Rollback path: remove the reason-language registry resolver and response
+  diagnostics, then restore raw `reason_language` validation and the previous
+  app `ja` / `en` branch.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+dart format --set-exit-if-changed app/lib/app/app.dart app/lib/app/localization/language_registry.dart app/lib/features/design/presentation/design_home_screen.dart app/test/language_registry_test.dart
+cargo test --manifest-path api/Cargo.toml reason_language -- --nocapture
+cargo test --manifest-path api/Cargo.toml kanji -- --nocapture
+flutter test test/language_registry_test.dart
+cargo test --manifest-path api/Cargo.toml
+flutter test test/api_dto_test.dart test/language_registry_test.dart
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
 
 ### M5: Admin Data Preservation
 

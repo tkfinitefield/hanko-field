@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/localization/app_localization.dart';
+import '../../../app/localization/language_registry.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/errors/core_errors.dart';
 import '../../../core/widgets/core_widgets.dart';
@@ -2554,8 +2555,7 @@ class _TipBadge extends StatelessWidget {
 }
 
 String _reasonLanguageFor(BuildContext context) {
-  final languageCode = context.l10n.locale.languageCode;
-  return languageCode == 'ja' ? 'ja' : 'en';
+  return fallbackRouteCodeForLocale(context.l10n.locale);
 }
 
 String _genderLabel(HankoLocalizations l10n, KanjiCandidateGender gender) {

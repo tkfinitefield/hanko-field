@@ -120,6 +120,27 @@ void main() {
     },
   );
 
+  test('fallback route code preserves traditional Chinese route code', () {
+    expect(
+      fallbackRouteCodeForLocale(
+        const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+      ),
+      'zhtw',
+    );
+    expect(
+      fallbackRouteCodeForLocale(
+        const Locale.fromSubtags(languageCode: 'zh', countryCode: 'TW'),
+      ),
+      'zhtw',
+    );
+    expect(
+      fallbackRouteCodeForLocale(
+        const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
+      ),
+      'zh',
+    );
+  });
+
   test('parses RTL registry entries for layout probes', () async {
     final registry = await AppLanguageRegistry.load();
     final arabic = registry.languages.singleWhere(

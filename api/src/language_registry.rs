@@ -18,6 +18,14 @@ pub struct RegistryPublicConfig {
     pub currency_by_locale: HashMap<String, String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasonLanguageResolution {
+    pub requested_locale: String,
+    pub route_code: String,
+    pub prompt_language: String,
+    pub fallback_reason: Option<&'static str>,
+}
+
 #[derive(Debug, Deserialize)]
 struct LanguageRegistryEntry {
     route_code: String,
@@ -131,6 +139,41 @@ pub fn normalize_currency_code(raw: &str) -> Option<String> {
     Some(value)
 }
 
+pub fn reason_language_for_locale(raw: Option<&str>) -> ReasonLanguageResolution {
+    let requested = raw
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("en");
+    let requested_locale =
+        normalize_locale_token(requested).unwrap_or_else(|| requested.trim().to_lowercase());
+    let route_code = match requested_locale.as_str() {
+        "english" => Some("en".to_owned()),
+        "japanese" => Some("ja".to_owned()),
+        _ => route_code_for_locale(requested),
+    };
+
+    match route_code {
+        Some(route_code) if route_code == "en" || route_code == "ja" => ReasonLanguageResolution {
+            requested_locale,
+            prompt_language: route_code.clone(),
+            route_code,
+            fallback_reason: None,
+        },
+        Some(route_code) => ReasonLanguageResolution {
+            requested_locale,
+            route_code,
+            prompt_language: "en".to_owned(),
+            fallback_reason: Some("unsupported_prompt_language"),
+        },
+        None => ReasonLanguageResolution {
+            requested_locale,
+            route_code: "en".to_owned(),
+            prompt_language: "en".to_owned(),
+            fallback_reason: Some("unknown_locale"),
+        },
+    }
+}
+
 fn registry_entries() -> Result<Vec<LanguageRegistryEntry>> {
     serde_json::from_str::<Vec<LanguageRegistryEntry>>(LANGUAGE_REGISTRY_JSON)
         .context("failed to parse language registry")
@@ -197,5 +240,36 @@ mod tests {
         assert_eq!(route_code_for_locale("zh-CN").as_deref(), Some("zh"));
         assert_eq!(route_code_for_locale("ja-JP").as_deref(), Some("ja"));
         assert_eq!(route_code_for_locale("xx").as_deref(), None);
+    }
+
+    #[test]
+    fn reason_language_for_locale_falls_back_with_diagnostics() {
+        assert_eq!(
+            reason_language_for_locale(Some("ja-JP")),
+            ReasonLanguageResolution {
+                requested_locale: "ja-jp".to_owned(),
+                route_code: "ja".to_owned(),
+                prompt_language: "ja".to_owned(),
+                fallback_reason: None,
+            }
+        );
+        assert_eq!(
+            reason_language_for_locale(Some("zh_Hant")),
+            ReasonLanguageResolution {
+                requested_locale: "zh-hant".to_owned(),
+                route_code: "zhtw".to_owned(),
+                prompt_language: "en".to_owned(),
+                fallback_reason: Some("unsupported_prompt_language"),
+            }
+        );
+        assert_eq!(
+            reason_language_for_locale(Some("xx")),
+            ReasonLanguageResolution {
+                requested_locale: "xx".to_owned(),
+                route_code: "en".to_owned(),
+                prompt_language: "en".to_owned(),
+                fallback_reason: Some("unknown_locale"),
+            }
+        );
     }
 }

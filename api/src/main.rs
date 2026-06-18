@@ -515,6 +515,9 @@ struct GenerateKanjiCandidatesRequest {
 struct GenerateKanjiCandidatesInput {
     real_name: String,
     reason_language: String,
+    reason_language_requested: String,
+    reason_language_route_code: String,
+    reason_language_fallback_reason: Option<&'static str>,
     gender: CandidateGender,
     kanji_style: KanjiStyle,
     count: usize,
@@ -1735,6 +1738,15 @@ async fn handle_generate_kanji_candidates(State(state): State<AppState>, body: B
         json!({
             "real_name": input.real_name,
             "reason_language": input.reason_language,
+            "reason_language_requested": input.reason_language_requested,
+            "reason_language_route_code": input.reason_language_route_code,
+            "reason_language_fallback": input.reason_language_fallback_reason.map(|reason| {
+                json!({
+                    "used": true,
+                    "reason": reason,
+                    "fallback_to": input.reason_language,
+                })
+            }),
             "gender": input.gender.as_str(),
             "kanji_style": input.kanji_style.as_str(),
             "candidates": candidates.into_iter().map(|candidate| {
@@ -4701,17 +4713,15 @@ fn validate_generate_kanji_candidates_request(
         bail!("real_name must be 120 characters or fewer");
     }
 
-    let reason_language = request
-        .reason_language
-        .unwrap_or_else(|| "en".to_owned())
-        .trim()
-        .to_owned();
-    if reason_language.is_empty() {
+    let reason_language_raw = request.reason_language.as_deref().unwrap_or("en").trim();
+    if reason_language_raw.is_empty() {
         bail!("reason_language is required");
     }
-    if reason_language.chars().count() > 32 {
+    if reason_language_raw.chars().count() > 32 {
         bail!("reason_language must be 32 characters or fewer");
     }
+    let reason_language_resolution =
+        language_registry::reason_language_for_locale(Some(reason_language_raw));
 
     let gender = parse_candidate_gender(request.gender.as_deref())?;
     let kanji_style = parse_kanji_style(request.kanji_style.as_deref())?;
@@ -4723,7 +4733,10 @@ fn validate_generate_kanji_candidates_request(
 
     Ok(GenerateKanjiCandidatesInput {
         real_name,
-        reason_language,
+        reason_language: reason_language_resolution.prompt_language,
+        reason_language_requested: reason_language_resolution.requested_locale,
+        reason_language_route_code: reason_language_resolution.route_code,
+        reason_language_fallback_reason: reason_language_resolution.fallback_reason,
         gender,
         kanji_style,
         count,
@@ -10944,6 +10957,9 @@ mod tests {
         let input =
             validate_generate_kanji_candidates_request(request).expect("request must be valid");
         assert_eq!(input.reason_language, "en");
+        assert_eq!(input.reason_language_requested, "en");
+        assert_eq!(input.reason_language_route_code, "en");
+        assert_eq!(input.reason_language_fallback_reason, None);
         assert_eq!(input.gender, CandidateGender::Unspecified);
         assert_eq!(input.kanji_style, KanjiStyle::Japanese);
         assert_eq!(input.count, DEFAULT_KANJI_CANDIDATE_COUNT);
@@ -10964,6 +10980,47 @@ mod tests {
         assert_eq!(input.gender, CandidateGender::Male);
         assert_eq!(input.kanji_style, KanjiStyle::Chinese);
         assert_eq!(input.count, 3);
+    }
+
+    #[test]
+    fn validate_generate_kanji_candidates_request_maps_route_code_prompt_language() {
+        let request = GenerateKanjiCandidatesRequest {
+            real_name: "山田 太郎".to_owned(),
+            reason_language: Some("ja-JP".to_owned()),
+            gender: None,
+            kanji_style: None,
+            count: Some(3),
+        };
+
+        let input =
+            validate_generate_kanji_candidates_request(request).expect("request must be valid");
+
+        assert_eq!(input.reason_language, "ja");
+        assert_eq!(input.reason_language_requested, "ja-jp");
+        assert_eq!(input.reason_language_route_code, "ja");
+        assert_eq!(input.reason_language_fallback_reason, None);
+    }
+
+    #[test]
+    fn validate_generate_kanji_candidates_request_falls_back_for_unsupported_prompt_language() {
+        let request = GenerateKanjiCandidatesRequest {
+            real_name: "Mei".to_owned(),
+            reason_language: Some("zh_Hant".to_owned()),
+            gender: None,
+            kanji_style: Some("taiwanese".to_owned()),
+            count: Some(3),
+        };
+
+        let input =
+            validate_generate_kanji_candidates_request(request).expect("request must be valid");
+
+        assert_eq!(input.reason_language, "en");
+        assert_eq!(input.reason_language_requested, "zh-hant");
+        assert_eq!(input.reason_language_route_code, "zhtw");
+        assert_eq!(
+            input.reason_language_fallback_reason,
+            Some("unsupported_prompt_language")
+        );
     }
 
     #[test]
@@ -11133,6 +11190,9 @@ mod tests {
         let input = GenerateKanjiCandidatesInput {
             real_name: "山田 太郎".to_owned(),
             reason_language: "ja".to_owned(),
+            reason_language_requested: "ja".to_owned(),
+            reason_language_route_code: "ja".to_owned(),
+            reason_language_fallback_reason: None,
             gender: CandidateGender::Male,
             kanji_style: KanjiStyle::Japanese,
             count: 6,
@@ -11151,6 +11211,9 @@ mod tests {
         let input = GenerateKanjiCandidatesInput {
             real_name: "山田 太郎".to_owned(),
             reason_language: "en".to_owned(),
+            reason_language_requested: "zhtw".to_owned(),
+            reason_language_route_code: "zhtw".to_owned(),
+            reason_language_fallback_reason: Some("unsupported_prompt_language"),
             gender: CandidateGender::Unspecified,
             kanji_style: KanjiStyle::Chinese,
             count: 4,

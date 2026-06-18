@@ -130,6 +130,24 @@ class AppLanguageOption {
   }
 }
 
+String fallbackRouteCodeForLocale(Locale locale) {
+  final languageCode = locale.languageCode.trim().toLowerCase();
+  final scriptCode = locale.scriptCode?.trim().toLowerCase();
+  final countryCode = locale.countryCode?.trim().toLowerCase();
+
+  if (languageCode == 'zh') {
+    if (scriptCode == 'hant' ||
+        countryCode == 'tw' ||
+        countryCode == 'hk' ||
+        countryCode == 'mo') {
+      return 'zhtw';
+    }
+    return 'zh';
+  }
+
+  return languageCode.isEmpty ? 'en' : languageCode;
+}
+
 List<Object?> _decodeList(String source, String path) {
   final decoded = jsonDecode(source);
   if (decoded is List<Object?>) {
