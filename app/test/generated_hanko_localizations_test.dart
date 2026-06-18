@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hankofield/app/localization/hanko_localizations.dart';
 import 'package:hankofield/l10n/generated/generated_hanko_localizations.dart';
 
 void main() {
@@ -19,6 +20,16 @@ void main() {
 
     expect(l10n.designKanjiStyleChinese, '中国风格');
     expect(l10n.designKanjiStyleTaiwanese, '台湾风格');
+  });
+
+  test('HankoLocalizations compatibility API uses generated localization', () {
+    expect(hankoSupportedLocales, const [Locale('en'), Locale('ja')]);
+
+    final l10n = lookupGeneratedHankoLocalizations(const Locale('ja'));
+    expect(l10n.locale, const Locale('ja'));
+    expect(l10n.designTipPrefix, 'ヒント: ');
+    expect(l10n.orderStatusPaid, '支払い済み');
+    expect(l10n.settingsVersionMessage('1.2.3'), 'バージョン 1.2.3');
   });
 
   testWidgets('generated delegate loads Chinese migration assets', (

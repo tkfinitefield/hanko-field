@@ -114,8 +114,8 @@ class _HankoAppState extends State<HankoApp> with WidgetsBindingObserver {
       onGenerateTitle: (context) => context.l10n.appTitle,
       debugShowCheckedModeBanner: false,
       locale: widget.locale ?? _preferredLocale,
-      supportedLocales: HankoLocalizations.supportedLocales,
-      localizationsDelegates: HankoLocalizations.localizationsDelegates,
+      supportedLocales: hankoSupportedLocales,
+      localizationsDelegates: hankoLocalizationsDelegates,
       theme: HankoTheme.light(),
       home: _AppLaunchGate(
         hasSeenOnboardingResolver: widget.hasSeenOnboardingResolver,
@@ -204,7 +204,7 @@ Locale? _supportedLocaleForLanguageCode(String? languageCode) {
   if (normalized == null || normalized.isEmpty) {
     return null;
   }
-  for (final locale in HankoLocalizations.supportedLocales) {
+  for (final locale in hankoSupportedLocales) {
     if (locale.languageCode == normalized) {
       return locale;
     }

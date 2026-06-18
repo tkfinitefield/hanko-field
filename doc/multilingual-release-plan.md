@@ -1623,7 +1623,7 @@ layout rules, or enabled-language behavior.
   Output: `app_zh.arb`, `app_zh_Hant.arb`, or approved fallback sidecars.
   Done when: existing Chinese product copy is not lost during ARB migration and
   the `M0-T05` migration-safety checklist is satisfied.
-- [ ] `M2-T03` Replace hand-written localization accessors.
+- [x] `M2-T03` Replace hand-written localization accessors.
   Output: generated localization access in `HankoApp` and feature screens.
   Done when: compatibility wrapper is removed or documented as temporary.
 - [ ] `M2-T04` Move long settings content to JSON assets.
@@ -1721,6 +1721,50 @@ flutter analyze
 make i18n-status-test
 make i18n-status
 ```
+
+#### M2-T03 Generated Localization Access
+
+Completed on 2026-06-18. Replaced the hand-written short-string localization
+map with Flutter `gen-l10n` output while preserving the existing import path
+used by app screens.
+
+Implementation notes:
+
+- `app/lib/l10n/app_en.arb` and `app/lib/l10n/app_ja.arb` now contain the
+  migrated short UI strings from the previous `HankoLocalizations` map.
+- `settingsVersionMessage` is now a generated placeholder method instead of a
+  hand-written template replacement.
+- The inline design tip prefix and order lookup status labels were added to ARB
+  so they no longer branch on `locale.languageCode` in feature code.
+- `app/lib/app/localization/hanko_localizations.dart` no longer contains the
+  hand-written delegate, `_HankoStrings`, or `_localizedValues`. It now keeps a
+  temporary compatibility shim: `typedef HankoLocalizations =
+  GeneratedHankoLocalizations`, the existing `context.l10n` extension, and a
+  generated-locale-to-`Locale` extension for existing helper code.
+- `hankoSupportedLocales` remains `en` and `ja` only, matching the registry's
+  current app-enabled languages. The generated `zh` and `zh_Hant` files remain
+  available for migration coverage but are not exposed by app locale selection
+  in this task.
+- `zh` and `zh_Hant` currently use English fallback for strings not migrated as
+  Chinese assets in `M2-T02`; completing those translations belongs to the pilot
+  and freeze milestones.
+
+Validation:
+
+```sh
+flutter gen-l10n
+flutter test test/generated_hanko_localizations_test.dart
+flutter analyze
+flutter build apk --debug
+make i18n-status-test
+make i18n-status
+jq empty app/lib/l10n/app_en.arb app/lib/l10n/app_ja.arb \
+  app/lib/l10n/app_zh.arb app/lib/l10n/app_zh_Hant.arb
+```
+
+Full `flutter test` was also attempted. It still fails on the pre-existing
+Flutter `ListTile` under `DecoratedBox` assertion in checkout widget tests,
+matching the earlier M2-T01 validation note.
 
 ### M3: Web Copy and Route Migration
 

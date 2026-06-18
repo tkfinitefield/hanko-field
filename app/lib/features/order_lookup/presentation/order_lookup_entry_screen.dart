@@ -587,22 +587,21 @@ String _formatWholeNumber(int value) {
 
 String _statusLabel(HankoLocalizations l10n, String value) {
   final normalized = value.trim().toLowerCase();
-  final isJapanese = l10n.locale.languageCode == 'ja';
   return switch (normalized) {
-    'paid' => isJapanese ? '支払い済み' : 'Paid',
-    'unpaid' => isJapanese ? '未決済' : 'Unpaid',
-    'pending' => isJapanese ? '保留中' : 'Pending',
-    'pending_payment' => isJapanese ? '決済待ち' : 'Pending payment',
-    'failed' => isJapanese ? '失敗' : 'Failed',
-    'cancelled' || 'canceled' => isJapanese ? 'キャンセル' : 'Canceled',
-    'not_started' => isJapanese ? '未開始' : 'Not started',
-    'in_production' => isJapanese ? '制作中' : 'In production',
-    'completed' => isJapanese ? '完了' : 'Completed',
-    'preparing_shipment' => isJapanese ? '発送準備中' : 'Preparing shipment',
-    'not_shipped' => isJapanese ? '未発送' : 'Not shipped',
-    'shipped' => isJapanese ? '発送済み' : 'Shipped',
-    'fulfilled' => isJapanese ? '配送完了' : 'Fulfilled',
-    '' => '-',
+    'paid' => l10n.orderStatusPaid,
+    'unpaid' => l10n.orderStatusUnpaid,
+    'pending' => l10n.orderStatusPending,
+    'pending_payment' => l10n.orderStatusPendingPayment,
+    'failed' => l10n.orderStatusFailed,
+    'cancelled' || 'canceled' => l10n.orderStatusCanceled,
+    'not_started' => l10n.orderStatusNotStarted,
+    'in_production' => l10n.orderStatusInProduction,
+    'completed' => l10n.orderStatusCompleted,
+    'preparing_shipment' => l10n.orderStatusPreparingShipment,
+    'not_shipped' => l10n.orderStatusNotShipped,
+    'shipped' => l10n.orderStatusShipped,
+    'fulfilled' => l10n.orderStatusFulfilled,
+    '' => l10n.orderStatusEmpty,
     _ => _labelFromToken(value),
   };
 }

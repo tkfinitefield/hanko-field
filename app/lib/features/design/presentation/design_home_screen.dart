@@ -2334,9 +2334,7 @@ class _StateTipCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tipPrefix = context.l10n.locale.languageCode == 'ja'
-        ? 'ヒント: '
-        : 'Tip: ';
+    final tipPrefix = context.l10n.designTipPrefix;
 
     return HankoSurfaceCard(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),

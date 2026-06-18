@@ -2,14 +2,1620 @@
   "@@locale": "ja",
   "appTitle": "STONE SIGNATURE",
   "@appTitle": {
-    "description": "MaterialApp に表示するアプリ名。ブランド名のため英語表記を維持する。"
+    "description": "Application title shown by MaterialApp. The brand name intentionally remains in English."
+  },
+  "splashPreparing": "デザイン体験を準備しています。",
+  "@splashPreparing": {
+    "description": "Localized app string for splashPreparing."
+  },
+  "onboardingTitle": "ようこそ",
+  "@onboardingTitle": {
+    "description": "Localized app string for onboardingTitle."
+  },
+  "onboardingHeroTitle": "数分で\n印影を作成",
+  "@onboardingHeroTitle": {
+    "description": "Localized app string for onboardingHeroTitle."
+  },
+  "onboardingTagline": "あなたらしく。時を超えて。\n唯一無二の印鑑へ。",
+  "@onboardingTagline": {
+    "description": "Localized app string for onboardingTagline."
+  },
+  "onboardingKanjiTitle": "名前から漢字を選ぶ",
+  "@onboardingKanjiTitle": {
+    "description": "Localized app string for onboardingKanjiTitle."
+  },
+  "onboardingKanjiMessage": "名前に合わせて意味のある漢字候補を提案します。",
+  "@onboardingKanjiMessage": {
+    "description": "Localized app string for onboardingKanjiMessage."
+  },
+  "onboardingAiTitle": "AIで印影を生成",
+  "@onboardingAiTitle": {
+    "description": "Localized app string for onboardingAiTitle."
+  },
+  "onboardingAiMessage": "美しく整った印影デザインをAIが作成します。",
+  "@onboardingAiMessage": {
+    "description": "Localized app string for onboardingAiMessage."
+  },
+  "onboardingStoneTitle": "天然石を選んで注文",
+  "@onboardingStoneTitle": {
+    "description": "Localized app string for onboardingStoneTitle."
+  },
+  "onboardingStoneMessage": "お気に入りの天然石を選び、職人が丁寧に制作します。",
+  "@onboardingStoneMessage": {
+    "description": "Localized app string for onboardingStoneMessage."
+  },
+  "onboardingStorageTitle": "この端末に保存されます",
+  "@onboardingStorageTitle": {
+    "description": "Localized app string for onboardingStorageTitle."
+  },
+  "onboardingStorageMessage": "保存済み印影とプレビュー画像はこの端末に保存されます。カード情報やCheckoutの秘密情報は端末に保存しません。",
+  "@onboardingStorageMessage": {
+    "description": "Localized app string for onboardingStorageMessage."
+  },
+  "onboardingGetStarted": "はじめる",
+  "@onboardingGetStarted": {
+    "description": "Localized app string for onboardingGetStarted."
+  },
+  "onboardingSaving": "保存中...",
+  "@onboardingSaving": {
+    "description": "Localized app string for onboardingSaving."
+  },
+  "onboardingSkip": "スキップ",
+  "@onboardingSkip": {
+    "description": "Localized app string for onboardingSkip."
+  },
+  "onboardingSaveError": "初回案内の完了状態を保存できませんでした。もう一度お試しください。",
+  "@onboardingSaveError": {
+    "description": "Localized app string for onboardingSaveError."
+  },
+  "design": "デザイン",
+  "@design": {
+    "description": "Localized app string for design."
+  },
+  "mySeals": "マイ印影",
+  "@mySeals": {
+    "description": "Localized app string for mySeals."
+  },
+  "stones": "石",
+  "@stones": {
+    "description": "Localized app string for stones."
+  },
+  "settings": "設定",
+  "@settings": {
+    "description": "Localized app string for settings."
+  },
+  "createCustomSeal": "あなた専用の\n印影を作成",
+  "@createCustomSeal": {
+    "description": "Localized app string for createCustomSeal."
+  },
+  "customSealDescription": "名前から、あなただけの\n天然石印鑑を作ります。",
+  "@customSealDescription": {
+    "description": "Localized app string for customSealDescription."
+  },
+  "startDesigning": "作成をはじめる",
+  "@startDesigning": {
+    "description": "Localized app string for startDesigning."
+  },
+  "designNameTitle": "名前を入力",
+  "@designNameTitle": {
+    "description": "Localized app string for designNameTitle."
+  },
+  "designNameIntro": "あなたの希望に合わせた漢字を提案します。",
+  "@designNameIntro": {
+    "description": "Localized app string for designNameIntro."
+  },
+  "designNameLabel": "お名前",
+  "@designNameLabel": {
+    "description": "Localized app string for designNameLabel."
+  },
+  "designNameHint": "山田 太郎",
+  "@designNameHint": {
+    "description": "Localized app string for designNameHint."
+  },
+  "designNameHelp": "小さな印鑑に合う1-2文字の漢字を提案します。",
+  "@designNameHelp": {
+    "description": "Localized app string for designNameHelp."
+  },
+  "designGenderLabel": "性別の希望",
+  "@designGenderLabel": {
+    "description": "Localized app string for designGenderLabel."
+  },
+  "designGenderUnspecified": "指定なし",
+  "@designGenderUnspecified": {
+    "description": "Localized app string for designGenderUnspecified."
+  },
+  "designGenderMale": "男性的",
+  "@designGenderMale": {
+    "description": "Localized app string for designGenderMale."
+  },
+  "designGenderFemale": "女性的",
+  "@designGenderFemale": {
+    "description": "Localized app string for designGenderFemale."
+  },
+  "designKanjiStyleLabel": "漢字スタイル",
+  "@designKanjiStyleLabel": {
+    "description": "Localized app string for designKanjiStyleLabel."
+  },
+  "designKanjiStyleJapanese": "日本スタイル",
+  "@designKanjiStyleJapanese": {
+    "description": "Localized app string for designKanjiStyleJapanese."
   },
   "designKanjiStyleChinese": "中国スタイル",
   "@designKanjiStyleChinese": {
-    "description": "中国本土寄りの漢字名スタイルを指定する選択肢ラベル。"
+    "description": "Localized app string for designKanjiStyleChinese."
   },
   "designKanjiStyleTaiwanese": "台湾スタイル",
   "@designKanjiStyleTaiwanese": {
-    "description": "台湾寄りの漢字名スタイルを指定する選択肢ラベル。"
+    "description": "Localized app string for designKanjiStyleTaiwanese."
+  },
+  "suggestKanji": "漢字を提案",
+  "@suggestKanji": {
+    "description": "Localized app string for suggestKanji."
+  },
+  "designKanjiTipTitle": "天然石の彫刻にはシンプルな漢字が適しています。",
+  "@designKanjiTipTitle": {
+    "description": "Localized app string for designKanjiTipTitle."
+  },
+  "designKanjiTipMessage": "明快で整った文字が、美しく長く愛せる印影になります。",
+  "@designKanjiTipMessage": {
+    "description": "Localized app string for designKanjiTipMessage."
+  },
+  "designCandidateReadyTitle": "漢字候補の準備ができました",
+  "@designCandidateReadyTitle": {
+    "description": "Localized app string for designCandidateReadyTitle."
+  },
+  "designCandidateReadyMessage": "この名前と希望条件で漢字候補生成へ進めます。",
+  "@designCandidateReadyMessage": {
+    "description": "Localized app string for designCandidateReadyMessage."
+  },
+  "designRequestDetails": "入力内容",
+  "@designRequestDetails": {
+    "description": "Localized app string for designRequestDetails."
+  },
+  "editName": "名前を修正",
+  "@editName": {
+    "description": "Localized app string for editName."
+  },
+  "designLoadingTitle": "漢字を検索中",
+  "@designLoadingTitle": {
+    "description": "Localized app string for designLoadingTitle."
+  },
+  "designLoadingMessage": "漢字候補を作成しています...",
+  "@designLoadingMessage": {
+    "description": "Localized app string for designLoadingMessage."
+  },
+  "designInvalidNameSummary": "名前を入力してください。",
+  "@designInvalidNameSummary": {
+    "description": "Localized app string for designInvalidNameSummary."
+  },
+  "designInvalidNameMessage": "短いお名前またはニックネームを入力してください。",
+  "@designInvalidNameMessage": {
+    "description": "Localized app string for designInvalidNameMessage."
+  },
+  "designSuggestionErrorTitle": "漢字候補を提案できませんでした",
+  "@designSuggestionErrorTitle": {
+    "description": "Localized app string for designSuggestionErrorTitle."
+  },
+  "designSuggestionErrorMessage": "漢字候補の生成中に問題が発生しました。もう一度お試しください。",
+  "@designSuggestionErrorMessage": {
+    "description": "Localized app string for designSuggestionErrorMessage."
+  },
+  "designNoKanjiTitle": "条件に合う漢字が見つかりませんでした",
+  "@designNoKanjiTitle": {
+    "description": "Localized app string for designNoKanjiTitle."
+  },
+  "designNoKanjiMessage": "入力された名前では、彫刻条件に合う漢字候補を出せませんでした。",
+  "@designNoKanjiMessage": {
+    "description": "Localized app string for designNoKanjiMessage."
+  },
+  "designNoKanjiRuleCharacters": "1-2文字のみ",
+  "@designNoKanjiRuleCharacters": {
+    "description": "Localized app string for designNoKanjiRuleCharacters."
+  },
+  "designNoKanjiRuleCommon": "シンプルで一般的な漢字",
+  "@designNoKanjiRuleCommon": {
+    "description": "Localized app string for designNoKanjiRuleCommon."
+  },
+  "designNoKanjiRuleEngraving": "印鑑の彫刻に適している",
+  "@designNoKanjiRuleEngraving": {
+    "description": "Localized app string for designNoKanjiRuleEngraving."
+  },
+  "designErrorTip": "短い名またはニックネームをお試しください。",
+  "@designErrorTip": {
+    "description": "Localized app string for designErrorTip."
+  },
+  "designNoKanjiTip": "より短い名前やニックネームをお試しください。",
+  "@designNoKanjiTip": {
+    "description": "Localized app string for designNoKanjiTip."
+  },
+  "tryAgain": "もう一度試す",
+  "@tryAgain": {
+    "description": "Localized app string for tryAgain."
+  },
+  "back": "戻る",
+  "@back": {
+    "description": "Localized app string for back."
+  },
+  "commonNetworkErrorTitle": "通信エラー",
+  "@commonNetworkErrorTitle": {
+    "description": "Localized app string for commonNetworkErrorTitle."
+  },
+  "commonNetworkErrorMessage": "サーバーに接続できません。通信環境を確認して、もう一度お試しください。",
+  "@commonNetworkErrorMessage": {
+    "description": "Localized app string for commonNetworkErrorMessage."
+  },
+  "commonServerErrorTitle": "サーバーエラー",
+  "@commonServerErrorTitle": {
+    "description": "Localized app string for commonServerErrorTitle."
+  },
+  "commonServerErrorMessage": "一時的な問題が発生しています。しばらく待ってからもう一度お試しください。",
+  "@commonServerErrorMessage": {
+    "description": "Localized app string for commonServerErrorMessage."
+  },
+  "storageErrorTitle": "印影を保存できませんでした",
+  "@storageErrorTitle": {
+    "description": "Localized app string for storageErrorTitle."
+  },
+  "storageErrorMessage": "この端末に印影画像を保存できませんでした。ストレージ権限と空き容量を確認して、もう一度お試しください。",
+  "@storageErrorMessage": {
+    "description": "Localized app string for storageErrorMessage."
+  },
+  "deepLinkErrorTitle": "Checkout戻りURLを処理できませんでした",
+  "@deepLinkErrorTitle": {
+    "description": "Localized app string for deepLinkErrorTitle."
+  },
+  "deepLinkErrorMessage": "Stripe Checkoutからの戻りURLを処理できませんでした。もう一度Checkoutを開くか、決済済みの可能性がある場合はお問い合わせください。",
+  "@deepLinkErrorMessage": {
+    "description": "Localized app string for deepLinkErrorMessage."
+  },
+  "maintenanceTitle": "ただいまご利用いただけません",
+  "@maintenanceTitle": {
+    "description": "Localized app string for maintenanceTitle."
+  },
+  "maintenanceMessage": "Stone Signatureは現在メンテナンス中です。しばらく時間をおいてからもう一度お試しください。",
+  "@maintenanceMessage": {
+    "description": "Localized app string for maintenanceMessage."
+  },
+  "appUpdateRequiredTitle": "アプリの更新が必要です",
+  "@appUpdateRequiredTitle": {
+    "description": "Localized app string for appUpdateRequiredTitle."
+  },
+  "appUpdateRequiredMessage": "続けるには新しいバージョンのアプリが必要です。アプリを更新してから、もう一度Stone Signatureを開いてください。",
+  "@appUpdateRequiredMessage": {
+    "description": "Localized app string for appUpdateRequiredMessage."
+  },
+  "appUpdateRequiredAction": "アプリを更新",
+  "@appUpdateRequiredAction": {
+    "description": "Localized app string for appUpdateRequiredAction."
+  },
+  "commonGenericErrorTitle": "問題が発生しました",
+  "@commonGenericErrorTitle": {
+    "description": "Localized app string for commonGenericErrorTitle."
+  },
+  "commonGenericErrorMessage": "予期しないエラーが発生しました。時間をおいてもう一度お試しください。",
+  "@commonGenericErrorMessage": {
+    "description": "Localized app string for commonGenericErrorMessage."
+  },
+  "kanjiSuggestionsTitle": "漢字候補",
+  "@kanjiSuggestionsTitle": {
+    "description": "Localized app string for kanjiSuggestionsTitle."
+  },
+  "kanjiSuggestionsMessage": "印鑑に使う漢字を選んでください。",
+  "@kanjiSuggestionsMessage": {
+    "description": "Localized app string for kanjiSuggestionsMessage."
+  },
+  "kanjiCandidateDetailTitle": "漢字の詳細",
+  "@kanjiCandidateDetailTitle": {
+    "description": "Localized app string for kanjiCandidateDetailTitle."
+  },
+  "kanjiReadingLabel": "読み",
+  "@kanjiReadingLabel": {
+    "description": "Localized app string for kanjiReadingLabel."
+  },
+  "kanjiMeaningLabel": "意味",
+  "@kanjiMeaningLabel": {
+    "description": "Localized app string for kanjiMeaningLabel."
+  },
+  "kanjiImpressionLabel": "印象",
+  "@kanjiImpressionLabel": {
+    "description": "Localized app string for kanjiImpressionLabel."
+  },
+  "kanjiReasonLabel": "理由",
+  "@kanjiReasonLabel": {
+    "description": "Localized app string for kanjiReasonLabel."
+  },
+  "kanjiCharacterCountLabel": "文字数",
+  "@kanjiCharacterCountLabel": {
+    "description": "Localized app string for kanjiCharacterCountLabel."
+  },
+  "kanjiStrokeComplexityLabel": "画数の複雑さ",
+  "@kanjiStrokeComplexityLabel": {
+    "description": "Localized app string for kanjiStrokeComplexityLabel."
+  },
+  "kanjiEngravingSuitabilityLabel": "彫刻適性",
+  "@kanjiEngravingSuitabilityLabel": {
+    "description": "Localized app string for kanjiEngravingSuitabilityLabel."
+  },
+  "selectKanji": "漢字を選択",
+  "@selectKanji": {
+    "description": "Localized app string for selectKanji."
+  },
+  "kanjiSelectedTitle": "漢字を選択しました",
+  "@kanjiSelectedTitle": {
+    "description": "Localized app string for kanjiSelectedTitle."
+  },
+  "kanjiSelectedMessage": "この漢字で印影スタイル選択へ進めます。",
+  "@kanjiSelectedMessage": {
+    "description": "Localized app string for kanjiSelectedMessage."
+  },
+  "sealStyleTitle": "印影スタイル",
+  "@sealStyleTitle": {
+    "description": "Localized app string for sealStyleTitle."
+  },
+  "sealStyleMessage": "印影スタイルをカスタマイズしてください。",
+  "@sealStyleMessage": {
+    "description": "Localized app string for sealStyleMessage."
+  },
+  "sealStyleSelectedKanjiLabel": "選択中の漢字",
+  "@sealStyleSelectedKanjiLabel": {
+    "description": "Localized app string for sealStyleSelectedKanjiLabel."
+  },
+  "sealShapeLabel": "形",
+  "@sealShapeLabel": {
+    "description": "Localized app string for sealShapeLabel."
+  },
+  "sealShapeSquare": "角印",
+  "@sealShapeSquare": {
+    "description": "Localized app string for sealShapeSquare."
+  },
+  "sealShapeRound": "丸印",
+  "@sealShapeRound": {
+    "description": "Localized app string for sealShapeRound."
+  },
+  "sealStyleNameLabel": "雰囲気",
+  "@sealStyleNameLabel": {
+    "description": "Localized app string for sealStyleNameLabel."
+  },
+  "sealStyleTraditional": "伝統的",
+  "@sealStyleTraditional": {
+    "description": "Localized app string for sealStyleTraditional."
+  },
+  "sealStyleElegant": "上品",
+  "@sealStyleElegant": {
+    "description": "Localized app string for sealStyleElegant."
+  },
+  "sealStyleSoft": "やわらかい",
+  "@sealStyleSoft": {
+    "description": "Localized app string for sealStyleSoft."
+  },
+  "sealStyleBold": "力強い",
+  "@sealStyleBold": {
+    "description": "Localized app string for sealStyleBold."
+  },
+  "sealStrokeWeightLabel": "線の太さ",
+  "@sealStrokeWeightLabel": {
+    "description": "Localized app string for sealStrokeWeightLabel."
+  },
+  "sealStrokeStandard": "標準",
+  "@sealStrokeStandard": {
+    "description": "Localized app string for sealStrokeStandard."
+  },
+  "sealStrokeBold": "太め",
+  "@sealStrokeBold": {
+    "description": "Localized app string for sealStrokeBold."
+  },
+  "sealBalanceLabel": "余白感",
+  "@sealBalanceLabel": {
+    "description": "Localized app string for sealBalanceLabel."
+  },
+  "sealBalanceAiry": "余白多め",
+  "@sealBalanceAiry": {
+    "description": "Localized app string for sealBalanceAiry."
+  },
+  "sealBalanceBalanced": "標準",
+  "@sealBalanceBalanced": {
+    "description": "Localized app string for sealBalanceBalanced."
+  },
+  "sealBalanceDense": "密度高め",
+  "@sealBalanceDense": {
+    "description": "Localized app string for sealBalanceDense."
+  },
+  "sealStyleSummaryTitle": "現在のスタイル",
+  "@sealStyleSummaryTitle": {
+    "description": "Localized app string for sealStyleSummaryTitle."
+  },
+  "confirmStyle": "スタイルを確定",
+  "@confirmStyle": {
+    "description": "Localized app string for confirmStyle."
+  },
+  "sealStyleConfirmedTitle": "スタイルを選択しました",
+  "@sealStyleConfirmedTitle": {
+    "description": "Localized app string for sealStyleConfirmedTitle."
+  },
+  "sealStyleConfirmedMessage": "このスタイルでAI印影生成へ進めます。",
+  "@sealStyleConfirmedMessage": {
+    "description": "Localized app string for sealStyleConfirmedMessage."
+  },
+  "generateSeal": "印影を生成",
+  "@generateSeal": {
+    "description": "Localized app string for generateSeal."
+  },
+  "sealGenerationLoadingTitle": "印影を生成中",
+  "@sealGenerationLoadingTitle": {
+    "description": "Localized app string for sealGenerationLoadingTitle."
+  },
+  "sealGenerationLoadingMessage": "AI印影候補を3件作成しています...",
+  "@sealGenerationLoadingMessage": {
+    "description": "Localized app string for sealGenerationLoadingMessage."
+  },
+  "sealGenerationLoadingDetail": "漢字、スタイルを確認しながらプレビューを保存しています。",
+  "@sealGenerationLoadingDetail": {
+    "description": "Localized app string for sealGenerationLoadingDetail."
+  },
+  "sealGenerationErrorTitle": "印影を生成できませんでした",
+  "@sealGenerationErrorTitle": {
+    "description": "Localized app string for sealGenerationErrorTitle."
+  },
+  "sealGenerationErrorMessage": "AI印影候補の作成中に問題が発生しました。もう一度お試しください。",
+  "@sealGenerationErrorMessage": {
+    "description": "Localized app string for sealGenerationErrorMessage."
+  },
+  "sealGenerationLimitTitle": "再生成の上限に達しました",
+  "@sealGenerationLimitTitle": {
+    "description": "Localized app string for sealGenerationLimitTitle."
+  },
+  "sealGenerationLimitMessage": "このスタイルで利用できる生成回数を使い切りました。スタイルを調整してから再度お試しください。",
+  "@sealGenerationLimitMessage": {
+    "description": "Localized app string for sealGenerationLimitMessage."
+  },
+  "sealGenerationAttemptLabel": "生成回数",
+  "@sealGenerationAttemptLabel": {
+    "description": "Localized app string for sealGenerationAttemptLabel."
+  },
+  "sealGenerationStyleDetails": "生成内容",
+  "@sealGenerationStyleDetails": {
+    "description": "Localized app string for sealGenerationStyleDetails."
+  },
+  "sealGenerationErrorTip": "一度再試行し、続けて失敗する場合はスタイルや漢字をよりシンプルにしてください。",
+  "@sealGenerationErrorTip": {
+    "description": "Localized app string for sealGenerationErrorTip."
+  },
+  "sealGenerationLimitTip": "余白感、線の太さ、または漢字を変えると新しく生成できます。",
+  "@sealGenerationLimitTip": {
+    "description": "Localized app string for sealGenerationLimitTip."
+  },
+  "adjustStyle": "スタイルを調整",
+  "@adjustStyle": {
+    "description": "Localized app string for adjustStyle."
+  },
+  "sealVariantSelectionTitle": "印影候補",
+  "@sealVariantSelectionTitle": {
+    "description": "Localized app string for sealVariantSelectionTitle."
+  },
+  "sealVariantSelectionMessage": "AI印影候補から1件を選択してください。",
+  "@sealVariantSelectionMessage": {
+    "description": "Localized app string for sealVariantSelectionMessage."
+  },
+  "sealVariantSelectedBadge": "選択中",
+  "@sealVariantSelectedBadge": {
+    "description": "Localized app string for sealVariantSelectedBadge."
+  },
+  "sealVariantSelectedTitle": "印影を選択しました",
+  "@sealVariantSelectedTitle": {
+    "description": "Localized app string for sealVariantSelectedTitle."
+  },
+  "sealVariantSelectedMessage": "このAI印影をプレビュー確認と保存に進められます。",
+  "@sealVariantSelectedMessage": {
+    "description": "Localized app string for sealVariantSelectedMessage."
+  },
+  "regenerateSeal": "印影を再生成",
+  "@regenerateSeal": {
+    "description": "Localized app string for regenerateSeal."
+  },
+  "sealPreviewTitle": "印影プレビュー",
+  "@sealPreviewTitle": {
+    "description": "Localized app string for sealPreviewTitle."
+  },
+  "sealPreviewMessage": "保存前に選択した印影デザインを確認してください。",
+  "@sealPreviewMessage": {
+    "description": "Localized app string for sealPreviewMessage."
+  },
+  "sealPreviewVariantLabel": "AI候補",
+  "@sealPreviewVariantLabel": {
+    "description": "Localized app string for sealPreviewVariantLabel."
+  },
+  "saveSeal": "印影を保存",
+  "@saveSeal": {
+    "description": "Localized app string for saveSeal."
+  },
+  "chooseStone": "石を選ぶ",
+  "@chooseStone": {
+    "description": "Localized app string for chooseStone."
+  },
+  "sealSavedTitle": "保存完了",
+  "@sealSavedTitle": {
+    "description": "Localized app string for sealSavedTitle."
+  },
+  "sealSavedHeading": "印影を保存しました",
+  "@sealSavedHeading": {
+    "description": "Localized app string for sealSavedHeading."
+  },
+  "sealSavedMessage": "保存した印影は比較や注文に使えます。",
+  "@sealSavedMessage": {
+    "description": "Localized app string for sealSavedMessage."
+  },
+  "goToMySeals": "マイ印影へ",
+  "@goToMySeals": {
+    "description": "Localized app string for goToMySeals."
+  },
+  "createAnotherSeal": "別の印影を作成",
+  "@createAnotherSeal": {
+    "description": "Localized app string for createAnotherSeal."
+  },
+  "savedSeals": "保存済み印影",
+  "@savedSeals": {
+    "description": "Localized app string for savedSeals."
+  },
+  "savedSealsDescription": "保存した印影デザインを\n確認・管理できます。",
+  "@savedSealsDescription": {
+    "description": "Localized app string for savedSealsDescription."
+  },
+  "savedOnThisDevice": "この端末に保存",
+  "@savedOnThisDevice": {
+    "description": "Localized app string for savedOnThisDevice."
+  },
+  "savedSealsLoadingTitle": "保存済み印影を読み込み中",
+  "@savedSealsLoadingTitle": {
+    "description": "Localized app string for savedSealsLoadingTitle."
+  },
+  "savedSealsLoadingMessage": "この端末に保存された印影を確認しています。",
+  "@savedSealsLoadingMessage": {
+    "description": "Localized app string for savedSealsLoadingMessage."
+  },
+  "savedSealsLoadErrorTitle": "保存済み印影を読み込めません",
+  "@savedSealsLoadErrorTitle": {
+    "description": "Localized app string for savedSealsLoadErrorTitle."
+  },
+  "savedSealsLoadErrorMessage": "マイ印影を開き直すか、新しい印影を作成してください。",
+  "@savedSealsLoadErrorMessage": {
+    "description": "Localized app string for savedSealsLoadErrorMessage."
+  },
+  "chooseSavedSeal": "選択",
+  "@chooseSavedSeal": {
+    "description": "Localized app string for chooseSavedSeal."
+  },
+  "viewSealDetails": "詳細を見る",
+  "@viewSealDetails": {
+    "description": "Localized app string for viewSealDetails."
+  },
+  "favoriteSeal": "お気に入りに追加",
+  "@favoriteSeal": {
+    "description": "Localized app string for favoriteSeal."
+  },
+  "removeFavoriteSeal": "お気に入りを解除",
+  "@removeFavoriteSeal": {
+    "description": "Localized app string for removeFavoriteSeal."
+  },
+  "sealDetailTitle": "印影詳細",
+  "@sealDetailTitle": {
+    "description": "Localized app string for sealDetailTitle."
+  },
+  "kanjiLabel": "漢字",
+  "@kanjiLabel": {
+    "description": "Localized app string for kanjiLabel."
+  },
+  "createdAtLabel": "作成日",
+  "@createdAtLabel": {
+    "description": "Localized app string for createdAtLabel."
+  },
+  "compareSavedSeals": "印影を比較",
+  "@compareSavedSeals": {
+    "description": "Localized app string for compareSavedSeals."
+  },
+  "compareSavedSealsTitle": "保存済み印影の比較",
+  "@compareSavedSealsTitle": {
+    "description": "Localized app string for compareSavedSealsTitle."
+  },
+  "compareSavedSealsMessage": "保存済み印影のプレビュー、漢字の意味、スタイルを横並びで比較できます。",
+  "@compareSavedSealsMessage": {
+    "description": "Localized app string for compareSavedSealsMessage."
+  },
+  "editSavedSeal": "編集 / 再生成",
+  "@editSavedSeal": {
+    "description": "Localized app string for editSavedSeal."
+  },
+  "editSavedSealTitle": "Designから新しい案を作成",
+  "@editSavedSealTitle": {
+    "description": "Localized app string for editSavedSealTitle."
+  },
+  "editSavedSealMessage": "保存済み印影はそのまま残ります。漢字やスタイルを変える場合は、Designから新しい印影を作成して保存してください。",
+  "@editSavedSealMessage": {
+    "description": "Localized app string for editSavedSealMessage."
+  },
+  "chooseSealForOrder": "注文に使う",
+  "@chooseSealForOrder": {
+    "description": "Localized app string for chooseSealForOrder."
+  },
+  "sealSelectedForOrderTitle": "注文用に選択済み",
+  "@sealSelectedForOrderTitle": {
+    "description": "Localized app string for sealSelectedForOrderTitle."
+  },
+  "sealSelectedForOrderMessage": "この印影を注文下書きに反映しました。",
+  "@sealSelectedForOrderMessage": {
+    "description": "Localized app string for sealSelectedForOrderMessage."
+  },
+  "sealSelectedForOrderAction": "選択済み",
+  "@sealSelectedForOrderAction": {
+    "description": "Localized app string for sealSelectedForOrderAction."
+  },
+  "deleteSavedSeal": "印影を削除",
+  "@deleteSavedSeal": {
+    "description": "Localized app string for deleteSavedSeal."
+  },
+  "deleteSealTitle": "保存済み印影を削除しますか？",
+  "@deleteSealTitle": {
+    "description": "Localized app string for deleteSealTitle."
+  },
+  "deleteSealMessage": "この端末から印影デザインを削除します。この操作は元に戻せません。",
+  "@deleteSealMessage": {
+    "description": "Localized app string for deleteSealMessage."
+  },
+  "deleteSealConfirm": "削除",
+  "@deleteSealConfirm": {
+    "description": "Localized app string for deleteSealConfirm."
+  },
+  "cancel": "キャンセル",
+  "@cancel": {
+    "description": "Localized app string for cancel."
+  },
+  "close": "閉じる",
+  "@close": {
+    "description": "Localized app string for close."
+  },
+  "browseStones": "石を探す",
+  "@browseStones": {
+    "description": "Localized app string for browseStones."
+  },
+  "browseStonesDescription": "天然石コレクションを\nご覧ください。",
+  "@browseStonesDescription": {
+    "description": "Localized app string for browseStonesDescription."
+  },
+  "noSavedSeals": "保存済み印影はありません",
+  "@noSavedSeals": {
+    "description": "Localized app string for noSavedSeals."
+  },
+  "noSavedSealsMessage": "作成した印影デザインがここに表示されます。",
+  "@noSavedSealsMessage": {
+    "description": "Localized app string for noSavedSealsMessage."
+  },
+  "stonesLoadingTitle": "石を読み込み中",
+  "@stonesLoadingTitle": {
+    "description": "Localized app string for stonesLoadingTitle."
+  },
+  "stonesLoadingMessage": "販売中の一点物の石を確認しています。",
+  "@stonesLoadingMessage": {
+    "description": "Localized app string for stonesLoadingMessage."
+  },
+  "stonesLoadErrorTitle": "石を読み込めません",
+  "@stonesLoadErrorTitle": {
+    "description": "Localized app string for stonesLoadErrorTitle."
+  },
+  "stonesLoadErrorMessage": "販売中の石一覧を再読み込みしてください。",
+  "@stonesLoadErrorMessage": {
+    "description": "Localized app string for stonesLoadErrorMessage."
+  },
+  "noStonesLoaded": "石を読み込んでいません",
+  "@noStonesLoaded": {
+    "description": "Localized app string for noStonesLoaded."
+  },
+  "noStonesLoadedMessage": "販売中の一点物の石がここに表示されます。",
+  "@noStonesLoadedMessage": {
+    "description": "Localized app string for noStonesLoadedMessage."
+  },
+  "stoneFiltersTitle": "絞り込み",
+  "@stoneFiltersTitle": {
+    "description": "Localized app string for stoneFiltersTitle."
+  },
+  "stoneFilterAll": "すべて",
+  "@stoneFilterAll": {
+    "description": "Localized app string for stoneFilterAll."
+  },
+  "stoneFilterMaterial": "素材",
+  "@stoneFilterMaterial": {
+    "description": "Localized app string for stoneFilterMaterial."
+  },
+  "stoneFilterColor": "色",
+  "@stoneFilterColor": {
+    "description": "Localized app string for stoneFilterColor."
+  },
+  "stoneFilterPattern": "模様",
+  "@stoneFilterPattern": {
+    "description": "Localized app string for stoneFilterPattern."
+  },
+  "stoneFilterAvailability": "在庫",
+  "@stoneFilterAvailability": {
+    "description": "Localized app string for stoneFilterAvailability."
+  },
+  "stoneFilterReset": "リセット",
+  "@stoneFilterReset": {
+    "description": "Localized app string for stoneFilterReset."
+  },
+  "noStonesMatchFilters": "条件に合う石がありません",
+  "@noStonesMatchFilters": {
+    "description": "Localized app string for noStonesMatchFilters."
+  },
+  "noStonesMatchFiltersMessage": "絞り込み条件を変更するか解除してください。",
+  "@noStonesMatchFiltersMessage": {
+    "description": "Localized app string for noStonesMatchFiltersMessage."
+  },
+  "stoneSortTitle": "並び替え",
+  "@stoneSortTitle": {
+    "description": "Localized app string for stoneSortTitle."
+  },
+  "stoneSortAction": "並び替え",
+  "@stoneSortAction": {
+    "description": "Localized app string for stoneSortAction."
+  },
+  "stoneSortRecommended": "おすすめ順",
+  "@stoneSortRecommended": {
+    "description": "Localized app string for stoneSortRecommended."
+  },
+  "stoneSortNewest": "新着順",
+  "@stoneSortNewest": {
+    "description": "Localized app string for stoneSortNewest."
+  },
+  "stoneSortPriceLowToHigh": "価格が安い順",
+  "@stoneSortPriceLowToHigh": {
+    "description": "Localized app string for stoneSortPriceLowToHigh."
+  },
+  "stoneSortPriceHighToLow": "価格が高い順",
+  "@stoneSortPriceHighToLow": {
+    "description": "Localized app string for stoneSortPriceHighToLow."
+  },
+  "viewStoneDetails": "詳細を見る",
+  "@viewStoneDetails": {
+    "description": "Localized app string for viewStoneDetails."
+  },
+  "stoneDetailTitle": "石の詳細",
+  "@stoneDetailTitle": {
+    "description": "Localized app string for stoneDetailTitle."
+  },
+  "stoneDetailDescriptionTitle": "説明",
+  "@stoneDetailDescriptionTitle": {
+    "description": "Localized app string for stoneDetailDescriptionTitle."
+  },
+  "stoneDetailStoryTitle": "ストーリー",
+  "@stoneDetailStoryTitle": {
+    "description": "Localized app string for stoneDetailStoryTitle."
+  },
+  "stoneDetailSpecsTitle": "詳細",
+  "@stoneDetailSpecsTitle": {
+    "description": "Localized app string for stoneDetailSpecsTitle."
+  },
+  "stoneDetailNotesTitle": "注意事項",
+  "@stoneDetailNotesTitle": {
+    "description": "Localized app string for stoneDetailNotesTitle."
+  },
+  "stoneDetailNotesMessage": "天然石は一点ごとに色、模様、透け感が異なります。注文前に写真と詳細を確認してください。",
+  "@stoneDetailNotesMessage": {
+    "description": "Localized app string for stoneDetailNotesMessage."
+  },
+  "stoneDetailMaterialLabel": "素材",
+  "@stoneDetailMaterialLabel": {
+    "description": "Localized app string for stoneDetailMaterialLabel."
+  },
+  "stoneDetailSizeLabel": "サイズ",
+  "@stoneDetailSizeLabel": {
+    "description": "Localized app string for stoneDetailSizeLabel."
+  },
+  "stoneDetailColorLabel": "色",
+  "@stoneDetailColorLabel": {
+    "description": "Localized app string for stoneDetailColorLabel."
+  },
+  "stoneDetailPatternLabel": "模様",
+  "@stoneDetailPatternLabel": {
+    "description": "Localized app string for stoneDetailPatternLabel."
+  },
+  "stoneDetailShapeLabel": "形状",
+  "@stoneDetailShapeLabel": {
+    "description": "Localized app string for stoneDetailShapeLabel."
+  },
+  "stoneDetailTextureLabel": "質感",
+  "@stoneDetailTextureLabel": {
+    "description": "Localized app string for stoneDetailTextureLabel."
+  },
+  "stoneDetailStatusLabel": "在庫",
+  "@stoneDetailStatusLabel": {
+    "description": "Localized app string for stoneDetailStatusLabel."
+  },
+  "selectStone": "石を選択",
+  "@selectStone": {
+    "description": "Localized app string for selectStone."
+  },
+  "selectStoneConfirmationTitle": "この石を選択しますか？",
+  "@selectStoneConfirmationTitle": {
+    "description": "Localized app string for selectStoneConfirmationTitle."
+  },
+  "selectStoneConfirmationMessage": "この一点物の石を注文下書きに反映します。注文前に在庫をもう一度確認します。",
+  "@selectStoneConfirmationMessage": {
+    "description": "Localized app string for selectStoneConfirmationMessage."
+  },
+  "selectStoneConfirm": "選択を確定",
+  "@selectStoneConfirm": {
+    "description": "Localized app string for selectStoneConfirm."
+  },
+  "stoneSelectedForOrderTitle": "注文用に選択済み",
+  "@stoneSelectedForOrderTitle": {
+    "description": "Localized app string for stoneSelectedForOrderTitle."
+  },
+  "stoneSelectedForOrderMessage": "この石を注文下書きに反映しました。",
+  "@stoneSelectedForOrderMessage": {
+    "description": "Localized app string for stoneSelectedForOrderMessage."
+  },
+  "stoneSelectedForOrderAction": "選択済み",
+  "@stoneSelectedForOrderAction": {
+    "description": "Localized app string for stoneSelectedForOrderAction."
+  },
+  "soldOutStoneTitle": "この石は選択できません",
+  "@soldOutStoneTitle": {
+    "description": "Localized app string for soldOutStoneTitle."
+  },
+  "soldOutStoneMessage": "この石は現在販売できません。注文前に別の石を選択してください。",
+  "@soldOutStoneMessage": {
+    "description": "Localized app string for soldOutStoneMessage."
+  },
+  "stoneAvailable": "販売中",
+  "@stoneAvailable": {
+    "description": "Localized app string for stoneAvailable."
+  },
+  "stoneUnavailable": "選択不可",
+  "@stoneUnavailable": {
+    "description": "Localized app string for stoneUnavailable."
+  },
+  "order": "注文",
+  "@order": {
+    "description": "Localized app string for order."
+  },
+  "noActiveDraft": "進行中の下書きはありません",
+  "@noActiveDraft": {
+    "description": "Localized app string for noActiveDraft."
+  },
+  "noActiveDraftMessage": "注文前に保存済み印影と石を選択してください。",
+  "@noActiveDraftMessage": {
+    "description": "Localized app string for noActiveDraftMessage."
+  },
+  "reviewSelection": "選択内容を確認",
+  "@reviewSelection": {
+    "description": "Localized app string for reviewSelection."
+  },
+  "orderMissingSealTitle": "印影が未選択です",
+  "@orderMissingSealTitle": {
+    "description": "Localized app string for orderMissingSealTitle."
+  },
+  "orderMissingSealMessage": "ご注文に進む前に、印影デザインを選択してください。",
+  "@orderMissingSealMessage": {
+    "description": "Localized app string for orderMissingSealMessage."
+  },
+  "orderMissingSealNotice": "印影デザインは、ご注文を完了するために必要な項目です。必ずご選択ください。",
+  "@orderMissingSealNotice": {
+    "description": "Localized app string for orderMissingSealNotice."
+  },
+  "orderChooseSealAction": "印影を選ぶ",
+  "@orderChooseSealAction": {
+    "description": "Localized app string for orderChooseSealAction."
+  },
+  "orderChangeSealAction": "印影を変更",
+  "@orderChangeSealAction": {
+    "description": "Localized app string for orderChangeSealAction."
+  },
+  "orderMissingStoneTitle": "宝石材が未選択です",
+  "@orderMissingStoneTitle": {
+    "description": "Localized app string for orderMissingStoneTitle."
+  },
+  "orderMissingStoneMessage": "ご注文に進む前に、宝石材を選択してください。",
+  "@orderMissingStoneMessage": {
+    "description": "Localized app string for orderMissingStoneMessage."
+  },
+  "orderChooseStoneAction": "宝石材を選ぶ",
+  "@orderChooseStoneAction": {
+    "description": "Localized app string for orderChooseStoneAction."
+  },
+  "orderChangeStoneAction": "宝石材を変更",
+  "@orderChangeStoneAction": {
+    "description": "Localized app string for orderChangeStoneAction."
+  },
+  "orderReviewTitle": "ご注文内容確認",
+  "@orderReviewTitle": {
+    "description": "Localized app string for orderReviewTitle."
+  },
+  "orderReviewMessage": "配送先入力へ進む前に、選択した印影と一点物の石を確認してください。",
+  "@orderReviewMessage": {
+    "description": "Localized app string for orderReviewMessage."
+  },
+  "orderItemPriceLabel": "商品価格",
+  "@orderItemPriceLabel": {
+    "description": "Localized app string for orderItemPriceLabel."
+  },
+  "orderShippingFeeLabel": "送料",
+  "@orderShippingFeeLabel": {
+    "description": "Localized app string for orderShippingFeeLabel."
+  },
+  "orderShippingEstimateNote": "送料は概算です。決済前に配送先にもとづいて再計算されます。",
+  "@orderShippingEstimateNote": {
+    "description": "Localized app string for orderShippingEstimateNote."
+  },
+  "orderTotalLabel": "合計",
+  "@orderTotalLabel": {
+    "description": "Localized app string for orderTotalLabel."
+  },
+  "orderCustomMadeNotice": "本商品は、印影と石を組み合わせてお作りする、お客様だけの一点物の特注品です。",
+  "@orderCustomMadeNotice": {
+    "description": "Localized app string for orderCustomMadeNotice."
+  },
+  "continueToShipping": "配送先入力へ進む",
+  "@continueToShipping": {
+    "description": "Localized app string for continueToShipping."
+  },
+  "checkoutInputTitle": "Checkout情報",
+  "@checkoutInputTitle": {
+    "description": "Localized app string for checkoutInputTitle."
+  },
+  "checkoutInputMessage": "この注文下書きに使う連絡先、配送先、任意の注文メモを入力してください。",
+  "@checkoutInputMessage": {
+    "description": "Localized app string for checkoutInputMessage."
+  },
+  "checkoutContactTitle": "連絡先",
+  "@checkoutContactTitle": {
+    "description": "Localized app string for checkoutContactTitle."
+  },
+  "checkoutShippingTitle": "配送先住所",
+  "@checkoutShippingTitle": {
+    "description": "Localized app string for checkoutShippingTitle."
+  },
+  "checkoutOrderNoteTitle": "注文メモ",
+  "@checkoutOrderNoteTitle": {
+    "description": "Localized app string for checkoutOrderNoteTitle."
+  },
+  "checkoutFullNameLabel": "氏名",
+  "@checkoutFullNameLabel": {
+    "description": "Localized app string for checkoutFullNameLabel."
+  },
+  "checkoutFullNameHint": "山田 太郎",
+  "@checkoutFullNameHint": {
+    "description": "Localized app string for checkoutFullNameHint."
+  },
+  "checkoutPhoneLabel": "電話番号",
+  "@checkoutPhoneLabel": {
+    "description": "Localized app string for checkoutPhoneLabel."
+  },
+  "checkoutPhoneHint": "+81 90 0000 0000",
+  "@checkoutPhoneHint": {
+    "description": "Localized app string for checkoutPhoneHint."
+  },
+  "checkoutCountryLabel": "国 / 地域",
+  "@checkoutCountryLabel": {
+    "description": "Localized app string for checkoutCountryLabel."
+  },
+  "checkoutPostalCodeLabel": "郵便番号",
+  "@checkoutPostalCodeLabel": {
+    "description": "Localized app string for checkoutPostalCodeLabel."
+  },
+  "checkoutPostalCodeHint": "100-0001",
+  "@checkoutPostalCodeHint": {
+    "description": "Localized app string for checkoutPostalCodeHint."
+  },
+  "checkoutAddressLine1Label": "住所1",
+  "@checkoutAddressLine1Label": {
+    "description": "Localized app string for checkoutAddressLine1Label."
+  },
+  "checkoutAddressLine1Hint": "千代田1-1",
+  "@checkoutAddressLine1Hint": {
+    "description": "Localized app string for checkoutAddressLine1Hint."
+  },
+  "checkoutAddressLine2Label": "住所2",
+  "@checkoutAddressLine2Label": {
+    "description": "Localized app string for checkoutAddressLine2Label."
+  },
+  "checkoutAddressLine2Hint": "マンション名・部屋番号",
+  "@checkoutAddressLine2Hint": {
+    "description": "Localized app string for checkoutAddressLine2Hint."
+  },
+  "checkoutCityLabel": "市区町村",
+  "@checkoutCityLabel": {
+    "description": "Localized app string for checkoutCityLabel."
+  },
+  "checkoutCityHint": "千代田区",
+  "@checkoutCityHint": {
+    "description": "Localized app string for checkoutCityHint."
+  },
+  "checkoutStateLabel": "都道府県 / 州",
+  "@checkoutStateLabel": {
+    "description": "Localized app string for checkoutStateLabel."
+  },
+  "checkoutStateHint": "東京都",
+  "@checkoutStateHint": {
+    "description": "Localized app string for checkoutStateHint."
+  },
+  "checkoutOrderNoteLabel": "注文メモ",
+  "@checkoutOrderNoteLabel": {
+    "description": "Localized app string for checkoutOrderNoteLabel."
+  },
+  "checkoutOrderNoteHint": "製作や配送についての任意メモ",
+  "@checkoutOrderNoteHint": {
+    "description": "Localized app string for checkoutOrderNoteHint."
+  },
+  "checkoutInputSaveAction": "Checkout情報を保存",
+  "@checkoutInputSaveAction": {
+    "description": "Localized app string for checkoutInputSaveAction."
+  },
+  "checkoutInputSavingAction": "保存中...",
+  "@checkoutInputSavingAction": {
+    "description": "Localized app string for checkoutInputSavingAction."
+  },
+  "checkoutInputSavedMessage": "Checkout情報を注文下書きに保存しました。",
+  "@checkoutInputSavedMessage": {
+    "description": "Localized app string for checkoutInputSavedMessage."
+  },
+  "checkoutValidationTitle": "入力内容を確認してください。",
+  "@checkoutValidationTitle": {
+    "description": "Localized app string for checkoutValidationTitle."
+  },
+  "checkoutValidationMessage": "未入力または形式が正しくない項目があります。",
+  "@checkoutValidationMessage": {
+    "description": "Localized app string for checkoutValidationMessage."
+  },
+  "checkoutEmailInvalidMessage": "有効なメールアドレスを入力してください。",
+  "@checkoutEmailInvalidMessage": {
+    "description": "Localized app string for checkoutEmailInvalidMessage."
+  },
+  "checkoutFullNameRequiredMessage": "氏名を入力してください。",
+  "@checkoutFullNameRequiredMessage": {
+    "description": "Localized app string for checkoutFullNameRequiredMessage."
+  },
+  "checkoutPhoneInvalidMessage": "有効な電話番号を入力してください。",
+  "@checkoutPhoneInvalidMessage": {
+    "description": "Localized app string for checkoutPhoneInvalidMessage."
+  },
+  "checkoutCountryRequiredMessage": "国 / 地域を選択してください。",
+  "@checkoutCountryRequiredMessage": {
+    "description": "Localized app string for checkoutCountryRequiredMessage."
+  },
+  "checkoutPostalCodeRequiredMessage": "郵便番号を入力してください。",
+  "@checkoutPostalCodeRequiredMessage": {
+    "description": "Localized app string for checkoutPostalCodeRequiredMessage."
+  },
+  "checkoutAddressLine1RequiredMessage": "住所1を入力してください。",
+  "@checkoutAddressLine1RequiredMessage": {
+    "description": "Localized app string for checkoutAddressLine1RequiredMessage."
+  },
+  "checkoutCityRequiredMessage": "市区町村を入力してください。",
+  "@checkoutCityRequiredMessage": {
+    "description": "Localized app string for checkoutCityRequiredMessage."
+  },
+  "checkoutStateRequiredMessage": "都道府県 / 州を入力してください。",
+  "@checkoutStateRequiredMessage": {
+    "description": "Localized app string for checkoutStateRequiredMessage."
+  },
+  "orderConfirmationTitle": "ご注文内容確認",
+  "@orderConfirmationTitle": {
+    "description": "Localized app string for orderConfirmationTitle."
+  },
+  "orderConfirmationMessage": "決済へ進む前に、印影、宝石材、配送先、合計金額を確認してください。",
+  "@orderConfirmationMessage": {
+    "description": "Localized app string for orderConfirmationMessage."
+  },
+  "orderConfirmationMissingInputMessage": "Checkout情報に未入力があります。確認前に入力画面へ戻ってください。",
+  "@orderConfirmationMissingInputMessage": {
+    "description": "Localized app string for orderConfirmationMissingInputMessage."
+  },
+  "orderConfirmationCheckoutTitle": "Checkout詳細",
+  "@orderConfirmationCheckoutTitle": {
+    "description": "Localized app string for orderConfirmationCheckoutTitle."
+  },
+  "orderConfirmationNoOrderNote": "注文メモなし",
+  "@orderConfirmationNoOrderNote": {
+    "description": "Localized app string for orderConfirmationNoOrderNote."
+  },
+  "editCheckoutInformation": "Checkout情報を編集",
+  "@editCheckoutInformation": {
+    "description": "Localized app string for editCheckoutInformation."
+  },
+  "customMadeAgreementTitle": "オーダーメイド確認",
+  "@customMadeAgreementTitle": {
+    "description": "Localized app string for customMadeAgreementTitle."
+  },
+  "customMadeAgreementMessage": "天然石を使い、お客様の印影に合わせて一点ずつ製作します。決済前に内容をご確認ください。",
+  "@customMadeAgreementMessage": {
+    "description": "Localized app string for customMadeAgreementMessage."
+  },
+  "confirmKanjiAndDesignLabel": "選択した漢字と印影デザインに間違いがないことを確認しました。",
+  "@confirmKanjiAndDesignLabel": {
+    "description": "Localized app string for confirmKanjiAndDesignLabel."
+  },
+  "confirmCustomMadePolicyLabel": "本商品がオーダーメイド品であり、製作開始後は変更できないことを理解しました。",
+  "@confirmCustomMadePolicyLabel": {
+    "description": "Localized app string for confirmCustomMadePolicyLabel."
+  },
+  "orderConfirmationSecurePaymentNote": "安全な決済のため、Stripe Checkoutへ移動します。",
+  "@orderConfirmationSecurePaymentNote": {
+    "description": "Localized app string for orderConfirmationSecurePaymentNote."
+  },
+  "orderConfirmationAgreementRequiredMessage": "決済へ進むには2つの確認チェックが必要です。",
+  "@orderConfirmationAgreementRequiredMessage": {
+    "description": "Localized app string for orderConfirmationAgreementRequiredMessage."
+  },
+  "orderConfirmationSavedMessage": "注文前確認を注文下書きに保存しました。",
+  "@orderConfirmationSavedMessage": {
+    "description": "Localized app string for orderConfirmationSavedMessage."
+  },
+  "proceedToSecurePayment": "安全な決済へ進む",
+  "@proceedToSecurePayment": {
+    "description": "Localized app string for proceedToSecurePayment."
+  },
+  "checkoutProcessingTitle": "Checkout準備中",
+  "@checkoutProcessingTitle": {
+    "description": "Localized app string for checkoutProcessingTitle."
+  },
+  "checkoutProcessingMessage": "注文を作成し、安全なStripe Checkout Sessionを準備しています。",
+  "@checkoutProcessingMessage": {
+    "description": "Localized app string for checkoutProcessingMessage."
+  },
+  "checkoutProcessingOrderStep": "注文を作成中",
+  "@checkoutProcessingOrderStep": {
+    "description": "Localized app string for checkoutProcessingOrderStep."
+  },
+  "checkoutProcessingSessionStep": "決済Sessionを作成中",
+  "@checkoutProcessingSessionStep": {
+    "description": "Localized app string for checkoutProcessingSessionStep."
+  },
+  "checkoutProcessingReadyTitle": "Checkout Session準備完了",
+  "@checkoutProcessingReadyTitle": {
+    "description": "Localized app string for checkoutProcessingReadyTitle."
+  },
+  "checkoutProcessingReadyMessage": "Stripe Checkoutを開く準備ができました。",
+  "@checkoutProcessingReadyMessage": {
+    "description": "Localized app string for checkoutProcessingReadyMessage."
+  },
+  "checkoutProcessingErrorTitle": "Checkoutを準備できませんでした",
+  "@checkoutProcessingErrorTitle": {
+    "description": "Localized app string for checkoutProcessingErrorTitle."
+  },
+  "checkoutProcessingErrorMessage": "戻ってからもう一度お試しください。",
+  "@checkoutProcessingErrorMessage": {
+    "description": "Localized app string for checkoutProcessingErrorMessage."
+  },
+  "stripeCheckoutTitle": "安全な決済",
+  "@stripeCheckoutTitle": {
+    "description": "Localized app string for stripeCheckoutTitle."
+  },
+  "stripeCheckoutOpeningTitle": "Stripe Checkoutを開いています",
+  "@stripeCheckoutOpeningTitle": {
+    "description": "Localized app string for stripeCheckoutOpeningTitle."
+  },
+  "stripeCheckoutOpeningMessage": "Stripe Checkoutへ移動します。",
+  "@stripeCheckoutOpeningMessage": {
+    "description": "Localized app string for stripeCheckoutOpeningMessage."
+  },
+  "stripeCheckoutWaitingTitle": "Stripe Checkoutで決済を完了してください",
+  "@stripeCheckoutWaitingTitle": {
+    "description": "Localized app string for stripeCheckoutWaitingTitle."
+  },
+  "stripeCheckoutWaitingMessage": "決済後、このアプリに戻ると続きへ進みます。",
+  "@stripeCheckoutWaitingMessage": {
+    "description": "Localized app string for stripeCheckoutWaitingMessage."
+  },
+  "stripeCheckoutReturnedTitle": "Stripe Checkoutから戻りました",
+  "@stripeCheckoutReturnedTitle": {
+    "description": "Localized app string for stripeCheckoutReturnedTitle."
+  },
+  "stripeCheckoutReturnedMessage": "戻りURLを受け取りました。次に注文状態を確認します。",
+  "@stripeCheckoutReturnedMessage": {
+    "description": "Localized app string for stripeCheckoutReturnedMessage."
+  },
+  "stripeCheckoutCanceledTitle": "Checkoutがキャンセルされました",
+  "@stripeCheckoutCanceledTitle": {
+    "description": "Localized app string for stripeCheckoutCanceledTitle."
+  },
+  "stripeCheckoutCanceledMessage": "Stripeから未決済の状態で戻りました。",
+  "@stripeCheckoutCanceledMessage": {
+    "description": "Localized app string for stripeCheckoutCanceledMessage."
+  },
+  "stripeCheckoutReturnFailedTitle": "決済に失敗しました",
+  "@stripeCheckoutReturnFailedTitle": {
+    "description": "Localized app string for stripeCheckoutReturnFailedTitle."
+  },
+  "stripeCheckoutReturnFailedMessage": "Stripe Checkoutを完了できませんでした。もう一度Checkoutをお試しください。",
+  "@stripeCheckoutReturnFailedMessage": {
+    "description": "Localized app string for stripeCheckoutReturnFailedMessage."
+  },
+  "stripeCheckoutLaunchFailedTitle": "Stripe Checkoutを開けませんでした",
+  "@stripeCheckoutLaunchFailedTitle": {
+    "description": "Localized app string for stripeCheckoutLaunchFailedTitle."
+  },
+  "stripeCheckoutLaunchFailedMessage": "ブラウザ設定を確認して、もう一度お試しください。",
+  "@stripeCheckoutLaunchFailedMessage": {
+    "description": "Localized app string for stripeCheckoutLaunchFailedMessage."
+  },
+  "stripeCheckoutOpenAction": "Stripe Checkoutを開く",
+  "@stripeCheckoutOpenAction": {
+    "description": "Localized app string for stripeCheckoutOpenAction."
+  },
+  "stripeCheckoutRetryAction": "もう一度試す",
+  "@stripeCheckoutRetryAction": {
+    "description": "Localized app string for stripeCheckoutRetryAction."
+  },
+  "stripeCheckoutSecureNote": "決済情報は暗号化され、安全に処理されます。Powered by Stripe.",
+  "@stripeCheckoutSecureNote": {
+    "description": "Localized app string for stripeCheckoutSecureNote."
+  },
+  "stripeCheckoutReturnOrderIdLabel": "戻り注文ID",
+  "@stripeCheckoutReturnOrderIdLabel": {
+    "description": "Localized app string for stripeCheckoutReturnOrderIdLabel."
+  },
+  "paymentStatusTitle": "決済状態",
+  "@paymentStatusTitle": {
+    "description": "Localized app string for paymentStatusTitle."
+  },
+  "paymentStatusCheckingTitle": "決済状態を確認しています",
+  "@paymentStatusCheckingTitle": {
+    "description": "Localized app string for paymentStatusCheckingTitle."
+  },
+  "paymentStatusCheckingMessage": "Stripe Checkoutから戻った後の最新注文状態を確認しています。",
+  "@paymentStatusCheckingMessage": {
+    "description": "Localized app string for paymentStatusCheckingMessage."
+  },
+  "paymentStatusPaidTitle": "決済を確認しました",
+  "@paymentStatusPaidTitle": {
+    "description": "Localized app string for paymentStatusPaidTitle."
+  },
+  "paymentStatusPaidMessage": "決済が確認できました。注文完了画面を準備しています。",
+  "@paymentStatusPaidMessage": {
+    "description": "Localized app string for paymentStatusPaidMessage."
+  },
+  "paymentStatusPendingTitle": "決済確認待ち",
+  "@paymentStatusPendingTitle": {
+    "description": "Localized app string for paymentStatusPendingTitle."
+  },
+  "paymentStatusPendingMessage": "Stripeから正常に戻りましたが、決済確定の反映がまだ完了していません。",
+  "@paymentStatusPendingMessage": {
+    "description": "Localized app string for paymentStatusPendingMessage."
+  },
+  "paymentStatusPendingNotice": "",
+  "@paymentStatusPendingNotice": {
+    "description": "Localized app string for paymentStatusPendingNotice."
+  },
+  "paymentStatusFailedTitle": "決済状態を確認できませんでした",
+  "@paymentStatusFailedTitle": {
+    "description": "Localized app string for paymentStatusFailedTitle."
+  },
+  "paymentStatusFailedMessage": "決済状態を確認できませんでした。後ほど注文照会をご確認ください。",
+  "@paymentStatusFailedMessage": {
+    "description": "Localized app string for paymentStatusFailedMessage."
+  },
+  "orderCompleteTitle": "注文完了",
+  "@orderCompleteTitle": {
+    "description": "Localized app string for orderCompleteTitle."
+  },
+  "orderCompleteStatusTitle": "ご注文ありがとうございます",
+  "@orderCompleteStatusTitle": {
+    "description": "Localized app string for orderCompleteStatusTitle."
+  },
+  "orderCompleteMessage": "決済が確認できました。決済完了メールはStripeから注文時のメールアドレスへ送信されます。",
+  "@orderCompleteMessage": {
+    "description": "Localized app string for orderCompleteMessage."
+  },
+  "orderCompleteStatusLabel": "状態",
+  "@orderCompleteStatusLabel": {
+    "description": "Localized app string for orderCompleteStatusLabel."
+  },
+  "orderCompleteStatusValue": "決済を受け付けました",
+  "@orderCompleteStatusValue": {
+    "description": "Localized app string for orderCompleteStatusValue."
+  },
+  "orderCompleteEmailMessage": "Stripeの決済完了メールをご確認ください。注文番号はお問い合わせや注文照会で使用します。",
+  "@orderCompleteEmailMessage": {
+    "description": "Localized app string for orderCompleteEmailMessage."
+  },
+  "orderCompleteSummaryTitle": "注文概要",
+  "@orderCompleteSummaryTitle": {
+    "description": "Localized app string for orderCompleteSummaryTitle."
+  },
+  "orderCompleteLookupAction": "注文照会を開く",
+  "@orderCompleteLookupAction": {
+    "description": "Localized app string for orderCompleteLookupAction."
+  },
+  "orderCompleteBackToDesignAction": "Designへ戻る",
+  "@orderCompleteBackToDesignAction": {
+    "description": "Localized app string for orderCompleteBackToDesignAction."
+  },
+  "emailSentNoticeTitle": "Stripeの決済完了メール",
+  "@emailSentNoticeTitle": {
+    "description": "Localized app string for emailSentNoticeTitle."
+  },
+  "emailSentNoticeMessage": "決済完了メールはStripeから注文時のメールアドレスへ送信されます。受信箱と迷惑メールフォルダをご確認ください。",
+  "@emailSentNoticeMessage": {
+    "description": "Localized app string for emailSentNoticeMessage."
+  },
+  "orderEmailMissingGuideTitle": "Stripeのメールが見つからない場合",
+  "@orderEmailMissingGuideTitle": {
+    "description": "Localized app string for orderEmailMissingGuideTitle."
+  },
+  "orderEmailMissingGuideMessage": "まず次の項目をご確認ください。",
+  "@orderEmailMissingGuideMessage": {
+    "description": "Localized app string for orderEmailMissingGuideMessage."
+  },
+  "orderEmailMissingSpamCheck": "迷惑メールフォルダやプロモーションフォルダを確認してください。",
+  "@orderEmailMissingSpamCheck": {
+    "description": "Localized app string for orderEmailMissingSpamCheck."
+  },
+  "orderEmailMissingAddressCheck": "注文時のメールアドレスに誤りがないか確認してください。",
+  "@orderEmailMissingAddressCheck": {
+    "description": "Localized app string for orderEmailMissingAddressCheck."
+  },
+  "orderEmailMissingDeliveryWait": "配信まで数分かかる場合があります。",
+  "@orderEmailMissingDeliveryWait": {
+    "description": "Localized app string for orderEmailMissingDeliveryWait."
+  },
+  "orderEmailMissingContactSupport": "それでも見つからない場合は、注文番号を添えてお問い合わせください。",
+  "@orderEmailMissingContactSupport": {
+    "description": "Localized app string for orderEmailMissingContactSupport."
+  },
+  "contactSupportPromptTitle": "お困りですか？",
+  "@contactSupportPromptTitle": {
+    "description": "Localized app string for contactSupportPromptTitle."
+  },
+  "contactSupportPromptMessage": "注文、配送、決済、メールに関する質問はサポートへお問い合わせください。注文番号を添えると確認がスムーズです。",
+  "@contactSupportPromptMessage": {
+    "description": "Localized app string for contactSupportPromptMessage."
+  },
+  "contactSupportPromptAction": "お問い合わせ",
+  "@contactSupportPromptAction": {
+    "description": "Localized app string for contactSupportPromptAction."
+  },
+  "orderLookup": "注文照会",
+  "@orderLookup": {
+    "description": "Localized app string for orderLookup."
+  },
+  "orderNo": "注文番号",
+  "@orderNo": {
+    "description": "Localized app string for orderNo."
+  },
+  "orderNoHint": "HF-0001",
+  "@orderNoHint": {
+    "description": "Localized app string for orderNoHint."
+  },
+  "email": "メールアドレス",
+  "@email": {
+    "description": "Localized app string for email."
+  },
+  "emailHint": "name@example.com",
+  "@emailHint": {
+    "description": "Localized app string for emailHint."
+  },
+  "lookupOrder": "注文を照会",
+  "@lookupOrder": {
+    "description": "Localized app string for lookupOrder."
+  },
+  "orderLookupLoadingTitle": "注文を照会中",
+  "@orderLookupLoadingTitle": {
+    "description": "Localized app string for orderLookupLoadingTitle."
+  },
+  "orderLookupLoadingMessage": "注文番号とメールアドレスを確認しています。",
+  "@orderLookupLoadingMessage": {
+    "description": "Localized app string for orderLookupLoadingMessage."
+  },
+  "orderLookupNotFoundTitle": "注文が見つかりません",
+  "@orderLookupNotFoundTitle": {
+    "description": "Localized app string for orderLookupNotFoundTitle."
+  },
+  "orderLookupNotFoundMessage": "入力された注文番号とメールアドレスに一致する注文が見つかりませんでした。",
+  "@orderLookupNotFoundMessage": {
+    "description": "Localized app string for orderLookupNotFoundMessage."
+  },
+  "orderLookupErrorTitle": "注文照会に失敗しました",
+  "@orderLookupErrorTitle": {
+    "description": "Localized app string for orderLookupErrorTitle."
+  },
+  "orderLookupErrorMessage": "注文照会を完了できませんでした。もう一度お試しください。",
+  "@orderLookupErrorMessage": {
+    "description": "Localized app string for orderLookupErrorMessage."
+  },
+  "orderLookupResultTitle": "注文状況",
+  "@orderLookupResultTitle": {
+    "description": "Localized app string for orderLookupResultTitle."
+  },
+  "orderLookupResultMessage": "ご注文の最新状況です。",
+  "@orderLookupResultMessage": {
+    "description": "Localized app string for orderLookupResultMessage."
+  },
+  "orderLookupOrderStatusLabel": "注文ステータス",
+  "@orderLookupOrderStatusLabel": {
+    "description": "Localized app string for orderLookupOrderStatusLabel."
+  },
+  "orderLookupProgressTitle": "進行状況",
+  "@orderLookupProgressTitle": {
+    "description": "Localized app string for orderLookupProgressTitle."
+  },
+  "orderLookupProductionStatusLabel": "制作ステータス",
+  "@orderLookupProductionStatusLabel": {
+    "description": "Localized app string for orderLookupProductionStatusLabel."
+  },
+  "orderLookupShippingStatusLabel": "発送ステータス",
+  "@orderLookupShippingStatusLabel": {
+    "description": "Localized app string for orderLookupShippingStatusLabel."
+  },
+  "orderLookupFulfillmentStatusLabel": "配送手配ステータス",
+  "@orderLookupFulfillmentStatusLabel": {
+    "description": "Localized app string for orderLookupFulfillmentStatusLabel."
+  },
+  "orderLookupTrackingNumberLabel": "追跡番号",
+  "@orderLookupTrackingNumberLabel": {
+    "description": "Localized app string for orderLookupTrackingNumberLabel."
+  },
+  "orderLookupTrackingDetailsTitle": "追跡詳細",
+  "@orderLookupTrackingDetailsTitle": {
+    "description": "Localized app string for orderLookupTrackingDetailsTitle."
+  },
+  "orderLookupCarrierLabel": "配送会社",
+  "@orderLookupCarrierLabel": {
+    "description": "Localized app string for orderLookupCarrierLabel."
+  },
+  "orderLookupShippedAtLabel": "発送日時",
+  "@orderLookupShippedAtLabel": {
+    "description": "Localized app string for orderLookupShippedAtLabel."
+  },
+  "orderLookupUpdatedAtLabel": "最終更新",
+  "@orderLookupUpdatedAtLabel": {
+    "description": "Localized app string for orderLookupUpdatedAtLabel."
+  },
+  "orderLookupNoTrackingValue": "未登録",
+  "@orderLookupNoTrackingValue": {
+    "description": "Localized app string for orderLookupNoTrackingValue."
+  },
+  "orderLookupOrderDateLabel": "注文日",
+  "@orderLookupOrderDateLabel": {
+    "description": "Localized app string for orderLookupOrderDateLabel."
+  },
+  "orderLookupContentTitle": "注文内容",
+  "@orderLookupContentTitle": {
+    "description": "Localized app string for orderLookupContentTitle."
+  },
+  "orderLookupSelectedSealLabel": "印影",
+  "@orderLookupSelectedSealLabel": {
+    "description": "Localized app string for orderLookupSelectedSealLabel."
+  },
+  "orderLookupGemstoneLabel": "宝石材",
+  "@orderLookupGemstoneLabel": {
+    "description": "Localized app string for orderLookupGemstoneLabel."
+  },
+  "orderLookupLookupAnotherAction": "別の注文を照会",
+  "@orderLookupLookupAnotherAction": {
+    "description": "Localized app string for orderLookupLookupAnotherAction."
+  },
+  "language": "言語",
+  "@language": {
+    "description": "Localized app string for language."
+  },
+  "about": "このアプリについて",
+  "@about": {
+    "description": "Localized app string for about."
+  },
+  "howItWorks": "使い方",
+  "@howItWorks": {
+    "description": "Localized app string for howItWorks."
+  },
+  "faq": "FAQ",
+  "@faq": {
+    "description": "Localized app string for faq."
+  },
+  "privacy": "プライバシー",
+  "@privacy": {
+    "description": "Localized app string for privacy."
+  },
+  "terms": "利用規約",
+  "@terms": {
+    "description": "Localized app string for terms."
+  },
+  "contact": "お問い合わせ",
+  "@contact": {
+    "description": "Localized app string for contact."
+  },
+  "version": "バージョン",
+  "@version": {
+    "description": "Localized app string for version."
+  },
+  "settingsLanguageTitle": "アプリの言語",
+  "@settingsLanguageTitle": {
+    "description": "Localized app string for settingsLanguageTitle."
+  },
+  "settingsLanguageMessage": "アプリ内で使う言語を選択できます。未選択の場合はスマートフォンの言語に合わせます。",
+  "@settingsLanguageMessage": {
+    "description": "Localized app string for settingsLanguageMessage."
+  },
+  "settingsLanguageEnglish": "英語",
+  "@settingsLanguageEnglish": {
+    "description": "Localized app string for settingsLanguageEnglish."
+  },
+  "settingsLanguageJapanese": "日本語",
+  "@settingsLanguageJapanese": {
+    "description": "Localized app string for settingsLanguageJapanese."
+  },
+  "settingsFaqIntro": "漢字選択、製作、配送、注文照会についてのよくある質問です。",
+  "@settingsFaqIntro": {
+    "description": "Localized app string for settingsFaqIntro."
+  },
+  "settingsVersionTitle": "インストール済みアプリのバージョン",
+  "@settingsVersionTitle": {
+    "description": "Localized app string for settingsVersionTitle."
+  },
+  "settingsVersionMessage": "バージョン {version}",
+  "@settingsVersionMessage": {
+    "description": "Installed app version label. The version placeholder is supplied by the app package metadata.",
+    "placeholders": {
+      "version": {
+        "type": "String",
+        "example": "1.0.0"
+      }
+    }
+  },
+  "designTipPrefix": "ヒント: ",
+  "@designTipPrefix": {
+    "description": "Prefix shown before short design-state guidance messages."
+  },
+  "orderStatusPaid": "支払い済み",
+  "@orderStatusPaid": {
+    "description": "Order status label for paid orders."
+  },
+  "orderStatusUnpaid": "未決済",
+  "@orderStatusUnpaid": {
+    "description": "Order status label for unpaid orders."
+  },
+  "orderStatusPending": "保留中",
+  "@orderStatusPending": {
+    "description": "Order status label for pending orders."
+  },
+  "orderStatusPendingPayment": "決済待ち",
+  "@orderStatusPendingPayment": {
+    "description": "Order status label for orders waiting for payment."
+  },
+  "orderStatusFailed": "失敗",
+  "@orderStatusFailed": {
+    "description": "Order status label for failed orders."
+  },
+  "orderStatusCanceled": "キャンセル",
+  "@orderStatusCanceled": {
+    "description": "Order status label for canceled orders."
+  },
+  "orderStatusNotStarted": "未開始",
+  "@orderStatusNotStarted": {
+    "description": "Order status label for work that has not started."
+  },
+  "orderStatusInProduction": "制作中",
+  "@orderStatusInProduction": {
+    "description": "Order status label for orders in production."
+  },
+  "orderStatusCompleted": "完了",
+  "@orderStatusCompleted": {
+    "description": "Order status label for completed production."
+  },
+  "orderStatusPreparingShipment": "発送準備中",
+  "@orderStatusPreparingShipment": {
+    "description": "Order status label for orders preparing shipment."
+  },
+  "orderStatusNotShipped": "未発送",
+  "@orderStatusNotShipped": {
+    "description": "Order status label for orders not yet shipped."
+  },
+  "orderStatusShipped": "発送済み",
+  "@orderStatusShipped": {
+    "description": "Order status label for shipped orders."
+  },
+  "orderStatusFulfilled": "配送完了",
+  "@orderStatusFulfilled": {
+    "description": "Order status label for fulfilled orders."
+  },
+  "orderStatusEmpty": "-",
+  "@orderStatusEmpty": {
+    "description": "Fallback order status label for an empty status value."
   }
 }
