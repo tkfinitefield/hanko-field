@@ -2,6 +2,7 @@ import 'package:declarative_nav/declarative_nav.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/localization/app_localization.dart';
+import '../../../app/localization/language_registry.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/widgets/core_widgets.dart';
 import 'settings_content.dart';
@@ -351,7 +352,6 @@ class _LanguageSettingsContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final currentLanguageCode = currentLocale.languageCode;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -362,41 +362,74 @@ class _LanguageSettingsContent extends StatelessWidget {
           body: l10n.settingsLanguageMessage,
         ),
         const SizedBox(height: HankoSpacing.md),
-        HankoSurfaceCard(
-          padding: const EdgeInsets.symmetric(vertical: HankoSpacing.xs),
-          radius: HankoRadii.md,
-          child: Column(
-            children: [
-              _LanguageOptionRow(
-                label: l10n.settingsLanguageEnglish,
-                isSelected: currentLanguageCode == 'en',
-                onTap: onLocaleSelected == null
-                    ? null
-                    : () => onLocaleSelected!(const Locale('en')),
-              ),
-              _LanguageOptionRow(
-                label: l10n.settingsLanguageJapanese,
-                isSelected: currentLanguageCode == 'ja',
-                onTap: onLocaleSelected == null
-                    ? null
-                    : () => onLocaleSelected!(const Locale('ja')),
-              ),
-            ],
-          ),
+        _LanguageRegistryRows(
+          currentLocale: currentLocale,
+          onLocaleSelected: onLocaleSelected,
         ),
       ],
     );
   }
 }
 
+class _LanguageRegistryRows extends StatelessWidget {
+  const _LanguageRegistryRows({
+    required this.currentLocale,
+    required this.onLocaleSelected,
+  });
+
+  final Locale currentLocale;
+  final ValueChanged<Locale>? onLocaleSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return FutureBuilder<AppLanguageRegistry>(
+      future: AppLanguageRegistry.load(bundle: DefaultAssetBundle.of(context)),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return HankoStateView.error(
+            title: l10n.commonGenericErrorTitle,
+            message: l10n.commonGenericErrorMessage,
+          );
+        }
+
+        final languages = snapshot.data?.selectableLanguages;
+        if (languages == null) {
+          return HankoStateView.loading(
+            title: l10n.settingsLanguageTitle,
+            message: l10n.splashPreparing,
+          );
+        }
+
+        return HankoSurfaceCard(
+          padding: const EdgeInsets.symmetric(vertical: HankoSpacing.xs),
+          radius: HankoRadii.md,
+          child: Column(
+            children: [
+              for (final language in languages)
+                _LanguageOptionRow(
+                  language: language,
+                  isSelected: language.matchesLocale(currentLocale),
+                  onTap: onLocaleSelected == null
+                      ? null
+                      : () => onLocaleSelected!(language.locale),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _LanguageOptionRow extends StatelessWidget {
   const _LanguageOptionRow({
-    required this.label,
+    required this.language,
     required this.isSelected,
     required this.onTap,
   });
 
-  final String label;
+  final AppLanguageOption language;
   final bool isSelected;
   final VoidCallback? onTap;
 
@@ -415,7 +448,17 @@ class _LanguageOptionRow extends StatelessWidget {
               children: [
                 const Icon(Icons.translate, color: HankoColors.gold, size: 20),
                 const SizedBox(width: 14),
-                Expanded(child: Text(label, style: HankoTextStyles.label)),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(language.nativeName, style: HankoTextStyles.label),
+                      if (language.englishNameLabel case final label?)
+                        Text(label, style: HankoTextStyles.compactBody),
+                    ],
+                  ),
+                ),
                 Icon(
                   isSelected
                       ? Icons.radio_button_checked

@@ -1630,7 +1630,7 @@ layout rules, or enabled-language behavior.
   Output: registry-keyed JSON files under `app/assets/i18n/settings/`.
   Done when: settings content can be translated without editing Dart source and
   the `M0-T05` migration-safety checklist is satisfied.
-- [ ] `M2-T05` Render language settings from the registry.
+- [x] `M2-T05` Render language settings from the registry.
   Output: selectable language rows using `native_name`, `english_name`, and
   `app.selectable`.
   Done when: English/Japanese rows are no longer hard-coded.
@@ -1829,6 +1829,53 @@ flutter test test/widget_test.dart \
   --plain-name "localizes non-tab feature entry screens"
 flutter analyze
 flutter build apk --debug
+make i18n-status-test
+make i18n-status
+```
+
+Full `flutter test` was also attempted. It still fails on the pre-existing
+Flutter `ListTile` under `DecoratedBox` assertion in checkout widget tests. In
+that full-suite run, the settings navigation test also timed out after the
+checkout assertion failures, while the same settings navigation test passed
+when run by itself.
+
+#### M2-T05 Registry-Driven Language Settings
+
+Completed on 2026-06-18. Replaced the hard-coded English/Japanese language
+selection rows with rows loaded from the canonical language registry.
+
+Implementation notes:
+
+- `app/lib/app/localization/language_registry.dart` reads
+  `config/languages.json` as a Flutter asset and parses the subset needed by
+  the app language settings UI.
+- The settings language screen now renders only entries where
+  `app.enabled=true` and `app.selectable=true`.
+- Each row uses `native_name` as the primary label and shows `english_name` as
+  supporting text when it differs from the native name.
+- Locale selection is derived from the registry's `flutter.languageCode`,
+  `flutter.scriptCode`, and `flutter.countryCode` fields, so future selectable
+  script-sensitive locales can be represented without adding hard-coded rows.
+- `app/pubspec.yaml` registers `../config/languages.json` as a Flutter asset
+  so the app consumes the checked-in registry instead of a duplicated app-only
+  locale list.
+- `M2-T06` still owns changing persistence from the current `Locale` value to a
+  normalized saved `route_code`.
+
+Validation:
+
+```sh
+jq empty config/languages.json
+flutter test test/language_registry_test.dart
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 switches the app language from settings"
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 settings rows navigate to destination screens"
+flutter test test/widget_test.dart \
+  --plain-name "localizes non-tab feature entry screens"
+flutter analyze
+flutter build apk --debug
+make i18n-registry-test
 make i18n-status-test
 make i18n-status
 ```

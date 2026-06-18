@@ -4182,22 +4182,26 @@ void main() {
 
     expect(find.text('App language'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
+    expect(find.text('日本語'), findsOneWidget);
     expect(find.text('Japanese'), findsOneWidget);
+    expect(find.text('简体中文'), findsNothing);
+    expect(find.text('繁體中文'), findsNothing);
 
     await tester.tap(find.text('Japanese'));
     await tester.pumpAndSettle();
 
     expect(savedLocale?.languageCode, 'ja');
     expect(find.text('アプリの言語'), findsOneWidget);
-    expect(find.text('英語'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
     expect(find.text('日本語'), findsOneWidget);
 
-    await tester.tap(find.text('英語'));
+    await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
 
     expect(savedLocale?.languageCode, 'en');
     expect(find.text('App language'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
+    expect(find.text('日本語'), findsOneWidget);
     expect(find.text('Japanese'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
