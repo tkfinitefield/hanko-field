@@ -1,7 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     env,
-    path::Path as FsPath,
     sync::{Arc, OnceLock},
     time::Duration,
 };
@@ -28,7 +27,7 @@ const DEFAULT_KANJI_CANDIDATE_COUNT: usize = 6;
 const ADMIN_PROXY_MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 const HX_REDIRECT_HEADER: &str = "hx-redirect";
 const WEB_STATIC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/static");
-const WEB_BLOG_ARTICLES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/blog/articles");
+const WEB_BLOG_CONTENT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/content/blog");
 const LANGUAGE_REGISTRY_JSON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../config/languages.json"
@@ -507,6 +506,24 @@ struct BlogPost {
     image_url: String,
     image_alt: String,
     image_alt_ja: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct BlogPostMetadata {
+    slug: String,
+    published_date: String,
+    last_modified_date: String,
+    image_url: String,
+    locales: HashMap<String, BlogPostLocaleMetadata>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BlogPostLocaleMetadata {
+    date_display: String,
+    title: String,
+    excerpt: String,
+    meta_description: String,
+    image_alt: String,
 }
 
 #[derive(Debug, Clone)]
@@ -2485,26 +2502,18 @@ fn collect_font_stylesheet_urls(fonts: &[FontOption]) -> Vec<String> {
 
 fn load_blog_posts() -> Result<Vec<BlogPost>> {
     let mut posts = Vec::new();
-    for entry in std::fs::read_dir(WEB_BLOG_ARTICLES_DIR).with_context(|| {
-        format!("failed to read blog articles directory {WEB_BLOG_ARTICLES_DIR}")
-    })? {
+    for entry in std::fs::read_dir(WEB_BLOG_CONTENT_DIR)
+        .with_context(|| format!("failed to read blog content directory {WEB_BLOG_CONTENT_DIR}"))?
+    {
         let entry = entry.with_context(|| {
-            format!("failed to read blog article entry in {WEB_BLOG_ARTICLES_DIR}")
+            format!("failed to read blog content entry in {WEB_BLOG_CONTENT_DIR}")
         })?;
         let path = entry.path();
-        if path.extension().and_then(|extension| extension.to_str()) != Some("html") {
-            continue;
-        }
-        let Some(file_name) = path.file_name().and_then(|file_name| file_name.to_str()) else {
-            continue;
-        };
-        if file_name.ends_with(".ja.html") {
+        if !path.is_dir() {
             continue;
         }
 
-        let source = std::fs::read_to_string(&path)
-            .with_context(|| format!("failed to read blog article {}", path.display()))?;
-        posts.push(parse_blog_post_from_article(&path, &source)?);
+        posts.push(load_blog_post_from_content_dir(&path)?);
     }
 
     posts.sort_by(|left, right| {
@@ -2516,142 +2525,101 @@ fn load_blog_posts() -> Result<Vec<BlogPost>> {
     Ok(posts)
 }
 
-fn parse_blog_post_from_article(path: &FsPath, source: &str) -> Result<BlogPost> {
-    let (front_matter, _) = split_blog_article_source(source)?;
-    let front_matter = front_matter.with_context(|| {
-        format!(
-            "missing blog metadata front matter in article {}",
-            path.display()
-        )
-    })?;
-    let metadata = parse_blog_front_matter(front_matter)
-        .with_context(|| format!("failed to parse blog metadata in {}", path.display()))?;
-    let fallback_slug = path
-        .file_stem()
-        .and_then(|file_stem| file_stem.to_str())
-        .context("blog article file name should be valid utf-8")?
-        .to_owned();
-    let slug = metadata
-        .get("slug")
-        .cloned()
-        .unwrap_or(fallback_slug)
-        .trim()
-        .to_owned();
+fn load_blog_post_from_content_dir(path: &std::path::Path) -> Result<BlogPost> {
+    let metadata_path = path.join("metadata.json");
+    let source = std::fs::read_to_string(&metadata_path)
+        .with_context(|| format!("failed to read blog metadata {}", metadata_path.display()))?;
+    let metadata = serde_json::from_str::<BlogPostMetadata>(&source)
+        .with_context(|| format!("failed to parse blog metadata {}", metadata_path.display()))?;
+    let slug = metadata.slug.trim().to_owned();
     if !is_safe_slug(&slug) {
-        bail!("invalid blog slug in {}: {slug}", path.display());
+        bail!("invalid blog slug in {}: {slug}", metadata_path.display());
+    }
+    let dir_slug = path
+        .file_name()
+        .and_then(|file_name| file_name.to_str())
+        .context("blog content directory name should be valid utf-8")?;
+    if dir_slug != slug {
+        bail!(
+            "blog metadata slug must match directory name: {} has slug {slug}",
+            path.display()
+        );
+    }
+    for locale in ["en", "ja"] {
+        let article_path = path.join(format!("{locale}.html"));
+        if !article_path.is_file() {
+            bail!("missing blog article body {}", article_path.display());
+        }
     }
 
-    let excerpt = required_blog_metadata(&metadata, "excerpt")?;
-    let excerpt_ja = required_blog_metadata(&metadata, "excerpt_ja")?;
-    let published_date = required_blog_metadata(&metadata, "date")?;
+    let published_date = metadata.published_date;
     ensure_valid_sitemap_lastmod(&published_date)
-        .with_context(|| format!("invalid blog date in {}", path.display()))?;
-    let last_modified_date = metadata
-        .get("lastmod")
-        .cloned()
-        .unwrap_or_else(|| published_date.clone());
-    ensure_valid_sitemap_lastmod(&last_modified_date)
-        .with_context(|| format!("invalid blog lastmod in {}", path.display()))?;
+        .with_context(|| format!("invalid blog published_date in {}", metadata_path.display()))?;
+    let last_modified_date = metadata.last_modified_date;
+    ensure_valid_sitemap_lastmod(&last_modified_date).with_context(|| {
+        format!(
+            "invalid blog last_modified_date in {}",
+            metadata_path.display()
+        )
+    })?;
+    let en = required_blog_locale_metadata(&metadata.locales, "en", &metadata_path)?;
+    let ja = required_blog_locale_metadata(&metadata.locales, "ja", &metadata_path)?;
     Ok(BlogPost {
         slug,
         published_date,
         last_modified_date,
-        date_display: required_blog_metadata(&metadata, "date_display")?,
-        date_display_ja: required_blog_metadata(&metadata, "date_display_ja")?,
-        title: required_blog_metadata(&metadata, "title")?,
-        title_ja: required_blog_metadata(&metadata, "title_ja")?,
-        meta_description: metadata
-            .get("meta_description")
-            .cloned()
-            .unwrap_or_else(|| excerpt.clone()),
-        meta_description_ja: metadata
-            .get("meta_description_ja")
-            .cloned()
-            .unwrap_or_else(|| excerpt_ja.clone()),
-        excerpt,
-        excerpt_ja,
-        image_url: required_blog_metadata(&metadata, "image_url")?,
-        image_alt: required_blog_metadata(&metadata, "image_alt")?,
-        image_alt_ja: required_blog_metadata(&metadata, "image_alt_ja")?,
+        date_display: required_blog_locale_value(en, "date_display", &metadata_path)?,
+        date_display_ja: required_blog_locale_value(ja, "date_display", &metadata_path)?,
+        title: required_blog_locale_value(en, "title", &metadata_path)?,
+        title_ja: required_blog_locale_value(ja, "title", &metadata_path)?,
+        excerpt: required_blog_locale_value(en, "excerpt", &metadata_path)?,
+        excerpt_ja: required_blog_locale_value(ja, "excerpt", &metadata_path)?,
+        meta_description: required_blog_locale_value(en, "meta_description", &metadata_path)?,
+        meta_description_ja: required_blog_locale_value(ja, "meta_description", &metadata_path)?,
+        image_url: required_blog_metadata_value(&metadata.image_url, "image_url", &metadata_path)?,
+        image_alt: required_blog_locale_value(en, "image_alt", &metadata_path)?,
+        image_alt_ja: required_blog_locale_value(ja, "image_alt", &metadata_path)?,
     })
 }
 
-fn required_blog_metadata(metadata: &HashMap<String, String>, key: &str) -> Result<String> {
-    metadata
-        .get(key)
-        .filter(|value| !value.trim().is_empty())
-        .cloned()
-        .with_context(|| format!("missing required blog metadata key `{key}`"))
+fn required_blog_locale_metadata<'a>(
+    locales: &'a HashMap<String, BlogPostLocaleMetadata>,
+    locale: &str,
+    path: &std::path::Path,
+) -> Result<&'a BlogPostLocaleMetadata> {
+    locales.get(locale).with_context(|| {
+        format!(
+            "missing blog metadata locale `{locale}` in {}",
+            path.display()
+        )
+    })
 }
 
-fn split_blog_article_source(source: &str) -> Result<(Option<&str>, &str)> {
-    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-    let Some(remainder) = source
-        .strip_prefix("---\n")
-        .or_else(|| source.strip_prefix("---\r\n"))
-    else {
-        return Ok((None, source));
+fn required_blog_locale_value(
+    metadata: &BlogPostLocaleMetadata,
+    key: &str,
+    path: &std::path::Path,
+) -> Result<String> {
+    let value = match key {
+        "date_display" => &metadata.date_display,
+        "title" => &metadata.title,
+        "excerpt" => &metadata.excerpt,
+        "meta_description" => &metadata.meta_description,
+        "image_alt" => &metadata.image_alt,
+        _ => bail!("unknown blog metadata key `{key}`"),
     };
-
-    for delimiter in ["\n---\n", "\r\n---\r\n", "\n---\r\n", "\r\n---\n"] {
-        if let Some(index) = remainder.find(delimiter) {
-            let metadata = &remainder[..index];
-            let body = &remainder[index + delimiter.len()..];
-            return Ok((Some(metadata), body.trim_start()));
-        }
-    }
-
-    bail!("blog article front matter is missing a closing delimiter")
+    required_blog_metadata_value(value, key, path)
 }
 
-fn parse_blog_front_matter(source: &str) -> Result<HashMap<String, String>> {
-    let mut metadata = HashMap::new();
-    for (line_index, line) in source.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            bail!("invalid metadata line {}: {line}", line_index + 1);
-        };
-        let key = key.trim();
-        if key.is_empty() {
-            bail!("empty metadata key on line {}", line_index + 1);
-        }
-        metadata.insert(
-            key.to_owned(),
-            parse_blog_metadata_value(value.trim())
-                .with_context(|| format!("invalid value for metadata key `{key}`"))?,
+fn required_blog_metadata_value(value: &str, key: &str, path: &std::path::Path) -> Result<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        bail!(
+            "missing required blog metadata key `{key}` in {}",
+            path.display()
         );
     }
-    Ok(metadata)
-}
-
-fn parse_blog_metadata_value(value: &str) -> Result<String> {
-    if !(value.starts_with('"') && value.ends_with('"') && value.len() >= 2) {
-        bail!("metadata values must be double-quoted strings");
-    }
-
-    let mut parsed = String::new();
-    let mut chars = value[1..value.len() - 1].chars();
-    while let Some(ch) = chars.next() {
-        if ch != '\\' {
-            parsed.push(ch);
-            continue;
-        }
-
-        let escaped = chars.next().context("unterminated escape sequence")?;
-        match escaped {
-            '"' => parsed.push('"'),
-            '\\' => parsed.push('\\'),
-            'n' => parsed.push('\n'),
-            'r' => parsed.push('\r'),
-            't' => parsed.push('\t'),
-            other => bail!("unsupported escape sequence \\{other}"),
-        }
-    }
-
-    Ok(parsed)
+    Ok(value.to_owned())
 }
 
 fn blog_post_cards(posts: &[BlogPost], base_url: &str, locale: &str) -> Vec<BlogPostCard> {
@@ -2702,16 +2670,15 @@ fn read_blog_article_body(slug: &str, locale: &str) -> Result<String> {
     if !is_safe_slug(slug) {
         bail!("invalid blog slug");
     }
-    let path = if is_japanese_locale(locale) {
-        format!("{WEB_BLOG_ARTICLES_DIR}/{slug}.ja.html")
+    let route_code = if is_japanese_locale(locale) {
+        "ja"
     } else {
-        format!("{WEB_BLOG_ARTICLES_DIR}/{slug}.html")
+        "en"
     };
+    let path = format!("{WEB_BLOG_CONTENT_DIR}/{slug}/{route_code}.html");
     let source = std::fs::read_to_string(&path)
         .with_context(|| format!("failed to read blog article {path}"))?;
-    let (_, body_html) = split_blog_article_source(&source)
-        .with_context(|| format!("failed to split blog article {path}"))?;
-    Ok(body_html.to_owned())
+    Ok(source)
 }
 
 fn is_safe_slug(slug: &str) -> bool {

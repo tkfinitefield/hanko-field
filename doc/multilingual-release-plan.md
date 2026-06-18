@@ -1989,7 +1989,7 @@ when run by itself.
 - [x] `M3-T05` Generate `hreflang`, canonical URLs, and sitemap entries.
   Output: registry-driven SEO output using `web.indexed`.
   Done when: non-indexed QA languages render but do not enter the sitemap.
-- [ ] `M3-T06` Migrate blog content layout.
+- [x] `M3-T06` Migrate blog content layout.
   Output: `web/content/blog/<slug>/<lang>.html` plus language-keyed metadata.
   Done when: English and Japanese blog pages retain their current URLs and the
   `M0-T05` migration-safety checklist is satisfied.
@@ -2224,6 +2224,71 @@ make i18n-registry-test
 make i18n-status-test
 make i18n-status
 rg -n 'for language_link in seo_language_links|x_default_url' web/templates
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T06 Blog Content Layout Migration
+
+Completed on 2026-06-18. Migrated blog articles from front matter HTML files
+under `web/blog/articles/` to the language-keyed content layout under
+`web/content/blog/<slug>/`.
+
+Implementation notes:
+
+- Created `metadata.json`, `en.html`, and `ja.html` for each of the 15 current
+  blog article slugs.
+- Moved language-specific title, excerpt, meta description, date display, and
+  image alt text into `metadata.json.locales.en` and `metadata.json.locales.ja`.
+- Kept shared slug, published date, last modified date, and image URL at the
+  metadata root.
+- Updated the web blog loader to read `web/content/blog/<slug>/metadata.json`
+  and article bodies from `en.html` / `ja.html`.
+- Removed the old front matter parser and the obsolete
+  `web/blog/articles/*.html` / `*.ja.html` source files.
+- Preserved current public URLs such as `/blog/<slug>` and `/ja/blog/<slug>`.
+
+M0-T05 preservation evidence:
+
+- English and Japanese blog metadata were migrated from the old front matter
+  fields without value changes.
+- English and Japanese article bodies were split from the old files without
+  content changes.
+- Existing blog URLs, canonical URLs, `hreflang`, sitemap entries, and journal
+  card behavior are covered by the existing web tests.
+- Chinese disposition: no standalone Chinese blog article source existed before
+  this task. Future Chinese blog content can be added as additional locale HTML
+  files and metadata locale objects under the same slug directories.
+- Rollback path: restore `web/blog/articles/*.html` and `*.ja.html`, revert the
+  blog loader to front matter parsing, and remove `web/content/blog/`.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+jq empty web/content/blog/*/metadata.json
+node - <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = 'web/content/blog';
+const slugs = fs.readdirSync(root).filter((name) => fs.statSync(path.join(root, name)).isDirectory());
+if (slugs.length !== 15) throw new Error(`expected 15 blog slugs, got ${slugs.length}`);
+for (const slug of slugs) {
+  const dir = path.join(root, slug);
+  for (const file of ['metadata.json', 'en.html', 'ja.html']) {
+    if (!fs.statSync(path.join(dir, file)).isFile()) throw new Error(`${slug}/${file} missing`);
+  }
+  const metadata = JSON.parse(fs.readFileSync(path.join(dir, 'metadata.json'), 'utf8'));
+  if (metadata.slug !== slug) throw new Error(`${slug} metadata slug mismatch`);
+  for (const locale of ['en', 'ja']) {
+    if (!metadata.locales?.[locale]?.title) throw new Error(`${slug}/${locale} title missing`);
+  }
+}
+NODE
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
 git diff --check
 git diff --cached --check
 ```
