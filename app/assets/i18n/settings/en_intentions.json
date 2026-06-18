@@ -1,0 +1,76 @@
+{
+  "entries": [
+    {
+      "key_path": "about.body",
+      "source_file": "app/lib/features/settings/presentation/settings_content.dart",
+      "source_value": "STONE SIGNATURE",
+      "target_locale": "en",
+      "reason_code": "brand_name",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.intro",
+      "source_file": "app/lib/features/settings/presentation/settings_content.dart",
+      "source_value": "STONE SIGNATURE",
+      "target_locale": "en",
+      "reason_code": "brand_name",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.sections[0].body",
+      "source_file": "app/lib/features/settings/presentation/settings_content.dart",
+      "source_value": "Finite Field, K.K.",
+      "target_locale": "en",
+      "reason_code": "legal_entity",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "privacy.officialUrl",
+      "source_file": "app/lib/features/settings/presentation/settings_content.dart",
+      "source_value": "https://finitefield.org/en/privacy/",
+      "target_locale": "en",
+      "reason_code": "url_or_email",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "terms.officialUrl",
+      "source_file": "app/lib/features/settings/presentation/settings_content.dart",
+      "source_value": "https://finitefield.org/terms",
+      "target_locale": "en",
+      "reason_code": "url_or_email",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.options[0].value",
+      "source_file": "app/lib/features/settings/presentation/settings_content.dart",
+      "source_value": "https://finitefield.org/en/contact/",
+      "target_locale": "en",
+      "reason_code": "url_or_email",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "contact.options[1].value",
+      "source_file": "app/lib/features/settings/presentation/settings_content.dart",
+      "source_value": "dev@finitefield.org",
+      "target_locale": "en",
+      "reason_code": "url_or_email",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    },
+    {
+      "key_path": "howItWorks.steps[3].body",
+      "source_file": "app/lib/features/settings/presentation/settings_content.dart",
+      "source_value": "Stripe Checkout",
+      "target_locale": "en",
+      "reason_code": "payment_provider",
+      "reviewer": "codex",
+      "date": "2026-06-18"
+    }
+  ]
+}

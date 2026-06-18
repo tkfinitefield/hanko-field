@@ -1626,7 +1626,7 @@ layout rules, or enabled-language behavior.
 - [x] `M2-T03` Replace hand-written localization accessors.
   Output: generated localization access in `HankoApp` and feature screens.
   Done when: compatibility wrapper is removed or documented as temporary.
-- [ ] `M2-T04` Move long settings content to JSON assets.
+- [x] `M2-T04` Move long settings content to JSON assets.
   Output: registry-keyed JSON files under `app/assets/i18n/settings/`.
   Done when: settings content can be translated without editing Dart source and
   the `M0-T05` migration-safety checklist is satisfied.
@@ -1765,6 +1765,79 @@ jq empty app/lib/l10n/app_en.arb app/lib/l10n/app_ja.arb \
 Full `flutter test` was also attempted. It still fails on the pre-existing
 Flutter `ListTile` under `DecoratedBox` assertion in checkout widget tests,
 matching the earlier M2-T01 validation note.
+
+#### M2-T04 Settings JSON Assets
+
+Completed on 2026-06-18. Moved the long settings content out of Dart constants
+and into JSON assets so future translation work can update structured content
+files without editing Flutter source.
+
+Implementation notes:
+
+- `app/assets/i18n/settings/en.json` and
+  `app/assets/i18n/settings/ja.json` now hold the About, How it works, FAQ,
+  Privacy, Terms, and Contact long-form settings copy.
+- `app/assets/i18n/settings/en_intentions.json` and
+  `app/assets/i18n/settings/ja_intentions.json` record intentional holdouts
+  for brand names, legal entity names, URLs, email addresses, and payment
+  provider names.
+- `app/lib/features/settings/presentation/settings_content.dart` now parses
+  settings content from JSON assets and keeps typed content models for the UI.
+- `app/lib/features/settings/presentation/settings_home_screen.dart` loads
+  long-form settings content asynchronously with `FutureBuilder` while keeping
+  language and version screens synchronous.
+- `app/pubspec.yaml` registers `assets/i18n/settings/` as a Flutter asset
+  directory.
+- `make i18n-status` now reports `app: 4/4 present`, with no missing app
+  asset groups.
+
+M0-T05 preservation evidence:
+
+- M0 inventory rows touched: `settings_content.dart` long-form settings copy
+  migration sources.
+- Source files removed or replaced: the inline Dart constants in
+  `settings_content.dart` were removed and replaced by JSON-backed loading.
+- Target files created or updated: English/Japanese settings JSON files,
+  English/Japanese intention sidecars, the settings content loader, the
+  settings home screen loader, the Flutter asset registration, and focused
+  settings content tests.
+- English and Japanese preservation evidence: JSON assets were generated from
+  the existing Dart constants, then verified by focused parser/asset tests and
+  settings navigation widget tests.
+- Chinese `zh` and `zhtw` disposition: no standalone Chinese settings source
+  existed for this screen. Existing Chinese references were topical
+  English/Japanese content, such as the partner workshop in China, so Chinese
+  settings JSON files are deferred until pilot translation.
+- Intentional holdout sidecars updated: `STONE SIGNATURE`, `Finite Field,
+  K.K.`, finitefield.org URLs, `dev@finitefield.org`, and `Stripe Checkout`
+  are recorded with the M0-T05 reason codes.
+- Rollback path: restore the previous Dart constants in
+  `settings_content.dart`, remove the settings asset directory and
+  `pubspec.yaml` asset entry, then remove the focused settings content test.
+
+Validation:
+
+```sh
+jq empty app/assets/i18n/settings/en.json \
+  app/assets/i18n/settings/ja.json \
+  app/assets/i18n/settings/en_intentions.json \
+  app/assets/i18n/settings/ja_intentions.json
+flutter test test/settings_content_test.dart
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 settings rows navigate to destination screens"
+flutter test test/widget_test.dart \
+  --plain-name "localizes non-tab feature entry screens"
+flutter analyze
+flutter build apk --debug
+make i18n-status-test
+make i18n-status
+```
+
+Full `flutter test` was also attempted. It still fails on the pre-existing
+Flutter `ListTile` under `DecoratedBox` assertion in checkout widget tests. In
+that full-suite run, the settings navigation test also timed out after the
+checkout assertion failures, while the same settings navigation test passed
+when run by itself.
 
 ### M3: Web Copy and Route Migration
 

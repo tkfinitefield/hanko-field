@@ -248,7 +248,6 @@ class _SettingsDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final content = SettingsContentBundle.forLanguage(l10n.locale.languageCode);
 
     return _SettingsPageFrame(
       title: destination.title(l10n),
@@ -264,6 +263,56 @@ class _SettingsDetailPage extends StatelessWidget {
             currentLocale: l10n.locale,
             onLocaleSelected: onLocaleSelected,
           ),
+          _SettingsDestination.about ||
+          _SettingsDestination.howItWorks ||
+          _SettingsDestination.faq ||
+          _SettingsDestination.privacy ||
+          _SettingsDestination.terms ||
+          _SettingsDestination.contact => _SettingsContentLoader(
+            languageCode: l10n.locale.languageCode,
+            destination: destination,
+          ),
+          _SettingsDestination.version => const _VersionSettingsContent(),
+        },
+      ],
+    );
+  }
+}
+
+class _SettingsContentLoader extends StatelessWidget {
+  const _SettingsContentLoader({
+    required this.languageCode,
+    required this.destination,
+  });
+
+  final String languageCode;
+  final _SettingsDestination destination;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return FutureBuilder<SettingsContentBundle>(
+      future: SettingsContentBundle.forLanguage(
+        languageCode,
+        bundle: DefaultAssetBundle.of(context),
+      ),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return HankoStateView.error(
+            title: l10n.commonGenericErrorTitle,
+            message: l10n.commonGenericErrorMessage,
+          );
+        }
+
+        final content = snapshot.data;
+        if (content == null) {
+          return HankoStateView.loading(
+            title: destination.title(l10n),
+            message: l10n.splashPreparing,
+          );
+        }
+
+        return switch (destination) {
           _SettingsDestination.about => _AboutSettingsContent(
             content: content.about,
           ),
@@ -282,9 +331,10 @@ class _SettingsDetailPage extends StatelessWidget {
           _SettingsDestination.contact => _ContactSettingsContent(
             content: content.contact,
           ),
-          _SettingsDestination.version => const _VersionSettingsContent(),
-        },
-      ],
+          _SettingsDestination.language ||
+          _SettingsDestination.version => const SizedBox.shrink(),
+        };
+      },
     );
   }
 }
