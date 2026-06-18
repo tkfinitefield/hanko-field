@@ -16,7 +16,7 @@ GCP_PROD_REGION ?= asia-northeast1
 ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_ADMIN_MODE);,)
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-export i18n-import i18n-handoff-test
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -43,6 +43,9 @@ help:
 	@echo "  make i18n-arb-test  # Validate ARB placeholder and ICU checks"
 	@echo "  make i18n-json-shape-test # Validate JSON shape and fallback checks"
 	@echo "  make i18n-intentions-test # Validate intention sidecar checks"
+	@echo "  make i18n-export    # Export translation handoff JSON"
+	@echo "  make i18n-import    # Import translation handoff JSON with IN=<file>"
+	@echo "  make i18n-handoff-test # Validate translation handoff helpers"
 	@echo "  make i18n-registry-test # Validate the language registry parser"
 	@echo ""
 	@echo "Options:"
@@ -107,3 +110,12 @@ i18n-json-shape-test:
 
 i18n-intentions-test:
 	node --test scripts/i18n/intentions.test.mjs
+
+i18n-export:
+	@node scripts/i18n/handoff.mjs export
+
+i18n-import:
+	@node scripts/i18n/handoff.mjs import
+
+i18n-handoff-test:
+	node --test scripts/i18n/handoff.test.mjs

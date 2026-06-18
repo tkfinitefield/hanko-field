@@ -2976,7 +2976,7 @@ git diff --cached --check
 - [x] `M6-T05` Implement intention sidecar validation.
   Output: allowed reason code checks and per-key suppression.
   Done when: English leftovers are allowed only with approved sidecars.
-- [ ] `M6-T06` Add export/import helpers.
+- [x] `M6-T06` Add export/import helpers.
   Output: translation handoff files that can be reviewed and imported without
   changing key order.
   Done when: generated diffs remain deterministic.
@@ -3311,6 +3311,81 @@ node --check scripts/i18n/intentions.mjs
 node --check scripts/i18n/intentions.test.mjs
 node --check scripts/i18n/check.mjs
 node --check scripts/i18n/check.test.mjs
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T06 Translation Handoff Export and Import
+
+Completed on 2026-06-18. Added deterministic translation handoff helpers for
+reviewable export/import workflows.
+
+Implementation notes:
+
+- Added `scripts/i18n/handoff.mjs`.
+- Added `scripts/i18n/handoff.test.mjs`.
+- Added root Make targets:
+  - `make i18n-export`
+  - `make i18n-import`
+  - `make i18n-handoff-test`
+- `make i18n-export` emits a stable JSON handoff envelope with no timestamp or
+  machine-local metadata.
+- The handoff includes `source_file`, `target_file`, `target_locale`,
+  `sidecar_file`, `key_path`, `source_value`, `target_value`, and
+  `present`/`missing` status for each exported string.
+- `LANGS=` and `FILE=` use the same route-code and file-filter workflow as the
+  existing i18n tools.
+- App ARB, app settings JSON, web content JSON, API checkout JSON, release
+  metadata JSON, and API catalog language maps can be exported.
+- `make i18n-import IN=<file>` imports handoff values into target files while
+  preserving existing object key order.
+- Missing JSON and ARB target files are created from the English source
+  skeleton before imported values are applied.
+- Missing ARB targets keep metadata keys and receive target `@@locale` metadata
+  derived from the target ARB filename.
+- Catalog imports aggregate all updates for the same catalog file before
+  writing, so multi-locale handoff imports do not overwrite earlier locale
+  updates in the same run.
+
+Examples:
+
+```sh
+LANGS=ja FILE=web/content/i18n/common/ja.json make i18n-export > /tmp/handoff.json
+IN=/tmp/handoff.json make i18n-import
+LANGS=zh FILE=api/content/i18n/catalog/materials.json make i18n-export
+make i18n-handoff-test
+```
+
+M0-T05 preservation evidence:
+
+- Export is read-only and does not generate, rewrite, or normalize translation
+  files.
+- Import writes only files listed in the reviewed handoff input.
+- Existing target object order is preserved by updating values in place rather
+  than reconstructing existing files from sorted keys.
+- Handoff output is deterministic: repeated exports for the same scope produce
+  byte-identical JSON.
+- Rollback path: remove `scripts/i18n/handoff.mjs`,
+  `scripts/i18n/handoff.test.mjs`, and the Make targets, then reopen
+  `M6-T06`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/handoff.mjs
+node --check scripts/i18n/handoff.test.mjs
+make i18n-handoff-test
+LANGS=ja FILE=web/content/i18n/common/ja.json make i18n-export > /tmp/hanko-field-handoff-1.json
+LANGS=ja FILE=web/content/i18n/common/ja.json make i18n-export > /tmp/hanko-field-handoff-2.json
+cmp /tmp/hanko-field-handoff-1.json /tmp/hanko-field-handoff-2.json
+make i18n-check
+make i18n-check-test
+make i18n-intentions-test
+make i18n-json-shape-test
+make i18n-arb-test
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
 git diff --check
 git diff --cached --check
 ```
