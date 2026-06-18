@@ -2962,7 +2962,7 @@ git diff --cached --check
   Output: actionable missing-key report with file, locale, key, base English
   value, fallback value, and sidecar path.
   Done when: `LANGS=` and `FILE=` filters work.
-- [ ] `M6-T02` Implement `make i18n-check`.
+- [x] `M6-T02` Implement `make i18n-check`.
   Output: one validation gate for registry, ARB, JSON, web copy, API content,
   sidecars, and release metadata.
   Done when: missing or malformed content returns non-zero.
@@ -3040,6 +3040,65 @@ make i18n-todo LANGS=zh FILE=api/content/i18n/catalog/materials.json
 make i18n-todo-test
 make i18n-status-test
 make i18n-registry-test
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T02 i18n Check Gate
+
+Completed on 2026-06-18. Added a single repository-level validation gate for
+localization content.
+
+Implementation notes:
+
+- Added `scripts/i18n/check.mjs`.
+- Added `scripts/i18n/check.test.mjs`.
+- Added root Make targets:
+  - `make i18n-check`
+  - `make i18n-check-test`
+- `make i18n-check` loads and validates `config/languages.json` through the
+  registry parser.
+- The check validates JSON syntax for app ARB files, app settings JSON, web
+  content JSON, API content JSON, existing intention sidecars, and existing
+  release metadata source JSON.
+- The check reuses `i18n-status` to fail when registry-enabled app, web, API,
+  or release metadata files are missing.
+- The check reuses `i18n-todo` to fail when target files or keys are missing.
+- `LANGS=` and `FILE=` are passed through to the todo/content validation layer,
+  so narrow checks can be run before broader checks.
+- Malformed content is reported as a check issue instead of aborting without a
+  summary.
+
+Examples:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=web/content/i18n/top/zh.json
+make i18n-check LANGS=zh FILE=api/content/i18n/catalog/materials.json
+```
+
+M0-T05 preservation evidence:
+
+- The command is read-only and does not generate, rewrite, or normalize
+  translation files.
+- Existing English, Japanese, Chinese, and Traditional Chinese content remains
+  untouched.
+- Missing sidecar and translation work is reported rather than auto-created.
+- Rollback path: remove `scripts/i18n/check.mjs`,
+  `scripts/i18n/check.test.mjs`, and the Make targets, then reopen `M6-T02`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=web/content/i18n/top/zh.json
+make i18n-check LANGS=zh FILE=api/content/i18n/catalog/materials.json
+make i18n-check-test
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
+node --check scripts/i18n/check.mjs
+node --check scripts/i18n/check.test.mjs
 git diff --check
 git diff --cached --check
 ```
