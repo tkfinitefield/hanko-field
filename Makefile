@@ -16,7 +16,7 @@ GCP_PROD_REGION ?= asia-northeast1
 ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_ADMIN_MODE);,)
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-export i18n-import i18n-handoff-test
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-export i18n-import i18n-handoff-test i18n-ci
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -46,6 +46,7 @@ help:
 	@echo "  make i18n-export    # Export translation handoff JSON"
 	@echo "  make i18n-import    # Import translation handoff JSON with IN=<file>"
 	@echo "  make i18n-handoff-test # Validate translation handoff helpers"
+	@echo "  make i18n-ci        # Run localization checks used by CI"
 	@echo "  make i18n-registry-test # Validate the language registry parser"
 	@echo ""
 	@echo "Options:"
@@ -119,3 +120,22 @@ i18n-import:
 
 i18n-handoff-test:
 	node --test scripts/i18n/handoff.test.mjs
+
+i18n-ci:
+	node --check scripts/i18n/registry.mjs
+	node --check scripts/i18n/status.mjs
+	node --check scripts/i18n/todo.mjs
+	node --check scripts/i18n/check.mjs
+	node --check scripts/i18n/arb.mjs
+	node --check scripts/i18n/json_shape.mjs
+	node --check scripts/i18n/intentions.mjs
+	node --check scripts/i18n/handoff.mjs
+	$(MAKE) i18n-check
+	$(MAKE) i18n-check-test
+	$(MAKE) i18n-arb-test
+	$(MAKE) i18n-json-shape-test
+	$(MAKE) i18n-intentions-test
+	$(MAKE) i18n-handoff-test
+	$(MAKE) i18n-todo-test
+	$(MAKE) i18n-status-test
+	$(MAKE) i18n-registry-test

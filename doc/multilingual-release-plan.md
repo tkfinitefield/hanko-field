@@ -2980,7 +2980,7 @@ git diff --cached --check
   Output: translation handoff files that can be reviewed and imported without
   changing key order.
   Done when: generated diffs remain deterministic.
-- [ ] `M6-T07` Add CI integration after checks stabilize.
+- [x] `M6-T07` Add CI integration after checks stabilize.
   Output: CI target or documented command set for release branches.
   Done when: release-enabled languages cannot regress silently.
 
@@ -3386,6 +3386,60 @@ make i18n-arb-test
 make i18n-todo-test
 make i18n-status-test
 make i18n-registry-test
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T07 i18n CI Integration
+
+Completed on 2026-06-18. Added a CI-ready localization gate and a GitHub
+Actions workflow for release branch coverage.
+
+Implementation notes:
+
+- Added root Make target:
+  - `make i18n-ci`
+- Added `.github/workflows/i18n.yml`.
+- `make i18n-ci` runs JavaScript syntax checks for every i18n helper script.
+- `make i18n-ci` runs the blocking `make i18n-check` gate.
+- `make i18n-ci` runs all i18n test targets:
+  - `make i18n-check-test`
+  - `make i18n-arb-test`
+  - `make i18n-json-shape-test`
+  - `make i18n-intentions-test`
+  - `make i18n-handoff-test`
+  - `make i18n-todo-test`
+  - `make i18n-status-test`
+  - `make i18n-registry-test`
+- The GitHub Actions workflow uses Node.js 22 and runs `make i18n-ci`.
+- CI runs on pushes and pull requests targeting `main`, `master`, `language`,
+  and `release/**`, plus manual `workflow_dispatch`.
+- Because `make i18n-check` reads `config/languages.json`, any future language
+  with `release.enabled=true` is included in the release metadata and content
+  gate automatically.
+
+Examples:
+
+```sh
+make i18n-ci
+git push origin release/<name>
+```
+
+M0-T05 preservation evidence:
+
+- The CI gate is read-only and does not generate, rewrite, or normalize
+  translation files.
+- The workflow only runs Node-based localization checks and does not touch
+  admin or web runtime behavior.
+- No polling, streaming, SSE, or WebSocket behavior was added.
+- Rollback path: remove `.github/workflows/i18n.yml`, remove `make i18n-ci`,
+  and reopen `M6-T07`.
+
+Validation:
+
+```sh
+make i18n-ci
+make i18n-check
 git diff --check
 git diff --cached --check
 ```

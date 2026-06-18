@@ -1,0 +1,37 @@
+name: i18n
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - language
+      - 'release/**'
+  pull_request:
+    branches:
+      - main
+      - master
+      - language
+      - 'release/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  localization:
+    name: Localization checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run localization CI gate
+        run: make i18n-ci
