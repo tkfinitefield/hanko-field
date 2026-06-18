@@ -1,17 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hankofield/app/localization/hanko_localizations.dart';
 import 'package:hankofield/l10n/generated/generated_hanko_localizations.dart';
 
 void main() {
-  test('generated localizations support migration baseline locales', () {
-    expect(GeneratedHankoLocalizations.supportedLocales, const [
-      Locale('ar'),
-      Locale('en'),
-      Locale('ja'),
-      Locale('zh'),
-      Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
-    ]);
+  test('generated localizations support registry route locales', () {
+    expect(GeneratedHankoLocalizations.supportedLocales, _registryLocales());
   });
 
   test('generated lookup resolves registry Simplified Chinese locale', () {
@@ -82,6 +79,25 @@ void main() {
     expect(find.text('中國風格'), findsOneWidget);
     expect(find.text('台灣風格'), findsOneWidget);
   });
+}
+
+List<Locale> _registryLocales() {
+  final source = File('../config/languages.json').readAsStringSync();
+  final entries = (jsonDecode(source) as List<Object?>)
+      .cast<Map<String, Object?>>();
+  return entries
+      .map((entry) {
+        final flutter = (entry['flutter'] as Map<String, Object?>);
+        if (entry['route_code'] == 'zh') {
+          return const Locale('zh');
+        }
+        return Locale.fromSubtags(
+          languageCode: flutter['languageCode'] as String,
+          scriptCode: flutter['scriptCode'] as String?,
+          countryCode: flutter['countryCode'] as String?,
+        );
+      })
+      .toList(growable: false);
 }
 
 class _GeneratedStyleProbe extends StatelessWidget {

@@ -1,0 +1,67 @@
+{
+  "format_version": 1,
+  "task": "M10-T01",
+  "date": "2026-06-18",
+  "release_candidate": {
+    "platform": "android",
+    "artifact": "app/build/app/outputs/bundle/release/app-release.aab",
+    "artifact_committed": false,
+    "bytes": 62753384,
+    "display_size": "62.8MB",
+    "sha256": "2ef6ff7862ce0a33731e4be1aaa92d19a2e4dd12bb8262b5f9fc853bb9f9f77c",
+    "version": "1.1.0+11"
+  },
+  "signing": {
+    "status": "verified",
+    "command": "jarsigner -verify -verbose -certs app/build/app/outputs/bundle/release/app-release.aab",
+    "signer": "CN=Hanko Field, OU=Mobile, O=Hanko Field, L=Tokyo, ST=Tokyo, C=JP",
+    "signature_algorithm": "SHA256withRSA",
+    "key_size_bits": 2048,
+    "certificate_valid_from": "2026-04-07 16:45 JST",
+    "certificate_valid_until": "2053-08-23 16:45 JST",
+    "verification_summary": "jar verified",
+    "strict_verification": {
+      "command": "jarsigner -verify -strict app/build/app/outputs/bundle/release/app-release.aab",
+      "exit_code": 4,
+      "reason": "self-signed signer certificate and no timestamp; standard jarsigner verification succeeds"
+    }
+  },
+  "build": {
+    "command": "cd app && flutter build appbundle --release",
+    "status": "pass",
+    "duration": "89.1s",
+    "flutter": "3.44.1 stable",
+    "dart": "3.12.1",
+    "java": "OpenJDK 17.0.16",
+    "warnings": [
+      "Flutter warns that the app and url_launcher_android still apply Kotlin Gradle Plugin and should migrate to Built-in Kotlin before future Flutter versions require it.",
+      "Flutter reports 403 untranslated messages for disabled/stub locales created for the 68-language rollout.",
+      "jarsigner strict verification reports self-signed certificate and no timestamp warnings."
+    ]
+  },
+  "generated_sources": {
+    "l10n_generated_files": 68,
+    "reason": "M9-T01 added ARB stubs for the 68-language registry; Flutter release build regenerated lib/l10n/generated sources from the checked-in ARB set.",
+    "runtime_supported_locales": [
+      "en",
+      "ja",
+      "zh-Hans",
+      "zh-Hant",
+      "ar"
+    ],
+    "runtime_locale_gate": "app/lib/app/localization/hanko_localizations.dart"
+  },
+  "private_material": {
+    "key_properties": "app/android/key.properties",
+    "keystore": "app/android/app/upload-keystore.jks",
+    "ignored_by_git": true,
+    "committed": false
+  },
+  "preservation": {
+    "registry_flags_changed": false,
+    "translation_values_changed": false,
+    "credentials_changed": false,
+    "upload_performed": false,
+    "polling_streaming_sse_websocket_changed": false
+  }
+}

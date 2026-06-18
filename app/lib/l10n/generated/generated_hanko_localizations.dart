@@ -6,8 +6,71 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'generated_hanko_localizations_ar.dart';
+import 'generated_hanko_localizations_az.dart';
+import 'generated_hanko_localizations_be.dart';
+import 'generated_hanko_localizations_bg.dart';
+import 'generated_hanko_localizations_bn.dart';
+import 'generated_hanko_localizations_cs.dart';
+import 'generated_hanko_localizations_da.dart';
+import 'generated_hanko_localizations_de.dart';
+import 'generated_hanko_localizations_el.dart';
 import 'generated_hanko_localizations_en.dart';
+import 'generated_hanko_localizations_es.dart';
+import 'generated_hanko_localizations_et.dart';
+import 'generated_hanko_localizations_fa.dart';
+import 'generated_hanko_localizations_fi.dart';
+import 'generated_hanko_localizations_fr.dart';
+import 'generated_hanko_localizations_gu.dart';
+import 'generated_hanko_localizations_he.dart';
+import 'generated_hanko_localizations_hi.dart';
+import 'generated_hanko_localizations_hr.dart';
+import 'generated_hanko_localizations_hu.dart';
+import 'generated_hanko_localizations_hy.dart';
+import 'generated_hanko_localizations_id.dart';
+import 'generated_hanko_localizations_is.dart';
+import 'generated_hanko_localizations_it.dart';
 import 'generated_hanko_localizations_ja.dart';
+import 'generated_hanko_localizations_ka.dart';
+import 'generated_hanko_localizations_kk.dart';
+import 'generated_hanko_localizations_km.dart';
+import 'generated_hanko_localizations_kn.dart';
+import 'generated_hanko_localizations_ko.dart';
+import 'generated_hanko_localizations_ky.dart';
+import 'generated_hanko_localizations_lo.dart';
+import 'generated_hanko_localizations_lt.dart';
+import 'generated_hanko_localizations_lv.dart';
+import 'generated_hanko_localizations_mk.dart';
+import 'generated_hanko_localizations_ml.dart';
+import 'generated_hanko_localizations_mn.dart';
+import 'generated_hanko_localizations_mr.dart';
+import 'generated_hanko_localizations_ms.dart';
+import 'generated_hanko_localizations_my.dart';
+import 'generated_hanko_localizations_ne.dart';
+import 'generated_hanko_localizations_nl.dart';
+import 'generated_hanko_localizations_no.dart';
+import 'generated_hanko_localizations_pa.dart';
+import 'generated_hanko_localizations_pl.dart';
+import 'generated_hanko_localizations_ps.dart';
+import 'generated_hanko_localizations_pt.dart';
+import 'generated_hanko_localizations_ro.dart';
+import 'generated_hanko_localizations_ru.dart';
+import 'generated_hanko_localizations_si.dart';
+import 'generated_hanko_localizations_sk.dart';
+import 'generated_hanko_localizations_sl.dart';
+import 'generated_hanko_localizations_sq.dart';
+import 'generated_hanko_localizations_sr.dart';
+import 'generated_hanko_localizations_sv.dart';
+import 'generated_hanko_localizations_sw.dart';
+import 'generated_hanko_localizations_ta.dart';
+import 'generated_hanko_localizations_te.dart';
+import 'generated_hanko_localizations_tg.dart';
+import 'generated_hanko_localizations_th.dart';
+import 'generated_hanko_localizations_tl.dart';
+import 'generated_hanko_localizations_tr.dart';
+import 'generated_hanko_localizations_uk.dart';
+import 'generated_hanko_localizations_ur.dart';
+import 'generated_hanko_localizations_uz.dart';
+import 'generated_hanko_localizations_vi.dart';
 import 'generated_hanko_localizations_zh.dart';
 
 // ignore_for_file: type=lint
@@ -100,8 +163,71 @@ abstract class GeneratedHankoLocalizations {
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('ar'),
+    Locale('az'),
+    Locale('be'),
+    Locale('bg'),
+    Locale('bn'),
+    Locale('cs'),
+    Locale('da'),
+    Locale('de'),
+    Locale('el'),
     Locale('en'),
+    Locale('es'),
+    Locale('et'),
+    Locale('fa'),
+    Locale('fi'),
+    Locale('fr'),
+    Locale('gu'),
+    Locale('he'),
+    Locale('hi'),
+    Locale('hr'),
+    Locale('hu'),
+    Locale('hy'),
+    Locale('id'),
+    Locale('is'),
+    Locale('it'),
     Locale('ja'),
+    Locale('ka'),
+    Locale('kk'),
+    Locale('km'),
+    Locale('kn'),
+    Locale('ko'),
+    Locale('ky'),
+    Locale('lo'),
+    Locale('lt'),
+    Locale('lv'),
+    Locale('mk'),
+    Locale('ml'),
+    Locale('mn'),
+    Locale('mr'),
+    Locale('ms'),
+    Locale('my'),
+    Locale('ne'),
+    Locale('nl'),
+    Locale('no'),
+    Locale('pa'),
+    Locale('pl'),
+    Locale('ps'),
+    Locale('pt'),
+    Locale('ro'),
+    Locale('ru'),
+    Locale('si'),
+    Locale('sk'),
+    Locale('sl'),
+    Locale('sq'),
+    Locale('sr'),
+    Locale('sv'),
+    Locale('sw'),
+    Locale('ta'),
+    Locale('te'),
+    Locale('tg'),
+    Locale('th'),
+    Locale('tl'),
+    Locale('tr'),
+    Locale('uk'),
+    Locale('ur'),
+    Locale('uz'),
+    Locale('vi'),
     Locale('zh'),
     Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
   ];
@@ -2537,8 +2663,75 @@ class _GeneratedHankoLocalizationsDelegate
   }
 
   @override
-  bool isSupported(Locale locale) =>
-      <String>['ar', 'en', 'ja', 'zh'].contains(locale.languageCode);
+  bool isSupported(Locale locale) => <String>[
+    'ar',
+    'az',
+    'be',
+    'bg',
+    'bn',
+    'cs',
+    'da',
+    'de',
+    'el',
+    'en',
+    'es',
+    'et',
+    'fa',
+    'fi',
+    'fr',
+    'gu',
+    'he',
+    'hi',
+    'hr',
+    'hu',
+    'hy',
+    'id',
+    'is',
+    'it',
+    'ja',
+    'ka',
+    'kk',
+    'km',
+    'kn',
+    'ko',
+    'ky',
+    'lo',
+    'lt',
+    'lv',
+    'mk',
+    'ml',
+    'mn',
+    'mr',
+    'ms',
+    'my',
+    'ne',
+    'nl',
+    'no',
+    'pa',
+    'pl',
+    'ps',
+    'pt',
+    'ro',
+    'ru',
+    'si',
+    'sk',
+    'sl',
+    'sq',
+    'sr',
+    'sv',
+    'sw',
+    'ta',
+    'te',
+    'tg',
+    'th',
+    'tl',
+    'tr',
+    'uk',
+    'ur',
+    'uz',
+    'vi',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_GeneratedHankoLocalizationsDelegate old) => false;
@@ -2561,10 +2754,136 @@ GeneratedHankoLocalizations lookupGeneratedHankoLocalizations(Locale locale) {
   switch (locale.languageCode) {
     case 'ar':
       return GeneratedHankoLocalizationsAr();
+    case 'az':
+      return GeneratedHankoLocalizationsAz();
+    case 'be':
+      return GeneratedHankoLocalizationsBe();
+    case 'bg':
+      return GeneratedHankoLocalizationsBg();
+    case 'bn':
+      return GeneratedHankoLocalizationsBn();
+    case 'cs':
+      return GeneratedHankoLocalizationsCs();
+    case 'da':
+      return GeneratedHankoLocalizationsDa();
+    case 'de':
+      return GeneratedHankoLocalizationsDe();
+    case 'el':
+      return GeneratedHankoLocalizationsEl();
     case 'en':
       return GeneratedHankoLocalizationsEn();
+    case 'es':
+      return GeneratedHankoLocalizationsEs();
+    case 'et':
+      return GeneratedHankoLocalizationsEt();
+    case 'fa':
+      return GeneratedHankoLocalizationsFa();
+    case 'fi':
+      return GeneratedHankoLocalizationsFi();
+    case 'fr':
+      return GeneratedHankoLocalizationsFr();
+    case 'gu':
+      return GeneratedHankoLocalizationsGu();
+    case 'he':
+      return GeneratedHankoLocalizationsHe();
+    case 'hi':
+      return GeneratedHankoLocalizationsHi();
+    case 'hr':
+      return GeneratedHankoLocalizationsHr();
+    case 'hu':
+      return GeneratedHankoLocalizationsHu();
+    case 'hy':
+      return GeneratedHankoLocalizationsHy();
+    case 'id':
+      return GeneratedHankoLocalizationsId();
+    case 'is':
+      return GeneratedHankoLocalizationsIs();
+    case 'it':
+      return GeneratedHankoLocalizationsIt();
     case 'ja':
       return GeneratedHankoLocalizationsJa();
+    case 'ka':
+      return GeneratedHankoLocalizationsKa();
+    case 'kk':
+      return GeneratedHankoLocalizationsKk();
+    case 'km':
+      return GeneratedHankoLocalizationsKm();
+    case 'kn':
+      return GeneratedHankoLocalizationsKn();
+    case 'ko':
+      return GeneratedHankoLocalizationsKo();
+    case 'ky':
+      return GeneratedHankoLocalizationsKy();
+    case 'lo':
+      return GeneratedHankoLocalizationsLo();
+    case 'lt':
+      return GeneratedHankoLocalizationsLt();
+    case 'lv':
+      return GeneratedHankoLocalizationsLv();
+    case 'mk':
+      return GeneratedHankoLocalizationsMk();
+    case 'ml':
+      return GeneratedHankoLocalizationsMl();
+    case 'mn':
+      return GeneratedHankoLocalizationsMn();
+    case 'mr':
+      return GeneratedHankoLocalizationsMr();
+    case 'ms':
+      return GeneratedHankoLocalizationsMs();
+    case 'my':
+      return GeneratedHankoLocalizationsMy();
+    case 'ne':
+      return GeneratedHankoLocalizationsNe();
+    case 'nl':
+      return GeneratedHankoLocalizationsNl();
+    case 'no':
+      return GeneratedHankoLocalizationsNo();
+    case 'pa':
+      return GeneratedHankoLocalizationsPa();
+    case 'pl':
+      return GeneratedHankoLocalizationsPl();
+    case 'ps':
+      return GeneratedHankoLocalizationsPs();
+    case 'pt':
+      return GeneratedHankoLocalizationsPt();
+    case 'ro':
+      return GeneratedHankoLocalizationsRo();
+    case 'ru':
+      return GeneratedHankoLocalizationsRu();
+    case 'si':
+      return GeneratedHankoLocalizationsSi();
+    case 'sk':
+      return GeneratedHankoLocalizationsSk();
+    case 'sl':
+      return GeneratedHankoLocalizationsSl();
+    case 'sq':
+      return GeneratedHankoLocalizationsSq();
+    case 'sr':
+      return GeneratedHankoLocalizationsSr();
+    case 'sv':
+      return GeneratedHankoLocalizationsSv();
+    case 'sw':
+      return GeneratedHankoLocalizationsSw();
+    case 'ta':
+      return GeneratedHankoLocalizationsTa();
+    case 'te':
+      return GeneratedHankoLocalizationsTe();
+    case 'tg':
+      return GeneratedHankoLocalizationsTg();
+    case 'th':
+      return GeneratedHankoLocalizationsTh();
+    case 'tl':
+      return GeneratedHankoLocalizationsTl();
+    case 'tr':
+      return GeneratedHankoLocalizationsTr();
+    case 'uk':
+      return GeneratedHankoLocalizationsUk();
+    case 'ur':
+      return GeneratedHankoLocalizationsUr();
+    case 'uz':
+      return GeneratedHankoLocalizationsUz();
+    case 'vi':
+      return GeneratedHankoLocalizationsVi();
     case 'zh':
       return GeneratedHankoLocalizationsZh();
   }

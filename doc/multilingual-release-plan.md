@@ -4783,7 +4783,7 @@ git diff --cached --check
 
 ### M10: Release QA and Staged Launch
 
-- [ ] `M10-T01` Build Android release candidate.
+- [x] `M10-T01` Build Android release candidate.
   Output: signed AAB build evidence.
   Done when: `flutter build appbundle --release` passes with release signing.
 - [ ] `M10-T02` Build iOS release candidate.
@@ -4808,6 +4808,81 @@ git diff --cached --check
   Output: store rollout notes and monitoring checkpoints.
   Done when: rollout percentage, observed issues, and rollback decision points
   are recorded.
+
+#### M10-T01 Android Release Candidate
+
+Completed on 2026-06-18. Built and verified the Android release candidate AAB
+for the current multilingual release baseline.
+
+Implementation notes:
+
+- Ran `cd app && flutter build appbundle --release`.
+- Generated local ignored artifact:
+  `app/build/app/outputs/bundle/release/app-release.aab`.
+- Added machine-readable release evidence:
+  - `doc/qa/m10-t01/android-release-candidate.json`
+  - `doc/qa/m10-t01/README.md`
+- Committed release-build source updates:
+  - Flutter migrator flags in `app/android/gradle.properties`.
+  - Regenerated `app/lib/l10n/generated/` files for the 68-language ARB set
+    created in M9-T01.
+  - Updated `test/generated_hanko_localizations_test.dart` so generated
+    localizations are validated against `config/languages.json`, while runtime
+    app locales remain gated by `hankoSupportedLocales`.
+- The AAB, key properties, keystore, and upload credentials remain ignored and
+  uncommitted.
+
+Release artifact:
+
+- Path: `app/build/app/outputs/bundle/release/app-release.aab`
+- Size: 62,753,384 bytes, reported by Flutter as 62.8MB
+- SHA-256:
+  `2ef6ff7862ce0a33731e4be1aaa92d19a2e4dd12bb8262b5f9fc853bb9f9f77c`
+- Version: `1.1.0+11`
+
+Signing evidence:
+
+- `jarsigner -verify -verbose -certs` reports `jar verified`.
+- Signer:
+  `CN=Hanko Field, OU=Mobile, O=Hanko Field, L=Tokyo, ST=Tokyo, C=JP`
+- Signature algorithm: SHA256withRSA, 2048-bit key.
+- Certificate validity: 2026-04-07 16:45 JST to 2053-08-23 16:45 JST.
+- `jarsigner -verify -strict` exits with code 4 because the signing
+  certificate is self-signed and the signature has no timestamp. This is
+  recorded as a known signing-tool warning in the evidence JSON.
+
+Known warnings:
+
+- Flutter warns that the app and `url_launcher_android` still apply the Kotlin
+  Gradle Plugin and must migrate to Built-in Kotlin before future Flutter
+  versions require it.
+- Flutter reports 403 untranslated messages for each disabled/stub locale. This
+  matches the current M9 stub baseline; M9-T02/M9-T05/M9-T06 continue to block
+  public release enablement for those locales.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No signing material, AAB/APK artifact, upload credential, polling, streaming,
+  SSE, or WebSocket behavior was committed.
+- Rollback path: remove `doc/qa/m10-t01/`, revert the generated l10n source
+  updates and Gradle migrator flags if release-build regeneration is deferred,
+  and reopen `M10-T01`.
+
+Validation:
+
+```sh
+cd app && flutter build appbundle --release
+shasum -a 256 app/build/app/outputs/bundle/release/app-release.aab
+jarsigner -verify -verbose -certs app/build/app/outputs/bundle/release/app-release.aab
+jarsigner -verify -strict app/build/app/outputs/bundle/release/app-release.aab
+cd app && flutter test test/generated_hanko_localizations_test.dart
+cd app && flutter test test/language_registry_test.dart
+git diff --check
+git diff --cached --check
+```
 
 ### M11: Post-Release Monitoring and Cleanup
 
