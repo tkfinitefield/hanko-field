@@ -6109,7 +6109,7 @@ mod tests {
             );
             assert!(
                 body.contains(r#"<meta name="robots" content="noindex,follow">"#),
-                "{path} must remain non-indexed while in pilot"
+                "{path} must remain non-indexed until all public web surfaces are ready"
             );
             assert!(
                 body.contains(r#"<link rel="canonical" href="https://finitefield.org/about">"#),
@@ -7094,7 +7094,7 @@ mod tests {
             );
             assert!(
                 body.contains(r#"<meta name="robots" content="noindex,follow">"#),
-                "{path} must remain non-indexed while in pilot"
+                "{path} must remain non-indexed because payment result pages are not SEO targets"
             );
         }
     }

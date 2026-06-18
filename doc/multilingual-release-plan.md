@@ -3463,7 +3463,7 @@ git diff --cached --check
   Output: screenshots for app settings, design, checkout, web top/about/payment,
   and RTL pages.
   Done when: overflow and directionality findings are fixed or tracked.
-- [ ] `M7-T06` Decide pilot public readiness.
+- [x] `M7-T06` Decide pilot public readiness.
   Output: registry flag changes for app-selectable or web-indexed status.
   Done when: each pilot language has explicit enablement evidence.
 
@@ -3756,6 +3756,56 @@ cargo test --manifest-path web/Cargo.toml
 flutter test test/pilot_layout_qa_test.dart test/rtl_overflow_test.dart
 make i18n-check
 sips -g pixelWidth -g pixelHeight doc/qa/m7-t05/screenshots/*.png
+git diff --check
+git diff --cached --check
+```
+
+#### M7-T06 Pilot Public Readiness
+
+Completed on 2026-06-18. Kept `zh`, `zhtw`, and `ar` app-selectable, and
+deferred public web indexing and store release.
+
+Implementation notes:
+
+- Confirmed `config/languages.json` keeps:
+  - `app.enabled=true` and `app.selectable=true` for all three pilot languages.
+  - `web.enabled=true` for all three pilot languages.
+  - `web.indexed=false` for all three pilot languages.
+  - `release.enabled=false` for all three pilot languages.
+- Kept pilot public pages `noindex,follow` because `web.indexed` is currently
+  language-wide and would also index blog index and article routes.
+- Kept payment result pages `noindex,follow` because they are not SEO targets.
+- Added readiness evidence in `doc/qa/m7-t06/README.md` and
+  `doc/qa/m7-t06/readiness.json`.
+
+Per-language readiness decisions:
+
+| Locale | Decision | Evidence |
+| --- | --- | --- |
+| `zh` | App selectable; web indexing and store release deferred. | App content, web static/payment content, API catalog, checkout routing, web top screenshot, and app Settings layout probe passed. Web indexing waits for localized blog article bodies and metadata. |
+| `zhtw` | App selectable; web indexing and store release deferred. | App content, web static/payment content, API catalog, checkout routing, web about screenshot, and app Design layout probe passed. Web indexing waits for localized blog article bodies and metadata. |
+| `ar` | App selectable; web indexing and store release deferred. | App content, web static/payment content, API catalog, Arabic checkout, RTL web screenshots, and app Checkout RTL layout probe passed. Web indexing waits for localized blog article bodies and metadata. |
+
+M0-T05 preservation evidence:
+
+- Existing English, Japanese, and Chinese translation values remain unchanged.
+- The task does not alter source copy, release metadata, or store metadata.
+- Web indexing remains disabled to avoid indexing fallback English blog
+  article content for pilot routes.
+- Store release remains gated by M8 fastlane and M9 production translation
+  work.
+- No signing, secret, polling, streaming, SSE, or WebSocket behavior was added.
+- Rollback path: remove `doc/qa/m7-t06` and reopen `M7-T06`.
+
+Validation:
+
+```sh
+jq empty config/languages.json doc/qa/m7-t06/readiness.json
+make i18n-check
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml web_router_resolves_supported_and_unknown_locale_prefixes -- --nocapture
+cargo test --manifest-path web/Cargo.toml
+make i18n-ci
 git diff --check
 git diff --cached --check
 ```
