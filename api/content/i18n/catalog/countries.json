@@ -2,37 +2,55 @@
   "JP": {
     "label": {
       "en": "Japan",
-      "ja": "日本"
+      "ja": "日本",
+      "zh": "Japan",
+      "zhtw": "Japan",
+      "ar": "Japan"
     }
   },
   "US": {
     "label": {
       "en": "United States",
-      "ja": "アメリカ"
+      "ja": "アメリカ",
+      "zh": "United States",
+      "zhtw": "United States",
+      "ar": "United States"
     }
   },
   "CA": {
     "label": {
       "en": "Canada",
-      "ja": "カナダ"
+      "ja": "カナダ",
+      "zh": "Canada",
+      "zhtw": "Canada",
+      "ar": "Canada"
     }
   },
   "GB": {
     "label": {
       "en": "United Kingdom",
-      "ja": "イギリス"
+      "ja": "イギリス",
+      "zh": "United Kingdom",
+      "zhtw": "United Kingdom",
+      "ar": "United Kingdom"
     }
   },
   "AU": {
     "label": {
       "en": "Australia",
-      "ja": "オーストラリア"
+      "ja": "オーストラリア",
+      "zh": "Australia",
+      "zhtw": "Australia",
+      "ar": "Australia"
     }
   },
   "SG": {
     "label": {
       "en": "Singapore",
-      "ja": "シンガポール"
+      "ja": "シンガポール",
+      "zh": "Singapore",
+      "zhtw": "Singapore",
+      "ar": "Singapore"
     }
   }
 }

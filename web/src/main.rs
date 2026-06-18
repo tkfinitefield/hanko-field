@@ -2740,7 +2740,7 @@ async fn render_top_page(
     let template = TopPageTemplate {
         page_title: web_copy_text("top", &selected_locale, "seo_title").to_owned(),
         meta_description: web_copy_text("top", &selected_locale, "seo_description").to_owned(),
-        robots_meta: "index,follow".to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
         canonical_url: canonical_url_for_path(site_base_url, "/", &selected_locale),
         x_default_url: x_default_url_for_path(site_base_url, "/"),
         seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/"),
@@ -2800,7 +2800,7 @@ async fn render_about_page(
     let template = AboutTemplate {
         page_title: web_copy_text("about", &selected_locale, "seo_title").to_owned(),
         meta_description: web_copy_text("about", &selected_locale, "seo_description").to_owned(),
-        robots_meta: "index,follow".to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
         canonical_url: canonical_url_for_path(site_base_url, "/about", &selected_locale),
         x_default_url: x_default_url_for_path(site_base_url, "/about"),
         seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/about"),
@@ -2900,7 +2900,7 @@ async fn render_design_page(
         selected_pattern_primary: material_filter_state.pattern_primary.clone(),
         page_title: web_copy_text("design", &selected_locale, "seo_title").to_owned(),
         meta_description: web_copy_text("design", &selected_locale, "seo_description").to_owned(),
-        robots_meta: "index,follow".to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
         purchase_action_url: if state.mode == RunMode::Mock {
             site_url(site_base_url, "/mock/purchase")
         } else {
@@ -2987,7 +2987,7 @@ async fn render_blog_index_page(
         page_title: web_copy_text("blog_index", &selected_locale, "seo_title").to_owned(),
         meta_description: web_copy_text("blog_index", &selected_locale, "seo_description")
             .to_owned(),
-        robots_meta: "index,follow".to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
         canonical_url: canonical_url_for_path(site_base_url, "/blog", &selected_locale),
         x_default_url: x_default_url_for_path(site_base_url, "/blog"),
         seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/blog"),
@@ -3072,7 +3072,7 @@ async fn render_blog_article_page(
     let template = BlogArticleTemplate {
         page_title: format!("{} | STONE SIGNATURE", &localized_post.title),
         meta_description: localized_post.meta_description.clone(),
-        robots_meta: "index,follow".to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
         canonical_url: canonical_url_for_path(
             site_base_url,
             &format!("/blog/{}", post.slug),
@@ -3582,7 +3582,7 @@ async fn render_commercial_transactions_page(
             "seo_description",
         )
         .to_owned(),
-        robots_meta: "index,follow".to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
         canonical_url: canonical_url_for_path(
             site_base_url,
             "/commercial-transactions",
@@ -3647,7 +3647,7 @@ async fn render_terms_page(
         contact_url: inquiry_url(site_base_url, &selected_locale),
         page_title: web_copy_text("terms", &selected_locale, "seo_title").to_owned(),
         meta_description: web_copy_text("terms", &selected_locale, "seo_description").to_owned(),
-        robots_meta: "index,follow".to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
         canonical_url: canonical_url_for_path(site_base_url, "/terms", &selected_locale),
         x_default_url: x_default_url_for_path(site_base_url, "/terms"),
         seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/terms"),
@@ -4301,6 +4301,15 @@ fn language_links_for_path_with_registry(
 
 fn canonical_url_for_path(base_url: &str, path: &str, locale: &str) -> String {
     canonical_url_for_path_with_registry(web_language_registry(), base_url, path, locale)
+}
+
+fn robots_meta_for_locale(locale: &str) -> String {
+    web_language_registry()
+        .enabled_language_exact(locale)
+        .filter(|language| language.indexed)
+        .map(|_| "index,follow")
+        .unwrap_or("noindex,follow")
+        .to_owned()
 }
 
 fn canonical_url_for_path_with_registry(
@@ -6003,7 +6012,20 @@ mod tests {
             "/en/about must remain non-canonical English compatibility"
         );
 
-        for path in ["/zhtw/about", "/zhtw/blog/what-is-a-hanko", "/xx/about"] {
+        for path in ["/zh/about", "/zhtw/about", "/ar/about"] {
+            let (status, body) = route_get_html(path).await;
+            assert_eq!(status, StatusCode::OK, "{path} should render for QA");
+            assert!(
+                body.contains(r#"<meta name="robots" content="noindex,follow">"#),
+                "{path} must remain non-indexed while in pilot"
+            );
+            assert!(
+                body.contains(r#"<link rel="canonical" href="https://finitefield.org/about">"#),
+                "{path} should canonicalize to the indexed default until public launch"
+            );
+        }
+
+        for path in ["/xx/about"] {
             let (status, body) = route_get_html(path).await;
             assert_eq!(status, StatusCode::NOT_FOUND, "{path} should 404");
             assert!(
@@ -6706,7 +6728,7 @@ mod tests {
                 .iter()
                 .map(|language| language.route_code.as_str())
                 .collect::<Vec<_>>(),
-            vec!["en", "ja"]
+            vec!["ar", "en", "ja", "zh", "zhtw"]
         );
 
         let english = registry
@@ -6725,7 +6747,10 @@ mod tests {
 
         assert_eq!(parse_supported_locale("ja-JP"), Some("ja"));
         assert_eq!(parse_path_locale("ja"), Some("ja"));
-        assert_eq!(parse_path_locale("zhtw"), None);
+        assert_eq!(parse_path_locale("zhtw"), Some("zhtw"));
+        assert_eq!(parse_path_locale("ar"), Some("ar"));
+        assert_eq!(robots_meta_for_locale("ar"), "noindex,follow");
+        assert_eq!(robots_meta_for_locale("en"), "index,follow");
 
         let links = language_links_for_path(TEST_SITE_BASE_URL, "/about");
         assert_eq!(
@@ -6737,7 +6762,13 @@ mod tests {
                     link.is_default
                 ))
                 .collect::<Vec<_>>(),
-            vec![("en", "English", true), ("ja", "日本語", false)]
+            vec![
+                ("ar", "العربية", false),
+                ("en", "English", true),
+                ("ja", "日本語", false),
+                ("zh", "简体中文", false),
+                ("zhtw", "繁體中文", false),
+            ]
         );
     }
 
@@ -6915,7 +6946,11 @@ mod tests {
         );
         assert_eq!(
             design_url(TEST_SITE_BASE_URL, "zhtw"),
-            "https://finitefield.org/design"
+            "https://finitefield.org/zhtw/design"
+        );
+        assert_eq!(
+            design_url(TEST_SITE_BASE_URL, "ar"),
+            "https://finitefield.org/ar/design"
         );
         assert_eq!(
             blog_index_url(TEST_ALT_SITE_BASE_URL, "en"),

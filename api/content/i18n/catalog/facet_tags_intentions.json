@@ -1,0 +1,94 @@
+{
+  "entries": [
+    {
+      "key_path": "color:green.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "color:green.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "color:green.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "color:white.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "color:white.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "color:white.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "color:yellow.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "color:yellow.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "color:yellow.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "pattern:cloud.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "pattern:cloud.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "pattern:cloud.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "pattern:plain.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "pattern:plain.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "pattern:plain.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "pattern:veined.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "pattern:veined.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "pattern:veined.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    }
+  ]
+}

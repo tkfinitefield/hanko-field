@@ -3446,7 +3446,7 @@ git diff --cached --check
 
 ### M7: Pilot Language Rollout
 
-- [ ] `M7-T01` Enable pilot languages as render-only.
+- [x] `M7-T01` Enable pilot languages as render-only.
   Output: registry flags for `zh`, `zhtw`, and `ar` with `web.indexed=false`
   and `release.enabled=false`.
   Done when: pilot languages render in QA without public indexing.
@@ -3466,6 +3466,68 @@ git diff --cached --check
 - [ ] `M7-T06` Decide pilot public readiness.
   Output: registry flag changes for app-selectable or web-indexed status.
   Done when: each pilot language has explicit enablement evidence.
+
+#### M7-T01 Render-only Pilot Languages
+
+Completed on 2026-06-18. Enabled `zh`, `zhtw`, and `ar` as web render-only
+pilot languages while keeping them out of public indexing and store release.
+
+Implementation notes:
+
+- Updated `config/languages.json`:
+  - `zh.web.enabled=true`
+  - `zhtw.web.enabled=true`
+  - `ar.web.enabled=true`
+  - `web.indexed=false` remains set for all three pilot languages.
+  - `release.enabled=false` remains set for all three pilot languages.
+  - `app.enabled=false` remains set for all three pilot languages until
+    `M7-T02`.
+- Added render-only web copy placeholders for `zhtw` and `ar`.
+- Kept existing `zh` web copy and added sidecars where values intentionally
+  remain the same as English during the render-only stage.
+- Added `ar` checkout copy placeholders and sidecars.
+- Added `zh`, `zhtw`, and `ar` catalog language-map placeholders with
+  `locale_not_release_enabled` sidecar entries.
+- Updated catalog intention validation so multi-locale catalog sidecars such as
+  `materials_intentions.json` are not mistaken for a single target locale.
+- Updated web pages to emit `robots: noindex,follow` for non-indexed enabled
+  locales.
+- Existing indexed sitemap and SEO hreflang generation continue to include only
+  indexed languages.
+- Web route tests now confirm `/zh/about`, `/zhtw/about`, and `/ar/about`
+  render for QA, use `noindex,follow`, and canonicalize to the indexed English
+  page until public readiness.
+
+Examples:
+
+```sh
+make i18n-check
+cargo test --manifest-path web/Cargo.toml
+```
+
+M0-T05 preservation evidence:
+
+- Existing English and Japanese copy remains unchanged.
+- Existing Chinese web copy remains in `zh`; `zhtw` and `ar` are render-only
+  placeholders, not release-ready translations.
+- Same-as-English placeholder values are explicitly approved with
+  `locale_not_release_enabled`.
+- The pilot languages remain `release.enabled=false`, so store metadata and
+  fastlane release paths are not activated.
+- Rollback path: set `web.enabled=false` for `zh`, `zhtw`, and `ar`, remove the
+  pilot placeholder files and sidecars, revert the noindex helper if no longer
+  needed, and reopen `M7-T01`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-ci
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+git diff --check
+git diff --cached --check
+```
 
 ### M8: Store Metadata and fastlane
 

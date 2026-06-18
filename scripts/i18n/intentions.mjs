@@ -602,6 +602,9 @@ function catalogSidecarPath(filePath) {
 
 function inferLocaleFromSidecar(sidecarPath) {
   const fileName = sidecarPath.split('/').pop() ?? '';
+  if (sidecarPath.startsWith('api/content/i18n/catalog/')) {
+    return null;
+  }
   if (sidecarPath.startsWith('app/lib/l10n/app_')) {
     return fileName.replace(/^app_/, '').replace(/_intentions\.json$/, '').replace(/^zh_Hant$/, 'zhtw');
   }

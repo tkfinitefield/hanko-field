@@ -2,37 +2,55 @@
   "color:green": {
     "label": {
       "en": "Green",
-      "ja": "緑"
+      "ja": "緑",
+      "zh": "Green",
+      "zhtw": "Green",
+      "ar": "Green"
     }
   },
   "color:yellow": {
     "label": {
       "en": "Yellow",
-      "ja": "黄"
+      "ja": "黄",
+      "zh": "Yellow",
+      "zhtw": "Yellow",
+      "ar": "Yellow"
     }
   },
   "color:white": {
     "label": {
       "en": "White",
-      "ja": "白"
+      "ja": "白",
+      "zh": "White",
+      "zhtw": "White",
+      "ar": "White"
     }
   },
   "pattern:cloud": {
     "label": {
       "en": "Cloud",
-      "ja": "雲状"
+      "ja": "雲状",
+      "zh": "Cloud",
+      "zhtw": "Cloud",
+      "ar": "Cloud"
     }
   },
   "pattern:veined": {
     "label": {
       "en": "Veined",
-      "ja": "筋"
+      "ja": "筋",
+      "zh": "Veined",
+      "zhtw": "Veined",
+      "ar": "Veined"
     }
   },
   "pattern:plain": {
     "label": {
       "en": "Plain",
-      "ja": "無地"
+      "ja": "無地",
+      "zh": "Plain",
+      "zhtw": "Plain",
+      "ar": "Plain"
     }
   }
 }

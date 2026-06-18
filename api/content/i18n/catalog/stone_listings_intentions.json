@@ -1,0 +1,184 @@
+{
+  "entries": [
+    {
+      "key_path": "frozen_stone_01.description",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "frozen_stone_01.description",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "frozen_stone_01.description",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "frozen_stone_01.photo_alt",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "frozen_stone_01.photo_alt",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "frozen_stone_01.photo_alt",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "frozen_stone_01.story",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "frozen_stone_01.story",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "frozen_stone_01.story",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "frozen_stone_01.title",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "frozen_stone_01.title",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "frozen_stone_01.title",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.description",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.description",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.description",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.photo_alt",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.photo_alt",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.photo_alt",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.story",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.story",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.story",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.title",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.title",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "qingtian_stone_01.title",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.description",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.description",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.description",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.photo_alt",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.photo_alt",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.photo_alt",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.story",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.story",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.story",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.title",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.title",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "shoushan_stone_01.title",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    }
+  ]
+}

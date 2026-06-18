@@ -173,6 +173,28 @@ test('validates catalog same-as-English values with route-specific approvals', a
   assert.equal(report.ok, true);
 });
 
+test('does not infer a target locale from catalog sidecar file names', async () => {
+  const rootDir = await createTempRoot();
+  await writeMinimalContent(rootDir);
+  await writeJson(rootDir, 'api/content/i18n/catalog/materials_intentions.json', {
+    entries: [
+      {
+        key_path: 'jade.label',
+        target_locale: 'ar',
+        reason_code: 'locale_not_release_enabled',
+      },
+    ],
+  });
+
+  const report = await validateIntentions({
+    rootDir,
+    file: 'api/content/i18n/catalog/materials_intentions.json',
+  });
+
+  assert.equal(report.ok, true);
+  assert.deepEqual(report.issues, []);
+});
+
 async function createTempRoot() {
   const rootDir = await mkdtemp(join(tmpdir(), 'hanko-field-i18n-intentions-'));
   await writeJson(rootDir, 'config/languages.json', [

@@ -1,0 +1,94 @@
+{
+  "entries": [
+    {
+      "key_path": "AU.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "AU.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "AU.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "CA.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "CA.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "CA.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "GB.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "GB.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "GB.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "JP.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "JP.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "JP.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "SG.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "SG.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "SG.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "US.label",
+      "target_locale": "ar",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "US.label",
+      "target_locale": "zh",
+      "reason_code": "locale_not_release_enabled"
+    },
+    {
+      "key_path": "US.label",
+      "target_locale": "zhtw",
+      "reason_code": "locale_not_release_enabled"
+    }
+  ]
+}

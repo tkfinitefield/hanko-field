@@ -2,81 +2,129 @@
   "wood": {
     "label": {
       "en": "Wood",
-      "ja": "木材"
+      "ja": "木材",
+      "zh": "Wood",
+      "zhtw": "Wood",
+      "ar": "Wood"
     },
     "description": {
       "en": "A lightweight material with natural grain that gives the seal a warm, organic feel.",
-      "ja": "自然な木目と軽さがあり、あたたかみのある印象に仕上がる材質です。"
+      "ja": "自然な木目と軽さがあり、あたたかみのある印象に仕上がる材質です。",
+      "zh": "A lightweight material with natural grain that gives the seal a warm, organic feel.",
+      "zhtw": "A lightweight material with natural grain that gives the seal a warm, organic feel.",
+      "ar": "A lightweight material with natural grain that gives the seal a warm, organic feel."
     }
   },
   "qingtian_stone": {
     "label": {
       "en": "Qingtian Stone",
-      "ja": "青田石"
+      "ja": "青田石",
+      "zh": "Qingtian Stone",
+      "zhtw": "Qingtian Stone",
+      "ar": "Qingtian Stone"
     },
     "description": {
       "en": "A classic seal-carving stone associated with Qingtian, Zhejiang, known for its fine texture and ease of carving.",
-      "ja": "中国浙江省青田産として知られる代表的な篆刻石で、きめ細かく彫りやすい石材です。"
+      "ja": "中国浙江省青田産として知られる代表的な篆刻石で、きめ細かく彫りやすい石材です。",
+      "zh": "A classic seal-carving stone associated with Qingtian, Zhejiang, known for its fine texture and ease of carving.",
+      "zhtw": "A classic seal-carving stone associated with Qingtian, Zhejiang, known for its fine texture and ease of carving.",
+      "ar": "A classic seal-carving stone associated with Qingtian, Zhejiang, known for its fine texture and ease of carving."
     }
   },
   "shoushan_stone": {
     "label": {
       "en": "Shoushan Stone",
-      "ja": "寿山石"
+      "ja": "寿山石",
+      "zh": "Shoushan Stone",
+      "zhtw": "Shoushan Stone",
+      "ar": "Shoushan Stone"
     },
     "description": {
       "en": "A seal stone associated with Shoushan, Fujian, valued for its range of colors and smooth carving feel.",
-      "ja": "中国福建省寿山産として知られる印材石で、色味の幅と滑らかな彫り心地が特徴です。"
+      "ja": "中国福建省寿山産として知られる印材石で、色味の幅と滑らかな彫り心地が特徴です。",
+      "zh": "A seal stone associated with Shoushan, Fujian, valued for its range of colors and smooth carving feel.",
+      "zhtw": "A seal stone associated with Shoushan, Fujian, valued for its range of colors and smooth carving feel.",
+      "ar": "A seal stone associated with Shoushan, Fujian, valued for its range of colors and smooth carving feel."
     }
   },
   "balin_stone": {
     "label": {
       "en": "Balin Stone",
-      "ja": "巴林石"
+      "ja": "巴林石",
+      "zh": "Balin Stone",
+      "zhtw": "Balin Stone",
+      "ar": "Balin Stone"
     },
     "description": {
       "en": "A seal stone associated with Inner Mongolia, known for varied colors and patterns with moderate hardness.",
-      "ja": "中国内モンゴル産として知られる印材石で、色柄の変化とほどよい硬さを持つ材質です。"
+      "ja": "中国内モンゴル産として知られる印材石で、色柄の変化とほどよい硬さを持つ材質です。",
+      "zh": "A seal stone associated with Inner Mongolia, known for varied colors and patterns with moderate hardness.",
+      "zhtw": "A seal stone associated with Inner Mongolia, known for varied colors and patterns with moderate hardness.",
+      "ar": "A seal stone associated with Inner Mongolia, known for varied colors and patterns with moderate hardness."
     }
   },
   "yili_stone": {
     "label": {
       "en": "Yili Stone",
-      "ja": "伊犁石"
+      "ja": "伊犁石",
+      "zh": "Yili Stone",
+      "zhtw": "Yili Stone",
+      "ar": "Yili Stone"
     },
     "description": {
       "en": "A seal stone associated with the Yili region of Xinjiang, with subdued colors and a natural stone texture.",
-      "ja": "中国新疆ウイグル自治区の伊犁地域に由来する印材石で、落ち着いた色味と素朴な石質が特徴です。"
+      "ja": "中国新疆ウイグル自治区の伊犁地域に由来する印材石で、落ち着いた色味と素朴な石質が特徴です。",
+      "zh": "A seal stone associated with the Yili region of Xinjiang, with subdued colors and a natural stone texture.",
+      "zhtw": "A seal stone associated with the Yili region of Xinjiang, with subdued colors and a natural stone texture.",
+      "ar": "A seal stone associated with the Yili region of Xinjiang, with subdued colors and a natural stone texture."
     }
   },
   "laos_stone": {
     "label": {
       "en": "Laos Stone",
-      "ja": "ラオス石"
+      "ja": "ラオス石",
+      "zh": "Laos Stone",
+      "zhtw": "Laos Stone",
+      "ar": "Laos Stone"
     },
     "description": {
       "en": "A seal stone commonly traded as Laos stone, known for its softer texture and ease of carving.",
-      "ja": "ラオス産として流通する印材石で、やわらかめの石質と彫刻しやすさが特徴です。"
+      "ja": "ラオス産として流通する印材石で、やわらかめの石質と彫刻しやすさが特徴です。",
+      "zh": "A seal stone commonly traded as Laos stone, known for its softer texture and ease of carving.",
+      "zhtw": "A seal stone commonly traded as Laos stone, known for its softer texture and ease of carving.",
+      "ar": "A seal stone commonly traded as Laos stone, known for its softer texture and ease of carving."
     }
   },
   "xixia_stone": {
     "label": {
       "en": "Xixia Stone",
-      "ja": "西峡石"
+      "ja": "西峡石",
+      "zh": "Xixia Stone",
+      "zhtw": "Xixia Stone",
+      "ar": "Xixia Stone"
     },
     "description": {
       "en": "A seal stone associated with Xixia, Henan, with a dense structure and calm, refined texture.",
-      "ja": "中国河南省西峡産として知られる印材石で、緻密で落ち着いた質感を持つ材質です。"
+      "ja": "中国河南省西峡産として知られる印材石で、緻密で落ち着いた質感を持つ材質です。",
+      "zh": "A seal stone associated with Xixia, Henan, with a dense structure and calm, refined texture.",
+      "zhtw": "A seal stone associated with Xixia, Henan, with a dense structure and calm, refined texture.",
+      "ar": "A seal stone associated with Xixia, Henan, with a dense structure and calm, refined texture."
     }
   },
   "frozen_stone": {
     "label": {
       "en": "Frozen Stone",
-      "ja": "凍石"
+      "ja": "凍石",
+      "zh": "Frozen Stone",
+      "zhtw": "Frozen Stone",
+      "ar": "Frozen Stone"
     },
     "description": {
       "en": "A seal-carving stone with a moist, semi-translucent appearance reminiscent of frozen stone.",
-      "ja": "凍ったような半透明感としっとりした質感が特徴の、篆刻向けの石材です。"
+      "ja": "凍ったような半透明感としっとりした質感が特徴の、篆刻向けの石材です。",
+      "zh": "A seal-carving stone with a moist, semi-translucent appearance reminiscent of frozen stone.",
+      "zhtw": "A seal-carving stone with a moist, semi-translucent appearance reminiscent of frozen stone.",
+      "ar": "A seal-carving stone with a moist, semi-translucent appearance reminiscent of frozen stone."
     }
   }
 }
