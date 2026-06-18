@@ -3821,7 +3821,7 @@ git diff --cached --check
   Output: deterministic `release/store_metadata/google_play/**` folders using
   `android_store_locale`.
   Done when: unsupported Google Play locales fail with clear messages.
-- [ ] `M8-T03` Generate App Store metadata.
+- [x] `M8-T03` Generate App Store metadata.
   Output: deterministic `release/store_metadata/app_store/**` folders using
   `ios_store_locale`.
   Done when: unsupported App Store locales fail with clear messages.
@@ -3977,6 +3977,89 @@ make store-metadata-check
 make google-play-metadata
 make google-play-metadata-check
 make google-play-metadata-test
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T03 App Store Metadata Generation
+
+Completed on 2026-06-18. Added deterministic App Store metadata generation
+from the store metadata source files.
+
+Implementation notes:
+
+- Added `scripts/release/app_store_metadata.mjs` to generate fastlane
+  `deliver`-style text metadata.
+- Added `scripts/release/app_store_metadata.test.mjs` to cover:
+  - generated file mapping
+  - deterministic `--check` behavior
+  - stale generated file detection
+  - clear failure when a source locale has no `ios_store_locale`
+  - clear failure when `ios_store_locale` is not in fastlane deliver's
+    supported App Store locale list
+- Added Make targets:
+  - `make app-store-metadata`
+  - `make app-store-metadata-check`
+  - `make app-store-metadata-test`
+- Added App Store metadata check and test targets to `make i18n-ci`.
+- Generated metadata under `release/store_metadata/app_store` using
+  `release.ios_store_locale`:
+  - `en` -> `en-US`
+  - `ja` -> `ja`
+  - `zh` -> `zh-Hans`
+  - `zhtw` -> `zh-Hant`
+
+Generated file layout:
+
+```text
+release/store_metadata/app_store/<ios_store_locale>/name.txt
+release/store_metadata/app_store/<ios_store_locale>/subtitle.txt
+release/store_metadata/app_store/<ios_store_locale>/description.txt
+release/store_metadata/app_store/<ios_store_locale>/keywords.txt
+release/store_metadata/app_store/<ios_store_locale>/release_notes.txt
+release/store_metadata/app_store/<ios_store_locale>/support_url.txt
+release/store_metadata/app_store/<ios_store_locale>/marketing_url.txt
+release/store_metadata/app_store/<ios_store_locale>/privacy_url.txt
+```
+
+Mapping rules:
+
+- `app_name` -> `name.txt`
+- `subtitle` -> `subtitle.txt`
+- `full_description[]` -> `description.txt`, joined by blank lines
+- `keywords[]` -> `keywords.txt`, joined by commas
+- latest `release_notes` entry -> `release_notes.txt`
+- `support_url` -> `support_url.txt`
+- `marketing_url` -> `marketing_url.txt`
+- `privacy_policy_url` -> `privacy_url.txt`
+- `short_description` and `screenshot_captions` stay in source JSON for
+  Google Play and screenshot workflows; App Store text generation does not
+  invent unsupported files from those fields.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, source store metadata, and Google Play
+  generated metadata remains unchanged.
+- App Store metadata is generated from source JSON only; no manual edits are
+  required under generated output.
+- `release.enabled=false` remains unchanged for all languages.
+- No fastlane lanes, signing files, private keys, uploads, polling, streaming,
+  SSE, or WebSocket behavior were added.
+- Rollback path: remove `release/store_metadata/app_store`, remove
+  `scripts/release/app_store_metadata.*`, remove the Makefile targets, and
+  reopen `M8-T03`.
+
+Validation:
+
+```sh
+node --check scripts/release/app_store_metadata.mjs
+make store-metadata-check
+make app-store-metadata
+make app-store-metadata-check
+make app-store-metadata-test
+make google-play-metadata-check
 make i18n-check
 make i18n-ci
 git diff --check

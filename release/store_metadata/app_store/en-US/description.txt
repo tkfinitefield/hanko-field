@@ -1,0 +1,3 @@
+STONE SIGNATURE helps you create a personal seal from natural gemstone. Enter your name, review kanji suggestions, and generate a balanced seal impression from the app.
+
+Choose a one-of-a-kind stone, confirm the design and shipping details, and proceed to secure checkout. Saved designs and preview images stay on your device while payment is handled securely through Stripe.
