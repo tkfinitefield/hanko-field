@@ -34,7 +34,7 @@
           <img class="top-brand__logo" src="/static/site-logo.png" alt="" aria-hidden="true">
           <div class="top-brand__text">
             <h1 class="top-brand__title">STONE SIGNATURE</h1>
-            <span class="top-brand__subtitle">{% if selected_locale == "ja" %}印鑑フィールド{% else %}Seal Field{% endif %}</span>
+            <span class="top-brand__subtitle">{{ self.copy_text("commercial_transactions_001") }}</span>
           </div>
         </div>
       </a>
@@ -44,8 +44,8 @@
             <span class="material-symbols-outlined top-brand__icon" aria-hidden="true">language</span>
           </summary>
           <div class="top-language-switcher__menu" role="menu" aria-label="Language options">
-            <a class="top-language-switcher__item{% if selected_locale == "ja" %} is-active{% endif %}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
-            <a class="top-language-switcher__item{% if selected_locale == "en" %} is-active{% endif %}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
+            <a class="top-language-switcher__item{{ self.language_active_class("ja") }}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
+            <a class="top-language-switcher__item{{ self.language_active_class("en") }}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
           </div>
         </details>
       </div>
@@ -56,7 +56,7 @@
   <main class="legal-page__main">
     <div class="legal-page__lead">
       <h2 class="legal-page__title">
-        {% if selected_locale == "ja" %}特定商取引法に基づく表記{% else %}Specified Commercial Transactions Act{% endif %}
+        {{ self.copy_text("commercial_transactions_045") }}
       </h2>
     </div>
 
@@ -64,37 +64,37 @@
       <section class="legal-section" id="section-1">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">01</span>
-          <span>{% if selected_locale == "ja" %}販売業者・運営者情報{% else %}Seller and operator information{% endif %}</span>
+          <span>{{ self.copy_text("commercial_transactions_002") }}</span>
         </h3>
         <dl class="legal-definition-list">
           <div class="legal-definition-row">
-            <dt class="legal-definition-term">{% if selected_locale == "ja" %}販売業者{% else %}Seller{% endif %}</dt>
-            <dd class="legal-definition-desc">{% if selected_locale == "ja" %}株式会社ファイナイトフィールド{% else %}Finite Field, K.K.{% endif %}</dd>
+            <dt class="legal-definition-term">{{ self.copy_text("commercial_transactions_003") }}</dt>
+            <dd class="legal-definition-desc">{{ self.copy_text("commercial_transactions_004") }}</dd>
           </div>
           <div class="legal-definition-row">
-            <dt class="legal-definition-term">{% if selected_locale == "ja" %}運営統括責任者{% else %}Operations manager{% endif %}</dt>
-            <dd class="legal-definition-desc">{% if selected_locale == "ja" %}代表取締役 一好 俊也{% else %}Toshiya Kazuyoshi, Representative Director{% endif %}</dd>
+            <dt class="legal-definition-term">{{ self.copy_text("commercial_transactions_005") }}</dt>
+            <dd class="legal-definition-desc">{{ self.copy_text("commercial_transactions_006") }}</dd>
           </div>
           <div class="legal-definition-row">
-            <dt class="legal-definition-term">{% if selected_locale == "ja" %}所在地{% else %}Address{% endif %}</dt>
-            <dd class="legal-definition-desc">{% if selected_locale == "ja" %}〒879-0151 大分県宇佐市大字宮熊550番地{% else %}550 Oaza Miyaguma, Usa City, Oita 879-0151, Japan{% endif %}</dd>
+            <dt class="legal-definition-term">{{ self.copy_text("commercial_transactions_007") }}</dt>
+            <dd class="legal-definition-desc">{{ self.copy_text("commercial_transactions_008") }}</dd>
           </div>
           <div class="legal-definition-row">
-            <dt class="legal-definition-term">{% if selected_locale == "ja" %}電話番号{% else %}Phone{% endif %}</dt>
-            <dd class="legal-definition-desc">{% if selected_locale == "ja" %}050-3033-2975{% else %}+81-50-3033-2975{% endif %}</dd>
+            <dt class="legal-definition-term">{{ self.copy_text("commercial_transactions_009") }}</dt>
+            <dd class="legal-definition-desc">{{ self.copy_text("commercial_transactions_010") }}</dd>
           </div>
           <div class="legal-definition-row">
-            <dt class="legal-definition-term">{% if selected_locale == "ja" %}受付時間{% else %}Business hours{% endif %}</dt>
-            <dd class="legal-definition-desc">{% if selected_locale == "ja" %}平日 10:00〜17:00（土日祝日を除く）{% else %}Weekdays 10:00-17:00 (excluding weekends and public holidays){% endif %}</dd>
+            <dt class="legal-definition-term">{{ self.copy_text("commercial_transactions_011") }}</dt>
+            <dd class="legal-definition-desc">{{ self.copy_text("commercial_transactions_012") }}</dd>
           </div>
           <div class="legal-definition-row">
-            <dt class="legal-definition-term">{% if selected_locale == "ja" %}メールアドレス{% else %}Email{% endif %}</dt>
+            <dt class="legal-definition-term">{{ self.copy_text("commercial_transactions_013") }}</dt>
             <dd class="legal-definition-desc">
               <a class="legal-link" href="mailto:dev@finitefield.org">dev@finitefield.org</a>
             </dd>
           </div>
           <div class="legal-definition-row">
-            <dt class="legal-definition-term">{% if selected_locale == "ja" %}サイトURL{% else %}Website URL{% endif %}</dt>
+            <dt class="legal-definition-term">{{ self.copy_text("commercial_transactions_014") }}</dt>
             <dd class="legal-definition-desc">
               <a class="legal-link" href="https://inkanfield.org" target="_blank" rel="noopener noreferrer">https://inkanfield.org</a>
             </dd>
@@ -105,30 +105,26 @@
       <section class="legal-section" id="section-2">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">02</span>
-          <span>{% if selected_locale == "ja" %}販売条件{% else %}Sales terms{% endif %}</span>
+          <span>{{ self.copy_text("commercial_transactions_015") }}</span>
         </h3>
         <dl class="legal-definition-list">
           <div class="legal-definition-row">
-            <dt class="legal-definition-term">{% if selected_locale == "ja" %}販売価格{% else %}Price{% endif %}</dt>
-            <dd class="legal-definition-desc">{% if selected_locale == "ja" %}各商品ページに表示（消費税込み）{% else %}Displayed on each product page (tax included){% endif %}</dd>
+            <dt class="legal-definition-term">{{ self.copy_text("commercial_transactions_016") }}</dt>
+            <dd class="legal-definition-desc">{{ self.copy_text("commercial_transactions_017") }}</dd>
           </div>
           <div class="legal-definition-row">
-            <dt class="legal-definition-term">{% if selected_locale == "ja" %}商品代金以外の必要料金{% else %}Additional charges{% endif %}</dt>
+            <dt class="legal-definition-term">{{ self.copy_text("commercial_transactions_018") }}</dt>
             <dd class="legal-definition-desc">
-              {% if selected_locale == "ja" %}
-              送料（地域別）に加え、配送先や通関状況により関税・輸入消費税・通関手数料等が発生する場合があります。
-              {% else %}
-              Shipping varies by destination. Depending on the destination and customs clearance status, customs duties, import consumption tax, brokerage fees, and similar charges may apply.
-              {% endif %}
+              {{ self.copy_html("commercial_transactions_019")|safe }}
             </dd>
           </div>
           <div class="legal-definition-row">
-            <dt class="legal-definition-term">{% if selected_locale == "ja" %}お支払い方法{% else %}Payment method{% endif %}</dt>
-            <dd class="legal-definition-desc">{% if selected_locale == "ja" %}Stripe Checkout（クレジットカード、Apple Pay、Google Pay等）{% else %}Stripe Checkout (credit card, Apple Pay, Google Pay, and similar methods){% endif %}</dd>
+            <dt class="legal-definition-term">{{ self.copy_text("commercial_transactions_020") }}</dt>
+            <dd class="legal-definition-desc">{{ self.copy_text("commercial_transactions_021") }}</dd>
           </div>
           <div class="legal-definition-row">
-            <dt class="legal-definition-term">{% if selected_locale == "ja" %}支払時期{% else %}Payment timing{% endif %}</dt>
-            <dd class="legal-definition-desc">{% if selected_locale == "ja" %}ご注文確定時（前払い）{% else %}At the time the order is confirmed (prepayment){% endif %}</dd>
+            <dt class="legal-definition-term">{{ self.copy_text("commercial_transactions_022") }}</dt>
+            <dd class="legal-definition-desc">{{ self.copy_text("commercial_transactions_023") }}</dd>
           </div>
         </dl>
       </section>
@@ -136,68 +132,44 @@
       <section class="legal-section" id="section-3">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">03</span>
-          <span>{% if selected_locale == "ja" %}商品の引渡し{% else %}Delivery{% endif %}</span>
+          <span>{{ self.copy_text("commercial_transactions_024") }}</span>
         </h3>
         <div class="legal-notes">
           <div class="legal-note">
-            <p class="legal-note__label">{% if selected_locale == "ja" %}Production Origin{% else %}Production Origin{% endif %}</p>
-            <p class="legal-note__text">{% if selected_locale == "ja" %}中国（当社提携工房にて一本ずつ製作）{% else %}China (each item is produced by our partner workshop){% endif %}</p>
+            <p class="legal-note__label">{{ self.copy_text("commercial_transactions_025") }}</p>
+            <p class="legal-note__text">{{ self.copy_text("commercial_transactions_026") }}</p>
           </div>
           <div class="legal-note">
-            <p class="legal-note__label">{% if selected_locale == "ja" %}Estimated Delivery{% else %}Estimated Delivery{% endif %}</p>
-            <p class="legal-note__text">{% if selected_locale == "ja" %}製作期間: 5〜10営業日 / 配送期間: 7〜14日程度{% else %}Production period: 5-10 business days / Shipping period: about 7-14 days{% endif %}</p>
+            <p class="legal-note__label">{{ self.copy_text("commercial_transactions_027") }}</p>
+            <p class="legal-note__text">{{ self.copy_text("commercial_transactions_028") }}</p>
           </div>
         </div>
         <p class="legal-section__body">
-          {% if selected_locale == "ja" %}
-          本商品は完全受注生産です。製作開始後、通関手続きや配送状況、大型連休の影響により、お届けまで通常より時間がかかる場合があります。
-          {% else %}
-          This product is made to order. After production begins, customs procedures, delivery conditions, and long holiday periods may extend the time required for delivery.
-          {% endif %}
+          {{ self.copy_html("commercial_transactions_029")|safe }}
         </p>
       </section>
 
       <section class="legal-section" id="section-4">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">04</span>
-          <span>{% if selected_locale == "ja" %}返品・交換・キャンセル{% else %}Returns, exchanges, and cancellations{% endif %}</span>
+          <span>{{ self.copy_text("commercial_transactions_030") }}</span>
         </h3>
         <div class="legal-section__copy">
           <p>
-            {% if selected_locale == "ja" %}
-            当ブランドの商品はすべてお客様一人ひとりに合わせたオーダーメイド品です。
-            {% else %}
-            All products are custom-made for each individual customer.
-            {% endif %}
+            {{ self.copy_html("commercial_transactions_031")|safe }}
           </p>
           <ul class="legal-list">
             <li>
-              {% if selected_locale == "ja" %}
-              お客様都合による返品・交換はお受けできません。
-              {% else %}
-              We cannot accept returns or exchanges for customer convenience.
-              {% endif %}
+              {{ self.copy_html("commercial_transactions_032")|safe }}
             </li>
             <li>
-              {% if selected_locale == "ja" %}
-              不良品・誤配送の場合、到着後7日以内にご連絡いただければ再製作いたします。
-              {% else %}
-              If an item is defective or incorrectly delivered, please contact us within 7 days of receipt and we will remake it.
-              {% endif %}
+              {{ self.copy_html("commercial_transactions_033")|safe }}
             </li>
             <li>
-              {% if selected_locale == "ja" %}
-              石材の個体差は天然素材の特性であり、不良品の対象外となります。
-              {% else %}
-              Natural variations in stone are inherent to the material and are not considered defects.
-              {% endif %}
+              {{ self.copy_html("commercial_transactions_034")|safe }}
             </li>
             <li>
-              {% if selected_locale == "ja" %}
-              ご注文後、製作工程に入る前に限りキャンセルが可能です。至急お問い合わせフォームよりご連絡ください。
-              {% else %}
-              Cancellation is possible only before production starts. Please contact us through the inquiry form as soon as possible.
-              {% endif %}
+              {{ self.copy_html("commercial_transactions_035")|safe }}
             </li>
           </ul>
         </div>
@@ -206,18 +178,14 @@
       <section class="legal-section" id="section-5">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">05</span>
-          <span>{% if selected_locale == "ja" %}お問い合わせ{% else %}Contact{% endif %}</span>
+          <span>{{ self.copy_text("commercial_transactions_036") }}</span>
         </h3>
         <p class="legal-section__body">
-          {% if selected_locale == "ja" %}
-          ご不明点やご質問がございましたら、お問い合わせフォームよりご連絡ください。
-          {% else %}
-          If you have any questions, please contact us through the inquiry form.
-          {% endif %}
+          {{ self.copy_html("commercial_transactions_037")|safe }}
         </p>
         <div class="legal-actions">
           <button type="button" class="legal-button legal-button--primary" onclick="window.location.href='{{ top_url }}'">
-            {% if selected_locale == "ja" %}トップへ戻る{% else %}Back to TOP{% endif %}
+            {{ self.copy_text("commercial_transactions_038") }}
           </button>
           <a
             class="legal-button legal-button--secondary"
@@ -225,7 +193,7 @@
             target="_blank"
             rel="noopener noreferrer"
           >
-            {% if selected_locale == "ja" %}お問い合わせ{% else %}Contact us{% endif %}
+            {{ self.copy_text("commercial_transactions_039") }}
           </a>
         </div>
       </section>
@@ -241,11 +209,11 @@
         </a>
       </div>
       <div class="top-footer__links">
-        <a class="top-footer__link" href="{{ about_url }}">{% if selected_locale == "ja" %}STONE SIGNATUREとは{% else %}About STONE SIGNATURE{% endif %}</a>
-        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{% if selected_locale == "ja" %}特商法に基づく表記{% else %}Legal Notice{% endif %}</a>
-        <a class="top-footer__link" href="{{ terms_url }}">{% if selected_locale == "ja" %}利用規約{% else %}Terms of Service{% endif %}</a>
-        <a class="top-footer__link" href="{{ privacy_policy_url }}">{% if selected_locale == "ja" %}プライバシーポリシー{% else %}Privacy Policy{% endif %}</a>
-        <a class="top-footer__link" href="{{ company_url }}">{% if selected_locale == "ja" %}運営会社{% else %}Company{% endif %}</a>
+        <a class="top-footer__link" href="{{ about_url }}">{{ self.copy_text("commercial_transactions_040") }}</a>
+        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{{ self.copy_text("commercial_transactions_041") }}</a>
+        <a class="top-footer__link" href="{{ terms_url }}">{{ self.copy_text("commercial_transactions_042") }}</a>
+        <a class="top-footer__link" href="{{ privacy_policy_url }}">{{ self.copy_text("commercial_transactions_043") }}</a>
+        <a class="top-footer__link" href="{{ company_url }}">{{ self.copy_text("commercial_transactions_044") }}</a>
       </div>
       <div class="top-footer__copyright">
         © STONE SIGNATURE

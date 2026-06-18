@@ -33,7 +33,7 @@
           <img class="top-brand__logo" src="/static/site-logo.png" alt="" aria-hidden="true">
           <div class="top-brand__text">
             <h1 class="top-brand__title">STONE SIGNATURE</h1>
-            <span class="top-brand__subtitle">{% if selected_locale == "ja" %}印鑑フィールド{% else %}Seal Field{% endif %}</span>
+            <span class="top-brand__subtitle">{{ self.copy_text("blog_index_001") }}</span>
           </div>
         </div>
       </a>
@@ -43,8 +43,8 @@
             <span class="material-symbols-outlined top-brand__icon" aria-hidden="true">language</span>
           </summary>
           <div class="top-language-switcher__menu" role="menu" aria-label="Language options">
-            <a class="top-language-switcher__item{% if selected_locale == "ja" %} is-active{% endif %}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
-            <a class="top-language-switcher__item{% if selected_locale == "en" %} is-active{% endif %}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
+            <a class="top-language-switcher__item{{ self.language_active_class("ja") }}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
+            <a class="top-language-switcher__item{{ self.language_active_class("en") }}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
           </div>
         </details>
       </div>
@@ -56,7 +56,7 @@
     <section class="journal-section journal-section--index">
       <div class="journal-section__inner">
         <div class="journal-section__heading">
-          <h2 class="journal-section__title">{% if selected_locale == "ja" %}ジャーナル{% else %}Journal{% endif %}</h2>
+          <h2 class="journal-section__title">{{ self.copy_text("blog_index_006") }}</h2>
           <div class="journal-section__rule" aria-hidden="true"></div>
         </div>
 
@@ -90,10 +90,10 @@
         </a>
       </div>
       <div class="top-footer__links">
-        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{% if selected_locale == "ja" %}特商法に基づく表記{% else %}Legal Notice{% endif %}</a>
-        <a class="top-footer__link" href="{{ terms_url }}">{% if selected_locale == "ja" %}利用規約{% else %}Terms of Service{% endif %}</a>
-        <a class="top-footer__link" href="{{ privacy_policy_url }}">{% if selected_locale == "ja" %}プライバシーポリシー{% else %}Privacy Policy{% endif %}</a>
-        <a class="top-footer__link" href="{{ company_url }}">{% if selected_locale == "ja" %}運営会社{% else %}Company{% endif %}</a>
+        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{{ self.copy_text("blog_index_002") }}</a>
+        <a class="top-footer__link" href="{{ terms_url }}">{{ self.copy_text("blog_index_003") }}</a>
+        <a class="top-footer__link" href="{{ privacy_policy_url }}">{{ self.copy_text("blog_index_004") }}</a>
+        <a class="top-footer__link" href="{{ company_url }}">{{ self.copy_text("blog_index_005") }}</a>
       </div>
       <div class="top-footer__copyright">
         © STONE SIGNATURE

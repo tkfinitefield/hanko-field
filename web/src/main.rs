@@ -33,9 +33,14 @@ const LANGUAGE_REGISTRY_JSON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../config/languages.json"
 ));
+const WEB_COPY_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/web-copy.json"
+));
 const EXTERNAL_LEGAL_BASE_URL: &str = "https://finitefield.org";
 const DEFAULT_LOCALE: &str = "en";
 static WEB_LANGUAGE_REGISTRY: OnceLock<WebLanguageRegistry> = OnceLock::new();
+static WEB_COPY_DOCUMENT: OnceLock<WebCopyDocument> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RunMode {
@@ -231,11 +236,74 @@ struct LanguageLink {
     is_indexed: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct WebCopyDocument {
+    common: LocalizedCopySection,
+    about: LocalizedCopySection,
+    blog_article: LocalizedCopySection,
+    blog_index: LocalizedCopySection,
+    commercial_transactions: LocalizedCopySection,
+    design: LocalizedCopySection,
+    kanji_suggestions: LocalizedCopySection,
+    payment_failure: LocalizedCopySection,
+    payment_success: LocalizedCopySection,
+    purchase_result: LocalizedCopySection,
+    terms: LocalizedCopySection,
+    top: LocalizedCopySection,
+}
+
+impl WebCopyDocument {
+    fn section(&self, section: &str) -> &LocalizedCopySection {
+        match section {
+            "common" => &self.common,
+            "about" => &self.about,
+            "blog_article" => &self.blog_article,
+            "blog_index" => &self.blog_index,
+            "commercial_transactions" => &self.commercial_transactions,
+            "design" => &self.design,
+            "kanji_suggestions" => &self.kanji_suggestions,
+            "payment_failure" => &self.payment_failure,
+            "payment_success" => &self.payment_success,
+            "purchase_result" => &self.purchase_result,
+            "terms" => &self.terms,
+            "top" => &self.top,
+            _ => panic!("unknown web copy section: {section}"),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalizedCopySection {
+    en: HashMap<String, String>,
+    ja: HashMap<String, String>,
+}
+
 fn web_language_registry() -> &'static WebLanguageRegistry {
     WEB_LANGUAGE_REGISTRY.get_or_init(|| {
         WebLanguageRegistry::from_json(LANGUAGE_REGISTRY_JSON)
             .expect("checked-in language registry must be valid for web")
     })
+}
+
+fn web_copy_document() -> &'static WebCopyDocument {
+    WEB_COPY_DOCUMENT.get_or_init(|| {
+        serde_json::from_str(WEB_COPY_JSON).expect("checked-in web copy JSON must be valid")
+    })
+}
+
+fn web_copy_text(section: &str, locale: &str, key: &str) -> &'static str {
+    let section_name = section;
+    let section = web_copy_document().section(section);
+    let localized = if is_japanese_locale(locale) {
+        &section.ja
+    } else {
+        &section.en
+    };
+    localized
+        .get(key)
+        .or_else(|| section.en.get(key))
+        .map(String::as_str)
+        .unwrap_or_else(|| panic!("missing web copy key: {section_name}.{key}"))
 }
 
 fn normalize_registry_code(raw: &str) -> String {
@@ -800,6 +868,43 @@ struct BlogArticleTemplate {
     post: BlogPostView,
     body_html: String,
 }
+
+macro_rules! impl_template_copy_methods {
+    ($type:ty, $section:literal) => {
+        impl $type {
+            #[allow(dead_code)]
+            fn copy_text(&self, key: &str) -> &str {
+                web_copy_text($section, &self.selected_locale, key)
+            }
+
+            #[allow(dead_code)]
+            fn copy_html(&self, key: &str) -> &str {
+                web_copy_text($section, &self.selected_locale, key)
+            }
+
+            #[allow(dead_code)]
+            fn language_active_class(&self, route_code: &str) -> &str {
+                if self.selected_locale == route_code {
+                    " is-active"
+                } else {
+                    ""
+                }
+            }
+        }
+    };
+}
+
+impl_template_copy_methods!(TopPageTemplate, "top");
+impl_template_copy_methods!(AboutTemplate, "about");
+impl_template_copy_methods!(PageTemplate, "design");
+impl_template_copy_methods!(KanjiSuggestionsTemplate, "kanji_suggestions");
+impl_template_copy_methods!(PurchaseResultTemplate, "purchase_result");
+impl_template_copy_methods!(PaymentSuccessTemplate, "payment_success");
+impl_template_copy_methods!(PaymentFailureTemplate, "payment_failure");
+impl_template_copy_methods!(CommercialTransactionsTemplate, "commercial_transactions");
+impl_template_copy_methods!(TermsTemplate, "terms");
+impl_template_copy_methods!(BlogIndexTemplate, "blog_index");
+impl_template_copy_methods!(BlogArticleTemplate, "blog_article");
 
 #[derive(Debug, Deserialize, Default)]
 struct PaymentRedirectQuery {
@@ -2561,16 +2666,8 @@ async fn render_top_page(
     };
 
     let template = TopPageTemplate {
-        page_title: localized_text(
-            &selected_locale,
-            "宝石印鑑をオンラインでデザイン | STONE SIGNATURE",
-            "Custom gemstone seals | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "宝石印鑑をオンラインでデザインして、日本語または英語で注文できます。",
-            "Design custom hand-carved gemstone seals online and order in English or Japanese.",
-        ),
+        page_title: web_copy_text("top", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("top", &selected_locale, "seo_description").to_owned(),
         robots_meta: "index,follow".to_owned(),
         canonical_url: top_url(site_base_url, "en"),
         lang_ja_url: top_url(site_base_url, "ja"),
@@ -2630,16 +2727,8 @@ async fn render_about_page(
     let lang_ja_url = about_url(site_base_url, "ja");
     let lang_en_url = about_url(site_base_url, "en");
     let template = AboutTemplate {
-        page_title: localized_text(
-            &selected_locale,
-            "STONE SIGNATUREとは | STONE SIGNATURE",
-            "About STONE SIGNATURE | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "STONE SIGNATUREは、宝石を使った印鑑をオンラインで選び、印影をデザインして注文できるサービスです。",
-            "Learn how STONE SIGNATURE lets you choose a gemstone seal online, design the seal impression, and place your order.",
-        ),
+        page_title: web_copy_text("about", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("about", &selected_locale, "seo_description").to_owned(),
         robots_meta: "index,follow".to_owned(),
         canonical_url: lang_en_url.clone(),
         lang_ja_url,
@@ -2737,35 +2826,24 @@ async fn render_design_page(
         material_filters: catalog.material_filters,
         selected_color_family: material_filter_state.color_family.clone(),
         selected_pattern_primary: material_filter_state.pattern_primary.clone(),
-        page_title: localized_text(
-            &selected_locale,
-            "デザイン作成 | STONE SIGNATURE",
-            "Design your seal | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "印影、出品個体、お届け先を順に選んで、そのまま購入まで進めます。",
-            "Choose the seal text, listing, and shipping details, then continue to checkout.",
-        ),
+        page_title: web_copy_text("design", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("design", &selected_locale, "seo_description").to_owned(),
         robots_meta: "index,follow".to_owned(),
         purchase_action_url: if state.mode == RunMode::Mock {
             site_url(site_base_url, "/mock/purchase")
         } else {
             site_url(site_base_url, "/purchase")
         },
-        purchase_note: if state.mode == RunMode::Mock {
-            localized_text(
-                &selected_locale,
-                "モック注文を確定します。",
-                "This confirms a mock order.",
-            )
-        } else {
-            localized_text(
-                &selected_locale,
-                "Stripe Checkout に遷移して決済します。",
-                "You will be redirected to Stripe Checkout to complete payment.",
-            )
-        },
+        purchase_note: web_copy_text(
+            "design",
+            &selected_locale,
+            if state.mode == RunMode::Mock {
+                "purchase_note_mock"
+            } else {
+                "purchase_note_live"
+            },
+        )
+        .to_owned(),
         canonical_url: design_url(site_base_url, "en"),
         lang_ja_url: design_url_with_filters(site_base_url, "ja", &material_filter_state),
         lang_en_url: design_url_with_filters(site_base_url, "en", &material_filter_state),
@@ -2831,16 +2909,9 @@ async fn render_blog_index_page(
         }
     };
     let template = BlogIndexTemplate {
-        page_title: localized_text(
-            &selected_locale,
-            "ジャーナル | STONE SIGNATURE",
-            "Journal | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "STONE SIGNATURE の石印、手彫り、朱肉にまつわる記事をご覧ください。",
-            "Read STONE SIGNATURE journal stories on gemstone seals, hand carving, and vermilion ink.",
-        ),
+        page_title: web_copy_text("blog_index", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("blog_index", &selected_locale, "seo_description")
+            .to_owned(),
         robots_meta: "index,follow".to_owned(),
         canonical_url: blog_index_url(site_base_url, "en"),
         lang_ja_url: blog_index_url(site_base_url, "ja"),
@@ -3249,16 +3320,9 @@ async fn render_payment_success_page(
             "/commercial-transactions",
             &selected_locale,
         ),
-        page_title: localized_text(
-            &selected_locale,
-            "支払い完了 | STONE SIGNATURE",
-            "Payment complete | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "ご注文の支払いが完了しました。Stripeの決済完了メールをご確認ください。",
-            "Your payment was received. Check your Stripe payment receipt for order details and next steps.",
-        ),
+        page_title: web_copy_text("payment_success", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("payment_success", &selected_locale, "seo_description")
+            .to_owned(),
         robots_meta: "noindex,follow".to_owned(),
         canonical_url: payment_result_locale_url(site_base_url, "/payment/success", &query, "en"),
         has_order_id: !order_id.is_empty(),
@@ -3336,16 +3400,9 @@ async fn render_payment_failure_page(
             "/commercial-transactions",
             &selected_locale,
         ),
-        page_title: localized_text(
-            &selected_locale,
-            "支払い未完了 | STONE SIGNATURE",
-            "Payment incomplete | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "お支払いが完了しませんでした。カード情報をご確認のうえ、購入画面から再度お試しください。",
-            "Payment did not complete. Check your card details and return to the purchase page to try again.",
-        ),
+        page_title: web_copy_text("payment_failure", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("payment_failure", &selected_locale, "seo_description")
+            .to_owned(),
         robots_meta: "noindex,follow".to_owned(),
         canonical_url: payment_result_locale_url(site_base_url, "/payment/failure", &query, "en"),
         has_order_id: !order_id.is_empty(),
@@ -3405,16 +3462,14 @@ async fn render_commercial_transactions_page(
     let lang_en_url = commercial_transactions_url(site_base_url, "en");
     let template = CommercialTransactionsTemplate {
         contact_url: inquiry_url(site_base_url, &selected_locale),
-        page_title: localized_text(
+        page_title: web_copy_text("commercial_transactions", &selected_locale, "seo_title")
+            .to_owned(),
+        meta_description: web_copy_text(
+            "commercial_transactions",
             &selected_locale,
-            "特定商取引法に基づく表記 | STONE SIGNATURE",
-            "Legal Notice | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "販売業者情報、支払い方法、配送、返品など、特定商取引法に基づく表記をご確認ください。",
-            "Read the legal notice for STONE SIGNATURE, including seller information, payment methods, delivery, and returns.",
-        ),
+            "seo_description",
+        )
+        .to_owned(),
         robots_meta: "index,follow".to_owned(),
         canonical_url: lang_en_url.clone(),
         lang_ja_url,
@@ -3472,16 +3527,8 @@ async fn render_terms_page(
     let lang_en_url = terms_url(site_base_url, "en");
     let template = TermsTemplate {
         contact_url: inquiry_url(site_base_url, &selected_locale),
-        page_title: localized_text(
-            &selected_locale,
-            "利用規約 | STONE SIGNATURE",
-            "Terms of Service | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "注文、支払い、配送、返品、準拠法など、STONE SIGNATURE の利用規約をご確認ください。",
-            "Read the STONE SIGNATURE terms of service, including order formation, payment, delivery, returns, and governing law.",
-        ),
+        page_title: web_copy_text("terms", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("terms", &selected_locale, "seo_description").to_owned(),
         robots_meta: "index,follow".to_owned(),
         canonical_url: lang_en_url.clone(),
         lang_ja_url,
@@ -6397,6 +6444,25 @@ mod tests {
                 ("en", "https://finitefield.org/about"),
                 ("ja", "https://finitefield.org/ja/about"),
             ]
+        );
+    }
+
+    #[test]
+    fn web_copy_document_loads_typed_sections() {
+        let copy = web_copy_document();
+        assert_eq!(copy.common.en["brand_subtitle"], "Seal Field");
+        assert_eq!(copy.common.ja["brand_subtitle"], "印鑑フィールド");
+        assert_eq!(
+            web_copy_text("top", "en", "seo_title"),
+            "Custom gemstone seals | STONE SIGNATURE"
+        );
+        assert_eq!(
+            web_copy_text("design", "ja", "purchase_note_live"),
+            "Stripe Checkout に遷移して決済します。"
+        );
+        assert_eq!(
+            web_copy_text("commercial_transactions", "en", "seo_title"),
+            "Legal Notice | STONE SIGNATURE"
         );
     }
 

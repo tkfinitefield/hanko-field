@@ -1,5 +1,5 @@
 {% if has_suggestions %}
-<p class="suggestion-title">{% if selected_locale == "ja" %}{{ real_name }} さんへの候補{% else %}Suggestions for {{ real_name }}{% endif %}</p>
+<p class="suggestion-title">{{ self.copy_text("kanji_suggestions_005") }}{{ real_name }}{{ self.copy_text("kanji_suggestions_006") }}</p>
 <div class="suggestion-chips">
   {% for suggestion in suggestions %}
   <button
@@ -13,13 +13,13 @@
   >{{ suggestion.kanji }}</button>
   {% endfor %}
 </div>
-<p class="suggestion-reading" data-kanji-reading>{% if selected_locale == "ja" %}読み方{% else %}Reading{% endif %}</p>
-<p class="suggestion-reason" data-kanji-reason>{% if selected_locale == "ja" %}提案理由{% else %}Reason{% endif %}</p>
-<p class="field-hint">{% if selected_locale == "ja" %}候補をタップすると印影テキストに反映されます。{% else %}Tap a suggestion to apply it to the seal text.{% endif %}</p>
+<p class="suggestion-reading" data-kanji-reading>{{ self.copy_text("kanji_suggestions_001") }}</p>
+<p class="suggestion-reason" data-kanji-reason>{{ self.copy_text("kanji_suggestions_002") }}</p>
+<p class="field-hint">{{ self.copy_text("kanji_suggestions_003") }}</p>
 {% else %}
   {% if !error.is_empty() %}
 <p class="field-error is-visible">{{ error }}</p>
   {% else %}
-<p class="placeholder">{% if selected_locale == "ja" %}候補を表示するには本名を入力してください。{% else %}Enter your name to generate suggestions.{% endif %}</p>
+<p class="placeholder">{{ self.copy_text("kanji_suggestions_004") }}</p>
   {% endif %}
 {% endif %}

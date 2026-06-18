@@ -33,7 +33,7 @@
           <img class="top-brand__logo" src="/static/site-logo.png" alt="" aria-hidden="true">
           <div class="top-brand__text">
             <h1 class="top-brand__title">STONE SIGNATURE</h1>
-            <span class="top-brand__subtitle">{% if selected_locale == "ja" %}印鑑フィールド{% else %}Seal Field{% endif %}</span>
+            <span class="top-brand__subtitle">{{ self.copy_text("top_001") }}</span>
           </div>
         </div>
       </a>
@@ -43,8 +43,8 @@
             <span class="material-symbols-outlined top-brand__icon" aria-hidden="true">language</span>
           </summary>
           <div class="top-language-switcher__menu" role="menu" aria-label="Language options">
-            <a class="top-language-switcher__item{% if selected_locale == "ja" %} is-active{% endif %}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
-            <a class="top-language-switcher__item{% if selected_locale == "en" %} is-active{% endif %}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
+            <a class="top-language-switcher__item{{ self.language_active_class("ja") }}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
+            <a class="top-language-switcher__item{{ self.language_active_class("en") }}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
           </div>
         </details>
       </div>
@@ -65,7 +65,7 @@
 
       <div class="top-hero__content">
         <h2 class="top-hero__title">
-          {% if selected_locale == "ja" %}あなただけの宝石印鑑{% else %}A gemstone seal made just for you.{% endif %}
+          {{ self.copy_text("top_010") }}
         </h2>
         <p class="top-hero__copy">
           Authentic Hand-Carved Gemstone Seals from the Orient
@@ -75,7 +75,7 @@
           class="top-cta"
           onclick="window.location.href='{{ design_url }}'"
         >
-          <span class="top-cta__label">{% if selected_locale == "ja" %}デザインする{% else %}Start designing{% endif %}</span>
+          <span class="top-cta__label">{{ self.copy_text("top_002") }}</span>
           <span class="top-cta__sheen" aria-hidden="true"></span>
         </button>
       </div>
@@ -84,7 +84,7 @@
     <section id="journal" class="journal-section">
       <div class="journal-section__inner">
         <div class="journal-section__heading">
-          <h2 class="journal-section__title">{% if selected_locale == "ja" %}ジャーナル{% else %}Journal{% endif %}</h2>
+          <h2 class="journal-section__title">{{ self.copy_text("top_003") }}</h2>
           <div class="journal-section__rule" aria-hidden="true"></div>
         </div>
 
@@ -107,7 +107,7 @@
         </div>
 
         <div class="journal-section__actions">
-          <a class="journal-section__button" href="{{ blog_index_url }}">{% if selected_locale == "ja" %}ジャーナル一覧へ{% else %}View All Stories{% endif %}</a>
+          <a class="journal-section__button" href="{{ blog_index_url }}">{{ self.copy_text("top_004") }}</a>
         </div>
       </div>
     </section>
@@ -122,11 +122,11 @@
         </a>
       </div>
       <div class="top-footer__links">
-        <a class="top-footer__link" href="{{ about_url }}">{% if selected_locale == "ja" %}STONE SIGNATUREとは{% else %}About STONE SIGNATURE{% endif %}</a>
-        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{% if selected_locale == "ja" %}特商法に基づく表記{% else %}Legal Notice{% endif %}</a>
-        <a class="top-footer__link" href="{{ terms_url }}">{% if selected_locale == "ja" %}利用規約{% else %}Terms of Service{% endif %}</a>
-        <a class="top-footer__link" href="{{ privacy_policy_url }}">{% if selected_locale == "ja" %}プライバシーポリシー{% else %}Privacy Policy{% endif %}</a>
-        <a class="top-footer__link" href="{{ company_url }}">{% if selected_locale == "ja" %}運営会社{% else %}Company{% endif %}</a>
+        <a class="top-footer__link" href="{{ about_url }}">{{ self.copy_text("top_005") }}</a>
+        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{{ self.copy_text("top_006") }}</a>
+        <a class="top-footer__link" href="{{ terms_url }}">{{ self.copy_text("top_007") }}</a>
+        <a class="top-footer__link" href="{{ privacy_policy_url }}">{{ self.copy_text("top_008") }}</a>
+        <a class="top-footer__link" href="{{ company_url }}">{{ self.copy_text("top_009") }}</a>
       </div>
       <div class="top-footer__copyright">
         © STONE SIGNATURE

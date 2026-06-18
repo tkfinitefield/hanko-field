@@ -34,7 +34,7 @@
           <img class="top-brand__logo" src="/static/site-logo.png" alt="" aria-hidden="true">
           <div class="top-brand__text">
             <h1 class="top-brand__title">STONE SIGNATURE</h1>
-            <span class="top-brand__subtitle">{% if selected_locale == "ja" %}印鑑フィールド{% else %}Seal Field{% endif %}</span>
+            <span class="top-brand__subtitle">{{ self.copy_text("payment_success_001") }}</span>
           </div>
         </div>
       </a>
@@ -44,8 +44,8 @@
             <span class="material-symbols-outlined top-brand__icon" aria-hidden="true">language</span>
           </summary>
           <div class="top-language-switcher__menu" role="menu" aria-label="Language options">
-            <a class="top-language-switcher__item{% if selected_locale == "ja" %} is-active{% endif %}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
-            <a class="top-language-switcher__item{% if selected_locale == "en" %} is-active{% endif %}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
+            <a class="top-language-switcher__item{{ self.language_active_class("ja") }}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
+            <a class="top-language-switcher__item{{ self.language_active_class("en") }}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
           </div>
         </details>
       </div>
@@ -56,7 +56,7 @@
   <main class="legal-page__main">
     <div class="legal-page__lead">
       <h2 class="legal-page__title">
-        {% if selected_locale == "ja" %}お支払いが完了しました{% else %}Payment completed{% endif %}
+        {{ self.copy_text("payment_success_025") }}
       </h2>
     </div>
 
@@ -64,24 +64,24 @@
       <section class="legal-section" id="section-1">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">01</span>
-          <span>{% if selected_locale == "ja" %}決済完了{% else %}Payment confirmed{% endif %}</span>
+          <span>{{ self.copy_text("payment_success_002") }}</span>
         </h3>
         <div class="legal-section__copy">
-          <p>{% if selected_locale == "ja" %}ご注文ありがとうございます。決済確認後、順次製作を開始します。{% else %}Thank you for your order. We will start production after payment confirmation.{% endif %}</p>
+          <p>{{ self.copy_text("payment_success_003") }}</p>
           <div class="legal-notes">
             <div class="legal-note">
-              <p class="legal-note__label">{% if selected_locale == "ja" %}状態{% else %}Status{% endif %}</p>
-              <p class="legal-note__text">{% if selected_locale == "ja" %}決済を受け付けました{% else %}Payment received{% endif %}</p>
+              <p class="legal-note__label">{{ self.copy_text("payment_success_004") }}</p>
+              <p class="legal-note__text">{{ self.copy_text("payment_success_005") }}</p>
             </div>
             <div class="legal-note">
-              <p class="legal-note__label">{% if selected_locale == "ja" %}製作開始{% else %}Production{% endif %}</p>
-              <p class="legal-note__text">{% if selected_locale == "ja" %}決済確認後に製作を開始します。{% else %}We will begin production after payment confirmation.{% endif %}</p>
+              <p class="legal-note__label">{{ self.copy_text("payment_success_006") }}</p>
+              <p class="legal-note__text">{{ self.copy_text("payment_success_007") }}</p>
             </div>
           </div>
           {% if has_app_redirect_url %}
           <div class="legal-actions">
             <a class="legal-button legal-button--primary" href="{{ app_redirect_url }}" data-app-return-link>
-              {% if selected_locale == "ja" %}アプリに戻る{% else %}Return to app{% endif %}
+              {{ self.copy_text("payment_success_008") }}
             </a>
           </div>
           {% endif %}
@@ -91,26 +91,26 @@
       <section class="legal-section" id="section-2">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">02</span>
-          <span>{% if selected_locale == "ja" %}注文情報{% else %}Order information{% endif %}</span>
+          <span>{{ self.copy_text("payment_success_009") }}</span>
         </h3>
         <div class="legal-section__copy">
           {% if has_order_id || has_session_id %}
           <dl class="legal-definition-list">
             {% if has_order_id %}
             <div class="legal-definition-row">
-              <dt class="legal-definition-term">{% if selected_locale == "ja" %}注文ID{% else %}Order ID{% endif %}</dt>
+              <dt class="legal-definition-term">{{ self.copy_text("payment_success_010") }}</dt>
               <dd class="legal-definition-desc">{{ order_id }}</dd>
             </div>
             {% endif %}
             {% if has_session_id %}
             <div class="legal-definition-row">
-              <dt class="legal-definition-term">{% if selected_locale == "ja" %}決済セッションID{% else %}Session ID{% endif %}</dt>
+              <dt class="legal-definition-term">{{ self.copy_text("payment_success_011") }}</dt>
               <dd class="legal-definition-desc">{{ session_id }}</dd>
             </div>
             {% endif %}
           </dl>
           {% else %}
-          <p>{% if selected_locale == "ja" %}Stripeの決済完了メールをご確認ください。{% else %}Please check your Stripe payment receipt.{% endif %}</p>
+          <p>{{ self.copy_text("payment_success_012") }}</p>
           {% endif %}
         </div>
       </section>
@@ -118,18 +118,18 @@
       <section class="legal-section" id="section-3">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">03</span>
-          <span>{% if selected_locale == "ja" %}次のステップ{% else %}Next steps{% endif %}</span>
+          <span>{{ self.copy_text("payment_success_013") }}</span>
         </h3>
         <div class="legal-section__copy">
-          <p class="legal-section__body">{% if selected_locale == "ja" %}ご不明点はお問い合わせフォームからご連絡ください。{% else %}If you have any questions, please contact us through the inquiry form.{% endif %}</p>
+          <p class="legal-section__body">{{ self.copy_text("payment_success_014") }}</p>
           <ul class="legal-list">
-            <li>{% if selected_locale == "ja" %}Stripeの決済完了メールをご確認ください。{% else %}Check your Stripe payment receipt.{% endif %}</li>
-            <li>{% if selected_locale == "ja" %}注文IDは問い合わせ時にお伝えください。{% else %}Keep your order ID for support.{% endif %}</li>
-            <li>{% if selected_locale == "ja" %}Stripeのメールが届かない場合はお問い合わせください。{% else %}If the Stripe email does not arrive, contact us.{% endif %}</li>
+            <li>{{ self.copy_text("payment_success_015") }}</li>
+            <li>{{ self.copy_text("payment_success_016") }}</li>
+            <li>{{ self.copy_text("payment_success_017") }}</li>
           </ul>
           <div class="legal-actions">
             <button type="button" class="legal-button legal-button--primary" onclick="window.location.href='{{ top_url }}'">
-              {% if selected_locale == "ja" %}トップへ戻る{% else %}Back to top{% endif %}
+              {{ self.copy_text("payment_success_018") }}
             </button>
             <a
               class="legal-button legal-button--secondary"
@@ -137,7 +137,7 @@
               target="_blank"
               rel="noopener noreferrer"
             >
-              {% if selected_locale == "ja" %}お問い合わせ{% else %}Contact us{% endif %}
+              {{ self.copy_text("payment_success_019") }}
             </a>
           </div>
         </div>
@@ -154,11 +154,11 @@
         </a>
       </div>
       <div class="top-footer__links">
-        <a class="top-footer__link" href="{{ about_url }}">{% if selected_locale == "ja" %}STONE SIGNATUREとは{% else %}About STONE SIGNATURE{% endif %}</a>
-        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{% if selected_locale == "ja" %}特商法に基づく表記{% else %}Legal Notice{% endif %}</a>
-        <a class="top-footer__link" href="{{ terms_url }}">{% if selected_locale == "ja" %}利用規約{% else %}Terms of Service{% endif %}</a>
-        <a class="top-footer__link" href="{{ privacy_policy_url }}">{% if selected_locale == "ja" %}プライバシーポリシー{% else %}Privacy Policy{% endif %}</a>
-        <a class="top-footer__link" href="{{ company_url }}">{% if selected_locale == "ja" %}運営会社{% else %}Company{% endif %}</a>
+        <a class="top-footer__link" href="{{ about_url }}">{{ self.copy_text("payment_success_020") }}</a>
+        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{{ self.copy_text("payment_success_021") }}</a>
+        <a class="top-footer__link" href="{{ terms_url }}">{{ self.copy_text("payment_success_022") }}</a>
+        <a class="top-footer__link" href="{{ privacy_policy_url }}">{{ self.copy_text("payment_success_023") }}</a>
+        <a class="top-footer__link" href="{{ company_url }}">{{ self.copy_text("payment_success_024") }}</a>
       </div>
       <div class="top-footer__copyright">
         © STONE SIGNATURE

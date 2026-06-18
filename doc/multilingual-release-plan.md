@@ -1975,7 +1975,7 @@ when run by itself.
   Output: web-side language model for route parsing, links, `hreflang`, and
   sitemap generation.
   Done when: `SUPPORTED_LOCALES` is no longer the source of truth.
-- [ ] `M3-T02` Create typed web copy structs.
+- [x] `M3-T02` Create typed web copy structs.
   Output: JSON-backed structs for common layout, SEO, top, design, about, blog,
   payment, terms, and commercial transaction pages.
   Done when: templates render data fields instead of locale conditionals.
@@ -2027,6 +2027,72 @@ jq empty config/languages.json
 make i18n-registry-test
 make i18n-status-test
 make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T02 Typed Web Copy Structs
+
+Completed on 2026-06-18. Added a JSON-backed web copy document and moved
+template-visible English/Japanese copy out of Askama locale conditionals.
+
+Implementation notes:
+
+- Added `web/content/i18n/web-copy.json` as the interim JSON source for common
+  layout, SEO, top, design, about, blog, payment, terms, commercial transaction,
+  kanji suggestion, and purchase-result copy.
+- Added typed Rust loader structs for the web copy document and localized
+  sections.
+- Added template copy helpers so Askama templates render copy through
+  `self.copy_text(...)` and `self.copy_html(...)` instead of
+  `selected_locale == "ja"` content branches.
+- Moved page title and meta description copy for top, design, about, blog
+  index, payment success, payment failure, terms, and commercial transaction
+  pages to JSON-backed copy.
+- Removed `selected_locale == ...` branches from `web/templates/*.html`.
+  Language-switcher active state now uses a helper method instead of inline
+  template locale comparisons.
+- Left runtime validation and API error messages in Rust for later API/checkout
+  localization tasks; those are not template-visible page copy.
+
+Validation:
+
+```sh
+cargo test --manifest-path web/Cargo.toml
+cargo fmt --manifest-path web/Cargo.toml -- --check
+jq empty config/languages.json web/content/i18n/web-copy.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+! rg -n 'selected_locale == "ja"|selected_locale == "en"' web/templates
+node - <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const copy = JSON.parse(fs.readFileSync('web/content/i18n/web-copy.json', 'utf8'));
+const sections = {
+  'top.html': 'top',
+  'about.html': 'about',
+  'index.html': 'design',
+  'kanji_suggestions.html': 'kanji_suggestions',
+  'purchase_result.html': 'purchase_result',
+  'payment_success.html': 'payment_success',
+  'payment_failure.html': 'payment_failure',
+  'commercial_transactions.html': 'commercial_transactions',
+  'terms.html': 'terms',
+  'blog_index.html': 'blog_index',
+  'blog_article.html': 'blog_article',
+};
+for (const [file, section] of Object.entries(sections)) {
+  const source = fs.readFileSync(path.join('web/templates', file), 'utf8');
+  for (const match of source.matchAll(/self\.copy_(?:text|html)\("([^"]+)"\)/g)) {
+    for (const lang of ['en', 'ja']) {
+      if (!copy[section]?.[lang]?.[match[1]]) {
+        throw new Error(`${file}:${match[1]}:${lang}`);
+      }
+    }
+  }
+}
+NODE
 git diff --check
 git diff --cached --check
 ```

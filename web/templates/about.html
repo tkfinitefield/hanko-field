@@ -34,7 +34,7 @@
           <img class="top-brand__logo" src="/static/site-logo.png" alt="" aria-hidden="true">
           <div class="top-brand__text">
             <h1 class="top-brand__title">STONE SIGNATURE</h1>
-            <span class="top-brand__subtitle">{% if selected_locale == "ja" %}印鑑フィールド{% else %}Seal Field{% endif %}</span>
+            <span class="top-brand__subtitle">{{ self.copy_text("about_001") }}</span>
           </div>
         </div>
       </a>
@@ -44,8 +44,8 @@
             <span class="material-symbols-outlined top-brand__icon" aria-hidden="true">language</span>
           </summary>
           <div class="top-language-switcher__menu" role="menu" aria-label="Language options">
-            <a class="top-language-switcher__item{% if selected_locale == "ja" %} is-active{% endif %}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
-            <a class="top-language-switcher__item{% if selected_locale == "en" %} is-active{% endif %}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
+            <a class="top-language-switcher__item{{ self.language_active_class("ja") }}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
+            <a class="top-language-switcher__item{{ self.language_active_class("en") }}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
           </div>
         </details>
       </div>
@@ -57,7 +57,7 @@
     <section class="about-hero">
       <div class="about-hero__background">
         <img
-          alt="{% if selected_locale == "ja" %}宝石印鑑の製作風景{% else %}Gemstone seal craftsmanship{% endif %}"
+          alt="{{ self.copy_text("about_018") }}"
           class="about-hero__image"
           src="https://lh3.googleusercontent.com/aida-public/AB6AXuC5cLu880OVzWOnNyf9ZD8XcLvMqrMQc9P2yYVHcoN-KgbnKfMWey16b0zf7R3fFa7H-VSCAqs42ltG1JCCyxdbtQkjxXihFB5El_2xJKqjbKOdd3GIGlRb4HbTAiBNZGpLyQFWhCV6j81PL1Ij60jvqLGQs25Adi_yHKMzrB2shzvBbn8gidOur5_a_iDxLBPlKCtGyXWQv7l06Ng_ConMMKlojtfNITI-0fmeyT57m3XpXNeVLHXcK4ObXpAuN59rk6gzHqKQKVk"
         >
@@ -67,17 +67,17 @@
       <div class="about-hero__content">
         <p class="about-hero__eyebrow">About STONE SIGNATURE</p>
         <h2 class="about-hero__title">
-          {% if selected_locale == "ja" %}宝石でつくる、あなたの印鑑{% else %}Your seal, made from gemstone{% endif %}
+          {{ self.copy_text("about_002") }}
         </h2>
         <p class="about-hero__copy">
-          {% if selected_locale == "ja" %}石を選び、印影をデザインして注文できます{% else %}Choose a stone, design the seal impression, and place your order{% endif %}
+          {{ self.copy_text("about_003") }}
         </p>
         <button
           type="button"
           class="top-cta about-hero__cta"
           onclick="window.location.href='{{ design_url }}'"
         >
-          <span class="top-cta__label">{% if selected_locale == "ja" %}デザインする{% else %}Design{% endif %}</span>
+          <span class="top-cta__label">{{ self.copy_text("about_004") }}</span>
           <span class="top-cta__sheen" aria-hidden="true"></span>
         </button>
       </div>
@@ -87,36 +87,30 @@
       <div class="about-story__inner">
         <div class="about-story__lead">
           <h2 class="about-story__title">
-            {% if selected_locale == "ja" %}宝石印鑑を、もっと選びやすく。{% else %}An easier way to choose a gemstone seal.{% endif %}
+            {{ self.copy_text("about_005") }}
           </h2>
           <div class="about-story__copy">
-            {% if selected_locale == "ja" %}
-            <p>STONE SIGNATUREは、宝石を使った印鑑をオンラインで選び、印影をデザインして注文できるサービスです。</p>
-            <p>素材や一点物の個体を確認しながら、自分に合った印鑑を見つけられます。</p>
-            {% else %}
-            <p>STONE SIGNATURE is a service for choosing a gemstone seal online, designing the seal impression, and placing an order.</p>
-            <p>Review the material and one-of-a-kind stone listings as you find the seal that fits you.</p>
-            {% endif %}
+            {{ self.copy_html("about_006")|safe }}
           </div>
         </div>
 
         <div class="about-points">
           <article class="about-point">
-            <h3 class="about-point__title">{% if selected_locale == "ja" %}宝石{% else %}Gemstone{% endif %}</h3>
+            <h3 class="about-point__title">{{ self.copy_text("about_007") }}</h3>
             <p class="about-point__body">
-              {% if selected_locale == "ja" %}天然石ならではの色や模様を見ながら、印鑑の素材を選べます。{% else %}Choose the seal material while reviewing the colors and patterns unique to natural stone.{% endif %}
+              {{ self.copy_text("about_008") }}
             </p>
           </article>
           <article class="about-point">
-            <h3 class="about-point__title">{% if selected_locale == "ja" %}印影デザイン{% else %}Seal design{% endif %}</h3>
+            <h3 class="about-point__title">{{ self.copy_text("about_009") }}</h3>
             <p class="about-point__body">
-              {% if selected_locale == "ja" %}彫る文字や印影の雰囲気を確認しながら、注文を進められます。{% else %}Move through the order while checking the carved text and the mood of the seal impression.{% endif %}
+              {{ self.copy_text("about_010") }}
             </p>
           </article>
           <article class="about-point">
-            <h3 class="about-point__title">{% if selected_locale == "ja" %}一点物{% else %}One of a kind{% endif %}</h3>
+            <h3 class="about-point__title">{{ self.copy_text("about_011") }}</h3>
             <p class="about-point__body">
-              {% if selected_locale == "ja" %}同じ石でも色や模様は少しずつ異なります。気に入った一本を選んで注文できます。{% else %}Even stones of the same type differ in color and pattern. Choose the piece you like and order it.{% endif %}
+              {{ self.copy_text("about_012") }}
             </p>
           </article>
         </div>
@@ -133,11 +127,11 @@
         </a>
       </div>
       <div class="top-footer__links">
-        <a class="top-footer__link" href="{{ about_url }}">{% if selected_locale == "ja" %}STONE SIGNATUREとは{% else %}About STONE SIGNATURE{% endif %}</a>
-        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{% if selected_locale == "ja" %}特商法に基づく表記{% else %}Legal Notice{% endif %}</a>
-        <a class="top-footer__link" href="{{ terms_url }}">{% if selected_locale == "ja" %}利用規約{% else %}Terms of Service{% endif %}</a>
-        <a class="top-footer__link" href="{{ privacy_policy_url }}">{% if selected_locale == "ja" %}プライバシーポリシー{% else %}Privacy Policy{% endif %}</a>
-        <a class="top-footer__link" href="{{ company_url }}">{% if selected_locale == "ja" %}運営会社{% else %}Company{% endif %}</a>
+        <a class="top-footer__link" href="{{ about_url }}">{{ self.copy_text("about_013") }}</a>
+        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{{ self.copy_text("about_014") }}</a>
+        <a class="top-footer__link" href="{{ terms_url }}">{{ self.copy_text("about_015") }}</a>
+        <a class="top-footer__link" href="{{ privacy_policy_url }}">{{ self.copy_text("about_016") }}</a>
+        <a class="top-footer__link" href="{{ company_url }}">{{ self.copy_text("about_017") }}</a>
       </div>
       <div class="top-footer__copyright">
         © STONE SIGNATURE
