@@ -3812,7 +3812,7 @@ git diff --cached --check
 
 ### M8: Store Metadata and fastlane
 
-- [ ] `M8-T01` Define store metadata source schema.
+- [x] `M8-T01` Define store metadata source schema.
   Output: `release/store_metadata/source/*.json` schema and examples for
   `en`, `ja`, `zh`, and `zhtw`.
   Done when: required fields are validated before generation and the `M0-T05`
@@ -3840,6 +3840,77 @@ git diff --cached --check
   Output: screenshot naming rules and optional screengrab/deliver metadata
   preparation.
   Done when: screenshots can be matched to locale and device deterministically.
+
+#### M8-T01 Store Metadata Source Schema
+
+Completed on 2026-06-18. Added the source schema, initial source examples, and
+pre-generation validation for mobile store metadata.
+
+Implementation notes:
+
+- Added `release/store_metadata/source/schema.json` as the canonical source
+  shape for store metadata.
+- Added initial source examples:
+  - `release/store_metadata/source/en.json`
+  - `release/store_metadata/source/ja.json`
+  - `release/store_metadata/source/zh.json`
+  - `release/store_metadata/source/zhtw.json`
+- Added intention sidecars for values that intentionally remain identical to
+  English, such as the brand name and public URLs.
+- Added `scripts/release/store_metadata.mjs` to validate store metadata before
+  Google Play or App Store generation.
+- Added `scripts/release/store_metadata.test.mjs` to cover required fields,
+  HTTPS URLs, and required M8-T01 example locales.
+- Added Make targets:
+  - `make store-metadata-check`
+  - `make store-metadata-test`
+- Added store metadata checks to `make i18n-ci` so future metadata generation
+  cannot bypass required-field validation.
+
+Validated source fields:
+
+- `app_name`
+- `subtitle`
+- `short_description`
+- `full_description`
+- `keywords`
+- `release_notes`
+- `support_url`
+- `marketing_url`
+- `privacy_policy_url`
+- `screenshot_captions.design`
+- `screenshot_captions.stones`
+- `screenshot_captions.checkout`
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, and checkout copy remains unchanged.
+- Store metadata is added under a new release-owned source directory and does
+  not replace runtime localization files.
+- Same-as-English store metadata values are explicitly documented in
+  `{locale}_intentions.json` sidecars.
+- `release.enabled=false` remains unchanged for all languages; M8-T01 defines
+  source data and validation only.
+- No fastlane lanes, signing files, private keys, uploads, polling, streaming,
+  SSE, or WebSocket behavior were added.
+- Rollback path: remove `release/store_metadata/source`, remove
+  `scripts/release/store_metadata.*`, remove the Makefile targets, and reopen
+  `M8-T01`.
+
+Validation:
+
+```sh
+jq empty release/store_metadata/source/*.json
+make store-metadata-check
+make store-metadata-test
+make i18n-check
+make i18n-check LANGS=ja FILE=release/store_metadata/source/ja.json
+make i18n-check LANGS=zh FILE=release/store_metadata/source/zh.json
+make i18n-check LANGS=zhtw FILE=release/store_metadata/source/zhtw.json
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
 
 ### M9: 68-Language Content Production
 

@@ -1,0 +1,30 @@
+{
+  "app_name": "STONE SIGNATURE",
+  "subtitle": "定制宝石印章",
+  "short_description": "设计印面并订购你的天然宝石印章。",
+  "full_description": [
+    "STONE SIGNATURE 可帮助你用天然宝石制作个人印章。输入姓名，查看汉字建议，并在应用中生成平衡美观的印面设计。",
+    "选择独一无二的石材，确认设计和配送信息，然后进入安全结账。已保存的印面和预览图会保留在本机，付款由 Stripe 安全处理。"
+  ],
+  "keywords": [
+    "印章",
+    "篆刻",
+    "宝石",
+    "天然石",
+    "汉字",
+    "个人印章"
+  ],
+  "release_notes": {
+    "1.1.0": [
+      "新增多语言应用内容和试点商店元数据源文件。"
+    ]
+  },
+  "support_url": "https://finitefield.org/contact/",
+  "marketing_url": "https://finitefield.org/",
+  "privacy_policy_url": "https://finitefield.org/privacy/",
+  "screenshot_captions": {
+    "design": "设计你的印面",
+    "stones": "选择独一无二的石材",
+    "checkout": "安全下单"
+  }
+}

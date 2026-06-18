@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://finitefield.org/schemas/store-metadata-source.schema.json",
+  "title": "STONE SIGNATURE store metadata source",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "app_name",
+    "subtitle",
+    "short_description",
+    "full_description",
+    "keywords",
+    "release_notes",
+    "support_url",
+    "marketing_url",
+    "privacy_policy_url",
+    "screenshot_captions"
+  ],
+  "properties": {
+    "app_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 30
+    },
+    "subtitle": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 30
+    },
+    "short_description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "full_description": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "keywords": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "release_notes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "support_url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "marketing_url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "privacy_policy_url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "screenshot_captions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "design",
+        "stones",
+        "checkout"
+      ],
+      "properties": {
+        "design": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stones": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checkout": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

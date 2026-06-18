@@ -16,7 +16,7 @@ GCP_PROD_REGION ?= asia-northeast1
 ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_ADMIN_MODE);,)
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-export i18n-import i18n-handoff-test i18n-ci
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod store-metadata-check store-metadata-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-export i18n-import i18n-handoff-test i18n-ci
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -37,6 +37,8 @@ help:
 	@echo "  make docker-dev     # Run API/Admin/Web together in container"
 	@echo "  make deploy-web-prod # Deploy Web to Cloud Run with explicit project/region"
 	@echo "  make stripe-listen  # Forward Stripe webhooks to the local API"
+	@echo "  make store-metadata-check # Validate release store metadata source JSON"
+	@echo "  make store-metadata-test # Validate release store metadata helpers"
 	@echo "  make i18n-status    # Report localization registry and missing files"
 	@echo "  make i18n-todo      # Report missing localization keys"
 	@echo "  make i18n-check     # Validate localization registry, files, and missing keys"
@@ -121,6 +123,12 @@ i18n-import:
 i18n-handoff-test:
 	node --test scripts/i18n/handoff.test.mjs
 
+store-metadata-check:
+	node scripts/release/store_metadata.mjs
+
+store-metadata-test:
+	node --test scripts/release/store_metadata.test.mjs
+
 i18n-ci:
 	node --check scripts/i18n/registry.mjs
 	node --check scripts/i18n/status.mjs
@@ -130,7 +138,9 @@ i18n-ci:
 	node --check scripts/i18n/json_shape.mjs
 	node --check scripts/i18n/intentions.mjs
 	node --check scripts/i18n/handoff.mjs
+	node --check scripts/release/store_metadata.mjs
 	$(MAKE) i18n-check
+	$(MAKE) store-metadata-check
 	$(MAKE) i18n-check-test
 	$(MAKE) i18n-arb-test
 	$(MAKE) i18n-json-shape-test
@@ -139,3 +149,4 @@ i18n-ci:
 	$(MAKE) i18n-todo-test
 	$(MAKE) i18n-status-test
 	$(MAKE) i18n-registry-test
+	$(MAKE) store-metadata-test

@@ -1,0 +1,30 @@
+{
+  "app_name": "STONE SIGNATURE",
+  "subtitle": "Custom gemstone seals",
+  "short_description": "Design and order a custom gemstone seal.",
+  "full_description": [
+    "STONE SIGNATURE helps you create a personal seal from natural gemstone. Enter your name, review kanji suggestions, and generate a balanced seal impression from the app.",
+    "Choose a one-of-a-kind stone, confirm the design and shipping details, and proceed to secure checkout. Saved designs and preview images stay on your device while payment is handled securely through Stripe."
+  ],
+  "keywords": [
+    "hanko",
+    "seal",
+    "gemstone",
+    "kanji",
+    "stamp",
+    "personal seal"
+  ],
+  "release_notes": {
+    "1.1.0": [
+      "Added multilingual app content and pilot store metadata source files."
+    ]
+  },
+  "support_url": "https://finitefield.org/contact/",
+  "marketing_url": "https://finitefield.org/",
+  "privacy_policy_url": "https://finitefield.org/privacy/",
+  "screenshot_captions": {
+    "design": "Design your seal impression",
+    "stones": "Choose a one-of-a-kind stone",
+    "checkout": "Order securely"
+  }
+}
