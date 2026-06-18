@@ -3825,7 +3825,7 @@ git diff --cached --check
   Output: deterministic `release/store_metadata/app_store/**` folders using
   `ios_store_locale`.
   Done when: unsupported App Store locales fail with clear messages.
-- [ ] `M8-T04` Add Android fastlane with Bundler.
+- [x] `M8-T04` Add Android fastlane with Bundler.
   Output: `app/android/Gemfile`, `Appfile`, and metadata/internal lanes.
   Done when: metadata-only Android lane runs without uploading binaries.
 - [ ] `M8-T05` Add iOS fastlane with Bundler.
@@ -4059,6 +4059,85 @@ make store-metadata-check
 make app-store-metadata
 make app-store-metadata-check
 make app-store-metadata-test
+make google-play-metadata-check
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T04 Android fastlane with Bundler
+
+Completed on 2026-06-18. Added Android fastlane setup with Bundler and
+metadata-safe lanes.
+
+Implementation notes:
+
+- Added `app/android/Gemfile` and `app/android/Gemfile.lock`.
+- Pinned fastlane to `2.228.0` because the local macOS Ruby is `2.6.10`,
+  while newer fastlane releases require newer Ruby runtimes.
+- Added `app/android/fastlane/Appfile` with:
+  - `package_name("org.finitefield.hankofield")`
+- Added `app/android/fastlane/Fastfile` with:
+  - `android metadata_check`: runs `make google-play-metadata-check` locally
+    without Google Play credentials.
+  - `android metadata`: runs `metadata_check` locally, then calls
+    `upload_to_play_store` only when `SUPPLY_JSON_KEY` is set. The Google
+    Play call uses `metadata_path` pointing at
+    `release/store_metadata/google_play`, `validate_only: true`,
+    `skip_upload_apk: true`, `skip_upload_aab: true`,
+    `skip_upload_images: true`, and `skip_upload_screenshots: true`.
+  - `android internal`: builds a release AAB and targets the Google Play
+    internal track. It defaults to `validate_only` unless
+    `SUPPLY_VALIDATE_ONLY=false` is explicitly set.
+- Added `scripts/release/android_fastlane_config.mjs` to validate that the
+  Android fastlane setup keeps metadata and binary lanes separate.
+- Added `scripts/release/android_fastlane_config.test.mjs` to cover:
+  - valid Android fastlane configuration shape
+  - failure when the metadata lane can upload an AAB
+  - failure when Google Play credential material is committed in `Appfile`
+- Added Make targets:
+  - `make android-fastlane-check`
+  - `make android-fastlane-test`
+- Added Android fastlane checks to `make i18n-ci`.
+
+Credential and upload behavior:
+
+- `SUPPLY_JSON_KEY` is required only for lanes that contact Google Play.
+- No Google Play service account JSON, key file path, keystore, password, AAB,
+  APK, fastlane report, polling, streaming, SSE, or WebSocket behavior was
+  added.
+- The completed local lane for M8-T04 is `bundle exec fastlane android
+  metadata` from `app/android`; without `SUPPLY_JSON_KEY`, it validates
+  generated metadata and does not contact Google Play or upload metadata, APKs,
+  or AABs.
+- The `metadata` lane is prepared as a Google Play validate-only metadata lane.
+  It cannot upload binaries because both APK and AAB upload are explicitly
+  skipped and are guarded by `make android-fastlane-check`.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, source store metadata, Google Play
+  generated metadata, and App Store generated metadata remains unchanged.
+- Android release signing files remain local and uncommitted.
+- `release.enabled=false` remains unchanged for all languages.
+- Binary upload remains separated into the `internal` lane for later M10
+  validation.
+- Rollback path: remove `app/android/Gemfile`,
+  `app/android/Gemfile.lock`, `app/android/fastlane`,
+  `scripts/release/android_fastlane_config.*`, remove the Makefile targets,
+  and reopen `M8-T04`.
+
+Validation:
+
+```sh
+node --check scripts/release/android_fastlane_config.mjs
+make android-fastlane-check
+make android-fastlane-test
+ruby -c app/android/fastlane/Fastfile
+ruby -c app/android/fastlane/Appfile
+BUNDLE_PATH=/tmp/hanko-field-android-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-android-bundle-config bundle install
+BUNDLE_PATH=/tmp/hanko-field-android-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-android-bundle-config bundle exec fastlane android metadata
 make google-play-metadata-check
 make i18n-check
 make i18n-ci

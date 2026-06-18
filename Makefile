@@ -16,7 +16,7 @@ GCP_PROD_REGION ?= asia-northeast1
 ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_ADMIN_MODE);,)
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod store-metadata-check store-metadata-test google-play-metadata google-play-metadata-check google-play-metadata-test app-store-metadata app-store-metadata-check app-store-metadata-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-export i18n-import i18n-handoff-test i18n-ci
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod store-metadata-check store-metadata-test google-play-metadata google-play-metadata-check google-play-metadata-test app-store-metadata app-store-metadata-check app-store-metadata-test android-fastlane-check android-fastlane-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-export i18n-import i18n-handoff-test i18n-ci
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -45,6 +45,8 @@ help:
 	@echo "  make app-store-metadata # Generate App Store metadata folders"
 	@echo "  make app-store-metadata-check # Check generated App Store metadata"
 	@echo "  make app-store-metadata-test # Validate App Store metadata generator"
+	@echo "  make android-fastlane-check # Validate Android fastlane metadata lanes"
+	@echo "  make android-fastlane-test # Test Android fastlane config checks"
 	@echo "  make i18n-status    # Report localization registry and missing files"
 	@echo "  make i18n-todo      # Report missing localization keys"
 	@echo "  make i18n-check     # Validate localization registry, files, and missing keys"
@@ -153,6 +155,12 @@ app-store-metadata-check:
 app-store-metadata-test:
 	node --test scripts/release/app_store_metadata.test.mjs
 
+android-fastlane-check:
+	node scripts/release/android_fastlane_config.mjs
+
+android-fastlane-test:
+	node --test scripts/release/android_fastlane_config.test.mjs
+
 i18n-ci:
 	node --check scripts/i18n/registry.mjs
 	node --check scripts/i18n/status.mjs
@@ -165,10 +173,12 @@ i18n-ci:
 	node --check scripts/release/store_metadata.mjs
 	node --check scripts/release/google_play_metadata.mjs
 	node --check scripts/release/app_store_metadata.mjs
+	node --check scripts/release/android_fastlane_config.mjs
 	$(MAKE) i18n-check
 	$(MAKE) store-metadata-check
 	$(MAKE) google-play-metadata-check
 	$(MAKE) app-store-metadata-check
+	$(MAKE) android-fastlane-check
 	$(MAKE) i18n-check-test
 	$(MAKE) i18n-arb-test
 	$(MAKE) i18n-json-shape-test
@@ -180,3 +190,4 @@ i18n-ci:
 	$(MAKE) store-metadata-test
 	$(MAKE) google-play-metadata-test
 	$(MAKE) app-store-metadata-test
+	$(MAKE) android-fastlane-test

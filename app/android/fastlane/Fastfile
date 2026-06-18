@@ -1,0 +1,65 @@
+require "shellwords"
+
+ENV["FASTLANE_SKIP_UPDATE_CHECK"] = "1"
+
+opt_out_usage
+
+default_platform(:android)
+
+REPO_ROOT = File.expand_path("../../..", __dir__)
+APP_ROOT = File.join(REPO_ROOT, "app")
+GOOGLE_PLAY_METADATA_PATH = File.join(REPO_ROOT, "release/store_metadata/google_play")
+RELEASE_AAB_PATH = File.join(APP_ROOT, "build/app/outputs/bundle/release/app-release.aab")
+PACKAGE_NAME = "org.finitefield.hankofield"
+
+def required_env(name)
+  value = ENV[name].to_s.strip
+  UI.user_error!("#{name} is required for this lane") if value.empty?
+  value
+end
+
+def repo_sh(command)
+  sh("cd #{Shellwords.escape(REPO_ROOT)} && #{command}")
+end
+
+platform :android do
+  desc "Validate generated Google Play metadata locally without Google Play credentials."
+  lane :metadata_check do
+    repo_sh("make google-play-metadata-check")
+    UI.success("Generated Google Play metadata is in sync.")
+  end
+
+  desc "Validate Google Play metadata locally, and with supply when SUPPLY_JSON_KEY is set."
+  lane :metadata do
+    metadata_check
+    if ENV["SUPPLY_JSON_KEY"].to_s.strip.empty?
+      UI.important("SUPPLY_JSON_KEY is not set; skipped Google Play validate-only metadata request.")
+    else
+      upload_to_play_store(
+        package_name: PACKAGE_NAME,
+        json_key: required_env("SUPPLY_JSON_KEY"),
+        metadata_path: GOOGLE_PLAY_METADATA_PATH,
+        skip_upload_apk: true,
+        skip_upload_aab: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+        validate_only: true
+      )
+    end
+  end
+
+  desc "Build the release AAB and upload it to the Google Play internal track."
+  lane :internal do
+    sh("cd #{Shellwords.escape(APP_ROOT)} && flutter build appbundle --release")
+    upload_to_play_store(
+      package_name: PACKAGE_NAME,
+      json_key: required_env("SUPPLY_JSON_KEY"),
+      track: "internal",
+      aab: RELEASE_AAB_PATH,
+      metadata_path: GOOGLE_PLAY_METADATA_PATH,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      validate_only: ENV.fetch("SUPPLY_VALIDATE_ONLY", "true") != "false"
+    )
+  end
+end
