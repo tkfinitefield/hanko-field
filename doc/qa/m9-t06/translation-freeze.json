@@ -1,0 +1,863 @@
+{
+  "format_version": 1,
+  "task": "M9-T06",
+  "frozen_at": "2026-06-18",
+  "release_candidate": "next-app-release",
+  "review_policy": {
+    "translation_changes_after_freeze_require_explicit_review": true,
+    "m0_t05_preservation_gates_recorded": true,
+    "current_task_changes_translations": false,
+    "current_task_changes_registry_flags": false,
+    "current_task_changes_release_credentials": false
+  },
+  "language_set": {
+    "registry_languages": 68,
+    "app_enabled": [
+      "ar",
+      "en",
+      "ja",
+      "zh",
+      "zhtw"
+    ],
+    "web_enabled": [
+      "ar",
+      "en",
+      "ja",
+      "zh",
+      "zhtw"
+    ],
+    "release_enabled": [],
+    "frozen_locales": [
+      "ar",
+      "en",
+      "ja",
+      "zh",
+      "zhtw"
+    ],
+    "store_metadata_source_locales": [
+      "en",
+      "ja",
+      "zh",
+      "zhtw"
+    ]
+  },
+  "required_checks": [
+    {
+      "id": "i18n_check",
+      "status": "pass",
+      "command": "make i18n-check"
+    },
+    {
+      "id": "i18n_stubs_check",
+      "status": "pass",
+      "command": "make i18n-stubs-check"
+    },
+    {
+      "id": "i18n_holdouts_check",
+      "status": "pass",
+      "command": "make i18n-holdouts-check"
+    },
+    {
+      "id": "i18n_layout_qa_check",
+      "status": "pass",
+      "command": "make i18n-layout-qa-check"
+    },
+    {
+      "id": "i18n_flag_stages_check",
+      "status": "pass",
+      "command": "make i18n-flag-stages-check"
+    },
+    {
+      "id": "store_metadata_check",
+      "status": "pass",
+      "command": "make store-metadata-check"
+    },
+    {
+      "id": "google_play_metadata_check",
+      "status": "pass",
+      "command": "make google-play-metadata-check"
+    },
+    {
+      "id": "app_store_metadata_check",
+      "status": "pass",
+      "command": "make app-store-metadata-check"
+    },
+    {
+      "id": "screenshot_metadata_check",
+      "status": "pass",
+      "command": "make screenshot-metadata-check"
+    },
+    {
+      "id": "android_fastlane_check",
+      "status": "pass",
+      "command": "make android-fastlane-check"
+    },
+    {
+      "id": "ios_fastlane_check",
+      "status": "pass",
+      "command": "make ios-fastlane-check"
+    },
+    {
+      "id": "release_secret_guardrails_check",
+      "status": "pass",
+      "command": "make release-secret-guardrails-check"
+    }
+  ],
+  "files": [
+    {
+      "path": "api/content/i18n/catalog/countries.json",
+      "sha256": "f40a6d35388be50895482f3bb9e9b60affc42521d030e9f610e2a62405ba4dfb",
+      "bytes": 1043
+    },
+    {
+      "path": "api/content/i18n/catalog/facet_tags.json",
+      "sha256": "bb6865914faac62555deadf0d8b909413c7bad946c963b6183a2d30b7f5ef44a",
+      "bytes": 973
+    },
+    {
+      "path": "api/content/i18n/catalog/materials.json",
+      "sha256": "c4c3da6fc190f3f0ce75a8b8acf4036587f139ac9d1821e810308b98df9c8168",
+      "bytes": 6316
+    },
+    {
+      "path": "api/content/i18n/catalog/stone_listings.json",
+      "sha256": "25f442589fb83e6db76f29633318811ef7c88f5c16439212861a6e7f756f4c0a",
+      "bytes": 4534
+    },
+    {
+      "path": "api/content/i18n/checkout/ar.json",
+      "sha256": "52af5bff6526520ae03266401f0f203e1427f053bfb5b45ca58351f56a54ddc2",
+      "bytes": 243
+    },
+    {
+      "path": "api/content/i18n/checkout/en.json",
+      "sha256": "92348716310e61fc4b050d94c4e526f7ba8a0e77e4b089975ed41fb9545328bd",
+      "bytes": 209
+    },
+    {
+      "path": "api/content/i18n/checkout/ja.json",
+      "sha256": "f728f658afa5f7a83c9deec022f97f387ced4c71e9286980ca00888d1789423a",
+      "bytes": 216
+    },
+    {
+      "path": "api/content/i18n/checkout/zh.json",
+      "sha256": "1c0fee7925596881d9a2f3d67293e5073e363720f80e859e9962aadc04a0a5b5",
+      "bytes": 210
+    },
+    {
+      "path": "api/content/i18n/checkout/zhtw.json",
+      "sha256": "24025473246c7e90196cf1fbc65e13444dafc3b3b3e20bb0ebfefe0727fb14f9",
+      "bytes": 210
+    },
+    {
+      "path": "app/assets/i18n/settings/ar.json",
+      "sha256": "bf911c4e4671356578328eaf6a92e094d365f107e339de0217f9fd8bf5396970",
+      "bytes": 7951
+    },
+    {
+      "path": "app/assets/i18n/settings/ar_intentions.json",
+      "sha256": "a0afe599788bb3dfb46e4d4a83256cd27d54aa0d3f4eb9df692b43d50e73b380",
+      "bytes": 26395
+    },
+    {
+      "path": "app/assets/i18n/settings/en.json",
+      "sha256": "bf911c4e4671356578328eaf6a92e094d365f107e339de0217f9fd8bf5396970",
+      "bytes": 7951
+    },
+    {
+      "path": "app/assets/i18n/settings/en_intentions.json",
+      "sha256": "0069fa81d2cb2547390c5c62968e12624200194deee0b528c1989b7c60308939",
+      "bytes": 2482
+    },
+    {
+      "path": "app/assets/i18n/settings/ja.json",
+      "sha256": "ef69732c63f24b0b27221353c4131c8d1e01b2989bd08e60d343a7b666edf9dd",
+      "bytes": 8717
+    },
+    {
+      "path": "app/assets/i18n/settings/ja_intentions.json",
+      "sha256": "85115a976d591310e5078dca8b27674af50f6f6ffa7b38b2b4c69f886754426b",
+      "bytes": 2173
+    },
+    {
+      "path": "app/assets/i18n/settings/zh.json",
+      "sha256": "bf911c4e4671356578328eaf6a92e094d365f107e339de0217f9fd8bf5396970",
+      "bytes": 7951
+    },
+    {
+      "path": "app/assets/i18n/settings/zh_intentions.json",
+      "sha256": "aff2ff22e23279473927087346a7ee953fc3171f00f8582f4b4bdbe61dd5ecf8",
+      "bytes": 26395
+    },
+    {
+      "path": "app/assets/i18n/settings/zhtw.json",
+      "sha256": "bf911c4e4671356578328eaf6a92e094d365f107e339de0217f9fd8bf5396970",
+      "bytes": 7951
+    },
+    {
+      "path": "app/assets/i18n/settings/zhtw_intentions.json",
+      "sha256": "6a45243fac795873fa5cfbc0295aff1875580092e2a46711c5c8fececa0f0003",
+      "bytes": 26547
+    },
+    {
+      "path": "app/lib/l10n/app_ar.arb",
+      "sha256": "573e31356ba8cc94ef64680a1953453eacf76d5ed6ec37c6b40781d3eaa4b915",
+      "bytes": 64972
+    },
+    {
+      "path": "app/lib/l10n/app_en.arb",
+      "sha256": "871b3265b95c8f24109e3cc5e066ba5eafc5a6ad9e8e518d69a42dd2df36b85d",
+      "bytes": 64972
+    },
+    {
+      "path": "app/lib/l10n/app_ja.arb",
+      "sha256": "fd86921532183f312dee01617104abc8611fafa7f005d9d3f55ad6b2e5a95f44",
+      "bytes": 68475
+    },
+    {
+      "path": "app/lib/l10n/app_zh.arb",
+      "sha256": "e7e8d6c8efeb40768057fc2a5a1218c13d193cf1ea03b97a4fe0175263a4e8fd",
+      "bytes": 64968
+    },
+    {
+      "path": "app/lib/l10n/app_zh_Hant.arb",
+      "sha256": "bd6f727df3c8d068a1f627e26712bc4bc28b509c7f62ebf3ac5dd131bceade25",
+      "bytes": 64973
+    },
+    {
+      "path": "config/languages.json",
+      "sha256": "4bcdde4bf44add3f22aaa27e46f5c11ba1bba5c34b2b89d1b8db6259a6e66a38",
+      "bytes": 39000
+    },
+    {
+      "path": "release/store_metadata/app_store/en-US/description.txt",
+      "sha256": "45e605d39db554e16c5ed3480847384dadae3633904b3f116b1739a18e26d0dd",
+      "bytes": 376
+    },
+    {
+      "path": "release/store_metadata/app_store/en-US/keywords.txt",
+      "sha256": "e53c05b77160cf4ede5068a530abe57d142e966882800c1f9fad105a9749be94",
+      "bytes": 46
+    },
+    {
+      "path": "release/store_metadata/app_store/en-US/marketing_url.txt",
+      "sha256": "aab77244ffb7b00e99486dbc9cc1e2c30103509fc299ee950c02351aa498a5cc",
+      "bytes": 25
+    },
+    {
+      "path": "release/store_metadata/app_store/en-US/name.txt",
+      "sha256": "550c9f74c98eea0c746071278895e61478a5dfe87769769b396a9546ce262dbb",
+      "bytes": 16
+    },
+    {
+      "path": "release/store_metadata/app_store/en-US/privacy_url.txt",
+      "sha256": "51edb91edbbf284c61096d36d6cde9471be0fb93e36135c8a4f74dd687f18c90",
+      "bytes": 33
+    },
+    {
+      "path": "release/store_metadata/app_store/en-US/release_notes.txt",
+      "sha256": "90833ccde547f3b6537f8d96f50a7236fc581297bfaa30be092cf1da76fefdbb",
+      "bytes": 70
+    },
+    {
+      "path": "release/store_metadata/app_store/en-US/subtitle.txt",
+      "sha256": "08f26104d6f99bf2e91e8b15db46ab039ffe2319e56da904ad070b240e384fe4",
+      "bytes": 22
+    },
+    {
+      "path": "release/store_metadata/app_store/en-US/support_url.txt",
+      "sha256": "efea52b17317e9206db089e5bc32df9eac6f4977fb56f224781ffc72f32f0e61",
+      "bytes": 33
+    },
+    {
+      "path": "release/store_metadata/app_store/ja/description.txt",
+      "sha256": "9e55b1f09df8bc33b40ebb1910a81cfe655fdef1a0f1d87c085a0d8aa0800be7",
+      "bytes": 450
+    },
+    {
+      "path": "release/store_metadata/app_store/ja/keywords.txt",
+      "sha256": "b3fb4df591d43323bb60f53dac94c0f654f4f437448b47e3f6653b25bf7b325b",
+      "bytes": 45
+    },
+    {
+      "path": "release/store_metadata/app_store/ja/marketing_url.txt",
+      "sha256": "aab77244ffb7b00e99486dbc9cc1e2c30103509fc299ee950c02351aa498a5cc",
+      "bytes": 25
+    },
+    {
+      "path": "release/store_metadata/app_store/ja/name.txt",
+      "sha256": "550c9f74c98eea0c746071278895e61478a5dfe87769769b396a9546ce262dbb",
+      "bytes": 16
+    },
+    {
+      "path": "release/store_metadata/app_store/ja/privacy_url.txt",
+      "sha256": "51edb91edbbf284c61096d36d6cde9471be0fb93e36135c8a4f74dd687f18c90",
+      "bytes": 33
+    },
+    {
+      "path": "release/store_metadata/app_store/ja/release_notes.txt",
+      "sha256": "cb5838b9489aef8360fb409e62aa5bfe0e4900c64f9c96e802f208b57f0918a6",
+      "bytes": 112
+    },
+    {
+      "path": "release/store_metadata/app_store/ja/subtitle.txt",
+      "sha256": "1493e7f61c049ca6a83b31823d5263810b953513216f12132a14b45b92c3c703",
+      "bytes": 28
+    },
+    {
+      "path": "release/store_metadata/app_store/ja/support_url.txt",
+      "sha256": "efea52b17317e9206db089e5bc32df9eac6f4977fb56f224781ffc72f32f0e61",
+      "bytes": 33
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hans/description.txt",
+      "sha256": "d46242744040317e3642924af71794634490f6a413d99c3eb55fe5c782f4ffc9",
+      "bytes": 324
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hans/keywords.txt",
+      "sha256": "ebe60ca0f9f496b60ce6181faa95bf47261ce5bb45609cadc7c40d5ed168ad01",
+      "bytes": 51
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hans/marketing_url.txt",
+      "sha256": "aab77244ffb7b00e99486dbc9cc1e2c30103509fc299ee950c02351aa498a5cc",
+      "bytes": 25
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hans/name.txt",
+      "sha256": "550c9f74c98eea0c746071278895e61478a5dfe87769769b396a9546ce262dbb",
+      "bytes": 16
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hans/privacy_url.txt",
+      "sha256": "51edb91edbbf284c61096d36d6cde9471be0fb93e36135c8a4f74dd687f18c90",
+      "bytes": 33
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hans/release_notes.txt",
+      "sha256": "f725d4fd4a45aa5cbbe7fcfa723e8512b0d2fd76b9fb1ed0daa557037527ad44",
+      "bytes": 64
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hans/subtitle.txt",
+      "sha256": "ccf676c1adffdf10786cd2d7abd59946a0a68c186147b18d9588e7036325c3a5",
+      "bytes": 19
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hans/support_url.txt",
+      "sha256": "efea52b17317e9206db089e5bc32df9eac6f4977fb56f224781ffc72f32f0e61",
+      "bytes": 33
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hant/description.txt",
+      "sha256": "715449048695af47c84a5231da3ade95c48b11253e02f7ee753adb6eff378a0c",
+      "bytes": 323
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hant/keywords.txt",
+      "sha256": "0890f3f08dd308f5c1fbaf797e2b28d2d4b7fd605f470d73bfd89462583efc3d",
+      "bytes": 51
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hant/marketing_url.txt",
+      "sha256": "aab77244ffb7b00e99486dbc9cc1e2c30103509fc299ee950c02351aa498a5cc",
+      "bytes": 25
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hant/name.txt",
+      "sha256": "550c9f74c98eea0c746071278895e61478a5dfe87769769b396a9546ce262dbb",
+      "bytes": 16
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hant/privacy_url.txt",
+      "sha256": "51edb91edbbf284c61096d36d6cde9471be0fb93e36135c8a4f74dd687f18c90",
+      "bytes": 33
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hant/release_notes.txt",
+      "sha256": "a231775a3fa8b1b9fc1c4dd805199abd60b4e43dca54788d071269867c679eb3",
+      "bytes": 69
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hant/subtitle.txt",
+      "sha256": "bcffaf0dfa94c0f09dbdafdc26d924f32b02f82e9b999ef08232ecb1df7f987b",
+      "bytes": 19
+    },
+    {
+      "path": "release/store_metadata/app_store/zh-Hant/support_url.txt",
+      "sha256": "efea52b17317e9206db089e5bc32df9eac6f4977fb56f224781ffc72f32f0e61",
+      "bytes": 33
+    },
+    {
+      "path": "release/store_metadata/google_play/en-US/changelogs/default.txt",
+      "sha256": "90833ccde547f3b6537f8d96f50a7236fc581297bfaa30be092cf1da76fefdbb",
+      "bytes": 70
+    },
+    {
+      "path": "release/store_metadata/google_play/en-US/full_description.txt",
+      "sha256": "45e605d39db554e16c5ed3480847384dadae3633904b3f116b1739a18e26d0dd",
+      "bytes": 376
+    },
+    {
+      "path": "release/store_metadata/google_play/en-US/short_description.txt",
+      "sha256": "7c157599aa2bad8c39e92cac643b9f1044cb8695f726cdf06c09a119fa2bd409",
+      "bytes": 41
+    },
+    {
+      "path": "release/store_metadata/google_play/en-US/title.txt",
+      "sha256": "550c9f74c98eea0c746071278895e61478a5dfe87769769b396a9546ce262dbb",
+      "bytes": 16
+    },
+    {
+      "path": "release/store_metadata/google_play/ja-JP/changelogs/default.txt",
+      "sha256": "cb5838b9489aef8360fb409e62aa5bfe0e4900c64f9c96e802f208b57f0918a6",
+      "bytes": 112
+    },
+    {
+      "path": "release/store_metadata/google_play/ja-JP/full_description.txt",
+      "sha256": "9e55b1f09df8bc33b40ebb1910a81cfe655fdef1a0f1d87c085a0d8aa0800be7",
+      "bytes": 450
+    },
+    {
+      "path": "release/store_metadata/google_play/ja-JP/short_description.txt",
+      "sha256": "fa7b6eee927ed37fd83536eb027a6ed80be7034d58f3a13df625bc6e50598a93",
+      "bytes": 76
+    },
+    {
+      "path": "release/store_metadata/google_play/ja-JP/title.txt",
+      "sha256": "550c9f74c98eea0c746071278895e61478a5dfe87769769b396a9546ce262dbb",
+      "bytes": 16
+    },
+    {
+      "path": "release/store_metadata/google_play/zh-CN/changelogs/default.txt",
+      "sha256": "f725d4fd4a45aa5cbbe7fcfa723e8512b0d2fd76b9fb1ed0daa557037527ad44",
+      "bytes": 64
+    },
+    {
+      "path": "release/store_metadata/google_play/zh-CN/full_description.txt",
+      "sha256": "d46242744040317e3642924af71794634490f6a413d99c3eb55fe5c782f4ffc9",
+      "bytes": 324
+    },
+    {
+      "path": "release/store_metadata/google_play/zh-CN/short_description.txt",
+      "sha256": "01c3c149da38b7b9086f7b16a379b0e80011f5f335e9aa087e9b6009c5d271aa",
+      "bytes": 49
+    },
+    {
+      "path": "release/store_metadata/google_play/zh-CN/title.txt",
+      "sha256": "550c9f74c98eea0c746071278895e61478a5dfe87769769b396a9546ce262dbb",
+      "bytes": 16
+    },
+    {
+      "path": "release/store_metadata/google_play/zh-TW/changelogs/default.txt",
+      "sha256": "a231775a3fa8b1b9fc1c4dd805199abd60b4e43dca54788d071269867c679eb3",
+      "bytes": 69
+    },
+    {
+      "path": "release/store_metadata/google_play/zh-TW/full_description.txt",
+      "sha256": "715449048695af47c84a5231da3ade95c48b11253e02f7ee753adb6eff378a0c",
+      "bytes": 323
+    },
+    {
+      "path": "release/store_metadata/google_play/zh-TW/short_description.txt",
+      "sha256": "e69ee3d7f574573bfecdf9d5b845c86b42c4495a1410f3a975d570eb455d33a8",
+      "bytes": 49
+    },
+    {
+      "path": "release/store_metadata/google_play/zh-TW/title.txt",
+      "sha256": "550c9f74c98eea0c746071278895e61478a5dfe87769769b396a9546ce262dbb",
+      "bytes": 16
+    },
+    {
+      "path": "release/store_metadata/screenshots/manifest.json",
+      "sha256": "a12197032476166b59fbc41c7ccf32845c144f4c06b024ceceba61104561965d",
+      "bytes": 14231
+    },
+    {
+      "path": "release/store_metadata/source/en.json",
+      "sha256": "0095b7ef148220893bd93661bbf818484a398c7262ee34bc5e05191d8d3d11cf",
+      "bytes": 1108
+    },
+    {
+      "path": "release/store_metadata/source/ja.json",
+      "sha256": "2c985e26ed25703429a1eeb0e57582a26c63e3560ad5a9566d45493d30e0d6f1",
+      "bytes": 1255
+    },
+    {
+      "path": "release/store_metadata/source/ja_intentions.json",
+      "sha256": "a2e61df3d93679fa706640a23b0fa2a01e2c5186f556d6bc210e1b6da33429ff",
+      "bytes": 112
+    },
+    {
+      "path": "release/store_metadata/source/schema.json",
+      "sha256": "93dc3848e76315972bf60ab21bfd5d9c7656da903f18fe924907c027ec002fdb",
+      "bytes": 2027
+    },
+    {
+      "path": "release/store_metadata/source/zh.json",
+      "sha256": "c831183332d926f934cd106f6f7416d05efd3ed3124e16292b214c18a3567807",
+      "bytes": 1048
+    },
+    {
+      "path": "release/store_metadata/source/zh_intentions.json",
+      "sha256": "a2e61df3d93679fa706640a23b0fa2a01e2c5186f556d6bc210e1b6da33429ff",
+      "bytes": 112
+    },
+    {
+      "path": "release/store_metadata/source/zhtw.json",
+      "sha256": "61450b6a0f48e9288049fb076db0b00d52589ba35bd3cb7c0305117f6f0f8930",
+      "bytes": 1052
+    },
+    {
+      "path": "release/store_metadata/source/zhtw_intentions.json",
+      "sha256": "a2e61df3d93679fa706640a23b0fa2a01e2c5186f556d6bc210e1b6da33429ff",
+      "bytes": 112
+    },
+    {
+      "path": "web/content/i18n/about/ar.json",
+      "sha256": "91df1f5c0743f2e239cc32bdc5635d55a2277377f9d95be04b2f9263c1041f26",
+      "bytes": 1733
+    },
+    {
+      "path": "web/content/i18n/about/en.json",
+      "sha256": "3cfc102e3488eb6d763af5ae9993d8c463300c74bef33af51e0d69888e853198",
+      "bytes": 1359
+    },
+    {
+      "path": "web/content/i18n/about/ja.json",
+      "sha256": "1c8b2aa874c3c8ae39119d2fd539e46a45f9b2c1985d0425b53d7604121941c1",
+      "bytes": 1495
+    },
+    {
+      "path": "web/content/i18n/about/zh.json",
+      "sha256": "50cefdfac93824a7d678ae84f449e988304d65a0ffcbdaaa4f2ed59886f155b2",
+      "bytes": 1245
+    },
+    {
+      "path": "web/content/i18n/about/zhtw.json",
+      "sha256": "d44c0b9b5ad70d1ae38dbfad720bbe8f345b97725a187b1dcb77923b504b358f",
+      "bytes": 1248
+    },
+    {
+      "path": "web/content/i18n/blog_article/ar.json",
+      "sha256": "addc09ce23b7a86074ff817bfb9e776f0154a85723235a77a3d9cdacb139df09",
+      "bytes": 307
+    },
+    {
+      "path": "web/content/i18n/blog_article/en.json",
+      "sha256": "91070c06bce679e3b543c10f9d8d689aab9c332078bddeb32e4e9e9637cdf286",
+      "bytes": 225
+    },
+    {
+      "path": "web/content/i18n/blog_article/ja.json",
+      "sha256": "464e0c1ae588ab6af2f14a75e61e4f1eaa003cb35e88745394d5741867270355",
+      "bytes": 285
+    },
+    {
+      "path": "web/content/i18n/blog_article/zh.json",
+      "sha256": "e6a44d891d794794f8e4a66133f75f2396a150f4a6c8416a1e81fb7cb5468542",
+      "bytes": 225
+    },
+    {
+      "path": "web/content/i18n/blog_article/zhtw.json",
+      "sha256": "a9229a9c03934125b43ced16c78e02e961685d8674debf0a32b51efaa87b039a",
+      "bytes": 228
+    },
+    {
+      "path": "web/content/i18n/blog_index/ar.json",
+      "sha256": "32dd67b1f9f94957e305a27d6f1af0b3a15a8996b62818302b1c17ea8e89fe1f",
+      "bytes": 492
+    },
+    {
+      "path": "web/content/i18n/blog_index/en.json",
+      "sha256": "771f56987c9aba2c0b19b98b70a17e54f978b86e7461d4afd66c8ffe7abdab36",
+      "bytes": 370
+    },
+    {
+      "path": "web/content/i18n/blog_index/ja.json",
+      "sha256": "9f55ddf72a04bbd05b8cb2ff02b57ae1311b24fea15ece85e95c669e1fe56482",
+      "bytes": 432
+    },
+    {
+      "path": "web/content/i18n/blog_index/zh.json",
+      "sha256": "d18622d014815e5ac4cb8ef9ff526c316367ad95b75cd0446529286597fd0752",
+      "bytes": 355
+    },
+    {
+      "path": "web/content/i18n/blog_index/zhtw.json",
+      "sha256": "cdec0a0c2737550ce7c87abd5a97841506cb93217900a7416aa3f9fdc9baebae",
+      "bytes": 358
+    },
+    {
+      "path": "web/content/i18n/commercial_transactions/ar.json",
+      "sha256": "9f9791490663c36194567eca596980ea51744a25f03416fe4f4844d10b219a16",
+      "bytes": 4742
+    },
+    {
+      "path": "web/content/i18n/commercial_transactions/ar_intentions.json",
+      "sha256": "3a7cee997190fdbeef81303ba4354f64bd82184854f4612438608866b918ab6c",
+      "bytes": 101
+    },
+    {
+      "path": "web/content/i18n/commercial_transactions/en.json",
+      "sha256": "7b3941ad94bc3aae58fc75d6c752bf57440ee6b0ecb7aebaa807a96710c435cb",
+      "bytes": 3804
+    },
+    {
+      "path": "web/content/i18n/commercial_transactions/ja.json",
+      "sha256": "c3f8d8eb15112bbc9639c1fbe3cb0ae50d48beeaf3b4ab68b238e21577dde41a",
+      "bytes": 4065
+    },
+    {
+      "path": "web/content/i18n/commercial_transactions/zh.json",
+      "sha256": "07480140017f7d6e5198e55a0b165245adbdeb7b57c8c8b36c2985f0546227e8",
+      "bytes": 3485
+    },
+    {
+      "path": "web/content/i18n/commercial_transactions/zh_intentions.json",
+      "sha256": "3a7cee997190fdbeef81303ba4354f64bd82184854f4612438608866b918ab6c",
+      "bytes": 101
+    },
+    {
+      "path": "web/content/i18n/commercial_transactions/zhtw.json",
+      "sha256": "1e44bd2375647f97584b4c43d96fb6df1d833ce255a96614669182805e8205a4",
+      "bytes": 3494
+    },
+    {
+      "path": "web/content/i18n/commercial_transactions/zhtw_intentions.json",
+      "sha256": "3a7cee997190fdbeef81303ba4354f64bd82184854f4612438608866b918ab6c",
+      "bytes": 101
+    },
+    {
+      "path": "web/content/i18n/common/ar.json",
+      "sha256": "f1d7f48fb32dbc11ce52bf4120f4e4f06e9370891a250f1892bfe55a7d458da2",
+      "bytes": 376
+    },
+    {
+      "path": "web/content/i18n/common/en.json",
+      "sha256": "1d0fbfb4fa4fd1a4710a1f9655c3eec6f7e77401340e89a1bce3d384fddfd3f9",
+      "bytes": 297
+    },
+    {
+      "path": "web/content/i18n/common/ja.json",
+      "sha256": "861de5ed29fdea96ab054861f4f71599c0346aa124312f543526b6e3d8e43761",
+      "bytes": 341
+    },
+    {
+      "path": "web/content/i18n/common/ja_intentions.json",
+      "sha256": "bb0566724b5aa2a26f7b3f3afc4d600d6f98e6915ce3235f14dd23f078ccd9a3",
+      "bytes": 51
+    },
+    {
+      "path": "web/content/i18n/common/zh.json",
+      "sha256": "296c05d8653e0fdb91345609e9aa686822a3d348531b56b5fdc03ae55f7d3f56",
+      "bytes": 290
+    },
+    {
+      "path": "web/content/i18n/common/zhtw.json",
+      "sha256": "c9d1da93b663914d2d3dd86678cee686b3c1f82ea25ab786eced3a6f3889e899",
+      "bytes": 293
+    },
+    {
+      "path": "web/content/i18n/design/ar.json",
+      "sha256": "1e0797df2a9bb62e0dd459c6533606c5a8e86d2021d9c49ae7acc6152c36ef07",
+      "bytes": 4805
+    },
+    {
+      "path": "web/content/i18n/design/ar_intentions.json",
+      "sha256": "e948c79c7730baf285f305d586bb62f36838651acdc8067de520c145e54bef5c",
+      "bytes": 265
+    },
+    {
+      "path": "web/content/i18n/design/en.json",
+      "sha256": "c39bb8dec88f035f711b2989f37c88115aa85337a23ad42c34633f8f8a5b13af",
+      "bytes": 3820
+    },
+    {
+      "path": "web/content/i18n/design/ja.json",
+      "sha256": "a7c98422b27b50b0a4f5e9fe8929e7eddf4d4c14c9c5cfdcbc1422b492ff743c",
+      "bytes": 4197
+    },
+    {
+      "path": "web/content/i18n/design/zh.json",
+      "sha256": "ce1602510b52d9129f841effc419cbb95de2771121fd14fe66e75beb61eb92c1",
+      "bytes": 3759
+    },
+    {
+      "path": "web/content/i18n/design/zh_intentions.json",
+      "sha256": "e948c79c7730baf285f305d586bb62f36838651acdc8067de520c145e54bef5c",
+      "bytes": 265
+    },
+    {
+      "path": "web/content/i18n/design/zhtw.json",
+      "sha256": "1a07cf9e1b301a0e8a7093b5273c1b3ab006717784edab57d24bd23a69425b77",
+      "bytes": 3765
+    },
+    {
+      "path": "web/content/i18n/design/zhtw_intentions.json",
+      "sha256": "e948c79c7730baf285f305d586bb62f36838651acdc8067de520c145e54bef5c",
+      "bytes": 265
+    },
+    {
+      "path": "web/content/i18n/kanji_suggestions/ar.json",
+      "sha256": "bba8565805c6a0f1a66b3bf10e3bc5279319a830b7ecb74fadfbc13e8c19f54b",
+      "bytes": 354
+    },
+    {
+      "path": "web/content/i18n/kanji_suggestions/en.json",
+      "sha256": "a49bedb69e33d1f81f9f97f4e882b062f1402944f5a80a762cb5e6d2fee5b1a5",
+      "bytes": 304
+    },
+    {
+      "path": "web/content/i18n/kanji_suggestions/ja.json",
+      "sha256": "86773dc10fdec3d2fe11e3001fa2741f538f08ee6b8696dd6b2f9433cd81f94a",
+      "bytes": 361
+    },
+    {
+      "path": "web/content/i18n/kanji_suggestions/zh.json",
+      "sha256": "ce2cf997ecef90379ea8077bbde4dda49524f8b59bda709e964f0f5156e3cb2c",
+      "bytes": 295
+    },
+    {
+      "path": "web/content/i18n/kanji_suggestions/zhtw.json",
+      "sha256": "8ed80f5145fced251fa660e20e3788cfba18eba439e7354407ff8acb1ea1302f",
+      "bytes": 295
+    },
+    {
+      "path": "web/content/i18n/payment_failure/ar.json",
+      "sha256": "8827807adba33d7e2e2085f0d9e5a1db12110eb711d69fe36d5418d9e2eabbfa",
+      "bytes": 1802
+    },
+    {
+      "path": "web/content/i18n/payment_failure/en.json",
+      "sha256": "35fc3e2ad8b9f4cf2bfc2157b52a9d5a062eaf3d09dd2d5d1d6d5a4634774430",
+      "bytes": 1382
+    },
+    {
+      "path": "web/content/i18n/payment_failure/ja.json",
+      "sha256": "179932bfe2c9892dc4203697bbb3d60e95a22864be77843f54bea4b09e73730c",
+      "bytes": 1622
+    },
+    {
+      "path": "web/content/i18n/payment_failure/zh.json",
+      "sha256": "dbdb32e6f88d24d21f1b37f24ab9a81aac9c05b25caf272d6efd23ea64a1a8cf",
+      "bytes": 1312
+    },
+    {
+      "path": "web/content/i18n/payment_failure/zhtw.json",
+      "sha256": "a7dd02492df71b66efcab04516cd8fc2035b0d0373c0a7a3630de89c4ff19ad5",
+      "bytes": 1312
+    },
+    {
+      "path": "web/content/i18n/payment_success/ar.json",
+      "sha256": "3ffa9ce5a83e4182c47659a6e11ff2ee4d79e28beaea3c03e1124eefa469fb36",
+      "bytes": 1869
+    },
+    {
+      "path": "web/content/i18n/payment_success/en.json",
+      "sha256": "a3f00c1cfa4cb761fcb99356bd106575da1631f8641d96cdb99e521b011c3fab",
+      "bytes": 1479
+    },
+    {
+      "path": "web/content/i18n/payment_success/ja.json",
+      "sha256": "3fe7ce353c528bb3cedbb4c6b972221cb0601270aa1a721e2cdbed80a21e9d7f",
+      "bytes": 1696
+    },
+    {
+      "path": "web/content/i18n/payment_success/zh.json",
+      "sha256": "6934b5a6d4f3bad457853ac3f9fb90b9228784bc239a8e97998c153cab85695f",
+      "bytes": 1424
+    },
+    {
+      "path": "web/content/i18n/payment_success/zh_intentions.json",
+      "sha256": "90efd3861a85c0bbbb9d0eda08ce252c50d471007233e24c67643d53ad14d508",
+      "bytes": 44
+    },
+    {
+      "path": "web/content/i18n/payment_success/zhtw.json",
+      "sha256": "186cc9d8b188e3fdc0faa79f541adaba225b80a48dba0a4b06483f3be703933a",
+      "bytes": 1433
+    },
+    {
+      "path": "web/content/i18n/payment_success/zhtw_intentions.json",
+      "sha256": "90efd3861a85c0bbbb9d0eda08ce252c50d471007233e24c67643d53ad14d508",
+      "bytes": 44
+    },
+    {
+      "path": "web/content/i18n/purchase_result/ar.json",
+      "sha256": "993ef474a201b45700f5fe7802f8597aa371dc283053e3251cb8fcfb5c8f74eb",
+      "bytes": 538
+    },
+    {
+      "path": "web/content/i18n/purchase_result/en.json",
+      "sha256": "025716e218669a97fd387fd47bec8dd7ee0d53d4201cc04632c044ef939827b2",
+      "bytes": 416
+    },
+    {
+      "path": "web/content/i18n/purchase_result/ja.json",
+      "sha256": "0ef3a7aba0be19bd6514281da222eda43c488fcc8d96e36bcdcc519a064bdeec",
+      "bytes": 467
+    },
+    {
+      "path": "web/content/i18n/purchase_result/zh.json",
+      "sha256": "e4884ee01640b006e91f1eb3f7a4ef19af28aebb95eaa76a198f4b026edec503",
+      "bytes": 419
+    },
+    {
+      "path": "web/content/i18n/purchase_result/zhtw.json",
+      "sha256": "612398239101578770e9cb27302394fb3952c1cd532b28fc7dc51d01dd210c4d",
+      "bytes": 419
+    },
+    {
+      "path": "web/content/i18n/terms/ar.json",
+      "sha256": "eb5784865e9b42cd8b995476f1f03a21b0abdca608c87c4b9d9d3206ca6db90c",
+      "bytes": 10003
+    },
+    {
+      "path": "web/content/i18n/terms/en.json",
+      "sha256": "f99a9119bbc0448cac5417b5be125228b6f3faf2f39bfd7094b9cea4845419ca",
+      "bytes": 8102
+    },
+    {
+      "path": "web/content/i18n/terms/ja.json",
+      "sha256": "baac20ff6dda03c1a6f58b1fd4f568be43028ffcdb16fd4faf25314fc3749550",
+      "bytes": 8486
+    },
+    {
+      "path": "web/content/i18n/terms/zh.json",
+      "sha256": "e3ea3d4933d59e78b79d7411f830f7529b0c9f6d646413926f7d3d53dbb26a43",
+      "bytes": 7135
+    },
+    {
+      "path": "web/content/i18n/terms/zhtw.json",
+      "sha256": "65ceb101752234dc271b8f2942779c5ed4e2edca83c9d5e0c0b460a695ee1d72",
+      "bytes": 7171
+    },
+    {
+      "path": "web/content/i18n/top/ar.json",
+      "sha256": "49c7aa57e1a96ab4f0eeb41115d3c8c18242a246159705a9a8a27ef7ebff913f",
+      "bytes": 744
+    },
+    {
+      "path": "web/content/i18n/top/en.json",
+      "sha256": "a30ed93fe5992bf88558d1a6c824baadddb4734a58eced4a587bca80dccc6dca",
+      "bytes": 489
+    },
+    {
+      "path": "web/content/i18n/top/ja.json",
+      "sha256": "702c0bd5d5bd8a32075065ab3c0eee0674ef2ae50c7c74ed88ad86900233ff89",
+      "bytes": 592
+    },
+    {
+      "path": "web/content/i18n/top/zh.json",
+      "sha256": "4789f93dc3460c53afd70151fd2a7d29ee3b2e88917c645823cd36139dc972a3",
+      "bytes": 485
+    },
+    {
+      "path": "web/content/i18n/top/zhtw.json",
+      "sha256": "274ce09acd798574fc9e55b7afe74bb6568112b2d9e14c78a5cabc89922d427f",
+      "bytes": 494
+    }
+  ]
+}

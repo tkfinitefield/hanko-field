@@ -4388,7 +4388,7 @@ git diff --cached --check
   Output: separate PRs or commits for render-only, app-selectable,
   web-indexed, and store-release-enabled transitions.
   Done when: each flag change has validation evidence.
-- [ ] `M9-T06` Freeze release candidate translations.
+- [x] `M9-T06` Freeze release candidate translations.
   Output: language set and metadata baseline for the next app release.
   Done when: translation changes after freeze require explicit review and the
   `M0-T05` preservation gates are recorded in the freeze notes.
@@ -4698,6 +4698,84 @@ make i18n-flag-stages-test
 make i18n-check
 make i18n-holdouts-check
 make i18n-layout-qa-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M9-T06 Release-Candidate Translation Freeze
+
+Completed on 2026-06-18. Added a release-candidate translation freeze gate so
+future translation or metadata changes must be reviewed before the frozen
+baseline is updated.
+
+Implementation notes:
+
+- Added `scripts/i18n/freeze.mjs`.
+- Added `scripts/i18n/freeze.test.mjs`.
+- Added Make targets:
+  - `make i18n-freeze`
+  - `make i18n-freeze-check`
+  - `make i18n-freeze-manifest`
+  - `make i18n-freeze-test`
+- Added freeze checks to `make i18n-ci`.
+- Added machine-readable freeze evidence:
+  - `doc/qa/m9-t06/translation-freeze.json`
+  - `doc/qa/m9-t06/README.md`
+- The checker derives the frozen language set from `config/languages.json`.
+- The checker derives the store metadata source locale set from
+  `release/store_metadata/source`.
+- The checker verifies SHA-256 and byte-size baselines for frozen app, web,
+  API, catalog, store metadata source, and generated store metadata files.
+- The checker verifies that required M0-T05 preservation and release guardrail
+  checks are recorded in the manifest.
+
+Current freeze baseline:
+
+- Frozen locales: `ar`, `en`, `ja`, `zh`, `zhtw`
+- Store metadata source locales: `en`, `ja`, `zh`, `zhtw`
+- Release-enabled locales: none
+- Frozen files: 151
+- `make i18n-freeze-check` passes with no translation freeze issues.
+
+Post-freeze review policy:
+
+- Any change to a frozen translation, registry, API catalog, or store metadata
+  file must be explicitly reviewed before `translation-freeze.json` is updated.
+- After review, run the required gates and then update the manifest with:
+  `make i18n-freeze-manifest`.
+- The updated manifest must pass `make i18n-freeze-check`.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, signing files, uploads, polling, streaming, SSE, or WebSocket
+  behavior were added.
+- Rollback path: remove `scripts/i18n/freeze.*`, remove the Makefile targets
+  and `i18n-ci` entries, remove `doc/qa/m9-t06/`, and reopen `M9-T06`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/freeze.mjs
+node --check scripts/i18n/freeze.test.mjs
+jq empty doc/qa/m9-t06/translation-freeze.json
+make i18n-freeze-check
+make i18n-freeze-test
+make i18n-check
+make i18n-stubs-check
+make i18n-holdouts-check
+make i18n-layout-qa-check
+make i18n-flag-stages-check
+make store-metadata-check
+make google-play-metadata-check
+make app-store-metadata-check
+make screenshot-metadata-check
+make android-fastlane-check
+make ios-fastlane-check
+make release-secret-guardrails-check
 make i18n-ci
 git diff --check
 git diff --cached --check

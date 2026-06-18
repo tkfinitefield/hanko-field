@@ -16,7 +16,7 @@ GCP_PROD_REGION ?= asia-northeast1
 ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_ADMIN_MODE);,)
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod store-metadata-check store-metadata-test google-play-metadata google-play-metadata-check google-play-metadata-test app-store-metadata app-store-metadata-check app-store-metadata-test screenshot-metadata screenshot-metadata-check screenshot-metadata-test android-fastlane-check android-fastlane-test ios-fastlane-check ios-fastlane-test release-secret-guardrails-check release-secret-guardrails-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-stubs i18n-stubs-check i18n-stubs-test i18n-holdouts i18n-holdouts-check i18n-holdouts-test i18n-layout-qa i18n-layout-qa-check i18n-layout-qa-test i18n-flag-stages i18n-flag-stages-check i18n-flag-stages-test i18n-export i18n-import i18n-handoff-test i18n-ci
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod store-metadata-check store-metadata-test google-play-metadata google-play-metadata-check google-play-metadata-test app-store-metadata app-store-metadata-check app-store-metadata-test screenshot-metadata screenshot-metadata-check screenshot-metadata-test android-fastlane-check android-fastlane-test ios-fastlane-check ios-fastlane-test release-secret-guardrails-check release-secret-guardrails-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-stubs i18n-stubs-check i18n-stubs-test i18n-holdouts i18n-holdouts-check i18n-holdouts-test i18n-layout-qa i18n-layout-qa-check i18n-layout-qa-test i18n-flag-stages i18n-flag-stages-check i18n-flag-stages-test i18n-freeze i18n-freeze-check i18n-freeze-manifest i18n-freeze-test i18n-export i18n-import i18n-handoff-test i18n-ci
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -72,6 +72,10 @@ help:
 	@echo "  make i18n-flag-stages # Report staged language flag readiness"
 	@echo "  make i18n-flag-stages-check # Check staged language flag evidence"
 	@echo "  make i18n-flag-stages-test # Validate staged flag helpers"
+	@echo "  make i18n-freeze    # Report release-candidate translation freeze"
+	@echo "  make i18n-freeze-check # Check release-candidate translation freeze"
+	@echo "  make i18n-freeze-manifest # Rewrite freeze manifest after review"
+	@echo "  make i18n-freeze-test # Validate translation freeze helpers"
 	@echo "  make i18n-export    # Export translation handoff JSON"
 	@echo "  make i18n-import    # Import translation handoff JSON with IN=<file>"
 	@echo "  make i18n-handoff-test # Validate translation handoff helpers"
@@ -177,6 +181,18 @@ i18n-flag-stages-check:
 i18n-flag-stages-test:
 	node --test scripts/i18n/flag_stages.test.mjs
 
+i18n-freeze:
+	node scripts/i18n/freeze.mjs
+
+i18n-freeze-check:
+	node scripts/i18n/freeze.mjs --check
+
+i18n-freeze-manifest:
+	node scripts/i18n/freeze.mjs --write-manifest
+
+i18n-freeze-test:
+	node --test scripts/i18n/freeze.test.mjs
+
 i18n-export:
 	@node scripts/i18n/handoff.mjs export
 
@@ -249,6 +265,7 @@ i18n-ci:
 	node --check scripts/i18n/holdouts.mjs
 	node --check scripts/i18n/layout_qa.mjs
 	node --check scripts/i18n/flag_stages.mjs
+	node --check scripts/i18n/freeze.mjs
 	node --check scripts/i18n/handoff.mjs
 	node --check scripts/release/store_metadata.mjs
 	node --check scripts/release/google_play_metadata.mjs
@@ -262,6 +279,7 @@ i18n-ci:
 	$(MAKE) i18n-holdouts-check
 	$(MAKE) i18n-layout-qa-check
 	$(MAKE) i18n-flag-stages-check
+	$(MAKE) i18n-freeze-check
 	$(MAKE) store-metadata-check
 	$(MAKE) google-play-metadata-check
 	$(MAKE) app-store-metadata-check
@@ -277,6 +295,7 @@ i18n-ci:
 	$(MAKE) i18n-holdouts-test
 	$(MAKE) i18n-layout-qa-test
 	$(MAKE) i18n-flag-stages-test
+	$(MAKE) i18n-freeze-test
 	$(MAKE) i18n-handoff-test
 	$(MAKE) i18n-todo-test
 	$(MAKE) i18n-status-test
