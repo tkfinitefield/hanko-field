@@ -60,16 +60,16 @@ test('fails when tier evidence omits a locale or required evidence kind', async 
   assert.ok(report.issues.some((issue) => issue.code === 'layout-qa-evidence-missing-kind'));
 });
 
-test('fails when web templates do not bind the locale direction', async () => {
+test('fails when web templates use the route code as the HTML language', async () => {
   const rootDir = await createTempRoot({
-    webTemplate: '<!doctype html><html lang="{{ selected_locale }}"><body></body></html>',
+    webTemplate: '<!doctype html><html lang="{{ selected_locale }}" dir="{{ self.html_dir() }}"><body></body></html>',
   });
   await writeCompleteEvidence(rootDir);
 
   const report = await buildLayoutQa({ rootDir });
 
   assert.equal(report.ok, false);
-  assert.ok(report.issues.some((issue) => issue.code === 'layout-qa-web-dir-missing'));
+  assert.ok(report.issues.some((issue) => issue.code === 'layout-qa-web-locale-binding'));
 });
 
 async function createTempRoot({ webTemplate } = {}) {
@@ -94,7 +94,7 @@ async function createTempRoot({ webTemplate } = {}) {
   await writeText(
     rootDir,
     'web/templates/top.html',
-    webTemplate ?? '<!doctype html><html lang="{{ selected_locale }}" dir="{{ self.html_dir() }}"><body></body></html>',
+    webTemplate ?? '<!doctype html><html lang="{{ self.html_lang() }}" dir="{{ self.html_dir() }}"><body></body></html>',
   );
   await writeText(rootDir, 'web/src/main.rs', 'fn html_dir_for_locale(locale: &str) { match locale { "ar" => "rtl", _ => "ltr" } }');
   await writeText(

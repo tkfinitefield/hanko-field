@@ -147,7 +147,7 @@ impl WebLanguageRegistry {
     }
 
     fn enabled_language_for_input(&self, raw: &str) -> Option<&WebLanguage> {
-        let normalized = normalize_registry_code(raw);
+        let normalized = normalize_locale_input(raw);
         if normalized.is_empty() {
             return None;
         }
@@ -164,10 +164,14 @@ impl WebLanguageRegistry {
         {
             return Some(language);
         }
-        let language = normalized
-            .split(['-', '_'])
-            .next()
-            .unwrap_or(normalized.as_str());
+        if normalized == "zh-tw"
+            || normalized == "zh-hk"
+            || normalized == "zh-mo"
+            || normalized.starts_with("zh-hant-")
+        {
+            return self.enabled_language_exact("zhtw");
+        }
+        let language = normalized.split('-').next().unwrap_or(normalized.as_str());
         self.enabled_language_exact(language)
     }
 
@@ -440,6 +444,10 @@ fn web_copy_text(section: &str, locale: &str, key: &str) -> &'static str {
 
 fn normalize_registry_code(raw: &str) -> String {
     raw.trim().to_lowercase()
+}
+
+fn normalize_locale_input(raw: &str) -> String {
+    normalize_registry_code(raw).replace('_', "-")
 }
 
 #[derive(Debug, Clone)]
@@ -1052,6 +1060,14 @@ macro_rules! impl_template_copy_methods {
             #[allow(dead_code)]
             fn html_dir(&self) -> &str {
                 html_dir_for_locale(&self.selected_locale)
+            }
+
+            #[allow(dead_code)]
+            fn html_lang(&self) -> &str {
+                web_language_registry()
+                    .enabled_language_for_input(&self.selected_locale)
+                    .map(|language| language.bcp47.as_str())
+                    .unwrap_or(&self.selected_locale)
             }
         }
     };
@@ -6067,7 +6083,7 @@ mod tests {
         for (path, html_lang, html_dir, expected_title, expected_seo_title, expected_meta) in [
             (
                 "/zh/about",
-                "zh",
+                "zh-Hans",
                 "ltr",
                 "用宝石制作你的印章",
                 "关于 STONE SIGNATURE | STONE SIGNATURE",
@@ -6075,7 +6091,7 @@ mod tests {
             ),
             (
                 "/zhtw/about",
-                "zhtw",
+                "zh-Hant",
                 "ltr",
                 "用寶石製作你的印章",
                 "關於 STONE SIGNATURE | STONE SIGNATURE",
@@ -6838,6 +6854,20 @@ mod tests {
         assert_eq!(japanese.english_name, "Japanese");
 
         assert_eq!(parse_supported_locale("ja-JP"), Some("ja"));
+        for locale in ["zhtw", "zh-Hant", "zh_Hant", "zh-TW", "zh-HK", "zh-MO"] {
+            assert_eq!(
+                parse_supported_locale(locale),
+                Some("zhtw"),
+                "{locale} must resolve to Traditional Chinese"
+            );
+        }
+        for locale in ["zh", "zh-Hans", "zh_Hans", "zh-CN"] {
+            assert_eq!(
+                parse_supported_locale(locale),
+                Some("zh"),
+                "{locale} must resolve to Simplified Chinese"
+            );
+        }
         assert_eq!(parse_path_locale("ja"), Some("ja"));
         assert_eq!(parse_path_locale("zhtw"), Some("zhtw"));
         assert_eq!(parse_path_locale("ar"), Some("ar"));

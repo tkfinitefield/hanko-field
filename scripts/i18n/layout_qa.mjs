@@ -52,13 +52,13 @@ export async function buildLayoutQa({ rootDir = REPO_ROOT, evidencePath = DEFAUL
       continue;
     }
     parsedWebTemplates.push(templatePath);
-    if (!/<html[^>]*lang="\{\{\s*selected_locale\s*\}\}"[^>]*dir="\{\{\s*self\.html_dir\(\)\s*\}\}"/.test(source)) {
+    if (!/<html[^>]*lang="\{\{\s*self\.html_lang\(\)\s*\}\}"[^>]*dir="\{\{\s*self\.html_dir\(\)\s*\}\}"/.test(source)) {
       issues.push(
         createIssue(
-          'layout-qa-web-dir-missing',
+          'layout-qa-web-locale-binding',
           templatePath,
           null,
-          'top-level html tag must bind lang and dir to selected locale helpers',
+          'top-level html tag must bind lang to the BCP 47 helper and dir to the locale direction helper',
         ),
       );
     }
