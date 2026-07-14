@@ -22,6 +22,7 @@ use firebase_sdk_rust::firebase_firestore::{
     CommitRequest, CreateDocumentOptions, Document, FirebaseFirestoreClient,
     FirebaseFirestoreError, GetDocumentOptions, PatchDocumentOptions, RunQueryRequest,
 };
+use futures_util::future::try_join_all;
 use gcp_auth::{CustomServiceAccount, TokenProvider, provider};
 use hmac::{Hmac, Mac};
 use image::{DynamicImage, ImageFormat, Rgba, RgbaImage, imageops::FilterType};
@@ -72,7 +73,7 @@ const STRIPE_CHECKOUT_API_VERSION: &str = "2025-07-30.basil";
 const STRIPE_WEBHOOK_TOLERANCE_SECONDS: i64 = 5 * 60;
 const STORAGE_SCOPE: &str = "https://www.googleapis.com/auth/devstorage.read_write";
 const DEFAULT_GEMINI_MODEL: &str = "gemini-2.5-flash-lite";
-const DEFAULT_GEMINI_THINKING_BUDGET: i32 = 1024;
+const DEFAULT_GEMINI_THINKING_BUDGET: i32 = 512;
 const DEFAULT_KANJI_CANDIDATE_COUNT: usize = 6;
 const MAX_KANJI_CANDIDATE_COUNT: usize = 10;
 const DEFAULT_SEAL_DESIGN_VARIANT_COUNT: usize = 3;
@@ -724,6 +725,15 @@ impl SealRecipeFontProfile {
             Self::ClassicSeal => "classic_seal",
         }
     }
+
+    fn display_label(self) -> &'static str {
+        match self {
+            Self::FormalSerif => "Formal Serif",
+            Self::SoftSans => "Soft Sans",
+            Self::BoldBrush => "Bold Brush",
+            Self::ClassicSeal => "Classic Seal",
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -743,6 +753,15 @@ impl SealRecipeImpression {
             Self::Elegant => "elegant",
             Self::Soft => "soft",
             Self::Bold => "bold",
+        }
+    }
+
+    fn display_label(self) -> &'static str {
+        match self {
+            Self::Traditional => "Traditional",
+            Self::Elegant => "Elegant",
+            Self::Soft => "Soft",
+            Self::Bold => "Bold",
         }
     }
 }
@@ -779,6 +798,14 @@ impl SealRecipeSpacing {
             Self::Airy => "airy",
             Self::Balanced => "balanced",
             Self::Dense => "dense",
+        }
+    }
+
+    fn display_label(self) -> &'static str {
+        match self {
+            Self::Airy => "Airy",
+            Self::Balanced => "Balanced",
+            Self::Dense => "Dense",
         }
     }
 }
@@ -1770,14 +1797,6 @@ async fn handle_generate_kanji_candidates(State(state): State<AppState>, body: B
 }
 
 async fn handle_generate_seal_designs(State(state): State<AppState>, body: Bytes) -> Response {
-    if state.gemini.api_key.trim().is_empty() {
-        return error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "gemini_not_configured",
-            "gemini api key is not configured",
-        );
-    }
-
     let request = match serde_json::from_slice::<GenerateSealDesignsRequest>(&body) {
         Ok(value) => value,
         Err(err) => {
@@ -1800,13 +1819,7 @@ async fn handle_generate_seal_designs(State(state): State<AppState>, body: Bytes
         }
     };
 
-    let recipe_variants = match generate_seal_design_recipes_with_gemini(&state, &input).await {
-        Ok(value) => value,
-        Err(err) => {
-            log_seal_design_failure(SealDesignFailurePhase::RecipeGeneration, format!("{err:#}"));
-            return seal_design_failure_response(SealDesignFailurePhase::RecipeGeneration);
-        }
-    };
+    let recipe_variants = generate_seal_design_recipes_from_approved_catalog(&input);
 
     if recipe_variants.len() != input.variant_count {
         log_seal_design_failure(
@@ -4983,47 +4996,6 @@ fn stone_listing_snapshot_fields(
     fields
 }
 
-async fn generate_seal_design_recipes_with_gemini(
-    state: &AppState,
-    input: &GenerateSealDesignsInput,
-) -> Result<Vec<SealDesignRecipeVariant>> {
-    let request_body = build_seal_designs_request_body(input);
-
-    let endpoint = format!(
-        "{}/v1beta/models/{}:generateContent",
-        state.gemini.base_url.trim_end_matches('/'),
-        state.gemini.model.trim()
-    );
-
-    let response = state
-        .http_client
-        .post(endpoint)
-        .query(&[("key", state.gemini.api_key.as_str())])
-        .json(&request_body)
-        .send()
-        .await
-        .context("failed to call gemini generateContent")?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "<unable to read response body>".to_owned());
-        bail!("gemini request failed status={} body={}", status, body);
-    }
-
-    let payload = response
-        .json::<JsonValue>()
-        .await
-        .context("failed to parse gemini response payload")?;
-
-    let text = extract_gemini_response_text(&payload)
-        .ok_or_else(|| anyhow!("gemini response did not include text"))?;
-
-    parse_seal_design_recipes_from_gemini_text(&text, input.variant_count)
-}
-
 fn build_seal_designs_request_body(input: &GenerateSealDesignsInput) -> JsonValue {
     json!({
         "contents": [
@@ -5114,6 +5086,257 @@ fn build_seal_designs_response_schema(input: &GenerateSealDesignsInput) -> JsonV
         },
         "required": ["variants"],
     })
+}
+
+fn generate_seal_design_recipes_from_approved_catalog(
+    input: &GenerateSealDesignsInput,
+) -> Vec<SealDesignRecipeVariant> {
+    let mut variants = Vec::with_capacity(input.variant_count);
+    let mut used_full_signatures = input
+        .previous_recipes
+        .iter()
+        .map(|recipe| seal_recipe_full_signature(*recipe))
+        .collect::<HashSet<_>>();
+    let mut used_visual_signatures = input
+        .previous_recipes
+        .iter()
+        .map(|recipe| seal_recipe_visual_signature(*recipe))
+        .collect::<HashSet<_>>();
+
+    for recipe in preferred_seal_design_recipes(input).into_iter().chain(
+        approved_seal_recipe_catalog(input.shape.recipe_frame())
+            .into_iter()
+            .filter(|recipe| recipe.impression == style_recipe_impression(input.style))
+            .chain(approved_seal_recipe_catalog(input.shape.recipe_frame())),
+    ) {
+        if variants.len() >= input.variant_count {
+            break;
+        }
+
+        let full_signature = seal_recipe_full_signature(recipe);
+        let visual_signature = seal_recipe_visual_signature(recipe);
+        if used_full_signatures.contains(&full_signature)
+            || used_visual_signatures.contains(&visual_signature)
+        {
+            continue;
+        }
+
+        used_full_signatures.insert(full_signature);
+        used_visual_signatures.insert(visual_signature);
+        variants.push(SealDesignRecipeVariant {
+            label: seal_design_recipe_label(recipe),
+            recipe,
+        });
+    }
+
+    variants
+}
+
+fn preferred_seal_design_recipes(input: &GenerateSealDesignsInput) -> Vec<SealDesignRecipe> {
+    let frame = input.shape.recipe_frame();
+    let fonts = preferred_font_profiles_for_style(input.style);
+    let primary_impression = style_recipe_impression(input.style);
+    let primary_weight = stroke_recipe_weight(input.stroke_weight);
+    let primary_spacing = balance_recipe_spacing(input.balance);
+    let textures = preferred_textures_for_style(input.style);
+    let secondary_impressions = secondary_impressions_for_style(input.style);
+    let secondary_spacings = secondary_spacings_for_balance(input.balance);
+
+    vec![
+        SealDesignRecipe {
+            font_profile: fonts[0],
+            impression: primary_impression,
+            weight: primary_weight,
+            spacing: primary_spacing,
+            texture: textures[0],
+            frame,
+        },
+        SealDesignRecipe {
+            font_profile: fonts[1],
+            impression: secondary_impressions[0],
+            weight: primary_weight,
+            spacing: secondary_spacings[0],
+            texture: textures[1],
+            frame,
+        },
+        SealDesignRecipe {
+            font_profile: fonts[2],
+            impression: secondary_impressions[1],
+            weight: alternate_recipe_weight(primary_weight),
+            spacing: secondary_spacings[1],
+            texture: textures[2],
+            frame,
+        },
+        SealDesignRecipe {
+            font_profile: fonts[3],
+            impression: primary_impression,
+            weight: primary_weight,
+            spacing: secondary_spacings[0],
+            texture: textures[0],
+            frame,
+        },
+    ]
+}
+
+fn approved_seal_recipe_catalog(frame: SealRecipeFrame) -> Vec<SealDesignRecipe> {
+    let mut recipes = Vec::new();
+    for font_profile in [
+        SealRecipeFontProfile::FormalSerif,
+        SealRecipeFontProfile::SoftSans,
+        SealRecipeFontProfile::BoldBrush,
+        SealRecipeFontProfile::ClassicSeal,
+    ] {
+        for impression in [
+            SealRecipeImpression::Traditional,
+            SealRecipeImpression::Elegant,
+            SealRecipeImpression::Soft,
+            SealRecipeImpression::Bold,
+        ] {
+            for weight in [SealRecipeWeight::Standard, SealRecipeWeight::Bold] {
+                for spacing in [
+                    SealRecipeSpacing::Airy,
+                    SealRecipeSpacing::Balanced,
+                    SealRecipeSpacing::Dense,
+                ] {
+                    for texture in [
+                        SealRecipeTexture::None,
+                        SealRecipeTexture::SubtleInk,
+                        SealRecipeTexture::SoftBleed,
+                    ] {
+                        recipes.push(SealDesignRecipe {
+                            font_profile,
+                            impression,
+                            weight,
+                            spacing,
+                            texture,
+                            frame,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    recipes
+}
+
+fn preferred_font_profiles_for_style(style: SealStyleName) -> [SealRecipeFontProfile; 4] {
+    match style {
+        SealStyleName::Traditional => [
+            SealRecipeFontProfile::ClassicSeal,
+            SealRecipeFontProfile::FormalSerif,
+            SealRecipeFontProfile::BoldBrush,
+            SealRecipeFontProfile::SoftSans,
+        ],
+        SealStyleName::Elegant => [
+            SealRecipeFontProfile::FormalSerif,
+            SealRecipeFontProfile::ClassicSeal,
+            SealRecipeFontProfile::SoftSans,
+            SealRecipeFontProfile::BoldBrush,
+        ],
+        SealStyleName::Soft => [
+            SealRecipeFontProfile::SoftSans,
+            SealRecipeFontProfile::FormalSerif,
+            SealRecipeFontProfile::ClassicSeal,
+            SealRecipeFontProfile::BoldBrush,
+        ],
+        SealStyleName::Bold => [
+            SealRecipeFontProfile::BoldBrush,
+            SealRecipeFontProfile::ClassicSeal,
+            SealRecipeFontProfile::FormalSerif,
+            SealRecipeFontProfile::SoftSans,
+        ],
+    }
+}
+
+fn style_recipe_impression(style: SealStyleName) -> SealRecipeImpression {
+    match style {
+        SealStyleName::Traditional => SealRecipeImpression::Traditional,
+        SealStyleName::Elegant => SealRecipeImpression::Elegant,
+        SealStyleName::Soft => SealRecipeImpression::Soft,
+        SealStyleName::Bold => SealRecipeImpression::Bold,
+    }
+}
+
+fn stroke_recipe_weight(stroke_weight: SealStrokeWeight) -> SealRecipeWeight {
+    match stroke_weight {
+        SealStrokeWeight::Standard => SealRecipeWeight::Standard,
+        SealStrokeWeight::Bold => SealRecipeWeight::Bold,
+    }
+}
+
+fn balance_recipe_spacing(balance: SealBalance) -> SealRecipeSpacing {
+    match balance {
+        SealBalance::Airy => SealRecipeSpacing::Airy,
+        SealBalance::Balanced => SealRecipeSpacing::Balanced,
+        SealBalance::Dense => SealRecipeSpacing::Dense,
+    }
+}
+
+fn alternate_recipe_weight(weight: SealRecipeWeight) -> SealRecipeWeight {
+    match weight {
+        SealRecipeWeight::Standard => SealRecipeWeight::Bold,
+        SealRecipeWeight::Bold => SealRecipeWeight::Standard,
+    }
+}
+
+fn preferred_textures_for_style(style: SealStyleName) -> [SealRecipeTexture; 3] {
+    match style {
+        SealStyleName::Traditional => [
+            SealRecipeTexture::None,
+            SealRecipeTexture::SubtleInk,
+            SealRecipeTexture::SoftBleed,
+        ],
+        SealStyleName::Elegant => [
+            SealRecipeTexture::SubtleInk,
+            SealRecipeTexture::None,
+            SealRecipeTexture::SoftBleed,
+        ],
+        SealStyleName::Soft => [
+            SealRecipeTexture::SoftBleed,
+            SealRecipeTexture::SubtleInk,
+            SealRecipeTexture::None,
+        ],
+        SealStyleName::Bold => [
+            SealRecipeTexture::None,
+            SealRecipeTexture::SoftBleed,
+            SealRecipeTexture::SubtleInk,
+        ],
+    }
+}
+
+fn secondary_impressions_for_style(style: SealStyleName) -> [SealRecipeImpression; 2] {
+    match style {
+        SealStyleName::Traditional => [SealRecipeImpression::Elegant, SealRecipeImpression::Bold],
+        SealStyleName::Elegant => [
+            SealRecipeImpression::Traditional,
+            SealRecipeImpression::Soft,
+        ],
+        SealStyleName::Soft => [
+            SealRecipeImpression::Elegant,
+            SealRecipeImpression::Traditional,
+        ],
+        SealStyleName::Bold => [
+            SealRecipeImpression::Traditional,
+            SealRecipeImpression::Elegant,
+        ],
+    }
+}
+
+fn secondary_spacings_for_balance(balance: SealBalance) -> [SealRecipeSpacing; 2] {
+    match balance {
+        SealBalance::Airy => [SealRecipeSpacing::Balanced, SealRecipeSpacing::Dense],
+        SealBalance::Balanced => [SealRecipeSpacing::Airy, SealRecipeSpacing::Dense],
+        SealBalance::Dense => [SealRecipeSpacing::Balanced, SealRecipeSpacing::Airy],
+    }
+}
+
+fn seal_design_recipe_label(recipe: SealDesignRecipe) -> String {
+    format!(
+        "{} {} {}",
+        recipe.impression.display_label(),
+        recipe.spacing.display_label(),
+        recipe.font_profile.display_label()
+    )
 }
 
 fn seal_previous_recipes_prompt(input: &GenerateSealDesignsInput) -> String {
@@ -5237,6 +5460,18 @@ fn seal_recipe_visual_signature(recipe: SealDesignRecipe) -> String {
         "{}+{}+{}",
         recipe.font_profile.as_str(),
         recipe.spacing.as_str(),
+        recipe.frame.as_str()
+    )
+}
+
+fn seal_recipe_full_signature(recipe: SealDesignRecipe) -> String {
+    format!(
+        "{}+{}+{}+{}+{}+{}",
+        recipe.font_profile.as_str(),
+        recipe.impression.as_str(),
+        recipe.weight.as_str(),
+        recipe.spacing.as_str(),
+        recipe.texture.as_str(),
         recipe.frame.as_str()
     )
 }
@@ -5742,17 +5977,31 @@ async fn upload_seal_design_images_to_storage(
 ) -> Result<()> {
     validate_seal_design_upload_inputs(variants, images)?;
 
-    for (variant, image) in variants.iter().zip(images.iter()) {
-        upload_storage_object(
-            state,
-            &state.storage_assets_bucket,
-            &variant.storage_path,
-            &image.content_type,
-            &image.bytes,
-        )
+    let endpoint = storage_upload_endpoint(&state.storage_assets_bucket)?;
+    let token = state
+        .store
+        .token_provider
+        .token(&[STORAGE_SCOPE])
         .await
-        .with_context(|| format!("failed to upload {}", variant.storage_path))?;
-    }
+        .context("failed to obtain storage access token")?;
+
+    let uploads = variants.iter().zip(images.iter()).map(|(variant, image)| {
+        let endpoint = endpoint.as_str();
+        let token = token.as_str();
+        async move {
+            upload_storage_object(
+                &state.http_client,
+                endpoint,
+                token,
+                &variant.storage_path,
+                &image.content_type,
+                &image.bytes,
+            )
+            .await
+            .with_context(|| format!("failed to upload {}", variant.storage_path))
+        }
+    });
+    try_join_all(uploads).await?;
 
     Ok(())
 }
@@ -5772,26 +6021,19 @@ fn validate_seal_design_upload_inputs(
 }
 
 async fn upload_storage_object(
-    state: &AppState,
-    bucket: &str,
+    http_client: &reqwest::Client,
+    endpoint: &str,
+    token: &str,
     storage_path: &str,
     content_type: &str,
     bytes: &[u8],
 ) -> Result<()> {
-    let endpoint = storage_upload_endpoint(bucket)?;
     let storage_path = normalize_storage_object_name(storage_path)?;
-    let token = state
-        .store
-        .token_provider
-        .token(&[STORAGE_SCOPE])
-        .await
-        .context("failed to obtain storage access token")?;
 
-    let response = state
-        .http_client
+    let response = http_client
         .post(endpoint)
         .query(&[("uploadType", "media"), ("name", storage_path.as_str())])
-        .bearer_auth(token.as_str())
+        .bearer_auth(token)
         .header("Content-Type", content_type)
         .body(bytes.to_vec())
         .send()
@@ -10110,6 +10352,68 @@ mod tests {
             .collect::<HashSet<_>>();
         assert_eq!(signatures.len(), 2);
         assert!(!signatures.contains(&previous_signature));
+    }
+
+    #[test]
+    fn generate_seal_design_recipes_uses_approved_catalog_without_gemini() {
+        let input = validate_generate_seal_designs_request(valid_seal_designs_request())
+            .expect("request should be valid");
+
+        let variants = generate_seal_design_recipes_from_approved_catalog(&input);
+
+        assert_eq!(variants.len(), 3);
+        assert_eq!(variants[0].label, "Elegant Balanced Formal Serif");
+        assert_eq!(
+            variants[0].recipe.font_profile,
+            SealRecipeFontProfile::FormalSerif
+        );
+        assert_eq!(variants[0].recipe.impression, SealRecipeImpression::Elegant);
+        assert_eq!(variants[0].recipe.weight, SealRecipeWeight::Standard);
+        assert_eq!(variants[0].recipe.spacing, SealRecipeSpacing::Balanced);
+        assert_eq!(variants[0].recipe.texture, SealRecipeTexture::SubtleInk);
+        assert_eq!(variants[0].recipe.frame, SealRecipeFrame::SquareStandard);
+
+        let signatures = variants
+            .iter()
+            .map(|variant| seal_recipe_visual_signature(variant.recipe))
+            .collect::<HashSet<_>>();
+        assert_eq!(signatures.len(), 3);
+    }
+
+    #[test]
+    fn generate_seal_design_recipes_avoids_previous_visuals() {
+        let first_input = validate_generate_seal_designs_request(valid_seal_designs_request())
+            .expect("request should be valid");
+        let first_variants = generate_seal_design_recipes_from_approved_catalog(&first_input);
+
+        let mut request = valid_seal_designs_request();
+        request.attempt_number = Some(2);
+        request.previous_recipes = Some(
+            first_variants
+                .iter()
+                .map(|variant| SealDesignRecipeDto {
+                    font_profile: variant.recipe.font_profile.as_str().to_owned(),
+                    impression: variant.recipe.impression.as_str().to_owned(),
+                    weight: variant.recipe.weight.as_str().to_owned(),
+                    spacing: variant.recipe.spacing.as_str().to_owned(),
+                    texture: variant.recipe.texture.as_str().to_owned(),
+                    frame: variant.recipe.frame.as_str().to_owned(),
+                })
+                .collect(),
+        );
+        let second_input =
+            validate_generate_seal_designs_request(request).expect("request should be valid");
+
+        let second_variants = generate_seal_design_recipes_from_approved_catalog(&second_input);
+
+        assert_eq!(second_variants.len(), 3);
+        let first_signatures = first_variants
+            .iter()
+            .map(|variant| seal_recipe_visual_signature(variant.recipe))
+            .collect::<HashSet<_>>();
+        for variant in second_variants {
+            assert!(!first_signatures.contains(&seal_recipe_visual_signature(variant.recipe)));
+        }
     }
 
     #[test]

@@ -280,7 +280,7 @@ class _SettingsDetailPage extends StatelessWidget {
   }
 }
 
-class _SettingsContentLoader extends StatelessWidget {
+class _SettingsContentLoader extends StatefulWidget {
   const _SettingsContentLoader({
     required this.routeCode,
     required this.destination,
@@ -290,13 +290,42 @@ class _SettingsContentLoader extends StatelessWidget {
   final _SettingsDestination destination;
 
   @override
+  State<_SettingsContentLoader> createState() => _SettingsContentLoaderState();
+}
+
+class _SettingsContentLoaderState extends State<_SettingsContentLoader> {
+  Object? _bundle;
+  Future<SettingsContentBundle>? _content;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bundle = DefaultAssetBundle.of(context);
+    if (!identical(_bundle, bundle)) {
+      _bundle = bundle;
+      _content = SettingsContentBundle.forLanguage(
+        widget.routeCode,
+        bundle: bundle,
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _SettingsContentLoader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.routeCode != widget.routeCode) {
+      _content = SettingsContentBundle.forLanguage(
+        widget.routeCode,
+        bundle: DefaultAssetBundle.of(context),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return FutureBuilder<SettingsContentBundle>(
-      future: SettingsContentBundle.forLanguage(
-        routeCode,
-        bundle: DefaultAssetBundle.of(context),
-      ),
+      future: _content,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return HankoStateView.error(
@@ -308,12 +337,12 @@ class _SettingsContentLoader extends StatelessWidget {
         final content = snapshot.data;
         if (content == null) {
           return HankoStateView.loading(
-            title: destination.title(l10n),
+            title: widget.destination.title(l10n),
             message: l10n.splashPreparing,
           );
         }
 
-        return switch (destination) {
+        return switch (widget.destination) {
           _SettingsDestination.about => _AboutSettingsContent(
             content: content.about,
           ),
@@ -371,7 +400,7 @@ class _LanguageSettingsContent extends StatelessWidget {
   }
 }
 
-class _LanguageRegistryRows extends StatelessWidget {
+class _LanguageRegistryRows extends StatefulWidget {
   const _LanguageRegistryRows({
     required this.currentLocale,
     required this.onLocaleSelected,
@@ -381,10 +410,28 @@ class _LanguageRegistryRows extends StatelessWidget {
   final ValueChanged<Locale>? onLocaleSelected;
 
   @override
+  State<_LanguageRegistryRows> createState() => _LanguageRegistryRowsState();
+}
+
+class _LanguageRegistryRowsState extends State<_LanguageRegistryRows> {
+  Object? _bundle;
+  Future<AppLanguageRegistry>? _registry;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bundle = DefaultAssetBundle.of(context);
+    if (!identical(_bundle, bundle)) {
+      _bundle = bundle;
+      _registry = AppLanguageRegistry.load(bundle: bundle);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return FutureBuilder<AppLanguageRegistry>(
-      future: AppLanguageRegistry.load(bundle: DefaultAssetBundle.of(context)),
+      future: _registry,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return HankoStateView.error(
@@ -409,10 +456,10 @@ class _LanguageRegistryRows extends StatelessWidget {
               for (final language in languages)
                 _LanguageOptionRow(
                   language: language,
-                  isSelected: language.matchesLocale(currentLocale),
-                  onTap: onLocaleSelected == null
+                  isSelected: language.matchesLocale(widget.currentLocale),
+                  onTap: widget.onLocaleSelected == null
                       ? null
-                      : () => onLocaleSelected!(language.locale),
+                      : () => widget.onLocaleSelected!(language.locale),
                 ),
             ],
           ),

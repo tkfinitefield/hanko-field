@@ -6,6 +6,7 @@ cd "${ROOT_DIR}"
 
 export PATH="${HOST_PATH:+${HOST_PATH}:}${PATH}"
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/hanko-field-cargo-target}"
 
 api_pid=""
 admin_pid=""
@@ -48,26 +49,23 @@ cargo build --manifest-path admin/Cargo.toml
 cargo build --manifest-path web/Cargo.toml
 
 (
-  cd api
-  API_SERVER_PORT="${API_SERVER_PORT:-3050}" exec ./target/debug/hanko-field-api
+  API_SERVER_PORT="${API_SERVER_PORT:-3050}" exec "${CARGO_TARGET_DIR}/debug/hanko-field-api"
 ) &
 api_pid=$!
 
 (
-  cd admin
   ADMIN_HTTP_ADDR=":${ADMIN_PORT:-3051}" \
     HANKO_ADMIN_MODE="${HANKO_ADMIN_MODE:-mock}" \
     HANKO_ADMIN_LOCALE="${HANKO_ADMIN_LOCALE:-ja}" \
-    exec ./target/debug/hanko-field-admin
+    exec "${CARGO_TARGET_DIR}/debug/hanko-field-admin"
 ) &
 admin_pid=$!
 
 (
-  cd web
   HANKO_WEB_PORT="${HANKO_WEB_PORT:-3052}" \
     HANKO_WEB_MODE="${HANKO_WEB_MODE:-mock}" \
     HANKO_WEB_LOCALE="${HANKO_WEB_LOCALE:-ja}" \
-    exec ./target/debug/hanko-field-web
+    exec "${CARGO_TARGET_DIR}/debug/hanko-field-web"
 ) &
 web_pid=$!
 

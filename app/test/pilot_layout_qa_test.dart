@@ -46,6 +46,28 @@ void main() {
       );
     });
   });
+
+  testWidgets('M7-T04 preserves Traditional Chinese checkout locale', (
+    tester,
+  ) async {
+    OrderDraftInput? savedInput;
+    await _pumpPilotSurface(
+      tester,
+      locale: const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+      viewport: viewport,
+      child: CheckoutInputScreen(
+        input: _checkoutInput(),
+        onSave: (input) async => savedInput = input,
+      ),
+    );
+
+    await tester.ensureVisible(find.text('Save Checkout Information'));
+    await tester.tap(find.text('Save Checkout Information'));
+    await tester.pumpAndSettle();
+
+    expect(savedInput?.contact.preferredLocale, 'zhtw');
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<void> _pumpPilotSurface(

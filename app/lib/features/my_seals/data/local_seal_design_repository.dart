@@ -68,6 +68,32 @@ class SqfliteLocalSealDesignRepository implements LocalSealDesignRepository {
 
   static const _databaseName = 'hanko_field_local_seals.db';
   static const _table = 'local_seal_designs';
+  static const _databaseVersion = 2;
+  static const _legacyDateFallback = '1970-01-01T00:00:00.000Z';
+  static const _columnMigrations = <String, String>{
+    'input_name': "input_name TEXT NOT NULL DEFAULT ''",
+    'selected_kanji': "selected_kanji TEXT NOT NULL DEFAULT ''",
+    'reading': "reading TEXT NOT NULL DEFAULT ''",
+    'meaning': 'meaning TEXT',
+    'impression_json': "impression_json TEXT NOT NULL DEFAULT '[]'",
+    'character_count': 'character_count INTEGER NOT NULL DEFAULT 0',
+    'stroke_complexity': 'stroke_complexity TEXT',
+    'engraving_suitability': 'engraving_suitability TEXT',
+    'shape': "shape TEXT NOT NULL DEFAULT 'square'",
+    'style': "style TEXT NOT NULL DEFAULT 'elegant'",
+    'stroke_weight': "stroke_weight TEXT NOT NULL DEFAULT 'standard'",
+    'balance': "balance TEXT NOT NULL DEFAULT 'balanced'",
+    'ai_generation_id': "ai_generation_id TEXT NOT NULL DEFAULT ''",
+    'ai_variant_id': "ai_variant_id TEXT NOT NULL DEFAULT ''",
+    'preview_image_storage_path':
+        "preview_image_storage_path TEXT NOT NULL DEFAULT ''",
+    'preview_image_download_url':
+        "preview_image_download_url TEXT NOT NULL DEFAULT ''",
+    'local_image_path': "local_image_path TEXT NOT NULL DEFAULT ''",
+    'is_favorite': 'is_favorite INTEGER NOT NULL DEFAULT 0',
+    'created_at': "created_at TEXT NOT NULL DEFAULT '$_legacyDateFallback'",
+    'updated_at': "updated_at TEXT NOT NULL DEFAULT '$_legacyDateFallback'",
+  };
 
   final sqflite.DatabaseFactory _databaseFactory;
   final Future<String> Function() _databasePathResolver;
@@ -130,15 +156,16 @@ class SqfliteLocalSealDesignRepository implements LocalSealDesignRepository {
     return _databaseFactory.openDatabase(
       databasePath,
       options: sqflite.OpenDatabaseOptions(
-        version: 1,
+        version: _databaseVersion,
         onCreate: (db, _) => _ensureSchema(db),
+        onUpgrade: (db, _, _) => _ensureSchema(db),
         onOpen: _ensureSchema,
       ),
     );
   }
 
-  Future<void> _ensureSchema(sqflite.Database db) {
-    return db.execute('''
+  Future<void> _ensureSchema(sqflite.Database db) async {
+    await db.execute('''
 CREATE TABLE IF NOT EXISTS $_table (
   id TEXT PRIMARY KEY,
   input_name TEXT NOT NULL,
@@ -162,6 +189,41 @@ CREATE TABLE IF NOT EXISTS $_table (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 )
+''');
+    await _ensureMigratedColumns(db);
+    await _backfillMigratedRows(db);
+  }
+
+  Future<void> _ensureMigratedColumns(sqflite.Database db) async {
+    final columns = await db.rawQuery('PRAGMA table_info($_table)');
+    final existingColumnNames = columns
+        .map((column) => column['name'])
+        .whereType<String>()
+        .toSet();
+
+    for (final entry in _columnMigrations.entries) {
+      if (existingColumnNames.contains(entry.key)) {
+        continue;
+      }
+      await db.execute('ALTER TABLE $_table ADD COLUMN ${entry.value}');
+    }
+  }
+
+  Future<void> _backfillMigratedRows(sqflite.Database db) async {
+    await db.execute('''
+UPDATE $_table
+SET character_count = length(selected_kanji)
+WHERE character_count = 0 AND selected_kanji <> ''
+''');
+    await db.execute('''
+UPDATE $_table
+SET ai_generation_id = id
+WHERE ai_generation_id = ''
+''');
+    await db.execute('''
+UPDATE $_table
+SET ai_variant_id = id
+WHERE ai_variant_id = ''
 ''');
   }
 
@@ -303,13 +365,17 @@ class _LocalSealDesignRecord {
         balance: _readString(map, 'balance'),
         aiGenerationId: _readString(map, 'ai_generation_id'),
         aiVariantId: _readString(map, 'ai_variant_id'),
-        previewImageStoragePath: _readString(map, 'preview_image_storage_path'),
+        previewImageStoragePath: _readString(
+          map,
+          'preview_image_storage_path',
+          allowEmpty: true,
+        ),
         previewImageDownloadUrl: _readString(
           map,
           'preview_image_download_url',
           allowEmpty: true,
         ),
-        localImagePath: _readString(map, 'local_image_path'),
+        localImagePath: _readString(map, 'local_image_path', allowEmpty: true),
         isFavorite: _readBool(map, 'is_favorite'),
         createdAt: DateTime.parse(_readString(map, 'created_at')),
         updatedAt: DateTime.parse(_readString(map, 'updated_at')),

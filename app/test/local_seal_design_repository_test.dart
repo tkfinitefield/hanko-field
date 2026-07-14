@@ -120,6 +120,62 @@ void main() {
     },
   );
 
+  test('migrates legacy local seal schema before saving designs', () async {
+    final legacyDb = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 1,
+        onCreate: (db, _) async {
+          await db.execute('''
+CREATE TABLE local_seal_designs (
+  id TEXT PRIMARY KEY,
+  input_name TEXT NOT NULL,
+  selected_kanji TEXT NOT NULL,
+  reading TEXT NOT NULL,
+  impression_json TEXT NOT NULL,
+  character_count INTEGER NOT NULL,
+  shape TEXT NOT NULL,
+  style TEXT NOT NULL,
+  stroke_weight TEXT NOT NULL,
+  balance TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)
+''');
+          await db.insert('local_seal_designs', {
+            'id': 'legacy_seal',
+            'input_name': 'Eiko',
+            'selected_kanji': '永',
+            'reading': 'Ei',
+            'impression_json': '["Timeless"]',
+            'character_count': 0,
+            'shape': 'square',
+            'style': 'elegant',
+            'stroke_weight': 'standard',
+            'balance': 'balanced',
+            'created_at': '2026-05-20T10:00:00.000+09:00',
+            'updated_at': '2026-05-20T10:00:00.000+09:00',
+          });
+        },
+      ),
+    );
+    await legacyDb.close();
+
+    await repository.saveLocalSealDesign(
+      _localSealDesign(id: 'local_seal_002', selectedKanji: '美嘉'),
+    );
+
+    final saved = await repository.getLocalSealDesign('local_seal_002');
+    expect(saved?.selectedKanji, '美嘉');
+    expect(saved?.previewImageStoragePath, isNotEmpty);
+
+    final legacy = await repository.getLocalSealDesign('legacy_seal');
+    expect(legacy?.selectedKanji, '永');
+    expect(legacy?.characterCount, 1);
+    expect(legacy?.aiGenerationId, 'legacy_seal');
+    expect(legacy?.previewImageStoragePath, '');
+  });
+
   test(
     'skips corrupted local seal rows instead of failing list reads',
     () async {

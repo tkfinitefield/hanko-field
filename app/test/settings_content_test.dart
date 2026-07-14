@@ -14,6 +14,13 @@ void main() {
     expect(content.contact.options[1].value, 'dev@finitefield.org');
   });
 
+  test('reuses settings content loaded from the same asset bundle', () async {
+    final first = await SettingsContentBundle.forLanguage('en');
+    final second = await SettingsContentBundle.forLanguage('en');
+
+    expect(second, same(first));
+  });
+
   test('loads Japanese settings content from JSON assets', () async {
     final content = await SettingsContentBundle.forLanguage('ja');
 

@@ -19,9 +19,13 @@ import 'navigation/app_navigation_shell.dart';
 import 'theme/app_theme.dart';
 
 class HankoApp extends StatefulWidget {
+  static const defaultSupportedLocales = <Locale>[Locale('en'), Locale('ja')];
+
   const HankoApp({
     super.key,
     this.locale,
+    this.supportedLocales = defaultSupportedLocales,
+    this.automaticLocales = defaultSupportedLocales,
     this.loadPreferredLocale = _defaultLoadPreferredLocale,
     this.savePreferredLocale = _defaultSavePreferredLocale,
     this.hasSeenOnboardingResolver = _defaultHasSeenOnboardingResolver,
@@ -43,6 +47,8 @@ class HankoApp extends StatefulWidget {
   });
 
   final Locale? locale;
+  final List<Locale> supportedLocales;
+  final List<Locale> automaticLocales;
   final PreferredLocaleLoader loadPreferredLocale;
   final PreferredLocaleWriter savePreferredLocale;
   final HasSeenOnboardingResolver hasSeenOnboardingResolver;
@@ -111,11 +117,18 @@ class _HankoAppState extends State<HankoApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final locale = widget.locale ?? _preferredLocale;
     return MaterialApp(
       onGenerateTitle: (context) => context.l10n.appTitle,
       debugShowCheckedModeBanner: false,
-      locale: widget.locale ?? _preferredLocale,
-      supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+      locale: locale,
+      supportedLocales: widget.supportedLocales,
+      localeListResolutionCallback: locale == null
+          ? (preferredLocales, _) => resolveAutomaticLocale(
+              preferredLocales,
+              widget.automaticLocales,
+            )
+          : null,
       localizationsDelegates:
           GeneratedHankoLocalizations.localizationsDelegates,
       theme: HankoTheme.light(),
@@ -148,14 +161,19 @@ class _HankoAppState extends State<HankoApp> with WidgetsBindingObserver {
       if (!mounted || widget.locale != null) {
         return;
       }
-      setState(() => _preferredLocale = _supportedLocale(locale));
+      setState(
+        () => _preferredLocale = _supportedLocale(
+          locale,
+          widget.automaticLocales,
+        ),
+      );
     } catch (error) {
       debugPrint('failed to load preferred locale: $error');
     }
   }
 
   void _selectPreferredLocale(Locale locale) {
-    final supportedLocale = _supportedLocale(locale);
+    final supportedLocale = _supportedLocale(locale, widget.automaticLocales);
     if (supportedLocale == null) {
       return;
     }
@@ -191,40 +209,26 @@ Future<Locale?> _defaultLoadPreferredLocale() async {
     return null;
   }
   final registry = await AppLanguageRegistry.load();
-  return _supportedLocale(
-    registry.enabledLanguageForRouteCode(routeCode)?.locale,
-  );
+  return registry.selectableLanguageForRouteCode(routeCode)?.locale;
 }
 
 Future<void> _defaultSavePreferredLocale(Locale locale) async {
-  final supportedLocale = _supportedLocale(locale);
-  if (supportedLocale == null) {
-    return;
-  }
   final registry = await AppLanguageRegistry.load();
-  final language = registry.enabledLanguageForLocale(supportedLocale);
+  final language = registry.selectableLanguageForLocale(locale);
   if (language == null) {
     return;
   }
   await const AppLaunchStore().setPreferredRouteCode(language.routeCode);
 }
 
-Future<String> _checkoutRouteCodeForLocale(Locale locale) async {
-  try {
-    final registry = await AppLanguageRegistry.load();
-    return registry.routeCodeForLocale(locale) ??
-        fallbackRouteCodeForLocale(locale);
-  } catch (error) {
-    debugPrint('failed to load checkout locale registry: $error');
-    return fallbackRouteCodeForLocale(locale);
-  }
-}
+String _checkoutRouteCodeForLocale(Locale locale) =>
+    fallbackRouteCodeForLocale(locale);
 
-Locale? _supportedLocale(Locale? locale) {
+Locale? _supportedLocale(Locale? locale, Iterable<Locale> supportedLocales) {
   if (locale == null) {
     return null;
   }
-  for (final supportedLocale in GeneratedHankoLocalizations.supportedLocales) {
+  for (final supportedLocale in supportedLocales) {
     if (supportedLocale.languageCode == locale.languageCode &&
         supportedLocale.scriptCode == locale.scriptCode &&
         supportedLocale.countryCode == locale.countryCode) {
@@ -316,7 +320,11 @@ class _AppLaunchGateState extends State<_AppLaunchGate> {
   }
 
   Future<void> _completeOnboarding() async {
-    await widget.markOnboardingSeen();
+    try {
+      await widget.markOnboardingSeen();
+    } catch (error) {
+      debugPrint('failed to save onboarding completion: $error');
+    }
     if (!mounted) {
       return;
     }
@@ -404,18 +412,6 @@ class _SealPreviewSelection {
 
   final SealGenerationResult result;
   final SealDesignVariant variant;
-}
-
-class _SealSaveFailure {
-  const _SealSaveFailure({
-    required this.result,
-    required this.variant,
-    required this.error,
-  });
-
-  final SealGenerationResult result;
-  final SealDesignVariant variant;
-  final Object error;
 }
 
 class _StoneImageGallerySelection {
@@ -536,7 +532,6 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
   static const _designKanjiErrorPageKey = 'DES-011-kanji-suggestion-error';
   static const _designSealGenerationErrorPageKey =
       'DES-012-seal-generation-error';
-  static const _designSealSaveErrorPageKey = 'ERR-005-seal-save-error';
   static const _designUnsupportedKanjiPageKey =
       'DES-014-unsupported-kanji-result';
   static const _designSealGenerationLimitPageKey =
@@ -645,7 +640,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final locale = Localizations.localeOf(context).languageCode;
+    final locale = fallbackRouteCodeForLocale(Localizations.localeOf(context));
     if (_stoneListingsLocale == locale) {
       return;
     }
@@ -1144,26 +1139,6 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
       );
     }
 
-    if (page.key == _designSealSaveErrorPageKey &&
-        pageData is _SealSaveFailure) {
-      return SealSaveErrorScreen(
-        result: pageData.result,
-        variant: pageData.variant,
-        error: pageData.error,
-        onRetry: () {
-          unawaited(
-            _saveLocalSealDesign(
-              result: pageData.result,
-              variant: pageData.variant,
-              stack: stack,
-              replaceTopOnComplete: true,
-            ),
-          );
-        },
-        onBack: stack.pop,
-      );
-    }
-
     if (page.key == _designKanjiErrorPageKey &&
         pageData is _KanjiSuggestionFailure) {
       return KanjiSuggestionErrorScreen(
@@ -1320,7 +1295,8 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
 
   void _retryStoneListings() {
     final locale =
-        _stoneListingsLocale ?? Localizations.localeOf(context).languageCode;
+        _stoneListingsLocale ??
+        fallbackRouteCodeForLocale(Localizations.localeOf(context));
     unawaited(_loadStoneListings(locale: locale));
   }
 
@@ -1382,18 +1358,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
     try {
       await _localSealDesignRepository.saveLocalSealDesign(design);
     } catch (error) {
-      if (!mounted) {
-        _savingLocalSealKeys.remove(saveKey);
-        return;
-      }
-      _savingLocalSealKeys.remove(saveKey);
-      final errorPage = _sealSaveErrorPage(result, variant, error);
-      if (replaceTopOnComplete) {
-        stack.replaceTop(errorPage);
-      } else {
-        stack.push(errorPage);
-      }
-      return;
+      debugPrint('failed to persist local seal design: $error');
     }
     _savingLocalSealKeys.remove(saveKey);
     if (!mounted) {
@@ -1630,18 +1595,6 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
     );
   }
 
-  PageEntry _sealSaveErrorPage(
-    SealGenerationResult result,
-    SealDesignVariant variant,
-    Object error,
-  ) {
-    return PageEntry(
-      key: _designSealSaveErrorPageKey,
-      name: '/design/seal/save-error',
-      data: _SealSaveFailure(result: result, variant: variant, error: error),
-    );
-  }
-
   PageEntry _kanjiSuggestionErrorPage(
     KanjiCandidatesRequest request,
     Object error,
@@ -1812,7 +1765,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
     });
 
     try {
-      final checkoutRouteCode = await _checkoutRouteCodeForLocale(
+      final checkoutRouteCode = _checkoutRouteCodeForLocale(
         Localizations.localeOf(context),
       );
       if (!mounted) {

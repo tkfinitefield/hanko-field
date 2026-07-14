@@ -75,7 +75,7 @@
     },
     "app": {
       "enabled": true,
-      "selectable": true
+      "selectable": false
     },
     "release": {
       "enabled": false,
@@ -103,7 +103,7 @@
     },
     "app": {
       "enabled": true,
-      "selectable": true
+      "selectable": false
     },
     "release": {
       "enabled": false,
@@ -159,7 +159,7 @@
     },
     "app": {
       "enabled": true,
-      "selectable": true
+      "selectable": false
     },
     "release": {
       "enabled": false,

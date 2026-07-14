@@ -27,6 +27,17 @@ test('fails when the runbook omits fastlane release steps', async () => {
   assert.ok(report.issues.some((issue) => issue.code === 'release-runbook-content'));
 });
 
+test('fails when internal upload remains in validate-only mode', async () => {
+  const rootDir = await createTempRoot({
+    runbook: validRunbook().replace('SUPPLY_VALIDATE_ONLY=false', ''),
+  });
+
+  const report = await buildReleaseRunbookReport({ rootDir });
+
+  assert.equal(report.ok, false);
+  assert.ok(report.issues.some((issue) => issue.key === 'SUPPLY_VALIDATE_ONLY=false'));
+});
+
 test('fails when evidence route code count drifts from the registry', async () => {
   const evidence = validEvidence();
   evidence.route_code_count = 3;
@@ -158,7 +169,7 @@ Run make store-metadata-check, make google-play-metadata-check, make app-store-m
 ## fastlane Release Flow
 
 Use app/android/fastlane/Fastfile and app/ios/fastlane/Fastfile.
-Set SUPPLY_JSON_KEY, APP_STORE_CONNECT_API_KEY_PATH, RELEASE_SIGNOFF_PATH, and RELEASE_SIGNOFF_CONFIRMATION.
+Set SUPPLY_JSON_KEY, SUPPLY_VALIDATE_ONLY=false, APP_STORE_CONNECT_API_KEY_PATH, RELEASE_SIGNOFF_PATH, and RELEASE_SIGNOFF_CONFIRMATION.
 Run bundle exec fastlane android metadata, bundle exec fastlane android internal, bundle exec fastlane android production, bundle exec fastlane ios metadata, bundle exec fastlane ios testflight_upload, and bundle exec fastlane ios production.
 
 ## Post-Release Monitoring and Cleanup

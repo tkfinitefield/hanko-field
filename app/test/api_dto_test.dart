@@ -674,16 +674,42 @@ void main() {
     );
   });
 
-  test('default API base URL targets the host from mobile simulators', () {
-    expect(
-      resolveDefaultHankoApiBaseUrl(isAndroid: false),
-      'http://127.0.0.1:3050',
-    );
-    expect(
-      resolveDefaultHankoApiBaseUrl(isAndroid: true),
-      'http://10.0.2.2:3050',
+  test('HankoApiClient maps non-JSON HTTP errors', () async {
+    final transport = FakeTransport([
+      const HankoApiResponse(statusCode: 404, body: '<html>Not Found</html>'),
+    ]);
+    final client = _client(transport);
+
+    await expectLater(
+      client.postJson('/v1/seal-designs/generate', const {}),
+      throwsA(
+        isA<HankoApiException>()
+            .having((error) => error.statusCode, 'statusCode', 404)
+            .having((error) => error.code, 'code', 'http_404'),
+      ),
     );
   });
+
+  test('default API base URL targets production in release builds', () {
+    expect(
+      resolveDefaultHankoApiBaseUrl(isReleaseMode: true),
+      productionHankoApiBaseUrl,
+    );
+  });
+
+  test(
+    'default API base URL targets the host from mobile simulators in debug',
+    () {
+      expect(
+        resolveDefaultHankoApiBaseUrl(isAndroid: false, isReleaseMode: false),
+        'http://127.0.0.1:3050',
+      );
+      expect(
+        resolveDefaultHankoApiBaseUrl(isAndroid: true, isReleaseMode: false),
+        'http://10.0.2.2:3050',
+      );
+    },
+  );
 
   test('HankoAppError classifies network server and generic errors', () {
     expect(

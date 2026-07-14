@@ -18,7 +18,7 @@ class GeneratedHankoLocalizationsJa extends GeneratedHankoLocalizations {
   String get onboardingTitle => 'ようこそ';
 
   @override
-  String get onboardingHeroTitle => '数分で\n印影を作成';
+  String get onboardingHeroTitle => 'あなたの名前を\n美しい印影に';
 
   @override
   String get onboardingTagline => 'あなたらしく。時を超えて。\n唯一無二の印鑑へ。';

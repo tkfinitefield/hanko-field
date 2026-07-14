@@ -7,11 +7,13 @@ after M7 content, checkout, and screenshot QA.
 
 ## Decision
 
-Keep all three pilot languages app-selectable and defer public web indexing.
+Keep all three pilot languages render-only and defer app selection, public web
+indexing, and store release.
 
-The blocking reason is that `web.indexed` is currently language-wide: enabling
-it would also index blog index and article routes, while checked-in blog article
-bodies and metadata are only localized for English and Japanese.
+The app ARBs still contain deferred English fallback entries, so the pilot
+languages must not be user-selectable yet. Web indexing also remains blocked
+because checked-in blog article bodies and metadata are only localized for
+English and Japanese.
 
 Store release remains disabled for all three languages because store metadata,
 fastlane, signing guardrails, and broader release-language batches are still
@@ -21,22 +23,23 @@ planned in M8 and M9.
 
 | Locale | App enabled | App selectable | Web enabled | Web indexed | Release enabled |
 | --- | --- | --- | --- | --- | --- |
-| `zh` | true | true | true | false | false |
-| `zhtw` | true | true | true | false | false |
-| `ar` | true | true | true | false | false |
+| `zh` | true | false | true | false | false |
+| `zhtw` | true | false | true | false | false |
+| `ar` | true | false | true | false | false |
 
 ## Evidence
 
 | Locale | Evidence |
 | --- | --- |
-| `zh` | App content, web static/payment content, API catalog, checkout routing, web top screenshot, and app Settings layout probe passed. Web indexing is deferred until localized blog article bodies and metadata exist. |
-| `zhtw` | App content, web static/payment content, API catalog, checkout routing, web about screenshot, and app Design layout probe passed. Web indexing is deferred until localized blog article bodies and metadata exist. |
-| `ar` | App content, web static/payment content, API catalog, Arabic checkout, RTL web screenshots, and app Checkout RTL layout probe passed. Web indexing is deferred until localized blog article bodies and metadata exist. |
+| `zh` | Forced app/web rendering and layout probes pass. App selection waits for deferred ARB entries to be translated; web indexing waits for localized blog bodies and metadata. |
+| `zhtw` | Forced app/web rendering and layout probes pass. App selection waits for deferred ARB entries to be translated; web indexing waits for localized blog bodies and metadata. |
+| `ar` | Forced app/web rendering and RTL probes pass. App selection waits for deferred ARB entries to be translated; web indexing waits for localized blog bodies and metadata. |
 
 ## Guardrails
 
 - Public pilot pages remain `noindex,follow` until web indexing can exclude or
   localize blog article surfaces.
+- App language settings expose only locales without deferred translation copy.
 - Payment result pages remain `noindex,follow`.
 - `release.enabled` remains `false` until M8/M9 release work is complete.
 - No store metadata, fastlane, signing, polling, streaming, SSE, or WebSocket

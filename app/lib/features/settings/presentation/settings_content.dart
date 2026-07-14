@@ -20,6 +20,9 @@ class SettingsContentBundle {
   final SettingsContactContent contact;
 
   static const _assetRoot = 'assets/i18n/settings';
+  static final Map<AssetBundle, Map<String, Future<SettingsContentBundle>>>
+  _cache =
+      Map<AssetBundle, Map<String, Future<SettingsContentBundle>>>.identity();
 
   static Future<SettingsContentBundle> forLanguage(
     String routeCode, {
@@ -30,9 +33,27 @@ class SettingsContentBundle {
     final assetName = _supportedAssetNames.contains(normalized)
         ? normalized
         : 'en';
+    final bundleCache = _cache.putIfAbsent(assetBundle, () => {});
+    final cached = bundleCache[assetName];
+    if (cached != null) {
+      return cached;
+    }
+
     final assetPath = '$_assetRoot/$assetName.json';
-    final source = await assetBundle.loadString(assetPath);
-    return SettingsContentBundle.fromJson(_decodeObject(source, assetPath));
+    final pending = () async {
+      final source = await assetBundle.loadString(assetPath);
+      return SettingsContentBundle.fromJson(_decodeObject(source, assetPath));
+    }();
+    bundleCache[assetName] = pending;
+
+    try {
+      return await pending;
+    } catch (_) {
+      if (identical(bundleCache[assetName], pending)) {
+        bundleCache.remove(assetName);
+      }
+      rethrow;
+    }
   }
 
   factory SettingsContentBundle.fromJson(Map<String, Object?> json) {

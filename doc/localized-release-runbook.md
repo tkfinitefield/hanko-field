@@ -99,6 +99,7 @@ or CI secret path through `SUPPLY_JSON_KEY`.
 ```sh
 cd app/android
 SUPPLY_JSON_KEY=/path/to/google-play-service-account.json \
+SUPPLY_VALIDATE_ONLY=false \
 BUNDLE_PATH=/tmp/hanko-field-android-bundle \
 BUNDLE_APP_CONFIG=/tmp/hanko-field-android-bundle-config \
 bundle exec fastlane android internal

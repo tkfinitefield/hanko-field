@@ -13,8 +13,10 @@ PASS for the current release state.
 - Removed the `HankoLocalizations` typedef.
 - Removed the hardcoded `hankoSupportedLocales` constant.
 - Removed the `hankoLocalizationsDelegates` constant.
-- `MaterialApp` now reads supported locales and delegates directly from
-  `GeneratedHankoLocalizations`.
+- `MaterialApp` reads delegates from `GeneratedHankoLocalizations` and limits
+  runtime supported locales to registry entries with `app.enabled=true`.
+- Automatic platform and saved-locale selection is further limited to
+  registry entries with `app.selectable=true`.
 - App code now types localized helper inputs as `GeneratedHankoLocalizations`.
 - `make i18n-migration-cleanup-check` validates that these temporary wrappers
   do not return.
@@ -24,9 +26,10 @@ retained. It is user-state migration safety, not an active translation lookup
 mechanism, and removing it would silently discard a previously saved language
 preference for upgraded installs.
 
-No translation content, registry flags, store release flags, credentials,
-production support exports, polling, streaming, SSE, or WebSocket behavior was
-changed in this task.
+The 2026-07-14 review updates the Japanese onboarding copy from `origin/main`
+and demotes deferred pilot locales from app-selectable to render-only. Store
+release flags, credentials, production support exports, polling, streaming,
+SSE, and WebSocket behavior remain unchanged.
 
 ## Active Localization Mechanisms
 

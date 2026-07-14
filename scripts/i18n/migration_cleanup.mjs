@@ -128,8 +128,8 @@ async function validateSource(rootDir) {
 
   const appSource = await readSource(rootDir, 'app/lib/app/app.dart');
   if (appSource.ok) {
-    if (!appSource.value.includes('GeneratedHankoLocalizations.supportedLocales')) {
-      issues.push(createIssue('migration-cleanup-generated-locales', 'app/lib/app/app.dart', null, 'MaterialApp must use generated supportedLocales'));
+    if (!appSource.value.includes('supportedLocales: widget.supportedLocales')) {
+      issues.push(createIssue('migration-cleanup-registry-locales', 'app/lib/app/app.dart', null, 'MaterialApp must use registry-filtered runtime supportedLocales'));
     }
     if (!appSource.value.includes('GeneratedHankoLocalizations.localizationsDelegates')) {
       issues.push(createIssue('migration-cleanup-generated-delegates', 'app/lib/app/app.dart', null, 'MaterialApp must use generated localizationsDelegates'));
@@ -142,6 +142,9 @@ async function validateSource(rootDir) {
   if (registrySource.ok) {
     if (!registrySource.value.includes("assetPath = '../config/languages.json'")) {
       issues.push(createIssue('migration-cleanup-registry-path', 'app/lib/app/localization/language_registry.dart', null, 'app language registry must load config/languages.json'));
+    }
+    if (!registrySource.value.includes('List<Locale> get enabledLocales')) {
+      issues.push(createIssue('migration-cleanup-registry-locales', 'app/lib/app/localization/language_registry.dart', null, 'app language registry must expose enabled runtime locales'));
     }
   } else {
     issues.push(createIssue('migration-cleanup-source-missing', 'app/lib/app/localization/language_registry.dart', null, registrySource.message));

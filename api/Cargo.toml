@@ -10,6 +10,7 @@ base64 = "0.22"
 chrono = { version = "0.4", features = ["clock"] }
 firebase_sdk_rust = { path = "../../firebase-sdk-rust" }
 fontdue = "0.9"
+futures-util = "0.3"
 gcp_auth = "0.12"
 hex = "0.4"
 hmac = "0.12"

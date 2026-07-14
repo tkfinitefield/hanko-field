@@ -12,11 +12,13 @@ LOCALE ?= ja
 STRIPE_WEBHOOK_URL ?= http://localhost:3050/v1/payments/stripe/webhook
 GCP_PROD_PROJECT ?= hanko-field-prod
 GCP_PROD_REGION ?= asia-northeast1
+DOCKER_CARGO_TARGET_DIR ?= /tmp/hanko-field-cargo-target
 
 ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_ADMIN_MODE);,)
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
+DOCKER_CARGO_TARGET_EXPORT := export CARGO_TARGET_DIR=$${CARGO_TARGET_DIR:-$(DOCKER_CARGO_TARGET_DIR)};
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-web-prod store-metadata-check store-metadata-test google-play-metadata google-play-metadata-check google-play-metadata-test app-store-metadata app-store-metadata-check app-store-metadata-test screenshot-metadata screenshot-metadata-check screenshot-metadata-test android-fastlane-check android-fastlane-test ios-fastlane-check ios-fastlane-test release-secret-guardrails-check release-secret-guardrails-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-stubs i18n-stubs-check i18n-stubs-test i18n-holdouts i18n-holdouts-check i18n-holdouts-test i18n-layout-qa i18n-layout-qa-check i18n-layout-qa-test i18n-flag-stages i18n-flag-stages-check i18n-flag-stages-test i18n-freeze i18n-freeze-check i18n-freeze-manifest i18n-freeze-test i18n-diagnostics i18n-diagnostics-check i18n-diagnostics-test i18n-support-triage i18n-support-triage-check i18n-support-triage-test i18n-translation-patches i18n-translation-patches-check i18n-translation-patches-test i18n-migration-cleanup i18n-migration-cleanup-check i18n-migration-cleanup-test i18n-release-runbook i18n-release-runbook-check i18n-release-runbook-test i18n-export i18n-import i18n-handoff-test i18n-ci
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-api-prod deploy-web-prod store-metadata-check store-metadata-test google-play-metadata google-play-metadata-check google-play-metadata-test app-store-metadata app-store-metadata-check app-store-metadata-test screenshot-metadata screenshot-metadata-check screenshot-metadata-test android-fastlane-check android-fastlane-test ios-fastlane-check ios-fastlane-test release-secret-guardrails-check release-secret-guardrails-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-stubs i18n-stubs-check i18n-stubs-test i18n-holdouts i18n-holdouts-check i18n-holdouts-test i18n-layout-qa i18n-layout-qa-check i18n-layout-qa-test i18n-flag-stages i18n-flag-stages-check i18n-flag-stages-test i18n-freeze i18n-freeze-check i18n-freeze-manifest i18n-freeze-test i18n-diagnostics i18n-diagnostics-check i18n-diagnostics-test i18n-support-triage i18n-support-triage-check i18n-support-triage-test i18n-translation-patches i18n-translation-patches-check i18n-translation-patches-test i18n-migration-cleanup i18n-migration-cleanup-check i18n-migration-cleanup-test i18n-release-runbook i18n-release-runbook-check i18n-release-runbook-test i18n-export i18n-import i18n-handoff-test i18n-ci
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -35,6 +37,7 @@ help:
 	@echo "  make docker-admin   # Run Admin server in container"
 	@echo "  make docker-web     # Run Web server in container"
 	@echo "  make docker-dev     # Run API/Admin/Web together in container"
+	@echo "  make deploy-api-prod # Deploy API to Cloud Run with explicit project/region"
 	@echo "  make deploy-web-prod # Deploy Web to Cloud Run with explicit project/region"
 	@echo "  make stripe-listen  # Forward Stripe webhooks to the local API"
 	@echo "  make store-metadata-check # Validate release store metadata source JSON"
@@ -113,16 +116,19 @@ docker-shell:
 	$(COMPOSE) exec $(WORKSPACE_SERVICE) sh -lc '$(ENV_LOAD_CMD) exec devbox shell'
 
 docker-api:
-	$(COMPOSE) exec $(WORKSPACE_SERVICE) sh -lc 'set -e; $(ENV_LOAD_CMD) cd /workspace && devbox run -- make -C api run PORT=$${API_SERVER_PORT:-$(API_PORT)}'
+	$(COMPOSE) exec $(WORKSPACE_SERVICE) sh -lc 'set -e; $(DOCKER_CARGO_TARGET_EXPORT) $(ENV_LOAD_CMD) cd /workspace && devbox run -- make -C api run PORT=$${API_SERVER_PORT:-$(API_PORT)}'
 
 docker-admin:
-	$(COMPOSE) exec $(WORKSPACE_SERVICE) sh -lc 'set -e; $(ADMIN_MODE_EXPORT) $(ENV_LOAD_CMD) cd /workspace && devbox run -- make -C admin dev PORT=$${ADMIN_PORT:-$(ADMIN_PORT)} MODE=$${HANKO_ADMIN_MODE:-$(MODE)} LOCALE=$${HANKO_ADMIN_LOCALE:-$(LOCALE)}'
+	$(COMPOSE) exec $(WORKSPACE_SERVICE) sh -lc 'set -e; $(DOCKER_CARGO_TARGET_EXPORT) $(ADMIN_MODE_EXPORT) $(ENV_LOAD_CMD) cd /workspace && devbox run -- make -C admin dev PORT=$${ADMIN_PORT:-$(ADMIN_PORT)} MODE=$${HANKO_ADMIN_MODE:-$(MODE)} LOCALE=$${HANKO_ADMIN_LOCALE:-$(LOCALE)}'
 
 docker-web:
-	$(COMPOSE) exec $(WORKSPACE_SERVICE) sh -lc 'set -e; $(WEB_MODE_EXPORT) $(ENV_LOAD_CMD) cd /workspace && devbox run -- make -C web dev PORT=$${HANKO_WEB_PORT:-$(WEB_PORT)} MODE=$${HANKO_WEB_MODE:-$(MODE)} LOCALE=$${HANKO_WEB_LOCALE:-$(LOCALE)}'
+	$(COMPOSE) exec $(WORKSPACE_SERVICE) sh -lc 'set -e; $(DOCKER_CARGO_TARGET_EXPORT) $(WEB_MODE_EXPORT) $(ENV_LOAD_CMD) cd /workspace && devbox run -- make -C web dev PORT=$${HANKO_WEB_PORT:-$(WEB_PORT)} MODE=$${HANKO_WEB_MODE:-$(MODE)} LOCALE=$${HANKO_WEB_LOCALE:-$(LOCALE)}'
 
 docker-dev:
-	$(COMPOSE) exec $(WORKSPACE_SERVICE) sh -lc 'set -e; $(ADMIN_MODE_EXPORT) $(WEB_MODE_EXPORT) $(ENV_LOAD_CMD) cd /workspace; exec devbox run -- bash ./scripts/docker-dev.sh'
+	$(COMPOSE) exec $(WORKSPACE_SERVICE) sh -lc 'set -e; $(DOCKER_CARGO_TARGET_EXPORT) $(ADMIN_MODE_EXPORT) $(WEB_MODE_EXPORT) $(ENV_LOAD_CMD) cd /workspace; exec devbox run -- bash ./scripts/docker-dev.sh'
+
+deploy-api-prod:
+	./scripts/deploy-api-prod.sh
 
 deploy-web-prod:
 	./scripts/deploy-web-prod.sh

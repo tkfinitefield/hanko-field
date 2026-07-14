@@ -1,62 +1,63 @@
 {
   "task": "M7-T06",
   "date": "2026-06-18",
-  "decision": "keep_app_selectable_defer_public_web_indexing_and_store_release",
+  "decision": "keep_render_only_defer_app_selection_public_web_indexing_and_store_release",
   "languages": [
     {
       "route_code": "zh",
       "app_enabled": true,
-      "app_selectable": true,
+      "app_selectable": false,
       "web_enabled": true,
       "web_indexed": false,
       "release_enabled": false,
-      "decision": "app_selectable_web_indexing_deferred",
+      "decision": "render_only_app_selection_and_web_indexing_deferred",
       "evidence": [
-        "M7-T02 app content and settings content completed",
+        "Forced app rendering and settings asset loading verified",
         "M7-T03 web, payment, and SEO content completed",
         "M7-T04 API catalog and checkout locale preservation completed",
         "M7-T05 web top screenshot passed without horizontal overflow",
         "M7-T05 app Settings layout probe passed"
       ],
-      "deferred_until": "localized blog article bodies and metadata are available for web indexing; M8 store metadata and fastlane, then M9 production translation batches for release enablement"
+      "deferred_until": "deferred app ARB entries are translated for app selection; localized blog article bodies and metadata are available for web indexing; release gates pass for store enablement"
     },
     {
       "route_code": "zhtw",
       "app_enabled": true,
-      "app_selectable": true,
+      "app_selectable": false,
       "web_enabled": true,
       "web_indexed": false,
       "release_enabled": false,
-      "decision": "app_selectable_web_indexing_deferred",
+      "decision": "render_only_app_selection_and_web_indexing_deferred",
       "evidence": [
-        "M7-T02 app content and settings content completed",
+        "Forced app rendering and settings asset loading verified",
         "M7-T03 web, payment, and SEO content completed",
         "M7-T04 API catalog and checkout locale preservation completed",
         "M7-T05 web about screenshot passed without horizontal overflow",
         "M7-T05 app Design layout probe passed"
       ],
-      "deferred_until": "localized blog article bodies and metadata are available for web indexing; M8 store metadata and fastlane, then M9 production translation batches for release enablement"
+      "deferred_until": "deferred app ARB entries are translated for app selection; localized blog article bodies and metadata are available for web indexing; release gates pass for store enablement"
     },
     {
       "route_code": "ar",
       "app_enabled": true,
-      "app_selectable": true,
+      "app_selectable": false,
       "web_enabled": true,
       "web_indexed": false,
       "release_enabled": false,
-      "decision": "app_selectable_web_indexing_deferred",
+      "decision": "render_only_app_selection_and_web_indexing_deferred",
       "evidence": [
-        "M7-T02 app content and settings content completed",
+        "Forced app rendering and settings asset loading verified",
         "M7-T03 web, payment, and SEO content completed",
         "M7-T04 API catalog and checkout locale preservation completed",
         "M7-T05 web RTL screenshots passed without horizontal overflow",
         "M7-T05 app Checkout RTL layout probe passed"
       ],
-      "deferred_until": "localized blog article bodies and metadata are available for web indexing; M8 store metadata and fastlane, then M9 production translation batches for release enablement"
+      "deferred_until": "deferred app ARB entries are translated for app selection; localized blog article bodies and metadata are available for web indexing; release gates pass for store enablement"
     }
   ],
   "non_goals": [
     "Do not enable web.indexed while blog article bodies and metadata are only localized for English and Japanese.",
+    "Do not enable app.selectable while deferred app translation entries remain.",
     "Do not enable release.enabled before store metadata and fastlane guardrails exist.",
     "Do not index payment result pages.",
     "Do not change secret, signing, polling, streaming, SSE, or WebSocket behavior."

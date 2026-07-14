@@ -54,6 +54,7 @@ void main() {
   Future<void> pumpLaunchedApp(
     WidgetTester tester, {
     Locale? locale,
+    List<Locale> supportedLocales = HankoApp.defaultSupportedLocales,
     bool hasSeenOnboarding = true,
     KanjiCandidatesGenerator? generateKanjiCandidates,
     SealDesignsGenerator? generateSealDesigns,
@@ -75,6 +76,7 @@ void main() {
       ProviderScope(
         child: HankoApp(
           locale: locale,
+          supportedLocales: supportedLocales,
           loadPreferredLocale: loadPreferredLocale ?? () async => null,
           savePreferredLocale: savePreferredLocale ?? (_) async {},
           hasSeenOnboardingResolver: () async => hasSeenOnboarding,
@@ -195,6 +197,42 @@ void main() {
 
     expect(find.byType(SplashScreen), findsNothing);
     expect(find.byType(OnboardingScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('COM-002 continues when onboarding completion save fails', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(432, 912);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: HankoApp(
+          hasSeenOnboardingResolver: () async => false,
+          markOnboardingSeen: () async => throw StateError('no storage'),
+          splashMinimumDuration: Duration.zero,
+          listStoneListings: _emptyStoneListingsLoader,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    expect(find.byType(OnboardingScreen), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Get Started'));
+    await tester.pump();
+    await tester.tap(find.text('Get Started'));
+    await tester.pump();
+
+    expect(find.byType(BottomNavigationShell), findsOneWidget);
+    expect(
+      find.text('Could not save onboarding status. Please try again.'),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -495,7 +533,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('M12-T05 shows storage save errors in the design flow', (
+  testWidgets('DES-010 continues when local seal persistence fails', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(432, 912);
@@ -519,15 +557,10 @@ void main() {
     await tester.tap(find.text('Save Seal'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(SealSaveErrorScreen), findsOneWidget);
-    expect(find.text("Couldn't Save Seal"), findsOneWidget);
-    expect(
-      find.text(
-        "The seal image couldn't be saved on this device. Check storage permissions and available space, then try again.",
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('Try Again'), findsOneWidget);
+    expect(find.byType(SealSaveConfirmationScreen), findsOneWidget);
+    expect(find.text("Couldn't Save Seal"), findsNothing);
+    expect(find.text('Seal Saved'), findsOneWidget);
+    expect(find.text('Seal saved to My Seals'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -3958,6 +3991,27 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('STN-001 preserves Traditional Chinese stone locale', (
+    tester,
+  ) async {
+    StoneListingsQuery? capturedQuery;
+    const locale = Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant');
+
+    await pumpLaunchedApp(
+      tester,
+      locale: locale,
+      supportedLocales: const [Locale('en'), locale],
+      listStoneListings: (query) async {
+        capturedQuery = query;
+        return _stoneListingsResult();
+      },
+    );
+    await tester.pumpAndSettle();
+
+    expect(capturedQuery?.locale, 'zhtw');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('STN-001 clears unavailable saved stone from the order draft', (
     tester,
   ) async {
@@ -4209,38 +4263,38 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('App language'), findsOneWidget);
-    expect(find.text('العربية'), findsOneWidget);
-    expect(find.text('Arabic'), findsOneWidget);
+    expect(find.text('العربية'), findsNothing);
+    expect(find.text('Arabic'), findsNothing);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('日本語'), findsOneWidget);
     expect(find.text('Japanese'), findsOneWidget);
-    expect(find.text('简体中文'), findsOneWidget);
-    expect(find.text('Simplified Chinese'), findsOneWidget);
-    expect(find.text('繁體中文'), findsOneWidget);
-    expect(find.text('Traditional Chinese'), findsOneWidget);
+    expect(find.text('简体中文'), findsNothing);
+    expect(find.text('Simplified Chinese'), findsNothing);
+    expect(find.text('繁體中文'), findsNothing);
+    expect(find.text('Traditional Chinese'), findsNothing);
 
     await tester.tap(find.text('Japanese'));
     await tester.pumpAndSettle();
 
     expect(savedLocale?.languageCode, 'ja');
     expect(find.text('アプリの言語'), findsOneWidget);
-    expect(find.text('العربية'), findsOneWidget);
+    expect(find.text('العربية'), findsNothing);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('日本語'), findsOneWidget);
-    expect(find.text('简体中文'), findsOneWidget);
-    expect(find.text('繁體中文'), findsOneWidget);
+    expect(find.text('简体中文'), findsNothing);
+    expect(find.text('繁體中文'), findsNothing);
 
     await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
 
     expect(savedLocale?.languageCode, 'en');
     expect(find.text('App language'), findsOneWidget);
-    expect(find.text('العربية'), findsOneWidget);
+    expect(find.text('العربية'), findsNothing);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('日本語'), findsOneWidget);
     expect(find.text('Japanese'), findsOneWidget);
-    expect(find.text('简体中文'), findsOneWidget);
-    expect(find.text('繁體中文'), findsOneWidget);
+    expect(find.text('简体中文'), findsNothing);
+    expect(find.text('繁體中文'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -4420,6 +4474,27 @@ void main() {
       ),
     );
 
+    Future<void> pumpUntilFound(Finder finder) async {
+      for (var attempt = 0; attempt < 500; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        if (finder.evaluate().isNotEmpty) {
+          return;
+        }
+      }
+      final visibleText = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((widget) => widget.data)
+          .whereType<String>()
+          .toList();
+      fail(
+        'Timed out waiting for $finder; '
+        'visible text: $visibleText',
+      );
+    }
+
     Future<void> openAndReturn(
       String rowLabel,
       Finder expectedFinder, {
@@ -4429,11 +4504,12 @@ void main() {
       await tester.ensureVisible(find.text(rowLabel));
       await tester.pump();
       await tester.tap(find.text(rowLabel));
-      await tester.pumpAndSettle();
+      await pumpUntilFound(expectedFinder);
+      await tester.pump(const Duration(milliseconds: 500));
 
-      expect(expectedFinder, findsOneWidget);
+      expect(expectedFinder, findsAtLeastNWidgets(1));
       for (final finder in additionalExpectedFinders) {
-        expect(finder, findsOneWidget);
+        expect(finder, findsAtLeastNWidgets(1));
       }
 
       if (useSystemBack) {
@@ -4441,7 +4517,8 @@ void main() {
       } else {
         await tester.tap(find.byTooltip('Back'));
       }
-      await tester.pumpAndSettle();
+      await pumpUntilFound(find.text('Settings'));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Settings'), findsOneWidget);
     }

@@ -12,7 +12,7 @@
   "@onboardingTitle": {
     "description": "Localized app string for onboardingTitle."
   },
-  "onboardingHeroTitle": "数分で\n印影を作成",
+  "onboardingHeroTitle": "あなたの名前を\n美しい印影に",
   "@onboardingHeroTitle": {
     "description": "Localized app string for onboardingHeroTitle."
   },

@@ -1,13 +1,13 @@
 {
   "format_version": 1,
   "task": "M9-T06",
-  "frozen_at": "2026-06-18",
+  "frozen_at": "2026-07-14",
   "release_candidate": "next-app-release",
   "review_policy": {
     "translation_changes_after_freeze_require_explicit_review": true,
     "m0_t05_preservation_gates_recorded": true,
-    "current_task_changes_translations": false,
-    "current_task_changes_registry_flags": false,
+    "current_task_changes_translations": true,
+    "current_task_changes_registry_flags": true,
     "current_task_changes_release_credentials": false
   },
   "language_set": {
@@ -211,8 +211,8 @@
     },
     {
       "path": "app/lib/l10n/app_ja.arb",
-      "sha256": "fd86921532183f312dee01617104abc8611fafa7f005d9d3f55ad6b2e5a95f44",
-      "bytes": 68475
+      "sha256": "f09bb848cb96e4a9c34a1116d1e1941a6add07d972760d05d29a779e3464379a",
+      "bytes": 68490
     },
     {
       "path": "app/lib/l10n/app_zh.arb",
@@ -226,8 +226,8 @@
     },
     {
       "path": "config/languages.json",
-      "sha256": "4bcdde4bf44add3f22aaa27e46f5c11ba1bba5c34b2b89d1b8db6259a6e66a38",
-      "bytes": 39000
+      "sha256": "06fdec98741aa9f0e286629fdcbdd46b2ad4471a50b56361a9c9d6d5a1e88dda",
+      "bytes": 39003
     },
     {
       "path": "release/store_metadata/app_store/en-US/description.txt",

@@ -1,24 +1,42 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'api_json.dart';
 
 const _hankoApiBaseUrlOverride = String.fromEnvironment('HANKO_API_BASE_URL');
+const _hankoWebApiBaseUrlOverride = String.fromEnvironment(
+  'HANKO_WEB_API_BASE_URL',
+);
 const _legacyHankoAppProdApiBaseUrlOverride = String.fromEnvironment(
   'HANKO_APP_PROD_API_BASE_URL',
+);
+const productionHankoApiBaseUrl = String.fromEnvironment(
+  'HANKO_PRODUCTION_API_BASE_URL',
+  defaultValue: 'https://hanko-field-api-26orkkye6a-an.a.run.app',
 );
 
 final defaultHankoApiBaseUrl = resolveDefaultHankoApiBaseUrl();
 
-String resolveDefaultHankoApiBaseUrl({bool? isAndroid}) {
+String resolveDefaultHankoApiBaseUrl({bool? isAndroid, bool? isReleaseMode}) {
   final configured = _hankoApiBaseUrlOverride.trim();
   if (configured.isNotEmpty) {
     return configured;
   }
 
+  final webConfigured = _hankoWebApiBaseUrlOverride.trim();
+  if (webConfigured.isNotEmpty) {
+    return webConfigured;
+  }
+
   final legacyConfigured = _legacyHankoAppProdApiBaseUrlOverride.trim();
   if (legacyConfigured.isNotEmpty) {
     return legacyConfigured;
+  }
+
+  if (isReleaseMode ?? kReleaseMode) {
+    return productionHankoApiBaseUrl;
   }
 
   if (isAndroid ?? Platform.isAndroid) {
@@ -63,7 +81,21 @@ class HankoApiClient {
       ),
     );
 
-    final decoded = _decodeJsonObject(response.body, 'API response');
+    late final JsonMap decoded;
+    try {
+      decoded = _decodeJsonObject(response.body, 'API response');
+    } on FormatException catch (error) {
+      if (!response.isSuccess) {
+        throw HankoApiException(
+          statusCode: response.statusCode,
+          code: 'http_${response.statusCode}',
+          message: 'API request failed with a non-JSON response',
+          payload: {'parse_error': error.message, 'body': response.body},
+        );
+      }
+      rethrow;
+    }
+
     if (response.isSuccess) {
       return decoded;
     }
@@ -146,8 +178,9 @@ abstract interface class HankoApiTransport {
 
 class HankoHttpApiTransport implements HankoApiTransport {
   HankoHttpApiTransport({HttpClient? httpClient})
-    : _httpClient = httpClient ?? HttpClient();
+    : _httpClient = httpClient ?? (HttpClient()..connectionTimeout = _timeout);
 
+  static const _timeout = Duration(seconds: 120);
   final HttpClient _httpClient;
 
   @override
@@ -162,10 +195,10 @@ class HankoHttpApiTransport implements HankoApiTransport {
       httpRequest.add(utf8.encode(jsonEncode(body)));
     }
 
-    final response = await httpRequest.close();
+    final response = await httpRequest.close().timeout(_timeout);
     return HankoApiResponse(
       statusCode: response.statusCode,
-      body: await response.transform(utf8.decoder).join(),
+      body: await response.transform(utf8.decoder).join().timeout(_timeout),
     );
   }
 }

@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "task": "M11-T04",
-  "reviewed_at": "2026-06-18T23:59:00+09:00",
+  "reviewed_at": "2026-07-14T00:00:00+09:00",
   "cleanup_scope": {
     "source": "local release-gate cleanup",
     "notes": "This cleanup removes temporary localization migration wrappers while preserving durable user-state upgrade compatibility."
@@ -19,6 +19,10 @@
     {
       "kind": "language_registry",
       "path": "config/languages.json"
+    },
+    {
+      "kind": "runtime_supported_locales",
+      "path": "app/lib/app/localization/language_registry.dart"
     }
   ],
   "retained_compatibility": [
@@ -72,8 +76,8 @@
     }
   ],
   "preservation": {
-    "registry_flags_changed": false,
-    "translation_values_changed": false,
+    "registry_flags_changed": true,
+    "translation_values_changed": true,
     "release_enabled_changed": false,
     "credentials_changed": false,
     "production_support_export_committed": false,

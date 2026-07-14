@@ -10,10 +10,11 @@ release enablement.
 PASS for the current registry state.
 
 - `ja` remains the only non-English `web_indexed` locale.
-- `ar`, `zh`, and `zhtw` remain `app_selectable` and web-enabled with
-  `web.indexed=false` and `release.enabled=false`.
+- `ar`, `zh`, and `zhtw` are `render_only`: app/web rendering stays available
+  for forced QA, while app selection, web indexing, and release remain disabled.
 - The remaining 63 non-English route languages remain `disabled`.
-- No language flag is promoted by this task.
+- The three pilot locales are demoted from app-selectable until their deferred
+  translation entries are resolved.
 
 ## Transition Order
 
@@ -39,6 +40,8 @@ make i18n-flag-stages-check
 ## Guardrails
 
 - `app.selectable=true` requires `app.enabled=true`.
+- Deferred translation entries block app selection, web indexing, and store
+  release.
 - `web.indexed=true` requires `web.enabled=true`.
 - `release.enabled=true` requires app selectable, web indexed, Android and iOS
   store locale mappings, and store metadata source.

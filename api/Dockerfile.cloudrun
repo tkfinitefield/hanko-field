@@ -14,10 +14,7 @@ COPY firebase-sdk-rust /workspace/firebase-sdk-rust
 COPY hanko-field /workspace/hanko-field/api
 
 WORKDIR /workspace/hanko-field/api
-RUN cargo build --locked -j 1 \
-    --config 'profile.dev.debug=0' \
-    --config 'profile.dev.incremental=false' \
-    --config 'profile.dev.codegen-units=256'
+RUN cargo build --locked --release -j 1
 
 FROM debian:bookworm-slim AS runtime
 
@@ -27,8 +24,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Use the debug binary to keep build memory usage lower on Cloud Build.
-COPY --from=builder /workspace/hanko-field/api/target/debug/hanko-field-api /usr/local/bin/hanko-field-api
+COPY --from=builder /workspace/hanko-field/api/target/release/hanko-field-api /usr/local/bin/hanko-field-api
 
 ENV RUST_LOG=info
 

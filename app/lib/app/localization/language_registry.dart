@@ -12,6 +12,12 @@ class AppLanguageRegistry {
   final List<AppLanguageOption> languages;
   final List<AppLanguageOption> selectableLanguages;
 
+  List<Locale> get enabledLocales =>
+      _defaultFirstLocales(languages.where((language) => language.appEnabled));
+
+  List<Locale> get selectableLocales =>
+      _defaultFirstLocales(selectableLanguages);
+
   static const assetPath = '../config/languages.json';
 
   static Future<AppLanguageRegistry> load({AssetBundle? bundle}) async {
@@ -55,6 +61,31 @@ class AppLanguageRegistry {
     }
     for (final language in languages) {
       if (language.appEnabled && language.matchesLocale(locale)) {
+        return language;
+      }
+    }
+    return null;
+  }
+
+  AppLanguageOption? selectableLanguageForRouteCode(String? routeCode) {
+    final normalized = _normalizeRouteCode(routeCode);
+    if (normalized == null) {
+      return null;
+    }
+    for (final language in selectableLanguages) {
+      if (language.routeCode == normalized) {
+        return language;
+      }
+    }
+    return null;
+  }
+
+  AppLanguageOption? selectableLanguageForLocale(Locale? locale) {
+    if (locale == null) {
+      return null;
+    }
+    for (final language in selectableLanguages) {
+      if (language.matchesLocale(locale)) {
         return language;
       }
     }
@@ -146,6 +177,56 @@ String fallbackRouteCodeForLocale(Locale locale) {
   }
 
   return languageCode.isEmpty ? 'en' : languageCode;
+}
+
+Locale resolveAutomaticLocale(
+  List<Locale>? preferredLocales,
+  Iterable<Locale> selectableLocales, {
+  Locale fallbackLocale = const Locale('en'),
+}) {
+  final selectable = selectableLocales.toList(growable: false);
+  for (final preferred in preferredLocales ?? const <Locale>[]) {
+    for (final candidate in selectable) {
+      if (_sameLocale(candidate, preferred)) {
+        return candidate;
+      }
+    }
+    for (final candidate in selectable) {
+      if (candidate.languageCode == preferred.languageCode &&
+          (candidate.scriptCode == null ||
+              candidate.scriptCode == preferred.scriptCode)) {
+        return candidate;
+      }
+    }
+  }
+  for (final candidate in selectable) {
+    if (_sameLocale(candidate, fallbackLocale)) {
+      return candidate;
+    }
+  }
+  return selectable.isNotEmpty ? selectable.first : fallbackLocale;
+}
+
+List<Locale> _defaultFirstLocales(Iterable<AppLanguageOption> languages) {
+  final locales = languages.map((language) => language.locale).toList();
+  locales.sort((left, right) {
+    if (left.languageCode == 'en') {
+      return -1;
+    }
+    if (right.languageCode == 'en') {
+      return 1;
+    }
+    return fallbackRouteCodeForLocale(
+      left,
+    ).compareTo(fallbackRouteCodeForLocale(right));
+  });
+  return List<Locale>.unmodifiable(locales);
+}
+
+bool _sameLocale(Locale left, Locale right) {
+  return left.languageCode == right.languageCode &&
+      left.scriptCode == right.scriptCode &&
+      left.countryCode == right.countryCode;
 }
 
 List<Object?> _decodeList(String source, String path) {

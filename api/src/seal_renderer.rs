@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::{io::Cursor, sync::LazyLock};
 
 use anyhow::{Context, Result, anyhow, bail};
 use fontdue::{Font, FontSettings};
@@ -26,6 +26,26 @@ const INK_BOUNDS_ALPHA_THRESHOLD: u8 = 16;
 const DEFAULT_GLYPH_FONT_SIZE_PX: f32 = 720.0;
 const MIN_GLYPH_FONT_SIZE_PX: f32 = 32.0;
 const MAX_GLYPH_FONT_SIZE_PX: f32 = 1600.0;
+
+struct LoadedSealFontProfileAsset {
+    key: &'static str,
+    font_family: &'static str,
+    font: Font,
+}
+
+static LOADED_SEAL_FONT_PROFILE_ASSETS: LazyLock<Vec<LoadedSealFontProfileAsset>> =
+    LazyLock::new(|| {
+        seal_font_profile_assets()
+            .iter()
+            .map(|asset| LoadedSealFontProfileAsset {
+                key: asset.key,
+                font_family: asset.font_family,
+                font: load_font(asset).unwrap_or_else(|err| {
+                    panic!("failed to load bundled seal font {}: {err:#}", asset.key)
+                }),
+            })
+            .collect()
+    });
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -151,7 +171,7 @@ pub(crate) fn render_seal_glyphs_from_real_font_at_px(
 
     let mut failures = Vec::new();
     for profile_key in font_profile_fallback_order(requested_profile) {
-        let asset = seal_font_profile_asset(profile_key)?;
+        let asset = loaded_seal_font_profile_asset(profile_key)?;
         match render_glyph_run_with_asset(
             &selected_text,
             &chars,
@@ -234,6 +254,15 @@ fn seal_font_profile_asset(profile_key: &str) -> Result<&'static SealFontProfile
         .ok_or_else(|| anyhow!("seal font profile asset not found: {profile_key}"))
 }
 
+fn loaded_seal_font_profile_asset(
+    profile_key: &str,
+) -> Result<&'static LoadedSealFontProfileAsset> {
+    LOADED_SEAL_FONT_PROFILE_ASSETS
+        .iter()
+        .find(|asset| asset.key == profile_key)
+        .ok_or_else(|| anyhow!("loaded seal font profile asset not found: {profile_key}"))
+}
+
 fn load_font(asset: &SealFontProfileAsset) -> Result<Font> {
     Font::from_bytes(asset.bytes, FontSettings::default())
         .map_err(|err| anyhow!("failed to load {} font bytes: {err}", asset.key))
@@ -243,14 +272,13 @@ fn render_glyph_run_with_asset(
     selected_text: &str,
     chars: &[char],
     requested_profile: SealRecipeFontProfile,
-    asset: &'static SealFontProfileAsset,
+    asset: &'static LoadedSealFontProfileAsset,
     font_size_px: f32,
 ) -> Result<RenderedSealGlyphRun> {
-    let font = load_font(asset)?;
     let mut glyphs = Vec::with_capacity(chars.len());
 
     for character in chars {
-        let glyph_index = font.lookup_glyph_index(*character);
+        let glyph_index = asset.font.lookup_glyph_index(*character);
         if glyph_index == 0 {
             bail!(
                 "font profile {} does not contain selected glyph {}",
@@ -259,7 +287,7 @@ fn render_glyph_run_with_asset(
             );
         }
 
-        let (metrics, bitmap) = font.rasterize(*character, font_size_px);
+        let (metrics, bitmap) = asset.font.rasterize(*character, font_size_px);
         if metrics.width == 0 || metrics.height == 0 || bitmap.iter().all(|alpha| *alpha == 0) {
             bail!(
                 "font profile {} produced empty glyph bitmap for {}",

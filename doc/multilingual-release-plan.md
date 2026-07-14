@@ -3450,7 +3450,7 @@ git diff --cached --check
   Output: registry flags for `zh`, `zhtw`, and `ar` with `web.indexed=false`
   and `release.enabled=false`.
   Done when: pilot languages render in QA without public indexing.
-- [x] `M7-T02` Fill pilot app content.
+- [ ] `M7-T02` Fill pilot app content.
   Output: ARB and settings JSON for `zh`, `zhtw`, and `ar`.
   Done when: pilot app screens launch without fallback for primary UI.
 - [x] `M7-T03` Fill pilot web and payment content.
@@ -3531,19 +3531,19 @@ git diff --cached --check
 
 #### M7-T02 Pilot App Content
 
-Completed on 2026-06-18. Enabled `zh`, `zhtw`, and `ar` for app runtime
-selection and added the app content files required for primary app screens to
-launch without missing localization files or English fallback routing.
+Reopened on 2026-07-14. `zh`, `zhtw`, and `ar` remain available for forced app
+rendering, but user selection is disabled because their ARBs still contain
+deferred English fallback entries.
 
 Implementation notes:
 
 - Updated `config/languages.json`:
   - `zh.app.enabled=true`
-  - `zh.app.selectable=true`
+  - `zh.app.selectable=false`
   - `zhtw.app.enabled=true`
-  - `zhtw.app.selectable=true`
+  - `zhtw.app.selectable=false`
   - `ar.app.enabled=true`
-  - `ar.app.selectable=true`
+  - `ar.app.selectable=false`
   - `release.enabled=false` remains set for all three pilot languages.
 - Added `app/lib/l10n/app_ar.arb` and regenerated Flutter localization output.
 - Kept existing `app/lib/l10n/app_zh.arb` and `app/lib/l10n/app_zh_Hant.arb`.
@@ -3551,9 +3551,8 @@ Implementation notes:
 - Added Settings content JSON for `ar`, `zh`, and `zhtw`.
 - Updated Settings content loading to use route codes, so `zh` and `zhtw` do
   not collapse into the same `zh` file.
-- Added sidecars for same-as-English pilot app and Settings values with
-  `locale_not_release_enabled`, while preserving explicit reasons for brand,
-  URL, legal-entity, and payment-provider values.
+- Sidecars still contain deferred `locale_not_release_enabled` app entries.
+  These entries must be translated before this task can be checked again.
 - Updated app tests for generated localizations, registry selectability, and
   Settings content loading.
 
@@ -3762,13 +3761,13 @@ git diff --cached --check
 
 #### M7-T06 Pilot Public Readiness
 
-Completed on 2026-06-18. Kept `zh`, `zhtw`, and `ar` app-selectable, and
-deferred public web indexing and store release.
+Completed on 2026-07-14. Kept `zh`, `zhtw`, and `ar` render-only, and deferred
+app selection, public web indexing, and store release.
 
 Implementation notes:
 
 - Confirmed `config/languages.json` keeps:
-  - `app.enabled=true` and `app.selectable=true` for all three pilot languages.
+  - `app.enabled=true` and `app.selectable=false` for all three pilot languages.
   - `web.enabled=true` for all three pilot languages.
   - `web.indexed=false` for all three pilot languages.
   - `release.enabled=false` for all three pilot languages.
@@ -3782,9 +3781,9 @@ Per-language readiness decisions:
 
 | Locale | Decision | Evidence |
 | --- | --- | --- |
-| `zh` | App selectable; web indexing and store release deferred. | App content, web static/payment content, API catalog, checkout routing, web top screenshot, and app Settings layout probe passed. Web indexing waits for localized blog article bodies and metadata. |
-| `zhtw` | App selectable; web indexing and store release deferred. | App content, web static/payment content, API catalog, checkout routing, web about screenshot, and app Design layout probe passed. Web indexing waits for localized blog article bodies and metadata. |
-| `ar` | App selectable; web indexing and store release deferred. | App content, web static/payment content, API catalog, Arabic checkout, RTL web screenshots, and app Checkout RTL layout probe passed. Web indexing waits for localized blog article bodies and metadata. |
+| `zh` | Render-only; app selection, web indexing, and store release deferred. | Forced app/web rendering passes. App selection waits for deferred ARB entries; web indexing waits for localized blog article bodies and metadata. |
+| `zhtw` | Render-only; app selection, web indexing, and store release deferred. | Forced app/web rendering passes. App selection waits for deferred ARB entries; web indexing waits for localized blog article bodies and metadata. |
+| `ar` | Render-only; app selection, web indexing, and store release deferred. | Forced app/web RTL rendering passes. App selection waits for deferred ARB entries; web indexing waits for localized blog article bodies and metadata. |
 
 M0-T05 preservation evidence:
 
@@ -4628,9 +4627,8 @@ git diff --cached --check
 
 #### M9-T05 Staged Language Flags
 
-Completed on 2026-06-18. Added a staged language-flag readiness gate so future
-registry flag changes must move through explicit promotion stages with matching
-validation evidence.
+Updated on 2026-07-14. The staged language-flag readiness gate now blocks
+promotion while deferred translation entries remain.
 
 Implementation notes:
 
@@ -4650,6 +4648,8 @@ Implementation notes:
   state and includes the required evidence kinds for each non-empty stage.
 - The checker also enforces flag invariants:
   - `app.selectable=true` requires `app.enabled=true`.
+  - Deferred translation entries block app selection, web indexing, and store
+    release.
   - `web.indexed=true` requires `web.enabled=true`.
   - `release.enabled=true` requires app selectable, web indexed, Android and
     iOS store locale mappings, and store metadata source.
@@ -4657,9 +4657,9 @@ Implementation notes:
 Current stage results:
 
 - `web_indexed`: `ja`
-- `app_selectable`: `ar`, `zh`, `zhtw`
+- `render_only`: `ar`, `zh`, `zhtw`
+- `app_selectable`: none
 - `disabled`: the remaining 63 non-English route languages
-- `render_only`: none
 - `store_release_enabled`: none
 
 Transition policy:
@@ -4673,13 +4673,14 @@ Transition policy:
 - Each transition kind must be made in a separate PR or commit.
 - Each transition must update `doc/qa/m9-t05/flag-stages.json` with fresh
   evidence before the gate passes.
-- M9-T05 itself does not promote any language flags.
+- This correction demotes the three pilot locales from `app_selectable` to
+  `render_only`; future promotions still require a separate reviewed change.
 
 M0-T05 preservation evidence:
 
-- Existing translation values and registry flags remain unchanged.
-- No new language was made render-only, app-selectable, web-indexed, or
-  store-release-enabled.
+- Existing translation values remain unchanged.
+- `ar`, `zh`, and `zhtw` are no longer user-selectable while deferred copy
+  remains; forced render-only QA stays available.
 - `release.enabled=false` remains unchanged for all languages.
 - No credentials, signing files, uploads, polling, streaming, SSE, or WebSocket
   behavior were added.

@@ -33,7 +33,7 @@ test('fails when the old HankoLocalizations typedef returns', async () => {
   assert.ok(report.issues.some((issue) => issue.code === 'migration-wrapper-typedef'));
 });
 
-test('fails when MaterialApp stops using generated localization delegates', async () => {
+test('fails when MaterialApp stops using registry locales or generated delegates', async () => {
   const rootDir = await createTempRoot({
     appSource: [
       'class HankoApp {',
@@ -46,7 +46,7 @@ test('fails when MaterialApp stops using generated localization delegates', asyn
   const report = await buildMigrationCleanupReport({ rootDir });
 
   assert.equal(report.ok, false);
-  assert.ok(report.issues.some((issue) => issue.code === 'migration-cleanup-generated-locales'));
+  assert.ok(report.issues.some((issue) => issue.code === 'migration-cleanup-registry-locales'));
   assert.ok(report.issues.some((issue) => issue.code === 'migration-cleanup-generated-delegates'));
 });
 
@@ -112,14 +112,14 @@ function validLocalizationWrapper() {
 function validAppSource() {
   return [
     'class HankoApp {',
-    '  final supportedLocales = GeneratedHankoLocalizations.supportedLocales;',
+    '  final supportedLocales = widget.supportedLocales;',
     '  final localizationsDelegates = GeneratedHankoLocalizations.localizationsDelegates;',
     '}',
   ].join('\n');
 }
 
 function validRegistrySource() {
-  return "class AppLanguageRegistry { static const assetPath = '../config/languages.json'; }";
+  return "class AppLanguageRegistry { static const assetPath = '../config/languages.json'; List<Locale> get enabledLocales => []; }";
 }
 
 async function writeJson(rootDir, relativePath, value) {

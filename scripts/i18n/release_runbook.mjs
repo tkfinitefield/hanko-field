@@ -22,6 +22,7 @@ const REQUIRED_RUNBOOK_TOKENS = Object.freeze([
   'app/android/fastlane/Fastfile',
   'app/ios/fastlane/Fastfile',
   'SUPPLY_JSON_KEY',
+  'SUPPLY_VALIDATE_ONLY=false',
   'APP_STORE_CONNECT_API_KEY_PATH',
   'RELEASE_SIGNOFF_PATH',
   'RELEASE_SIGNOFF_CONFIRMATION',

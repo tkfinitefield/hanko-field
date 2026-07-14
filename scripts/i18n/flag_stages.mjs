@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { loadLanguageRegistry } from './registry.mjs';
+import { buildHoldoutReview } from './holdouts.mjs';
 
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const DEFAULT_EVIDENCE_PATH = 'doc/qa/m9-t05/flag-stages.json';
@@ -56,6 +57,18 @@ export async function buildFlagStageReport({
   const registry = await loadRegistry(rootDir);
   const currentStages = classifyLanguageStages(registry.languages);
   const issues = validateFlagInvariants(rootDir, registry.languages);
+  const holdoutReview = await buildHoldoutReview({ rootDir, langs: ['all'] });
+  if (!holdoutReview.ok) {
+    issues.push(
+      createIssue(
+        'flag-stage-holdout-review',
+        'scripts/i18n/holdouts.mjs',
+        null,
+        'holdout review must pass before language stages can be validated',
+      ),
+    );
+  }
+  issues.push(...validateDeferredPromotion(registry.languages, holdoutReview.entries));
   const evidenceResult = await readEvidence(rootDir, evidencePath);
 
   if (!evidenceResult.ok) {
@@ -139,6 +152,39 @@ export function stageForLanguage(language) {
     return 'render_only';
   }
   return 'disabled';
+}
+
+export function validateDeferredPromotion(languages, holdoutEntries) {
+  const promotedLocales = new Set(
+    languages
+      .filter(
+        (language) =>
+          language.app.selectable ||
+          language.web.indexed ||
+          language.release.enabled,
+      )
+      .map((language) => language.route_code),
+  );
+  const deferredCounts = new Map();
+  for (const entry of holdoutEntries) {
+    if (!entry.deferred || !promotedLocales.has(entry.target_locale)) {
+      continue;
+    }
+    deferredCounts.set(
+      entry.target_locale,
+      (deferredCounts.get(entry.target_locale) ?? 0) + 1,
+    );
+  }
+  return [...deferredCounts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([locale, count]) =>
+      createIssue(
+        'flag-stage-deferred-copy',
+        'config/languages.json',
+        locale,
+        `${count} deferred translation entries must be resolved before app selection, web indexing, or store release`,
+      ),
+    );
 }
 
 function validateFlagInvariants(rootDir, languages) {

@@ -9,26 +9,28 @@ void main() {
     final registry = await AppLanguageRegistry.load();
 
     expect(registry.selectableLanguages.map((language) => language.routeCode), [
-      'ar',
       'en',
+      'ja',
+    ]);
+    expect(
+      registry.selectableLanguages.map((language) => language.nativeName),
+      ['English', '日本語'],
+    );
+    expect(
+      registry.selectableLanguages.map((language) => language.englishName),
+      ['English', 'Japanese'],
+    );
+    expect(registry.enabledLocales.map(fallbackRouteCodeForLocale), [
+      'en',
+      'ar',
       'ja',
       'zh',
       'zhtw',
     ]);
-    expect(
-      registry.selectableLanguages.map((language) => language.nativeName),
-      ['العربية', 'English', '日本語', '简体中文', '繁體中文'],
-    );
-    expect(
-      registry.selectableLanguages.map((language) => language.englishName),
-      [
-        'Arabic',
-        'English',
-        'Japanese',
-        'Simplified Chinese',
-        'Traditional Chinese',
-      ],
-    );
+    expect(registry.selectableLocales.map(fallbackRouteCodeForLocale), [
+      'en',
+      'ja',
+    ]);
   });
 
   test('filters out app-disabled and non-selectable languages', () {
@@ -153,6 +155,25 @@ void main() {
         const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
       ),
       'zh',
+    );
+  });
+
+  test('automatic locale resolution excludes render-only locales', () {
+    const selectable = [Locale('en'), Locale('ja')];
+
+    expect(
+      resolveAutomaticLocale(const [Locale('ar')], selectable),
+      const Locale('en'),
+    );
+    expect(
+      resolveAutomaticLocale(const [
+        Locale.fromSubtags(languageCode: 'ja', countryCode: 'JP'),
+      ], selectable),
+      const Locale('ja'),
+    );
+    expect(
+      resolveAutomaticLocale(const [Locale('fr')], selectable),
+      const Locale('en'),
     );
   });
 

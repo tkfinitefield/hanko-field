@@ -9,6 +9,7 @@ import {
   classifyLanguageStages,
   renderFlagStageReport,
   stageForLanguage,
+  validateDeferredPromotion,
 } from './flag_stages.mjs';
 
 test('classifies staged locale flags from registry state', () => {
@@ -37,6 +38,34 @@ test('classifies staged locale flags from registry state', () => {
     web_indexed: ['ja'],
     store_release_enabled: ['it'],
   });
+});
+
+test('blocks public promotion while deferred translation entries remain', () => {
+  const languages = [
+    createLanguage('ar', {
+      app: { enabled: true, selectable: true },
+      web: { enabled: true, indexed: false, url_prefix: 'ar' },
+    }),
+    createLanguage('fr', {
+      app: { enabled: true, selectable: false },
+      web: { enabled: true, indexed: false, url_prefix: 'fr' },
+    }),
+  ];
+  const entries = [
+    { target_locale: 'ar', deferred: true },
+    { target_locale: 'ar', deferred: false },
+    { target_locale: 'fr', deferred: true },
+  ];
+
+  assert.deepEqual(validateDeferredPromotion(languages, entries), [
+    {
+      code: 'flag-stage-deferred-copy',
+      file: 'config/languages.json',
+      locale: 'ar',
+      message:
+        '1 deferred translation entries must be resolved before app selection, web indexing, or store release',
+    },
+  ]);
 });
 
 test('passes when evidence matches staged locale flags', async () => {

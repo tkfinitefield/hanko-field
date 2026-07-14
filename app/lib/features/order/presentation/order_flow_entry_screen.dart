@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../app/localization/app_localization.dart';
+import '../../../app/localization/language_registry.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/errors/core_errors.dart';
 import '../../../core/domain/money.dart';
@@ -341,7 +342,7 @@ class _CheckoutInputScreenState extends State<CheckoutInputScreen> {
     if (_isSaving) {
       return;
     }
-    final locale = Localizations.localeOf(context).languageCode;
+    final locale = fallbackRouteCodeForLocale(Localizations.localeOf(context));
     final input = _inputFromControllers(locale: locale);
     final errors = _validateInput(context, input);
     if (errors.isNotEmpty) {
@@ -1592,33 +1593,39 @@ class _CustomMadeAgreementCard extends StatelessWidget {
           const SizedBox(height: HankoSpacing.md),
           Text(l10n.customMadeAgreementMessage, style: HankoTextStyles.body),
           const SizedBox(height: HankoSpacing.sm),
-          CheckboxListTile(
-            key: const Key('order-confirm-kanji-design-checkbox'),
-            value: kanjiAndDesignConfirmed,
-            onChanged: onKanjiAndDesignChanged == null
-                ? null
-                : (value) => onKanjiAndDesignChanged?.call(value ?? false),
-            activeColor: HankoColors.red,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              l10n.confirmKanjiAndDesignLabel,
-              style: HankoTextStyles.body.copyWith(color: HankoColors.ink),
+          Material(
+            type: MaterialType.transparency,
+            child: CheckboxListTile(
+              key: const Key('order-confirm-kanji-design-checkbox'),
+              value: kanjiAndDesignConfirmed,
+              onChanged: onKanjiAndDesignChanged == null
+                  ? null
+                  : (value) => onKanjiAndDesignChanged?.call(value ?? false),
+              activeColor: HankoColors.red,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                l10n.confirmKanjiAndDesignLabel,
+                style: HankoTextStyles.body.copyWith(color: HankoColors.ink),
+              ),
             ),
           ),
           const Divider(color: HankoColors.surfaceBorder, height: 1),
-          CheckboxListTile(
-            key: const Key('order-confirm-custom-made-checkbox'),
-            value: customMadePolicyConfirmed,
-            onChanged: onCustomMadePolicyChanged == null
-                ? null
-                : (value) => onCustomMadePolicyChanged?.call(value ?? false),
-            activeColor: HankoColors.red,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              l10n.confirmCustomMadePolicyLabel,
-              style: HankoTextStyles.body.copyWith(color: HankoColors.ink),
+          Material(
+            type: MaterialType.transparency,
+            child: CheckboxListTile(
+              key: const Key('order-confirm-custom-made-checkbox'),
+              value: customMadePolicyConfirmed,
+              onChanged: onCustomMadePolicyChanged == null
+                  ? null
+                  : (value) => onCustomMadePolicyChanged?.call(value ?? false),
+              activeColor: HankoColors.red,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                l10n.confirmCustomMadePolicyLabel,
+                style: HankoTextStyles.body.copyWith(color: HankoColors.ink),
+              ),
             ),
           ),
         ],

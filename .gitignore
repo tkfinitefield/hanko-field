@@ -46,6 +46,7 @@ test_unused_var
 system-field-firebase-setup/
 
 .devbox/
+.gcloud/
 .go/
 
 hanko-field-firebase-adminsdk-fbsvc.json
