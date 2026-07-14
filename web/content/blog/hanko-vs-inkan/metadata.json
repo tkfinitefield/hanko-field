@@ -1,0 +1,22 @@
+{
+  "slug": "hanko-vs-inkan",
+  "published_date": "2026-05-07",
+  "last_modified_date": "2026-05-07",
+  "image_url": "/static/blog/hanko-vs-inkan.svg",
+  "locales": {
+    "en": {
+      "date_display": "May 7, 2026",
+      "title": "Hanko vs Inkan: What's the Difference?",
+      "excerpt": "Understand hanko vs inkan, what an inkan seal means, and how jitsuin, ginkoin, and mitomein fit into Japanese seal culture.",
+      "meta_description": "Hanko vs inkan explained. Learn the difference between a Japanese seal stamp, an inkan seal impression, jitsuin, ginkoin, and mitomein.",
+      "image_alt": "A Japanese hanko stamp beside a red inkan impression on paper."
+    },
+    "ja": {
+      "date_display": "2026年5月7日",
+      "title": "ハンコと印鑑の違いとは？",
+      "excerpt": "ハンコと印鑑の違い、inkan seal の意味、実印・銀行印・認印が日本の印章文化でどう使われるかを解説します。",
+      "meta_description": "ハンコと印鑑の違いを解説。日本の印章、inkan seal、実印、銀行印、認印の意味と使い分けをわかりやすく紹介します。",
+      "image_alt": "日本のハンコと、紙に押された赤い印鑑の印影。"
+    }
+  }
+}

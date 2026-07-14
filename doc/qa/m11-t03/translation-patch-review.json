@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "task": "M11-T03",
+  "reviewed_at": "2026-06-18T23:55:00+09:00",
+  "review_window": {
+    "source": "local release-gate evidence",
+    "production_rollout_started": false,
+    "support_export_available": false,
+    "notes": "M11-T02 recorded no support feedback records and no high-priority translation issues because M10-T07 production execution is not approved. This review validates the translation patch evidence shape before live rollout feedback exists."
+  },
+  "source_triage_evidence": "doc/qa/m11-t02/support-feedback-triage.json",
+  "store_release_enabled_locales": [],
+  "patches": [],
+  "summary": {
+    "high_priority_translation_issue_count": 0,
+    "patch_count": 0,
+    "unresolved_issue_count": 0,
+    "high_priority_translation_issues_patched": true,
+    "content_only_patches": true,
+    "i18n_check_passed": true,
+    "store_release_enabled_languages_clean": true,
+    "requires_live_support_refresh_after_m10_t07": true
+  },
+  "validation": [
+    {
+      "command": "node --check scripts/i18n/translation_patches.mjs",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-translation-patches-check",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-translation-patches-test",
+      "status": "pass"
+    },
+    {
+      "command": "jq empty doc/qa/m11-t03/translation-patch-review.json",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-check",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-ci",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --cached --check",
+      "status": "pass"
+    }
+  ],
+  "preservation": {
+    "registry_flags_changed": false,
+    "translation_values_changed": false,
+    "release_enabled_changed": false,
+    "credentials_changed": false,
+    "production_support_export_committed": false,
+    "polling_streaming_sse_websocket_changed": false
+  }
+}

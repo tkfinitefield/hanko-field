@@ -1,0 +1,312 @@
+{
+  "schema_version": 1,
+  "source_pattern": "release/store_metadata/screenshots/source/{route_code}/{device}/{NN}-{key}.png",
+  "prepared_pattern": "release/store_metadata/screenshots/{platform}/{store_locale}/{device}/{NN}-{key}.png",
+  "screenshot_keys": [
+    "design",
+    "stones",
+    "checkout"
+  ],
+  "devices": [
+    {
+      "id": "phone_6_5",
+      "label": "Phone 6.5 inch",
+      "capture_size": "1290x2796",
+      "google_play_image_type": "phoneScreenshots",
+      "app_store_device": "iphone_6_5"
+    },
+    {
+      "id": "tablet_12_9",
+      "label": "Tablet 12.9 inch",
+      "capture_size": "2048x2732",
+      "google_play_image_type": "tenInchScreenshots",
+      "app_store_device": "ipad_12_9"
+    }
+  ],
+  "locales": [
+    {
+      "route_code": "en",
+      "bcp47": "en",
+      "text_direction": "ltr",
+      "google_play_locale": "en-US",
+      "app_store_locale": "en-US",
+      "devices": [
+        {
+          "id": "phone_6_5",
+          "google_play_image_type": "phoneScreenshots",
+          "app_store_device": "iphone_6_5",
+          "slots": [
+            {
+              "key": "design",
+              "position": 1,
+              "caption": "Design your seal impression",
+              "source_path": "release/store_metadata/screenshots/source/en/phone_6_5/01-design.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/en-US/phone_6_5/01-design.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/en-US/phone_6_5/01-design.png"
+            },
+            {
+              "key": "stones",
+              "position": 2,
+              "caption": "Choose a one-of-a-kind stone",
+              "source_path": "release/store_metadata/screenshots/source/en/phone_6_5/02-stones.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/en-US/phone_6_5/02-stones.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/en-US/phone_6_5/02-stones.png"
+            },
+            {
+              "key": "checkout",
+              "position": 3,
+              "caption": "Order securely",
+              "source_path": "release/store_metadata/screenshots/source/en/phone_6_5/03-checkout.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/en-US/phone_6_5/03-checkout.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/en-US/phone_6_5/03-checkout.png"
+            }
+          ]
+        },
+        {
+          "id": "tablet_12_9",
+          "google_play_image_type": "tenInchScreenshots",
+          "app_store_device": "ipad_12_9",
+          "slots": [
+            {
+              "key": "design",
+              "position": 1,
+              "caption": "Design your seal impression",
+              "source_path": "release/store_metadata/screenshots/source/en/tablet_12_9/01-design.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/en-US/tablet_12_9/01-design.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/en-US/tablet_12_9/01-design.png"
+            },
+            {
+              "key": "stones",
+              "position": 2,
+              "caption": "Choose a one-of-a-kind stone",
+              "source_path": "release/store_metadata/screenshots/source/en/tablet_12_9/02-stones.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/en-US/tablet_12_9/02-stones.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/en-US/tablet_12_9/02-stones.png"
+            },
+            {
+              "key": "checkout",
+              "position": 3,
+              "caption": "Order securely",
+              "source_path": "release/store_metadata/screenshots/source/en/tablet_12_9/03-checkout.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/en-US/tablet_12_9/03-checkout.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/en-US/tablet_12_9/03-checkout.png"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route_code": "ja",
+      "bcp47": "ja",
+      "text_direction": "ltr",
+      "google_play_locale": "ja-JP",
+      "app_store_locale": "ja",
+      "devices": [
+        {
+          "id": "phone_6_5",
+          "google_play_image_type": "phoneScreenshots",
+          "app_store_device": "iphone_6_5",
+          "slots": [
+            {
+              "key": "design",
+              "position": 1,
+              "caption": "印影をデザイン",
+              "source_path": "release/store_metadata/screenshots/source/ja/phone_6_5/01-design.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/ja-JP/phone_6_5/01-design.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/ja/phone_6_5/01-design.png"
+            },
+            {
+              "key": "stones",
+              "position": 2,
+              "caption": "一点物の石を選択",
+              "source_path": "release/store_metadata/screenshots/source/ja/phone_6_5/02-stones.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/ja-JP/phone_6_5/02-stones.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/ja/phone_6_5/02-stones.png"
+            },
+            {
+              "key": "checkout",
+              "position": 3,
+              "caption": "安全に注文",
+              "source_path": "release/store_metadata/screenshots/source/ja/phone_6_5/03-checkout.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/ja-JP/phone_6_5/03-checkout.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/ja/phone_6_5/03-checkout.png"
+            }
+          ]
+        },
+        {
+          "id": "tablet_12_9",
+          "google_play_image_type": "tenInchScreenshots",
+          "app_store_device": "ipad_12_9",
+          "slots": [
+            {
+              "key": "design",
+              "position": 1,
+              "caption": "印影をデザイン",
+              "source_path": "release/store_metadata/screenshots/source/ja/tablet_12_9/01-design.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/ja-JP/tablet_12_9/01-design.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/ja/tablet_12_9/01-design.png"
+            },
+            {
+              "key": "stones",
+              "position": 2,
+              "caption": "一点物の石を選択",
+              "source_path": "release/store_metadata/screenshots/source/ja/tablet_12_9/02-stones.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/ja-JP/tablet_12_9/02-stones.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/ja/tablet_12_9/02-stones.png"
+            },
+            {
+              "key": "checkout",
+              "position": 3,
+              "caption": "安全に注文",
+              "source_path": "release/store_metadata/screenshots/source/ja/tablet_12_9/03-checkout.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/ja-JP/tablet_12_9/03-checkout.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/ja/tablet_12_9/03-checkout.png"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route_code": "zh",
+      "bcp47": "zh-Hans",
+      "text_direction": "ltr",
+      "google_play_locale": "zh-CN",
+      "app_store_locale": "zh-Hans",
+      "devices": [
+        {
+          "id": "phone_6_5",
+          "google_play_image_type": "phoneScreenshots",
+          "app_store_device": "iphone_6_5",
+          "slots": [
+            {
+              "key": "design",
+              "position": 1,
+              "caption": "设计你的印面",
+              "source_path": "release/store_metadata/screenshots/source/zh/phone_6_5/01-design.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-CN/phone_6_5/01-design.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hans/phone_6_5/01-design.png"
+            },
+            {
+              "key": "stones",
+              "position": 2,
+              "caption": "选择独一无二的石材",
+              "source_path": "release/store_metadata/screenshots/source/zh/phone_6_5/02-stones.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-CN/phone_6_5/02-stones.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hans/phone_6_5/02-stones.png"
+            },
+            {
+              "key": "checkout",
+              "position": 3,
+              "caption": "安全下单",
+              "source_path": "release/store_metadata/screenshots/source/zh/phone_6_5/03-checkout.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-CN/phone_6_5/03-checkout.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hans/phone_6_5/03-checkout.png"
+            }
+          ]
+        },
+        {
+          "id": "tablet_12_9",
+          "google_play_image_type": "tenInchScreenshots",
+          "app_store_device": "ipad_12_9",
+          "slots": [
+            {
+              "key": "design",
+              "position": 1,
+              "caption": "设计你的印面",
+              "source_path": "release/store_metadata/screenshots/source/zh/tablet_12_9/01-design.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-CN/tablet_12_9/01-design.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hans/tablet_12_9/01-design.png"
+            },
+            {
+              "key": "stones",
+              "position": 2,
+              "caption": "选择独一无二的石材",
+              "source_path": "release/store_metadata/screenshots/source/zh/tablet_12_9/02-stones.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-CN/tablet_12_9/02-stones.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hans/tablet_12_9/02-stones.png"
+            },
+            {
+              "key": "checkout",
+              "position": 3,
+              "caption": "安全下单",
+              "source_path": "release/store_metadata/screenshots/source/zh/tablet_12_9/03-checkout.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-CN/tablet_12_9/03-checkout.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hans/tablet_12_9/03-checkout.png"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route_code": "zhtw",
+      "bcp47": "zh-Hant",
+      "text_direction": "ltr",
+      "google_play_locale": "zh-TW",
+      "app_store_locale": "zh-Hant",
+      "devices": [
+        {
+          "id": "phone_6_5",
+          "google_play_image_type": "phoneScreenshots",
+          "app_store_device": "iphone_6_5",
+          "slots": [
+            {
+              "key": "design",
+              "position": 1,
+              "caption": "設計你的印面",
+              "source_path": "release/store_metadata/screenshots/source/zhtw/phone_6_5/01-design.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-TW/phone_6_5/01-design.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hant/phone_6_5/01-design.png"
+            },
+            {
+              "key": "stones",
+              "position": 2,
+              "caption": "選擇獨一無二的石材",
+              "source_path": "release/store_metadata/screenshots/source/zhtw/phone_6_5/02-stones.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-TW/phone_6_5/02-stones.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hant/phone_6_5/02-stones.png"
+            },
+            {
+              "key": "checkout",
+              "position": 3,
+              "caption": "安全下單",
+              "source_path": "release/store_metadata/screenshots/source/zhtw/phone_6_5/03-checkout.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-TW/phone_6_5/03-checkout.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hant/phone_6_5/03-checkout.png"
+            }
+          ]
+        },
+        {
+          "id": "tablet_12_9",
+          "google_play_image_type": "tenInchScreenshots",
+          "app_store_device": "ipad_12_9",
+          "slots": [
+            {
+              "key": "design",
+              "position": 1,
+              "caption": "設計你的印面",
+              "source_path": "release/store_metadata/screenshots/source/zhtw/tablet_12_9/01-design.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-TW/tablet_12_9/01-design.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hant/tablet_12_9/01-design.png"
+            },
+            {
+              "key": "stones",
+              "position": 2,
+              "caption": "選擇獨一無二的石材",
+              "source_path": "release/store_metadata/screenshots/source/zhtw/tablet_12_9/02-stones.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-TW/tablet_12_9/02-stones.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hant/tablet_12_9/02-stones.png"
+            },
+            {
+              "key": "checkout",
+              "position": 3,
+              "caption": "安全下單",
+              "source_path": "release/store_metadata/screenshots/source/zhtw/tablet_12_9/03-checkout.png",
+              "google_play_path": "release/store_metadata/screenshots/google_play/zh-TW/tablet_12_9/03-checkout.png",
+              "app_store_path": "release/store_metadata/screenshots/app_store/zh-Hant/tablet_12_9/03-checkout.png"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

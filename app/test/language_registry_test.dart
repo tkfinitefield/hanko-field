@@ -1,0 +1,213 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hankofield/app/localization/language_registry.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('loads selectable app languages from the checked-in registry', () async {
+    final registry = await AppLanguageRegistry.load();
+
+    expect(registry.selectableLanguages.map((language) => language.routeCode), [
+      'en',
+      'ja',
+    ]);
+    expect(
+      registry.selectableLanguages.map((language) => language.nativeName),
+      ['English', '日本語'],
+    );
+    expect(
+      registry.selectableLanguages.map((language) => language.englishName),
+      ['English', 'Japanese'],
+    );
+    expect(registry.enabledLocales.map(fallbackRouteCodeForLocale), [
+      'en',
+      'ar',
+      'ja',
+      'zh',
+      'zhtw',
+    ]);
+    expect(registry.selectableLocales.map(fallbackRouteCodeForLocale), [
+      'en',
+      'ja',
+    ]);
+  });
+
+  test('filters out app-disabled and non-selectable languages', () {
+    final registry = AppLanguageRegistry.fromJson([
+      _language(
+        routeCode: 'en',
+        nativeName: 'English',
+        englishName: 'English',
+        appEnabled: true,
+        appSelectable: true,
+      ),
+      _language(
+        routeCode: 'zh',
+        nativeName: '简体中文',
+        englishName: 'Simplified Chinese',
+        appEnabled: true,
+        appSelectable: false,
+      ),
+      _language(
+        routeCode: 'fr',
+        nativeName: 'Français',
+        englishName: 'French',
+        appEnabled: false,
+        appSelectable: true,
+      ),
+    ]);
+
+    expect(registry.selectableLanguages, hasLength(1));
+    expect(registry.selectableLanguages.single.routeCode, 'en');
+  });
+
+  test('builds locale and display labels from registry fields', () {
+    final registry = AppLanguageRegistry.fromJson([
+      _language(
+        routeCode: 'zhtw',
+        languageCode: 'zh',
+        scriptCode: 'Hant',
+        nativeName: '繁體中文',
+        englishName: 'Traditional Chinese',
+        appEnabled: true,
+        appSelectable: true,
+      ),
+    ]);
+
+    final language = registry.selectableLanguages.single;
+
+    expect(
+      language.locale,
+      const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+    );
+    expect(language.nativeName, '繁體中文');
+    expect(language.englishNameLabel, 'Traditional Chinese');
+    expect(language.textDirection, TextDirection.ltr);
+    expect(
+      language.matchesLocale(
+        const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+      ),
+      isTrue,
+    );
+    expect(registry.enabledLanguageForRouteCode(' ZHTW ')?.routeCode, 'zhtw');
+    expect(
+      registry
+          .enabledLanguageForLocale(
+            const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+          )
+          ?.routeCode,
+      'zhtw',
+    );
+  });
+
+  test('does not resolve app-disabled languages for runtime locale use', () {
+    final registry = AppLanguageRegistry.fromJson([
+      _language(
+        routeCode: 'zh',
+        nativeName: '简体中文',
+        englishName: 'Simplified Chinese',
+        appEnabled: false,
+        appSelectable: false,
+      ),
+    ]);
+
+    expect(registry.enabledLanguageForRouteCode('zh'), isNull);
+    expect(registry.enabledLanguageForLocale(const Locale('zh')), isNull);
+    expect(registry.routeCodeForLocale(const Locale('zh')), 'zh');
+  });
+
+  test('resolves route code for checked-in pilot locales', () async {
+    final registry = await AppLanguageRegistry.load();
+
+    expect(
+      registry.routeCodeForLocale(
+        const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+      ),
+      'zhtw',
+    );
+    expect(registry.enabledLanguageForRouteCode('ar')?.locale, Locale('ar'));
+    expect(
+      registry
+          .enabledLanguageForLocale(
+            const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
+          )
+          ?.routeCode,
+      'zh',
+    );
+  });
+
+  test('fallback route code preserves traditional Chinese route code', () {
+    expect(
+      fallbackRouteCodeForLocale(
+        const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+      ),
+      'zhtw',
+    );
+    expect(
+      fallbackRouteCodeForLocale(
+        const Locale.fromSubtags(languageCode: 'zh', countryCode: 'TW'),
+      ),
+      'zhtw',
+    );
+    expect(
+      fallbackRouteCodeForLocale(
+        const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
+      ),
+      'zh',
+    );
+  });
+
+  test('automatic locale resolution excludes render-only locales', () {
+    const selectable = [Locale('en'), Locale('ja')];
+
+    expect(
+      resolveAutomaticLocale(const [Locale('ar')], selectable),
+      const Locale('en'),
+    );
+    expect(
+      resolveAutomaticLocale(const [
+        Locale.fromSubtags(languageCode: 'ja', countryCode: 'JP'),
+      ], selectable),
+      const Locale('ja'),
+    );
+    expect(
+      resolveAutomaticLocale(const [Locale('fr')], selectable),
+      const Locale('en'),
+    );
+  });
+
+  test('parses RTL registry entries for layout probes', () async {
+    final registry = await AppLanguageRegistry.load();
+    final arabic = registry.languages.singleWhere(
+      (language) => language.routeCode == 'ar',
+    );
+
+    expect(arabic.textDirection, TextDirection.rtl);
+  });
+}
+
+Map<String, Object?> _language({
+  required String routeCode,
+  String? languageCode,
+  String? scriptCode,
+  String? countryCode,
+  required String nativeName,
+  required String englishName,
+  TextDirection textDirection = TextDirection.ltr,
+  required bool appEnabled,
+  required bool appSelectable,
+}) {
+  return {
+    'route_code': routeCode,
+    'flutter': {
+      'languageCode': languageCode ?? routeCode,
+      'scriptCode': scriptCode,
+      'countryCode': countryCode,
+    },
+    'native_name': nativeName,
+    'english_name': englishName,
+    'text_direction': textDirection == TextDirection.rtl ? 'rtl' : 'ltr',
+    'app': {'enabled': appEnabled, 'selectable': appSelectable},
+  };
+}

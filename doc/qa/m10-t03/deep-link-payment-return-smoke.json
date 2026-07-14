@@ -1,0 +1,201 @@
+{
+  "format_version": 1,
+  "task": "M10-T03",
+  "date": "2026-06-18",
+  "result": "pass",
+  "scope": "static and unit-level smoke coverage for deep links and payment returns",
+  "pilot_route_codes": [
+    "zh",
+    "zhtw",
+    "ar"
+  ],
+  "baseline_route_codes": [
+    "en",
+    "ja"
+  ],
+  "surfaces": {
+    "custom_scheme": {
+      "scheme": "hankofield",
+      "paths": [
+        "hankofield://checkout/success",
+        "hankofield://checkout/cancel",
+        "hankofield://checkout/failure"
+      ],
+      "route_code_source": "lang query parameter",
+      "status": "pass"
+    },
+    "android_app_links": {
+      "hosts": [
+        "finitefield.org",
+        "www.finitefield.org"
+      ],
+      "path_prefixes": [
+        "/payment",
+        "/en/payment",
+        "/ja/payment",
+        "/zh/payment",
+        "/zhtw/payment",
+        "/ar/payment"
+      ],
+      "status": "pass"
+    },
+    "ios_universal_links": {
+      "associated_domains": [
+        "applinks:finitefield.org",
+        "applinks:www.finitefield.org"
+      ],
+      "localized_paths_documented": [
+        "/payment/*",
+        "/en/payment/*",
+        "/ja/payment/*",
+        "/zh/payment/*",
+        "/zhtw/payment/*",
+        "/ar/payment/*"
+      ],
+      "status": "pass"
+    },
+    "web_payment_paths": {
+      "localized_routes": [
+        "/payment/success",
+        "/payment/cancel",
+        "/payment/failure",
+        "/en/payment/success",
+        "/ja/payment/success",
+        "/zh/payment/success",
+        "/zhtw/payment/success",
+        "/ar/payment/success"
+      ],
+      "app_return_marker": "return_to=app on success return URLs",
+      "status": "pass"
+    },
+    "api_stripe_return_urls": {
+      "normalized_order_locales": [
+        {
+          "order_locale": "zh-Hans",
+          "route_code": "zh"
+        },
+        {
+          "order_locale": "zh-Hant",
+          "route_code": "zhtw"
+        },
+        {
+          "order_locale": "ar",
+          "route_code": "ar"
+        }
+      ],
+      "status": "pass"
+    }
+  },
+  "smoke_cases": [
+    {
+      "surface": "custom_scheme",
+      "input": "hankofield://checkout/success?checkout=success&order_id=order_1&session_id=cs_test_zh&lang=zh&return_to=app",
+      "expected": "success outcome with locale zh",
+      "status": "pass"
+    },
+    {
+      "surface": "custom_scheme",
+      "input": "hankofield://checkout/cancel?checkout=cancel&order_id=order_1&lang=zhtw&return_to=app",
+      "expected": "cancel outcome with locale zhtw",
+      "status": "pass"
+    },
+    {
+      "surface": "custom_scheme",
+      "input": "hankofield://checkout/success?checkout=success&order_id=order_1&session_id=cs_test_ar&lang=ar&return_to=app",
+      "expected": "success outcome with locale ar",
+      "status": "pass"
+    },
+    {
+      "surface": "universal_or_app_link",
+      "input": "https://finitefield.org/zh/payment/success?checkout=success&order_id=ord_zh&session_id=cs_test_zh&return_to=app",
+      "expected": "success outcome with inferred locale zh",
+      "status": "pass"
+    },
+    {
+      "surface": "universal_or_app_link",
+      "input": "https://finitefield.org/zhtw/payment/success?checkout=success&order_id=ord_zhtw&session_id=cs_test_zhtw&return_to=app",
+      "expected": "success outcome with inferred locale zhtw",
+      "status": "pass"
+    },
+    {
+      "surface": "universal_or_app_link",
+      "input": "https://finitefield.org/ar/payment/success?checkout=success&order_id=ord_ar&session_id=cs_test_ar&return_to=app",
+      "expected": "success outcome with inferred locale ar",
+      "status": "pass"
+    },
+    {
+      "surface": "web_payment_path",
+      "input": "https://finitefield.org/ar/payment/success?checkout=success&session_id=sess_123&order_id=ord_456&return_to=app",
+      "expected": "localized payment URL preserves route code and app return marker",
+      "status": "pass"
+    },
+    {
+      "surface": "invalid_route",
+      "input": "https://finitefield.org/not-payment/success?checkout=success",
+      "expected": "no checkout return result",
+      "status": "pass"
+    }
+  ],
+  "validation": [
+    {
+      "command": "jq empty doc/qa/m10-t03/deep-link-payment-return-smoke.json",
+      "status": "pass"
+    },
+    {
+      "command": "cd app && flutter test test/checkout_return_test.dart test/platform_deep_link_config_test.dart",
+      "status": "pass"
+    },
+    {
+      "command": "cargo test --manifest-path api/Cargo.toml stripe_checkout_return_urls_preserve_normalized_route_code -- --nocapture",
+      "status": "pass"
+    },
+    {
+      "command": "cargo test --manifest-path api/Cargo.toml pilot_checkout_return_urls_preserve_arabic_route_code -- --nocapture",
+      "status": "pass"
+    },
+    {
+      "command": "cargo test --manifest-path web/Cargo.toml payment_result_urls_preserve_app_return_marker -- --nocapture",
+      "status": "pass"
+    },
+    {
+      "command": "cargo test --manifest-path web/Cargo.toml pilot_payment_result_urls_preserve_app_return_route_codes -- --nocapture",
+      "status": "pass"
+    },
+    {
+      "command": "cargo test --manifest-path web/Cargo.toml app_checkout_success_page_does_not_auto_redirect_to_custom_scheme -- --nocapture",
+      "status": "pass"
+    },
+    {
+      "command": "cargo test --manifest-path web/Cargo.toml pilot_payment_routes_render_localized_copy -- --nocapture",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-ci",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --cached --check",
+      "status": "pass"
+    }
+  ],
+  "limitations": {
+    "live_device_install_tested": false,
+    "hosted_assetlinks_tested": false,
+    "hosted_aasa_tested": false,
+    "stripe_network_checkout_tested": false,
+    "store_upload_performed": false,
+    "notes": "This task verifies repository configuration and parser/URL behavior. Live install, hosted association files, and store upload checks remain in later release tasks."
+  },
+  "preservation": {
+    "registry_flags_changed": false,
+    "translation_values_changed": false,
+    "release_enabled_changed": false,
+    "credentials_changed": false,
+    "upload_performed": false,
+    "polling_streaming_sse_websocket_changed": false
+  }
+}

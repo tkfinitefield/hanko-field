@@ -18,7 +18,7 @@ ADMIN_MODE_EXPORT := $(if $(HANKO_ADMIN_MODE),export HANKO_ADMIN_MODE=$(HANKO_AD
 WEB_MODE_EXPORT := $(if $(HANKO_WEB_MODE),export HANKO_WEB_MODE=$(HANKO_WEB_MODE);,)
 DOCKER_CARGO_TARGET_EXPORT := export CARGO_TARGET_DIR=$${CARGO_TARGET_DIR:-$(DOCKER_CARGO_TARGET_DIR)};
 
-.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-api-prod deploy-web-prod
+.PHONY: help docker-up docker-down docker-shell docker-api docker-admin docker-web docker-dev stripe-listen deploy-api-prod deploy-web-prod store-metadata-check store-metadata-test google-play-metadata google-play-metadata-check google-play-metadata-test app-store-metadata app-store-metadata-check app-store-metadata-test screenshot-metadata screenshot-metadata-check screenshot-metadata-test android-fastlane-check android-fastlane-test ios-fastlane-check ios-fastlane-test release-secret-guardrails-check release-secret-guardrails-test i18n-registry-test i18n-status i18n-status-test i18n-todo i18n-todo-test i18n-check i18n-check-test i18n-arb-test i18n-json-shape-test i18n-intentions-test i18n-stubs i18n-stubs-check i18n-stubs-test i18n-holdouts i18n-holdouts-check i18n-holdouts-test i18n-layout-qa i18n-layout-qa-check i18n-layout-qa-test i18n-flag-stages i18n-flag-stages-check i18n-flag-stages-test i18n-freeze i18n-freeze-check i18n-freeze-manifest i18n-freeze-test i18n-diagnostics i18n-diagnostics-check i18n-diagnostics-test i18n-support-triage i18n-support-triage-check i18n-support-triage-test i18n-translation-patches i18n-translation-patches-check i18n-translation-patches-test i18n-migration-cleanup i18n-migration-cleanup-check i18n-migration-cleanup-test i18n-release-runbook i18n-release-runbook-check i18n-release-runbook-test i18n-export i18n-import i18n-handoff-test i18n-ci
 
 ifneq ($(wildcard $(ENV_FILE)),)
 COMPOSE_ENV_FILE_OPT := --env-file $(ENV_FILE)
@@ -40,6 +40,65 @@ help:
 	@echo "  make deploy-api-prod # Deploy API to Cloud Run with explicit project/region"
 	@echo "  make deploy-web-prod # Deploy Web to Cloud Run with explicit project/region"
 	@echo "  make stripe-listen  # Forward Stripe webhooks to the local API"
+	@echo "  make store-metadata-check # Validate release store metadata source JSON"
+	@echo "  make store-metadata-test # Validate release store metadata helpers"
+	@echo "  make google-play-metadata # Generate Google Play metadata folders"
+	@echo "  make google-play-metadata-check # Check generated Google Play metadata"
+	@echo "  make google-play-metadata-test # Validate Google Play metadata generator"
+	@echo "  make app-store-metadata # Generate App Store metadata folders"
+	@echo "  make app-store-metadata-check # Check generated App Store metadata"
+	@echo "  make app-store-metadata-test # Validate App Store metadata generator"
+	@echo "  make screenshot-metadata # Generate store screenshot manifest"
+	@echo "  make screenshot-metadata-check # Check generated store screenshot manifest"
+	@echo "  make screenshot-metadata-test # Validate store screenshot workflow"
+	@echo "  make android-fastlane-check # Validate Android fastlane metadata lanes"
+	@echo "  make android-fastlane-test # Test Android fastlane config checks"
+	@echo "  make ios-fastlane-check # Validate iOS fastlane metadata lanes"
+	@echo "  make ios-fastlane-test # Test iOS fastlane config checks"
+	@echo "  make release-secret-guardrails-check # Validate release secret ignore rules"
+	@echo "  make release-secret-guardrails-test # Test release secret guardrails"
+	@echo "  make i18n-status    # Report localization registry and missing files"
+	@echo "  make i18n-todo      # Report missing localization keys"
+	@echo "  make i18n-check     # Validate localization registry, files, and missing keys"
+	@echo "  make i18n-arb-test  # Validate ARB placeholder and ICU checks"
+	@echo "  make i18n-json-shape-test # Validate JSON shape and fallback checks"
+	@echo "  make i18n-intentions-test # Validate intention sidecar checks"
+	@echo "  make i18n-stubs     # Create missing locale stub files for translation"
+	@echo "  make i18n-stubs-check # Check missing locale stub files"
+	@echo "  make i18n-stubs-test # Validate locale stub helpers"
+	@echo "  make i18n-holdouts  # Report approved English/legal holdouts"
+	@echo "  make i18n-holdouts-check # Check approved holdout sidecars"
+	@echo "  make i18n-holdouts-test # Validate holdout review helpers"
+	@echo "  make i18n-layout-qa # Report tiered localization layout QA"
+	@echo "  make i18n-layout-qa-check # Check tiered layout QA evidence"
+	@echo "  make i18n-layout-qa-test # Validate layout QA helpers"
+	@echo "  make i18n-flag-stages # Report staged language flag readiness"
+	@echo "  make i18n-flag-stages-check # Check staged language flag evidence"
+	@echo "  make i18n-flag-stages-test # Validate staged flag helpers"
+	@echo "  make i18n-freeze    # Report release-candidate translation freeze"
+	@echo "  make i18n-freeze-check # Check release-candidate translation freeze"
+	@echo "  make i18n-freeze-manifest # Rewrite freeze manifest after review"
+	@echo "  make i18n-freeze-test # Validate translation freeze helpers"
+	@echo "  make i18n-diagnostics # Report locale diagnostics monitoring evidence"
+	@echo "  make i18n-diagnostics-check # Check locale diagnostics monitoring evidence"
+	@echo "  make i18n-diagnostics-test # Validate locale diagnostics monitoring helper"
+	@echo "  make i18n-support-triage # Report support feedback triage evidence"
+	@echo "  make i18n-support-triage-check # Check support feedback triage evidence"
+	@echo "  make i18n-support-triage-test # Validate support feedback triage helper"
+	@echo "  make i18n-translation-patches # Report high-priority translation patch evidence"
+	@echo "  make i18n-translation-patches-check # Check high-priority translation patch evidence"
+	@echo "  make i18n-translation-patches-test # Validate high-priority translation patch helper"
+	@echo "  make i18n-migration-cleanup # Report migration wrapper cleanup evidence"
+	@echo "  make i18n-migration-cleanup-check # Check migration wrapper cleanup evidence"
+	@echo "  make i18n-migration-cleanup-test # Validate migration wrapper cleanup helper"
+	@echo "  make i18n-release-runbook # Report localized release runbook evidence"
+	@echo "  make i18n-release-runbook-check # Check localized release runbook evidence"
+	@echo "  make i18n-release-runbook-test # Validate localized release runbook helper"
+	@echo "  make i18n-export    # Export translation handoff JSON"
+	@echo "  make i18n-import    # Import translation handoff JSON with IN=<file>"
+	@echo "  make i18n-handoff-test # Validate translation handoff helpers"
+	@echo "  make i18n-ci        # Run localization checks used by CI"
+	@echo "  make i18n-registry-test # Validate the language registry parser"
 	@echo ""
 	@echo "Options:"
 	@echo "  ENV=dev|prod"
@@ -76,3 +135,256 @@ deploy-web-prod:
 
 stripe-listen:
 	@set -e; if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; stripe listen --forward-to "$${STRIPE_WEBHOOK_URL:-$(STRIPE_WEBHOOK_URL)}"
+
+i18n-registry-test:
+	node --test scripts/i18n/registry.test.mjs
+
+i18n-status:
+	node scripts/i18n/status.mjs
+
+i18n-status-test:
+	node --test scripts/i18n/status.test.mjs
+
+i18n-todo:
+	node scripts/i18n/todo.mjs
+
+i18n-todo-test:
+	node --test scripts/i18n/todo.test.mjs
+
+i18n-check:
+	node scripts/i18n/check.mjs
+
+i18n-check-test:
+	node --test scripts/i18n/check.test.mjs
+
+i18n-arb-test:
+	node --test scripts/i18n/arb.test.mjs
+
+i18n-json-shape-test:
+	node --test scripts/i18n/json_shape.test.mjs
+
+i18n-intentions-test:
+	node --test scripts/i18n/intentions.test.mjs
+
+i18n-stubs:
+	node scripts/i18n/stubs.mjs
+
+i18n-stubs-check:
+	node scripts/i18n/stubs.mjs --check
+
+i18n-stubs-test:
+	node --test scripts/i18n/stubs.test.mjs
+
+i18n-holdouts:
+	node scripts/i18n/holdouts.mjs
+
+i18n-holdouts-check:
+	node scripts/i18n/holdouts.mjs --check
+
+i18n-holdouts-test:
+	node --test scripts/i18n/holdouts.test.mjs
+
+i18n-layout-qa:
+	node scripts/i18n/layout_qa.mjs
+
+i18n-layout-qa-check:
+	node scripts/i18n/layout_qa.mjs --check
+
+i18n-layout-qa-test:
+	node --test scripts/i18n/layout_qa.test.mjs
+
+i18n-flag-stages:
+	node scripts/i18n/flag_stages.mjs
+
+i18n-flag-stages-check:
+	node scripts/i18n/flag_stages.mjs --check
+
+i18n-flag-stages-test:
+	node --test scripts/i18n/flag_stages.test.mjs
+
+i18n-freeze:
+	node scripts/i18n/freeze.mjs
+
+i18n-freeze-check:
+	node scripts/i18n/freeze.mjs --check
+
+i18n-freeze-manifest:
+	node scripts/i18n/freeze.mjs --write-manifest
+
+i18n-freeze-test:
+	node --test scripts/i18n/freeze.test.mjs
+
+i18n-diagnostics:
+	node scripts/i18n/diagnostics.mjs
+
+i18n-diagnostics-check:
+	node scripts/i18n/diagnostics.mjs
+
+i18n-diagnostics-test:
+	node --test scripts/i18n/diagnostics.test.mjs
+
+i18n-support-triage:
+	node scripts/i18n/support_triage.mjs
+
+i18n-support-triage-check:
+	node scripts/i18n/support_triage.mjs
+
+i18n-support-triage-test:
+	node --test scripts/i18n/support_triage.test.mjs
+
+i18n-translation-patches:
+	node scripts/i18n/translation_patches.mjs
+
+i18n-translation-patches-check:
+	node scripts/i18n/translation_patches.mjs
+
+i18n-translation-patches-test:
+	node --test scripts/i18n/translation_patches.test.mjs
+
+i18n-migration-cleanup:
+	node scripts/i18n/migration_cleanup.mjs
+
+i18n-migration-cleanup-check:
+	node scripts/i18n/migration_cleanup.mjs
+
+i18n-migration-cleanup-test:
+	node --test scripts/i18n/migration_cleanup.test.mjs
+
+i18n-release-runbook:
+	node scripts/i18n/release_runbook.mjs
+
+i18n-release-runbook-check:
+	node scripts/i18n/release_runbook.mjs
+
+i18n-release-runbook-test:
+	node --test scripts/i18n/release_runbook.test.mjs
+
+i18n-export:
+	@node scripts/i18n/handoff.mjs export
+
+i18n-import:
+	@node scripts/i18n/handoff.mjs import
+
+i18n-handoff-test:
+	node --test scripts/i18n/handoff.test.mjs
+
+store-metadata-check:
+	node scripts/release/store_metadata.mjs
+
+store-metadata-test:
+	node --test scripts/release/store_metadata.test.mjs
+
+google-play-metadata:
+	node scripts/release/google_play_metadata.mjs
+
+google-play-metadata-check:
+	node scripts/release/google_play_metadata.mjs --check
+
+google-play-metadata-test:
+	node --test scripts/release/google_play_metadata.test.mjs
+
+app-store-metadata:
+	node scripts/release/app_store_metadata.mjs
+
+app-store-metadata-check:
+	node scripts/release/app_store_metadata.mjs --check
+
+app-store-metadata-test:
+	node --test scripts/release/app_store_metadata.test.mjs
+
+screenshot-metadata:
+	node scripts/release/screenshot_metadata.mjs
+
+screenshot-metadata-check:
+	node scripts/release/screenshot_metadata.mjs --check
+
+screenshot-metadata-test:
+	node --test scripts/release/screenshot_metadata.test.mjs
+
+android-fastlane-check:
+	node scripts/release/android_fastlane_config.mjs
+
+android-fastlane-test:
+	node --test scripts/release/android_fastlane_config.test.mjs
+
+ios-fastlane-check:
+	node scripts/release/ios_fastlane_config.mjs
+
+ios-fastlane-test:
+	node --test scripts/release/ios_fastlane_config.test.mjs
+
+release-secret-guardrails-check:
+	node scripts/release/secret_guardrails.mjs
+
+release-secret-guardrails-test:
+	node --test scripts/release/secret_guardrails.test.mjs
+
+i18n-ci:
+	node --check scripts/i18n/registry.mjs
+	node --check scripts/i18n/status.mjs
+	node --check scripts/i18n/todo.mjs
+	node --check scripts/i18n/check.mjs
+	node --check scripts/i18n/arb.mjs
+	node --check scripts/i18n/json_shape.mjs
+	node --check scripts/i18n/intentions.mjs
+	node --check scripts/i18n/stubs.mjs
+	node --check scripts/i18n/holdouts.mjs
+	node --check scripts/i18n/layout_qa.mjs
+	node --check scripts/i18n/flag_stages.mjs
+	node --check scripts/i18n/freeze.mjs
+	node --check scripts/i18n/diagnostics.mjs
+	node --check scripts/i18n/support_triage.mjs
+	node --check scripts/i18n/translation_patches.mjs
+	node --check scripts/i18n/migration_cleanup.mjs
+	node --check scripts/i18n/release_runbook.mjs
+	node --check scripts/i18n/handoff.mjs
+	node --check scripts/release/store_metadata.mjs
+	node --check scripts/release/google_play_metadata.mjs
+	node --check scripts/release/app_store_metadata.mjs
+	node --check scripts/release/screenshot_metadata.mjs
+	node --check scripts/release/android_fastlane_config.mjs
+	node --check scripts/release/ios_fastlane_config.mjs
+	node --check scripts/release/secret_guardrails.mjs
+	$(MAKE) i18n-check
+	$(MAKE) i18n-stubs-check
+	$(MAKE) i18n-holdouts-check
+	$(MAKE) i18n-layout-qa-check
+	$(MAKE) i18n-flag-stages-check
+	$(MAKE) i18n-freeze-check
+	$(MAKE) i18n-diagnostics-check
+	$(MAKE) i18n-support-triage-check
+	$(MAKE) i18n-translation-patches-check
+	$(MAKE) i18n-migration-cleanup-check
+	$(MAKE) i18n-release-runbook-check
+	$(MAKE) store-metadata-check
+	$(MAKE) google-play-metadata-check
+	$(MAKE) app-store-metadata-check
+	$(MAKE) screenshot-metadata-check
+	$(MAKE) android-fastlane-check
+	$(MAKE) ios-fastlane-check
+	$(MAKE) release-secret-guardrails-check
+	$(MAKE) i18n-check-test
+	$(MAKE) i18n-arb-test
+	$(MAKE) i18n-json-shape-test
+	$(MAKE) i18n-intentions-test
+	$(MAKE) i18n-stubs-test
+	$(MAKE) i18n-holdouts-test
+	$(MAKE) i18n-layout-qa-test
+	$(MAKE) i18n-flag-stages-test
+	$(MAKE) i18n-freeze-test
+	$(MAKE) i18n-diagnostics-test
+	$(MAKE) i18n-support-triage-test
+	$(MAKE) i18n-translation-patches-test
+	$(MAKE) i18n-migration-cleanup-test
+	$(MAKE) i18n-release-runbook-test
+	$(MAKE) i18n-handoff-test
+	$(MAKE) i18n-todo-test
+	$(MAKE) i18n-status-test
+	$(MAKE) i18n-registry-test
+	$(MAKE) store-metadata-test
+	$(MAKE) google-play-metadata-test
+	$(MAKE) app-store-metadata-test
+	$(MAKE) screenshot-metadata-test
+	$(MAKE) android-fastlane-test
+	$(MAKE) ios-fastlane-test
+	$(MAKE) release-secret-guardrails-test

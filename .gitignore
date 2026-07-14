@@ -59,3 +59,24 @@ api/.secrets.local
 node_modules/
 
 .editorconfig
+
+# Mobile release secrets and local fastlane artifacts
+app/android/key.properties
+app/android/**/*.jks
+app/android/**/*.keystore
+app/android/fastlane/report.xml
+app/android/fastlane/README.md
+app/android/*service-account*.json
+app/android/*service_account*.json
+app/android/*play*.json
+app/ios/fastlane/report.xml
+app/ios/fastlane/README.md
+app/ios/AuthKey*.p8
+app/ios/fastlane/AuthKey*.p8
+app/ios/fastlane/*api-key*.json
+app/ios/fastlane/*api_key*.json
+app/ios/**/*.mobileprovision
+app/ios/**/*.provisionprofile
+app/build/app/outputs/**/*.aab
+app/build/app/outputs/**/*.apk
+app/build/ios/**/*.ipa

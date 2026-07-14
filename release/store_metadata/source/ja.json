@@ -1,0 +1,30 @@
+{
+  "app_name": "STONE SIGNATURE",
+  "subtitle": "宝石印鑑をデザイン",
+  "short_description": "名前から印影を作成し、天然石の印鑑を注文できます。",
+  "full_description": [
+    "STONE SIGNATUREは、天然石を使った印鑑をアプリからデザインできるサービスです。名前を入力し、漢字候補を確認しながら、整った印影を作成できます。",
+    "一点物の石を選び、デザインと配送情報を確認して、安全なチェックアウトへ進めます。保存済みの印影とプレビュー画像は端末内に保存され、決済はStripeで安全に処理されます。"
+  ],
+  "keywords": [
+    "印鑑",
+    "判子",
+    "宝石",
+    "天然石",
+    "漢字",
+    "印影"
+  ],
+  "release_notes": {
+    "1.1.0": [
+      "多言語アプリコンテンツとパイロット用ストアメタデータソースを追加しました。"
+    ]
+  },
+  "support_url": "https://finitefield.org/contact/",
+  "marketing_url": "https://finitefield.org/",
+  "privacy_policy_url": "https://finitefield.org/privacy/",
+  "screenshot_captions": {
+    "design": "印影をデザイン",
+    "stones": "一点物の石を選択",
+    "checkout": "安全に注文"
+  }
+}

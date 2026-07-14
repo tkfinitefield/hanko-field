@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:flutter/services.dart';
+
 class SettingsContentBundle {
   const SettingsContentBundle({
     required this.about,
@@ -15,13 +19,58 @@ class SettingsContentBundle {
   final SettingsLegalContent terms;
   final SettingsContactContent contact;
 
-  static SettingsContentBundle forLanguage(String languageCode) {
-    if (languageCode == 'ja') {
-      return _jaContent;
+  static const _assetRoot = 'assets/i18n/settings';
+  static final Map<AssetBundle, Map<String, Future<SettingsContentBundle>>>
+  _cache =
+      Map<AssetBundle, Map<String, Future<SettingsContentBundle>>>.identity();
+
+  static Future<SettingsContentBundle> forLanguage(
+    String routeCode, {
+    AssetBundle? bundle,
+  }) async {
+    final normalized = routeCode.trim().toLowerCase();
+    final assetBundle = bundle ?? rootBundle;
+    final assetName = _supportedAssetNames.contains(normalized)
+        ? normalized
+        : 'en';
+    final bundleCache = _cache.putIfAbsent(assetBundle, () => {});
+    final cached = bundleCache[assetName];
+    if (cached != null) {
+      return cached;
     }
-    return _enContent;
+
+    final assetPath = '$_assetRoot/$assetName.json';
+    final pending = () async {
+      final source = await assetBundle.loadString(assetPath);
+      return SettingsContentBundle.fromJson(_decodeObject(source, assetPath));
+    }();
+    bundleCache[assetName] = pending;
+
+    try {
+      return await pending;
+    } catch (_) {
+      if (identical(bundleCache[assetName], pending)) {
+        bundleCache.remove(assetName);
+      }
+      rethrow;
+    }
+  }
+
+  factory SettingsContentBundle.fromJson(Map<String, Object?> json) {
+    return SettingsContentBundle(
+      about: SettingsAboutContent.fromJson(_object(json, 'about')),
+      howItWorks: SettingsHowItWorksContent.fromJson(
+        _object(json, 'howItWorks'),
+      ),
+      faq: SettingsFaqContent.fromJson(_object(json, 'faq')),
+      privacy: SettingsLegalContent.fromJson(_object(json, 'privacy')),
+      terms: SettingsLegalContent.fromJson(_object(json, 'terms')),
+      contact: SettingsContactContent.fromJson(_object(json, 'contact')),
+    );
   }
 }
+
+const _supportedAssetNames = {'ar', 'en', 'ja', 'zh', 'zhtw'};
 
 class SettingsAboutContent {
   const SettingsAboutContent({
@@ -35,6 +84,19 @@ class SettingsAboutContent {
   final String body;
   final List<SettingsTextSection> points;
   final String tagline;
+
+  factory SettingsAboutContent.fromJson(Map<String, Object?> json) {
+    return SettingsAboutContent(
+      heading: _string(json, 'heading'),
+      body: _string(json, 'body'),
+      points: _list(
+        json,
+        'points',
+        (value) => SettingsTextSection.fromJson(_objectValue(value)),
+      ),
+      tagline: _string(json, 'tagline'),
+    );
+  }
 }
 
 class SettingsFaqContent {
@@ -42,6 +104,17 @@ class SettingsFaqContent {
 
   final String heading;
   final List<SettingsFaqItem> items;
+
+  factory SettingsFaqContent.fromJson(Map<String, Object?> json) {
+    return SettingsFaqContent(
+      heading: _string(json, 'heading'),
+      items: _list(
+        json,
+        'items',
+        (value) => SettingsFaqItem.fromJson(_objectValue(value)),
+      ),
+    );
+  }
 }
 
 class SettingsHowItWorksContent {
@@ -58,6 +131,20 @@ class SettingsHowItWorksContent {
   final List<SettingsTextSection> steps;
   final String summaryTitle;
   final String summaryBody;
+
+  factory SettingsHowItWorksContent.fromJson(Map<String, Object?> json) {
+    return SettingsHowItWorksContent(
+      heading: _string(json, 'heading'),
+      intro: _string(json, 'intro'),
+      steps: _list(
+        json,
+        'steps',
+        (value) => SettingsTextSection.fromJson(_objectValue(value)),
+      ),
+      summaryTitle: _string(json, 'summaryTitle'),
+      summaryBody: _string(json, 'summaryBody'),
+    );
+  }
 }
 
 class SettingsFaqItem {
@@ -65,6 +152,13 @@ class SettingsFaqItem {
 
   final String question;
   final String answer;
+
+  factory SettingsFaqItem.fromJson(Map<String, Object?> json) {
+    return SettingsFaqItem(
+      question: _string(json, 'question'),
+      answer: _string(json, 'answer'),
+    );
+  }
 }
 
 class SettingsContactContent {
@@ -79,6 +173,19 @@ class SettingsContactContent {
   final String intro;
   final List<SettingsContactOption> options;
   final String replyNote;
+
+  factory SettingsContactContent.fromJson(Map<String, Object?> json) {
+    return SettingsContactContent(
+      heading: _string(json, 'heading'),
+      intro: _string(json, 'intro'),
+      options: _list(
+        json,
+        'options',
+        (value) => SettingsContactOption.fromJson(_objectValue(value)),
+      ),
+      replyNote: _string(json, 'replyNote'),
+    );
+  }
 }
 
 class SettingsContactOption {
@@ -91,6 +198,14 @@ class SettingsContactOption {
   final String title;
   final String body;
   final String value;
+
+  factory SettingsContactOption.fromJson(Map<String, Object?> json) {
+    return SettingsContactOption(
+      title: _string(json, 'title'),
+      body: _string(json, 'body'),
+      value: _string(json, 'value'),
+    );
+  }
 }
 
 class SettingsLegalContent {
@@ -107,6 +222,20 @@ class SettingsLegalContent {
   final String officialLinkLabel;
   final String officialUrl;
   final List<SettingsTextSection> sections;
+
+  factory SettingsLegalContent.fromJson(Map<String, Object?> json) {
+    return SettingsLegalContent(
+      updated: _string(json, 'updated'),
+      intro: _string(json, 'intro'),
+      officialLinkLabel: _string(json, 'officialLinkLabel'),
+      officialUrl: _string(json, 'officialUrl'),
+      sections: _list(
+        json,
+        'sections',
+        (value) => SettingsTextSection.fromJson(_objectValue(value)),
+      ),
+    );
+  }
 }
 
 class SettingsTextSection {
@@ -114,356 +243,57 @@ class SettingsTextSection {
 
   final String title;
   final String body;
+
+  factory SettingsTextSection.fromJson(Map<String, Object?> json) {
+    return SettingsTextSection(
+      title: _string(json, 'title'),
+      body: _string(json, 'body'),
+    );
+  }
 }
 
-const _enContent = SettingsContentBundle(
-  about: SettingsAboutContent(
-    heading: 'Your seal, made from gemstone',
-    body:
-        'STONE SIGNATURE helps you choose a gemstone seal online, design the seal impression, and place an order from the app. Review the material and one-of-a-kind stone listings as you find the seal that fits you.',
-    points: [
-      SettingsTextSection(
-        title: 'Custom design',
-        body:
-            'Turn your name into a kanji-based seal design with meaning, balance, and a personal sense of intention.',
-      ),
-      SettingsTextSection(
-        title: 'Natural gemstones',
-        body:
-            'Choose the seal material while reviewing colors, patterns, and natural character unique to each stone.',
-      ),
-      SettingsTextSection(
-        title: 'Handcrafted with care',
-        body:
-            'After payment and design confirmation, each custom seal is produced one by one by our partner workshop.',
-      ),
-    ],
-    tagline: 'Your name. Your stone. Your signature.',
-  ),
-  howItWorks: SettingsHowItWorksContent(
-    heading: 'Create a one-of-a-kind seal',
-    intro:
-        'Move from name selection to a saved design, gemstone choice, checkout, and delivery without losing your place.',
-    steps: [
-      SettingsTextSection(
-        title: 'Choose your name and kanji',
-        body:
-            'Enter your name, review kanji candidates, and choose the characters that match your intention.',
-      ),
-      SettingsTextSection(
-        title: 'Generate your seal design',
-        body:
-            'Pick a seal style, generate design variants, and save the version you want to keep on this device.',
-      ),
-      SettingsTextSection(
-        title: 'Select a gemstone',
-        body:
-            'Browse one-of-a-kind stones, review details and availability, then pair a stone with your saved seal.',
-      ),
-      SettingsTextSection(
-        title: 'Checkout and receive your seal',
-        body:
-            'Confirm shipping details, agree to the terms, complete payment through Stripe Checkout, and track the order by order number and email.',
-      ),
-    ],
-    summaryTitle: 'Handcrafted with care, delivered to you.',
-    summaryBody:
-        'Each seal is made to order by our partner workshop after payment and design confirmation. Production usually takes 5-10 business days, and shipping usually takes about 7-14 days after dispatch.',
-  ),
-  faq: SettingsFaqContent(
-    heading: 'Frequently asked questions',
-    items: [
-      SettingsFaqItem(
-        question: 'How is kanji selected?',
-        answer:
-            'Kanji is suggested from your name, the desired meaning, and the balance of the seal design. You can review candidates before choosing the design direction.',
-      ),
-      SettingsFaqItem(
-        question: 'Can I change my order after payment?',
-        answer:
-            'Because each seal is custom-made, changes may not be possible after production starts. Review the design, stone, shipping details, and terms before completing payment.',
-      ),
-      SettingsFaqItem(
-        question: 'How long does production take?',
-        answer:
-            'Production usually takes 5-10 business days after payment and design confirmation. Shipping usually takes about 7-14 days after dispatch.',
-      ),
-      SettingsFaqItem(
-        question: 'Do you ship internationally?',
-        answer:
-            'Orders are shipped from our partner workshop in China. Customs duties, import taxes, and clearance fees may be charged on receipt and are the customer\'s responsibility.',
-      ),
-      SettingsFaqItem(
-        question: 'Are gemstones one of a kind?',
-        answer:
-            'Yes. Natural stones vary in color, pattern, and texture. These differences are part of the material and are not treated as defects.',
-      ),
-      SettingsFaqItem(
-        question: 'How do I track my order?',
-        answer:
-            'Use Order Lookup with your order number and email address. Tracking details will appear there when shipment information is available.',
-      ),
-    ],
-  ),
-  privacy: SettingsLegalContent(
-    updated: 'Last updated: May 16, 2025',
-    intro:
-        'This app displays the privacy policy in an app-friendly format and references the official web policy for the latest legal text.',
-    officialLinkLabel: 'Official privacy policy',
-    officialUrl: 'https://finitefield.org/en/privacy/',
-    sections: [
-      SettingsTextSection(
-        title: 'Information we collect',
-        body:
-            'We collect information you provide directly, such as your name, email address, shipping details, and order details. Saved seal designs and preview images remain on this device until you delete them.',
-      ),
-      SettingsTextSection(
-        title: 'How we use information',
-        body:
-            'We use information to provide the service, process orders, communicate important updates, and improve the app experience.',
-      ),
-      SettingsTextSection(
-        title: 'Sharing information',
-        body:
-            'We do not sell personal information. We may share information with service providers needed for payment, production, delivery, support, legal compliance, or protection of rights.',
-      ),
-      SettingsTextSection(
-        title: 'Retention and local storage',
-        body:
-            'Order-related information is retained as required for service operation and legal obligations. Local saved designs are stored only on this device and are not synced across devices in the MVP.',
-      ),
-      SettingsTextSection(
-        title: 'Contact',
-        body:
-            'For privacy questions, use the contact guidance in Settings or the official privacy policy page.',
-      ),
-    ],
-  ),
-  terms: SettingsLegalContent(
-    updated: 'Last updated: May 22, 2025',
-    intro:
-        'These terms summarize the conditions for using STONE SIGNATURE in the app. The official web terms remain the legal source of truth.',
-    officialLinkLabel: 'Official terms of service',
-    officialUrl: 'https://finitefield.org/terms',
-    sections: [
-      SettingsTextSection(
-        title: 'Scope',
-        body:
-            'The service is operated by Finite Field, K.K. Customers are deemed to agree to the terms when they complete the order process.',
-      ),
-      SettingsTextSection(
-        title: 'Orders and contract formation',
-        body:
-            'An order is treated as received when required information is entered and the order process is completed. A sales contract is formed when payment is confirmed and an order confirmation notice is sent.',
-      ),
-      SettingsTextSection(
-        title: 'Fees, payment, and duties',
-        body:
-            'Prices are shown on each product page. Payment is made in advance through Stripe Checkout. Customs duties, import taxes, and clearance fees may apply and are the customer\'s responsibility.',
-      ),
-      SettingsTextSection(
-        title: 'Production and delivery',
-        body:
-            'Each item is made to order by our partner workshop in China. Production usually takes 5-10 business days and shipping usually takes about 7-14 days after dispatch.',
-      ),
-      SettingsTextSection(
-        title: 'Cancellations, returns, and exchanges',
-        body:
-            'Because custom seals are made to order, cancellations, returns, and exchanges are not accepted after production starts, except for significant damage or engraving errors caused by our fault.',
-      ),
-      SettingsTextSection(
-        title: 'Governing law and language',
-        body:
-            'The terms are governed by the laws of Japan. If translated versions differ, the Japanese version prevails.',
-      ),
-    ],
-  ),
-  contact: SettingsContactContent(
-    heading: 'We are here to help.',
-    intro:
-        'For order, shipping, payment, or app questions, use the official inquiry form or email support guidance below. Include your order number when the question is about an order.',
-    options: [
-      SettingsContactOption(
-        title: 'Send an inquiry',
-        body:
-            'Use the official contact form for questions about orders, shipping, returns, privacy, or account support.',
-        value: 'https://finitefield.org/en/contact/',
-      ),
-      SettingsContactOption(
-        title: 'Email support',
-        body:
-            'If your mail app is easier, include your order number, email address used at checkout, and a short description.',
-        value: 'dev@finitefield.org',
-      ),
-      SettingsContactOption(
-        title: 'Before contacting us',
-        body:
-            'Order status can be checked from Order Lookup with your order number and email address.',
-        value: 'Order Lookup',
-      ),
-    ],
-    replyNote: 'We usually reply within 2 business days.',
-  ),
-);
+Map<String, Object?> _decodeObject(String source, String path) {
+  final decoded = jsonDecode(source);
+  if (decoded is Map<String, Object?>) {
+    return decoded;
+  }
+  throw FormatException('Settings content root must be an object.', path);
+}
 
-const _jaContent = SettingsContentBundle(
-  about: SettingsAboutContent(
-    heading: '宝石でつくる、あなたの印鑑',
-    body:
-        'STONE SIGNATUREは、宝石を使った印鑑をオンラインで選び、印影をデザインして注文できるサービスです。素材や一点物の個体を確認しながら、自分に合った印鑑を見つけられます。',
-    points: [
-      SettingsTextSection(
-        title: '印影デザイン',
-        body: '名前から意味とバランスを考慮した漢字ベースの印影を作り、注文前に方向性を確認できます。',
-      ),
-      SettingsTextSection(
-        title: '天然石',
-        body: '天然石ならではの色や模様、個体差を見ながら、印鑑の素材を選べます。',
-      ),
-      SettingsTextSection(title: '一点ずつ製作', body: '支払いとデザイン確定後、提携工房で一本ずつ製作します。'),
-    ],
-    tagline: 'あなたの名前。あなたの石。あなたの印鑑。',
-  ),
-  howItWorks: SettingsHowItWorksContent(
-    heading: '一点物の印鑑を作る流れ',
-    intro: '名前の入力から印影保存、天然石の選択、Checkout、配送までをアプリ内で進められます。',
-    steps: [
-      SettingsTextSection(
-        title: '名前と漢字を選ぶ',
-        body: '名前を入力し、意味や雰囲気に合う漢字候補を確認して、印影に使う文字を選びます。',
-      ),
-      SettingsTextSection(
-        title: '印影デザインを生成する',
-        body: '印影スタイルを選び、生成された候補から気に入ったデザインをこの端末に保存します。',
-      ),
-      SettingsTextSection(
-        title: '天然石を選ぶ',
-        body: '一点物の石を一覧と詳細で確認し、保存済み印影と組み合わせて注文準備を進めます。',
-      ),
-      SettingsTextSection(
-        title: 'Checkoutして受け取る',
-        body: '配送先と同意事項を確認し、Stripe Checkoutで支払います。注文番号とメールアドレスで注文状態を確認できます。',
-      ),
-    ],
-    summaryTitle: '丁寧に製作し、お届けします。',
-    summaryBody: '支払いとデザイン確定後、提携工房で受注生産します。製作は通常5〜10営業日、発送後の配送は通常7〜14日程度です。',
-  ),
-  faq: SettingsFaqContent(
-    heading: 'よくある質問',
-    items: [
-      SettingsFaqItem(
-        question: '漢字はどのように選ばれますか？',
-        answer: '名前、込めたい意味、印影全体のバランスをもとに候補を提案します。候補を確認してからデザインの方向性を選べます。',
-      ),
-      SettingsFaqItem(
-        question: '支払い後に注文内容を変更できますか？',
-        answer: 'オーダーメイド商品のため、製作開始後の変更はできない場合があります。支払い前に印影、石、配送先、規約を確認してください。',
-      ),
-      SettingsFaqItem(
-        question: '製作にはどのくらいかかりますか？',
-        answer: '支払いとデザイン確定後、製作は通常5〜10営業日、発送後の配送は通常7〜14日程度です。',
-      ),
-      SettingsFaqItem(
-        question: '海外配送はありますか？',
-        answer: '商品は中国の提携工房から発送されます。受け取り時に関税、輸入消費税、通関手数料等が発生する場合があります。',
-      ),
-      SettingsFaqItem(
-        question: '宝石は一点物ですか？',
-        answer: 'はい。同じ種類の石でも色、模様、質感は少しずつ異なります。天然素材の個体差は不良品の対象外です。',
-      ),
-      SettingsFaqItem(
-        question: '注文の追跡はどこで確認できますか？',
-        answer: '注文番号とメールアドレスを使って注文照会から確認できます。発送情報がある場合は追跡情報も表示されます。',
-      ),
-    ],
-  ),
-  privacy: SettingsLegalContent(
-    updated: '最終更新: 2025年5月16日',
-    intro: 'このアプリでは、プライバシーポリシーをアプリ向けに要約して表示します。最新の法務本文は公式Webページを確認してください。',
-    officialLinkLabel: '公式プライバシーポリシー',
-    officialUrl: 'https://finitefield.org/privacy/',
-    sections: [
-      SettingsTextSection(
-        title: '取得する情報',
-        body:
-            '氏名、メールアドレス、配送先、注文内容など、利用者が入力した情報を取得します。保存済み印影とプレビュー画像は、削除するまでこの端末に保存されます。',
-      ),
-      SettingsTextSection(
-        title: '利用目的',
-        body: 'サービス提供、注文処理、重要なお知らせ、問い合わせ対応、アプリ体験の改善のために情報を利用します。',
-      ),
-      SettingsTextSection(
-        title: '第三者提供',
-        body:
-            '個人情報を販売することはありません。決済、製作、配送、サポート、法令対応、権利保護に必要な範囲でサービス提供者と共有する場合があります。',
-      ),
-      SettingsTextSection(
-        title: '保存期間と端末内保存',
-        body: '注文関連情報はサービス運営と法令上必要な期間保持します。MVPでは端末内の保存済み印影は端末間同期されません。',
-      ),
-      SettingsTextSection(
-        title: 'お問い合わせ',
-        body: 'プライバシーに関する質問は、Settings内の問い合わせ案内または公式プライバシーポリシーページからご連絡ください。',
-      ),
-    ],
-  ),
-  terms: SettingsLegalContent(
-    updated: '最終更新: 2025年5月22日',
-    intro:
-        'この画面では、STONE SIGNATUREの利用条件をアプリ向けに要約して表示します。正式な法務本文は公式Webの利用規約を確認してください。',
-    officialLinkLabel: '公式利用規約',
-    officialUrl: 'https://finitefield.org/ja/terms',
-    sections: [
-      SettingsTextSection(
-        title: '適用範囲',
-        body:
-            '本サービスは株式会社ファイナイトフィールドが運営します。利用者は注文手続を完了した時点で、利用規約に同意したものとみなされます。',
-      ),
-      SettingsTextSection(
-        title: '注文と契約の成立',
-        body: '必要事項の入力と注文完了により注文受付となります。当社が支払いを確認し、注文確定の通知を送信した時点で売買契約が成立します。',
-      ),
-      SettingsTextSection(
-        title: '料金、支払および関税',
-        body:
-            '販売価格は各商品ページの表示に従います。支払いはStripe Checkoutによる前払いです。関税、輸入消費税、通関手数料等が発生する場合は利用者負担です。',
-      ),
-      SettingsTextSection(
-        title: '製作と引渡し',
-        body: '商品は中国の提携工房で受注生産されます。製作は通常5〜10営業日、発送後の配送は通常7〜14日程度です。',
-      ),
-      SettingsTextSection(
-        title: 'キャンセル・返品・交換',
-        body:
-            'オーダーメイド商品のため、製作開始後のお客様都合によるキャンセル、返品、交換はできません。著しい破損や当社過失による彫刻内容の誤りは到着後7日以内にご連絡ください。',
-      ),
-      SettingsTextSection(
-        title: '準拠法と言語',
-        body: '本規約は日本法に準拠します。日本語以外の翻訳版がある場合でも、日本語による規約が優先されます。',
-      ),
-    ],
-  ),
-  contact: SettingsContactContent(
-    heading: 'お問い合わせ',
-    intro:
-        '注文、配送、決済、アプリの使い方については、公式問い合わせフォームまたはメール案内をご利用ください。注文に関する問い合わせでは注文番号を添えてください。',
-    options: [
-      SettingsContactOption(
-        title: '問い合わせフォーム',
-        body: '注文、配送、返品、プライバシー、アカウントサポートに関する質問は公式フォームからご連絡ください。',
-        value: 'https://finitefield.org/contact/',
-      ),
-      SettingsContactOption(
-        title: 'メールサポート',
-        body: 'メールアプリから連絡する場合は、注文番号、Checkoutで使用したメールアドレス、問い合わせ内容を記載してください。',
-        value: 'dev@finitefield.org',
-      ),
-      SettingsContactOption(
-        title: '問い合わせ前に',
-        body: '注文状態は、注文番号とメールアドレスを使って注文照会から確認できます。',
-        value: '注文照会',
-      ),
-    ],
-    replyNote: '通常2営業日以内に返信します。',
-  ),
-);
+Map<String, Object?> _object(Map<String, Object?> json, String key) {
+  return _objectValue(_required(json, key));
+}
+
+Map<String, Object?> _objectValue(Object? value) {
+  if (value is Map<String, Object?>) {
+    return value;
+  }
+  throw const FormatException('Expected a JSON object.');
+}
+
+String _string(Map<String, Object?> json, String key) {
+  final value = _required(json, key);
+  if (value is String) {
+    return value;
+  }
+  throw FormatException('Expected string for "$key".');
+}
+
+List<T> _list<T>(
+  Map<String, Object?> json,
+  String key,
+  T Function(Object? value) parse,
+) {
+  final value = _required(json, key);
+  if (value is List<Object?>) {
+    return List<T>.unmodifiable(value.map(parse));
+  }
+  throw FormatException('Expected list for "$key".');
+}
+
+Object? _required(Map<String, Object?> json, String key) {
+  if (json.containsKey(key)) {
+    return json[key];
+  }
+  throw FormatException('Missing required settings content key "$key".');
+}

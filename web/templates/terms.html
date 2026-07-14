@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ selected_locale }}">
+<html lang="{{ self.html_lang() }}" dir="{{ self.html_dir() }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,9 +7,10 @@
   <meta name="description" content="{{ meta_description }}">
   <meta name="robots" content="{{ robots_meta }}">
   <link rel="canonical" href="{{ canonical_url }}">
-  <link rel="alternate" hreflang="ja" href="{{ lang_ja_url }}">
-  <link rel="alternate" hreflang="en" href="{{ lang_en_url }}">
-  <link rel="alternate" hreflang="x-default" href="{{ canonical_url }}">
+  {% for language_link in seo_language_links %}
+  <link rel="alternate" hreflang="{{ language_link.bcp47 }}" href="{{ language_link.url }}">
+  {% endfor %}
+  <link rel="alternate" hreflang="x-default" href="{{ x_default_url }}">
   <meta property="og:type" content="website">
   <meta property="og:title" content="{{ page_title }}">
   <meta property="og:description" content="{{ meta_description }}">
@@ -34,7 +35,7 @@
           <img class="top-brand__logo" src="/static/site-logo.png" alt="" aria-hidden="true">
           <div class="top-brand__text">
             <h1 class="top-brand__title">STONE SIGNATURE</h1>
-            <span class="top-brand__subtitle">{% if selected_locale == "ja" %}印鑑フィールド{% else %}Seal Field{% endif %}</span>
+            <span class="top-brand__subtitle">{{ self.copy_text("terms_001") }}</span>
           </div>
         </div>
       </a>
@@ -44,8 +45,9 @@
             <span class="material-symbols-outlined top-brand__icon" aria-hidden="true">language</span>
           </summary>
           <div class="top-language-switcher__menu" role="menu" aria-label="Language options">
-            <a class="top-language-switcher__item{% if selected_locale == "ja" %} is-active{% endif %}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
-            <a class="top-language-switcher__item{% if selected_locale == "en" %} is-active{% endif %}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
+            {% for language_link in language_links %}
+            <a class="top-language-switcher__item{{ self.language_active_class(language_link.route_code) }}" href="{{ language_link.url }}" hreflang="{{ language_link.bcp47 }}" data-language-option="{{ language_link.route_code }}">{{ language_link.label }}</a>
+            {% endfor %}
           </div>
         </details>
       </div>
@@ -56,7 +58,7 @@
   <main class="legal-page__main">
     <div class="legal-page__lead">
       <h2 class="legal-page__title">
-        {% if selected_locale == "ja" %}利用規約{% else %}Terms of Service{% endif %}
+        {{ self.copy_text("terms_035") }}
       </h2>
     </div>
 
@@ -64,280 +66,111 @@
       <section class="legal-section" id="section-1">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">01</span>
-          <span>{% if selected_locale == "ja" %}適用範囲{% else %}Scope{% endif %}</span>
+          <span>{{ self.copy_text("terms_002") }}</span>
         </h3>
         <div class="legal-section__copy">
-          {% if selected_locale == "ja" %}
-          <p>本規約は、株式会社ファイナイトフィールド（以下「当社」）が運営するブランド「STONE SIGNATURE」（以下「本サービス」）の利用条件を定めるものです。</p>
-          <p>本サービスを利用するお客様（以下「利用者」）は、注文手続を完了した時点で、本規約の全ての条項に同意したものとみなされます。</p>
-          <p>本サービスに関し、本規約以外に別途定める「特定商取引法に基づく表記」や案内等は、本規約の一部を構成するものとします。</p>
-          {% else %}
-          <p>These Terms set out the conditions for using the brand “STONE SIGNATURE” (the “Service”) operated by Finite Field, K.K. (the “Company”).</p>
-          <p>Customers using the Service (the “Users”) are deemed to have agreed to all provisions of these Terms when they complete the order process.</p>
-          <p>Any separate notices or guidance posted for the Service, including the “Legal Notice (Act on Specified Commercial Transactions),” form part of these Terms.</p>
-          {% endif %}
+          {{ self.copy_html("terms_003")|safe }}
         </div>
       </section>
 
       <section class="legal-section" id="section-2">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">02</span>
-          <span>{% if selected_locale == "ja" %}注文と契約の成立{% else %}Orders and Contract Formation{% endif %}</span>
+          <span>{{ self.copy_text("terms_004") }}</span>
         </h3>
         <div class="legal-section__copy">
-          {% if selected_locale == "ja" %}
-          <p>利用者が当サイトにて必要事項を入力し、注文手続を完了させた時点で、当社は注文を受付済みとして取り扱います。</p>
-          <dl class="legal-definition-list">
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">注文受付</dt>
-              <dd class="legal-definition-desc">必要事項の入力と注文完了をもって、当社は注文を受付済みとして取り扱います。</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">契約成立</dt>
-              <dd class="legal-definition-desc">当社が利用者からの支払いを確認し、注文確定の通知（メール等）を送信した時点で、売買契約が成立するものとします。</dd>
-            </div>
-          </dl>
-          <p>当社は、以下の理由により注文をお断り、または契約を解除できるものとします。</p>
-          <ul class="legal-list">
-            <li>入力内容に虚偽や不備がある場合</li>
-            <li>転売目的、または不当な利益を得る目的と判断される場合</li>
-            <li>過去に利用規約違反があった場合</li>
-            <li>その他、当社が不適切と判断した場合</li>
-          </ul>
-          {% else %}
-          <p>When a User enters the required information on the Site and completes the order process, we treat the order as received.</p>
-          <dl class="legal-definition-list">
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">Order received</dt>
-              <dd class="legal-definition-desc">Once the required information has been entered and the order process is completed, we treat the order as received.</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">Contract formation</dt>
-              <dd class="legal-definition-desc">A sales contract is formed when we confirm payment from the User and send an order confirmation notice (by email or similar means).</dd>
-            </div>
-          </dl>
-          <p>We may decline an order or terminate the contract for any of the following reasons:</p>
-          <ul class="legal-list">
-            <li>The submitted information is false or incomplete</li>
-            <li>The order is deemed to be for resale or to obtain unfair profit</li>
-            <li>The User has previously violated these Terms</li>
-            <li>Any other reason we deem inappropriate</li>
-          </ul>
-          {% endif %}
+          {{ self.copy_html("terms_005")|safe }}
         </div>
       </section>
 
       <section class="legal-section" id="section-3">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">03</span>
-          <span>{% if selected_locale == "ja" %}料金、支払および関税{% else %}Fees, Payment, and Duties{% endif %}</span>
+          <span>{{ self.copy_text("terms_006") }}</span>
         </h3>
         <div class="legal-section__copy">
-          {% if selected_locale == "ja" %}
-          <dl class="legal-definition-list">
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">販売価格</dt>
-              <dd class="legal-definition-desc">各商品ページに表示される価格に従います（消費税込み）。</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">追加料金</dt>
-              <dd class="legal-definition-desc">送料（地域別）に加え、配送先や通関状況により関税・輸入消費税・通関手数料等が発生する場合があります。</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">お支払い方法</dt>
-              <dd class="legal-definition-desc">Stripe Checkout（クレジットカード、Apple Pay、Google Pay等）による前払いです。</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">支払時期</dt>
-              <dd class="legal-definition-desc">ご注文確定時（前払い）です。</dd>
-            </div>
-          </dl>
-          <p><strong>関税等の負担:</strong> 本商品は中国の提携工房より直送される個人輸入となります。日本国内および配送先の国において、受け取り時に関税、消費税、通関手数料等（以下「関税等」）が発生する場合、これらは全て利用者の負担となります。関税等の支払いを拒否したことによる受取辞退の場合、当社は代金の返金を行いません。</p>
-          {% else %}
-          <dl class="legal-definition-list">
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">Price</dt>
-              <dd class="legal-definition-desc">Prices displayed on each product page (tax included).</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">Additional charges</dt>
-              <dd class="legal-definition-desc">Shipping varies by destination. Depending on the destination and customs clearance status, customs duties, import consumption tax, brokerage fees, and similar charges may apply.</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">Payment method</dt>
-              <dd class="legal-definition-desc">Payment is made in advance through Stripe Checkout (credit card, Apple Pay, Google Pay, and similar methods).</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">Payment timing</dt>
-              <dd class="legal-definition-desc">At the time the order is confirmed (prepayment).</dd>
-            </div>
-          </dl>
-          <p><strong>Customs and import charges:</strong> This product is shipped directly from our partner workshop in China as a personal import. If customs duties, consumption tax, customs clearance fees, or similar charges (collectively, “Duties”) arise in Japan or in the destination country upon receipt, the User is solely responsible for those charges. If the User refuses to pay the Duties and declines delivery, we will not refund the purchase price.</p>
-          {% endif %}
+          {{ self.copy_html("terms_007")|safe }}
         </div>
       </section>
 
       <section class="legal-section" id="section-4">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">04</span>
-          <span>{% if selected_locale == "ja" %}製作と引渡し{% else %}Production and Delivery{% endif %}</span>
+          <span>{{ self.copy_text("terms_008") }}</span>
         </h3>
         <div class="legal-section__copy">
-          {% if selected_locale == "ja" %}
           <div class="legal-notes">
             <div class="legal-note">
-              <p class="legal-note__label">{% if selected_locale == "ja" %}製作拠点{% else %}Production Origin{% endif %}</p>
-              <p class="legal-note__text">{% if selected_locale == "ja" %}中国（当社提携工房にて一本ずつ製作）{% else %}China (each item is produced by our partner workshop){% endif %}</p>
+              <p class="legal-note__label">{{ self.copy_text("terms_036") }}</p>
+              <p class="legal-note__text">{{ self.copy_text("terms_009") }}</p>
             </div>
             <div class="legal-note">
-              <p class="legal-note__label">{% if selected_locale == "ja" %}目安納期{% else %}Estimated Delivery{% endif %}</p>
-              <p class="legal-note__text">{% if selected_locale == "ja" %}製作期間: 5〜10営業日 / 配送期間: 7〜14日程度{% else %}Production period: 5-10 business days / Shipping period: about 7-14 days{% endif %}</p>
+              <p class="legal-note__label">{{ self.copy_text("terms_010") }}</p>
+              <p class="legal-note__text">{{ self.copy_text("terms_011") }}</p>
             </div>
           </div>
-          <p class="legal-section__body">{% if selected_locale == "ja" %}本商品は完全受注生産です。支払いおよびデザイン確定（デザイン確認工程がある場合）の完了後、速やかに製作を開始します。{% else %}Each item is made to order. Production begins promptly after payment and design confirmation (if a design review step is required) are completed.{% endif %}</p>
-          <p class="legal-section__body">{% if selected_locale == "ja" %}製作に通常 5〜10 営業日、発送後の配送に通常 7〜14 日程度を要します。ただし、以下の事由により遅延が生じる場合があります。{% else %}Production usually takes 5-10 business days, and shipping usually takes 7-14 days after dispatch. However, delays may occur due to the following:{% endif %}</p>
+          <p class="legal-section__body">{{ self.copy_text("terms_012") }}</p>
+          <p class="legal-section__body">{{ self.copy_text("terms_013") }}</p>
           <ul class="legal-list">
-            <li>{% if selected_locale == "ja" %}通関手続きの遅延{% else %}Delays in customs procedures{% endif %}</li>
-            <li>{% if selected_locale == "ja" %}配送業者の都合、天候、国際情勢{% else %}Shipping carrier issues, weather, or international conditions{% endif %}</li>
-            <li>{% if selected_locale == "ja" %}中国および日本の大型連休（春節等）{% else %}Long holidays in China or Japan (including Lunar New Year){% endif %}</li>
+            <li>{{ self.copy_text("terms_014") }}</li>
+            <li>{{ self.copy_text("terms_015") }}</li>
+            <li>{{ self.copy_text("terms_016") }}</li>
           </ul>
-          <p>{% if selected_locale == "ja" %}利用者の不在等により商品が発送元へ返送された場合、再発送にかかる費用は利用者の負担となります。{% else %}If an item is returned to the sender due to the User’s absence or similar reasons, the cost of re-shipment shall be borne by the User.{% endif %}</p>
-          {% else %}
-          <div class="legal-notes">
-            <div class="legal-note">
-              <p class="legal-note__label">Production Origin</p>
-              <p class="legal-note__text">China (each item is produced by our partner workshop)</p>
-            </div>
-            <div class="legal-note">
-              <p class="legal-note__label">Estimated Delivery</p>
-              <p class="legal-note__text">Production period: 5-10 business days / Shipping period: about 7-14 days</p>
-            </div>
-          </div>
-          <p class="legal-section__body">Each item is made to order. Production begins promptly after payment and design confirmation (if a design review step is required) are completed.</p>
-          <p class="legal-section__body">Production usually takes 5-10 business days, and shipping usually takes 7-14 days after dispatch. However, delays may occur due to the following:</p>
-          <ul class="legal-list">
-            <li>Delays in customs procedures</li>
-            <li>Shipping carrier issues, weather, or international conditions</li>
-            <li>Long holidays in China or Japan (including Lunar New Year)</li>
-          </ul>
-          <p>If an item is returned to the sender due to the User’s absence or similar reasons, the cost of re-shipment shall be borne by the User.</p>
-          {% endif %}
+          <p>{{ self.copy_text("terms_017") }}</p>
         </div>
       </section>
 
       <section class="legal-section" id="section-5">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">05</span>
-          <span>{% if selected_locale == "ja" %}キャンセル・返品・交換{% else %}Cancellations, Returns, and Exchanges{% endif %}</span>
+          <span>{{ self.copy_text("terms_018") }}</span>
         </h3>
         <div class="legal-section__copy">
-          {% if selected_locale == "ja" %}
-          <ul class="legal-list">
-            <li><strong>お客様都合による拒否:</strong> 商品の性質上（オーダーメイド）、製作開始後のキャンセル、返品、交換は一切お受けできません。</li>
-            <li><strong>不良品・誤配送:</strong> お届けした商品に著しい破損、汚損、または当社の過失による彫刻内容の誤りがある場合に限り、商品到着後 7日以内にご連絡をいただいた上で、無償で再製作・再発送を行います。</li>
-            <li><strong>石材の特性:</strong> 石材特有の個体差（模様、色味、微細な質感の差異）は天然素材の特性であり、不良品の対象外となります。</li>
-          </ul>
-          {% else %}
-          <ul class="legal-list">
-            <li><strong>Customer-initiated refusal:</strong> Because the product is custom-made, we cannot accept cancellations, returns, or exchanges after production has started.</li>
-            <li><strong>Defective or incorrectly shipped items:</strong> If the delivered item has significant damage, stains, or engraving errors caused by our fault, and you contact us within 7 days of receipt, we will remake and reship the item at no cost.</li>
-            <li><strong>Stone characteristics:</strong> Natural variations in stone patterns, color, and fine texture are inherent to the material and are not considered defects.</li>
-          </ul>
-          {% endif %}
+          {{ self.copy_html("terms_019")|safe }}
         </div>
       </section>
 
       <section class="legal-section" id="section-6">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">06</span>
-          <span>{% if selected_locale == "ja" %}禁止事項・知的財産権{% else %}Prohibited Conduct and Intellectual Property{% endif %}</span>
+          <span>{{ self.copy_text("terms_020") }}</span>
         </h3>
         <div class="legal-section__copy">
-          {% if selected_locale == "ja" %}
-          <ul class="legal-list">
-            <li>利用者は、本サイトの画像、文章、デザイン等の無断転載・転用を禁じられます。</li>
-            <li>提供される印影デザイン等の知的財産権は、当社または正当な権利者に帰属します。</li>
-          </ul>
-          {% else %}
-          <ul class="legal-list">
-            <li>Users must not reproduce or reuse the Site’s images, text, designs, or other content without permission.</li>
-            <li>Intellectual property rights in the seal designs and related materials provided belong to the Company or the rightful rights holder.</li>
-          </ul>
-          {% endif %}
+          {{ self.copy_html("terms_021")|safe }}
         </div>
       </section>
 
       <section class="legal-section" id="section-7">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">07</span>
-          <span>{% if selected_locale == "ja" %}免責事項{% else %}Disclaimer{% endif %}</span>
+          <span>{{ self.copy_text("terms_022") }}</span>
         </h3>
         <div class="legal-section__copy">
-          {% if selected_locale == "ja" %}
-          <p>当社は、天災、戦争、テロ、通信障害、システム保守、通関の差し止め、その他不可抗力により生じた損害や遅延について、一切の責任を負いません。</p>
-          <p>本サービスにおける商品の使用、または使用不能から生じる損害についても、当社の過失が認められない限り責任を負いません。</p>
-          {% else %}
-          <p>The Company is not liable for damages or delays caused by natural disasters, war, terrorism, network failures, system maintenance, customs holds, or other force majeure events.</p>
-          <p>The Company is also not liable for damages arising from the use or inability to use the products in the Service, except where the Company is found negligent.</p>
-          {% endif %}
+          {{ self.copy_html("terms_023")|safe }}
         </div>
       </section>
 
       <section class="legal-section" id="section-8">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">08</span>
-          <span>{% if selected_locale == "ja" %}準拠法・裁判管轄・言語{% else %}Governing Law, Jurisdiction, and Language{% endif %}</span>
+          <span>{{ self.copy_text("terms_024") }}</span>
         </h3>
         <div class="legal-section__copy">
-          {% if selected_locale == "ja" %}
-          <dl class="legal-definition-list">
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">準拠法</dt>
-              <dd class="legal-definition-desc">本規約の解釈および適用は、日本法に準拠します。</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">合意管轄</dt>
-              <dd class="legal-definition-desc">本サービスに関して紛争が生じた場合、当社の本店所在地を管轄する地方裁判所を第一審の専属的合意管轄裁判所とします。</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">準拠言語</dt>
-              <dd class="legal-definition-desc">本規約に日本語以外の翻訳版が存在する場合でも、日本語による規約が優先されるものとします。</dd>
-            </div>
-          </dl>
-          {% else %}
-          <dl class="legal-definition-list">
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">Governing law</dt>
-              <dd class="legal-definition-desc">These Terms shall be governed by and construed in accordance with the laws of Japan.</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">Exclusive jurisdiction</dt>
-              <dd class="legal-definition-desc">Any dispute arising in connection with the Service shall be subject to the exclusive jurisdiction of the district court having jurisdiction over the location of our head office, as the court of first instance.</dd>
-            </div>
-            <div class="legal-definition-row">
-              <dt class="legal-definition-term">Controlling language</dt>
-              <dd class="legal-definition-desc">If these Terms are available in any language other than Japanese, the Japanese version shall prevail.</dd>
-            </div>
-          </dl>
-          {% endif %}
+          {{ self.copy_html("terms_025")|safe }}
         </div>
       </section>
 
       <section class="legal-section" id="section-9">
         <h3 class="legal-section__heading">
           <span class="legal-section__index">09</span>
-          <span>{% if selected_locale == "ja" %}お問い合わせ{% else %}Contact{% endif %}</span>
+          <span>{{ self.copy_text("terms_026") }}</span>
         </h3>
         <p class="legal-section__body">
-          {% if selected_locale == "ja" %}
-          ご不明点やご質問がございましたら、お問い合わせフォームよりご連絡ください。
-          {% else %}
-          If you have any questions, please contact us through the inquiry form.
-          {% endif %}
+          {{ self.copy_html("terms_027")|safe }}
         </p>
         <div class="legal-actions">
           <button type="button" class="legal-button legal-button--primary" onclick="window.location.href='{{ top_url }}'">
-            {% if selected_locale == "ja" %}トップへ戻る{% else %}Back to TOP{% endif %}
+            {{ self.copy_text("terms_028") }}
           </button>
           <a
             class="legal-button legal-button--secondary"
@@ -345,7 +178,7 @@
             target="_blank"
             rel="noopener noreferrer"
           >
-            {% if selected_locale == "ja" %}お問い合わせ{% else %}Contact us{% endif %}
+            {{ self.copy_text("terms_029") }}
           </a>
         </div>
       </section>
@@ -361,11 +194,11 @@
         </a>
       </div>
       <div class="top-footer__links">
-        <a class="top-footer__link" href="{{ about_url }}">{% if selected_locale == "ja" %}STONE SIGNATUREとは{% else %}About STONE SIGNATURE{% endif %}</a>
-        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{% if selected_locale == "ja" %}特商法に基づく表記{% else %}Legal Notice{% endif %}</a>
-        <a class="top-footer__link" href="{{ terms_url }}">{% if selected_locale == "ja" %}利用規約{% else %}Terms of Service{% endif %}</a>
-        <a class="top-footer__link" href="{{ privacy_policy_url }}">{% if selected_locale == "ja" %}プライバシーポリシー{% else %}Privacy Policy{% endif %}</a>
-        <a class="top-footer__link" href="{{ company_url }}">{% if selected_locale == "ja" %}運営会社{% else %}Company{% endif %}</a>
+        <a class="top-footer__link" href="{{ about_url }}">{{ self.copy_text("terms_030") }}</a>
+        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{{ self.copy_text("terms_031") }}</a>
+        <a class="top-footer__link" href="{{ terms_url }}">{{ self.copy_text("terms_032") }}</a>
+        <a class="top-footer__link" href="{{ privacy_policy_url }}">{{ self.copy_text("terms_033") }}</a>
+        <a class="top-footer__link" href="{{ company_url }}">{{ self.copy_text("terms_034") }}</a>
       </div>
       <div class="top-footer__copyright">
         © STONE SIGNATURE

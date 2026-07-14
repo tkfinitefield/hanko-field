@@ -14,13 +14,18 @@ import '../features/order_lookup/order_lookup.dart';
 import '../features/settings/settings.dart';
 import '../features/stones/stones.dart';
 import 'localization/app_localization.dart';
+import 'localization/language_registry.dart';
 import 'navigation/app_navigation_shell.dart';
 import 'theme/app_theme.dart';
 
 class HankoApp extends StatefulWidget {
+  static const defaultSupportedLocales = <Locale>[Locale('en'), Locale('ja')];
+
   const HankoApp({
     super.key,
     this.locale,
+    this.supportedLocales = defaultSupportedLocales,
+    this.automaticLocales = defaultSupportedLocales,
     this.loadPreferredLocale = _defaultLoadPreferredLocale,
     this.savePreferredLocale = _defaultSavePreferredLocale,
     this.hasSeenOnboardingResolver = _defaultHasSeenOnboardingResolver,
@@ -42,6 +47,8 @@ class HankoApp extends StatefulWidget {
   });
 
   final Locale? locale;
+  final List<Locale> supportedLocales;
+  final List<Locale> automaticLocales;
   final PreferredLocaleLoader loadPreferredLocale;
   final PreferredLocaleWriter savePreferredLocale;
   final HasSeenOnboardingResolver hasSeenOnboardingResolver;
@@ -110,12 +117,20 @@ class _HankoAppState extends State<HankoApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final locale = widget.locale ?? _preferredLocale;
     return MaterialApp(
       onGenerateTitle: (context) => context.l10n.appTitle,
       debugShowCheckedModeBanner: false,
-      locale: widget.locale ?? _preferredLocale,
-      supportedLocales: HankoLocalizations.supportedLocales,
-      localizationsDelegates: HankoLocalizations.localizationsDelegates,
+      locale: locale,
+      supportedLocales: widget.supportedLocales,
+      localeListResolutionCallback: locale == null
+          ? (preferredLocales, _) => resolveAutomaticLocale(
+              preferredLocales,
+              widget.automaticLocales,
+            )
+          : null,
+      localizationsDelegates:
+          GeneratedHankoLocalizations.localizationsDelegates,
       theme: HankoTheme.light(),
       home: _AppLaunchGate(
         hasSeenOnboardingResolver: widget.hasSeenOnboardingResolver,
@@ -146,14 +161,19 @@ class _HankoAppState extends State<HankoApp> with WidgetsBindingObserver {
       if (!mounted || widget.locale != null) {
         return;
       }
-      setState(() => _preferredLocale = _supportedLocale(locale));
+      setState(
+        () => _preferredLocale = _supportedLocale(
+          locale,
+          widget.automaticLocales,
+        ),
+      );
     } catch (error) {
       debugPrint('failed to load preferred locale: $error');
     }
   }
 
   void _selectPreferredLocale(Locale locale) {
-    final supportedLocale = _supportedLocale(locale);
+    final supportedLocale = _supportedLocale(locale, widget.automaticLocales);
     if (supportedLocale == null) {
       return;
     }
@@ -184,29 +204,35 @@ Future<void> _defaultMarkOnboardingSeen() {
 }
 
 Future<Locale?> _defaultLoadPreferredLocale() async {
-  final languageCode = await const AppLaunchStore().preferredLanguageCode();
-  return _supportedLocaleForLanguageCode(languageCode);
+  final routeCode = await const AppLaunchStore().preferredRouteCode();
+  if (routeCode == null) {
+    return null;
+  }
+  final registry = await AppLanguageRegistry.load();
+  return registry.selectableLanguageForRouteCode(routeCode)?.locale;
 }
 
-Future<void> _defaultSavePreferredLocale(Locale locale) {
-  return const AppLaunchStore().setPreferredLanguageCode(locale.languageCode);
+Future<void> _defaultSavePreferredLocale(Locale locale) async {
+  final registry = await AppLanguageRegistry.load();
+  final language = registry.selectableLanguageForLocale(locale);
+  if (language == null) {
+    return;
+  }
+  await const AppLaunchStore().setPreferredRouteCode(language.routeCode);
 }
 
-Locale? _supportedLocale(Locale? locale) {
+String _checkoutRouteCodeForLocale(Locale locale) =>
+    fallbackRouteCodeForLocale(locale);
+
+Locale? _supportedLocale(Locale? locale, Iterable<Locale> supportedLocales) {
   if (locale == null) {
     return null;
   }
-  return _supportedLocaleForLanguageCode(locale.languageCode);
-}
-
-Locale? _supportedLocaleForLanguageCode(String? languageCode) {
-  final normalized = languageCode?.trim().toLowerCase();
-  if (normalized == null || normalized.isEmpty) {
-    return null;
-  }
-  for (final locale in HankoLocalizations.supportedLocales) {
-    if (locale.languageCode == normalized) {
-      return locale;
+  for (final supportedLocale in supportedLocales) {
+    if (supportedLocale.languageCode == locale.languageCode &&
+        supportedLocale.scriptCode == locale.scriptCode &&
+        supportedLocale.countryCode == locale.countryCode) {
+      return supportedLocale;
     }
   }
   return null;
@@ -532,6 +558,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
   Object? _checkoutProcessingError;
   CreatedOrder? _checkoutCreatedOrder;
   CheckoutSession? _checkoutSession;
+  String? _checkoutRouteCode;
   var _stripeCheckoutStep = StripeCheckoutExternalStep.opening;
   Object? _stripeCheckoutLaunchError;
   CheckoutReturnResult? _checkoutReturnResult;
@@ -613,7 +640,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final locale = Localizations.localeOf(context).languageCode;
+    final locale = fallbackRouteCodeForLocale(Localizations.localeOf(context));
     if (_stoneListingsLocale == locale) {
       return;
     }
@@ -1268,7 +1295,8 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
 
   void _retryStoneListings() {
     final locale =
-        _stoneListingsLocale ?? Localizations.localeOf(context).languageCode;
+        _stoneListingsLocale ??
+        fallbackRouteCodeForLocale(Localizations.localeOf(context));
     unawaited(_loadStoneListings(locale: locale));
   }
 
@@ -1723,6 +1751,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
       _checkoutProcessingError = null;
       _checkoutCreatedOrder = null;
       _checkoutSession = null;
+      _checkoutRouteCode = null;
       _stripeCheckoutStep = StripeCheckoutExternalStep.opening;
       _stripeCheckoutLaunchError = null;
       _checkoutDeepLinkError = null;
@@ -1736,9 +1765,16 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
     });
 
     try {
+      final checkoutRouteCode = _checkoutRouteCodeForLocale(
+        Localizations.localeOf(context),
+      );
+      if (!mounted) {
+        return;
+      }
+      _checkoutRouteCode = checkoutRouteCode;
       final orderDraft = _sealOrderDraftFromOrderDraft(
         draft,
-        locale: Localizations.localeOf(context).languageCode,
+        locale: checkoutRouteCode,
         idempotencyKey: idempotencyKey,
         confirmedAt: confirmedAt,
       );
@@ -1841,6 +1877,9 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
       return;
     }
 
+    final checkoutRouteCode =
+        _checkoutRouteCode ??
+        fallbackRouteCodeForLocale(Localizations.localeOf(context));
     final sourceUri = Uri(
       scheme: 'hankofield',
       host: 'checkout',
@@ -1848,7 +1887,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
       queryParameters: {
         'order_id': order.orderId,
         'session_id': session.sessionId,
-        'lang': Localizations.localeOf(context).languageCode,
+        'lang': checkoutRouteCode,
       },
     );
     _beginPaymentStatusCheck(
@@ -1857,7 +1896,7 @@ class _BottomNavigationShellState extends State<BottomNavigationShell>
         sourceUri: sourceUri,
         orderId: order.orderId,
         sessionId: session.sessionId,
-        locale: Localizations.localeOf(context).languageCode,
+        locale: checkoutRouteCode,
       ),
     );
   }
@@ -2122,7 +2161,7 @@ SealStyleSelection _sealStyleSelectionFromLocalSealDesign(
 }
 
 String _reasonLanguageForCurrentLocale(BuildContext context) {
-  return Localizations.localeOf(context).languageCode == 'ja' ? 'ja' : 'en';
+  return fallbackRouteCodeForLocale(Localizations.localeOf(context));
 }
 
 SealShape _sealShapeFromApiValue(String value) {

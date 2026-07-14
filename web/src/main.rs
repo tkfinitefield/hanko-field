@@ -1,8 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     env,
-    path::Path as FsPath,
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
@@ -28,10 +27,15 @@ const DEFAULT_KANJI_CANDIDATE_COUNT: usize = 6;
 const ADMIN_PROXY_MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 const HX_REDIRECT_HEADER: &str = "hx-redirect";
 const WEB_STATIC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/static");
-const WEB_BLOG_ARTICLES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/blog/articles");
+const WEB_BLOG_CONTENT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/content/blog");
+const LANGUAGE_REGISTRY_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../config/languages.json"
+));
 const EXTERNAL_LEGAL_BASE_URL: &str = "https://finitefield.org";
 const DEFAULT_LOCALE: &str = "en";
-const SUPPORTED_LOCALES: &[&str] = &["en", "ja"];
+static WEB_LANGUAGE_REGISTRY: OnceLock<WebLanguageRegistry> = OnceLock::new();
+static WEB_COPY_DOCUMENT: OnceLock<WebCopyDocument> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RunMode {
@@ -48,6 +52,402 @@ impl RunMode {
             Self::Prod => "prod",
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WebLanguageRegistry {
+    languages: Vec<WebLanguage>,
+    default_route_code: String,
+}
+
+impl WebLanguageRegistry {
+    fn from_json(source: &str) -> Result<Self> {
+        let entries: Vec<LanguageRegistryEntry> =
+            serde_json::from_str(source).context("failed to parse language registry JSON")?;
+        Self::from_entries(entries)
+    }
+
+    fn from_entries(entries: Vec<LanguageRegistryEntry>) -> Result<Self> {
+        let mut route_codes = HashSet::new();
+        let mut enabled_prefixes = HashSet::new();
+        let mut languages = Vec::new();
+
+        for entry in entries {
+            let route_code = normalize_registry_code(&entry.route_code);
+            if route_code.is_empty() {
+                bail!("language registry route_code must not be empty");
+            }
+            if !route_codes.insert(route_code.clone()) {
+                bail!("duplicate language registry route_code: {route_code}");
+            }
+            if entry.web.indexed && !entry.web.enabled {
+                bail!("indexed web language must also be enabled: {route_code}");
+            }
+            if !entry.web.enabled {
+                continue;
+            }
+
+            let url_prefix = entry.web.url_prefix.trim().trim_matches('/').to_lowercase();
+            if route_code != DEFAULT_LOCALE && url_prefix.is_empty() {
+                bail!("non-default enabled web language must define url_prefix: {route_code}");
+            }
+            if !url_prefix.is_empty() && !enabled_prefixes.insert(url_prefix.clone()) {
+                bail!("duplicate enabled web url_prefix: {url_prefix}");
+            }
+
+            languages.push(WebLanguage {
+                route_code,
+                bcp47: entry.bcp47.trim().to_owned(),
+                native_name: entry.native_name.trim().to_owned(),
+                english_name: entry.english_name.trim().to_owned(),
+                text_direction: entry.text_direction,
+                url_prefix,
+                indexed: entry.web.indexed,
+            });
+        }
+
+        if languages.is_empty() {
+            bail!("language registry must include at least one enabled web language");
+        }
+
+        let Some(default_language) = languages
+            .iter()
+            .find(|language| language.route_code == DEFAULT_LOCALE)
+        else {
+            bail!("language registry must include enabled default locale {DEFAULT_LOCALE}");
+        };
+        if !default_language.url_prefix.is_empty() {
+            bail!("default web language must use an empty url_prefix");
+        }
+
+        Ok(Self {
+            languages,
+            default_route_code: DEFAULT_LOCALE.to_owned(),
+        })
+    }
+
+    fn enabled_languages(&self) -> &[WebLanguage] {
+        &self.languages
+    }
+
+    fn indexed_languages(&self) -> impl Iterator<Item = &WebLanguage> {
+        self.languages.iter().filter(|language| language.indexed)
+    }
+
+    fn default_language(&self) -> &WebLanguage {
+        self.enabled_language_exact(&self.default_route_code)
+            .expect("default web language must exist")
+    }
+
+    fn enabled_language_exact(&self, route_code: &str) -> Option<&WebLanguage> {
+        let normalized = normalize_registry_code(route_code);
+        self.languages
+            .iter()
+            .find(|language| language.route_code == normalized)
+    }
+
+    fn enabled_language_for_input(&self, raw: &str) -> Option<&WebLanguage> {
+        let normalized = normalize_locale_input(raw);
+        if normalized.is_empty() {
+            return None;
+        }
+        if normalized == "jp" {
+            return self.enabled_language_exact("ja");
+        }
+        if let Some(language) = self.enabled_language_exact(&normalized) {
+            return Some(language);
+        }
+        if let Some(language) = self
+            .languages
+            .iter()
+            .find(|language| normalize_registry_code(&language.bcp47) == normalized)
+        {
+            return Some(language);
+        }
+        if normalized == "zh-tw"
+            || normalized == "zh-hk"
+            || normalized == "zh-mo"
+            || normalized.starts_with("zh-hant-")
+        {
+            return self.enabled_language_exact("zhtw");
+        }
+        let language = normalized.split('-').next().unwrap_or(normalized.as_str());
+        self.enabled_language_exact(language)
+    }
+
+    fn enabled_language_for_path_segment(&self, raw: &str) -> Option<&WebLanguage> {
+        let normalized = normalize_registry_code(raw);
+        if normalized.is_empty() {
+            return None;
+        }
+        if normalized == "jp" {
+            return self.enabled_language_exact("ja");
+        }
+        self.languages.iter().find(|language| {
+            language.route_code == normalized
+                || (!language.url_prefix.is_empty() && language.url_prefix == normalized)
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WebLanguage {
+    route_code: String,
+    bcp47: String,
+    native_name: String,
+    english_name: String,
+    text_direction: RegistryTextDirection,
+    url_prefix: String,
+    indexed: bool,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum RegistryTextDirection {
+    Ltr,
+    Rtl,
+}
+
+#[derive(Debug, Deserialize)]
+struct LanguageRegistryEntry {
+    route_code: String,
+    bcp47: String,
+    native_name: String,
+    english_name: String,
+    text_direction: RegistryTextDirection,
+    web: LanguageRegistryWebConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct LanguageRegistryWebConfig {
+    enabled: bool,
+    indexed: bool,
+    url_prefix: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LanguageLink {
+    route_code: String,
+    bcp47: String,
+    label: String,
+    url: String,
+    is_default: bool,
+    is_indexed: bool,
+}
+
+#[derive(Debug)]
+struct WebCopyDocument {
+    common: LocalizedCopySection,
+    about: LocalizedCopySection,
+    blog_article: LocalizedCopySection,
+    blog_index: LocalizedCopySection,
+    commercial_transactions: LocalizedCopySection,
+    design: LocalizedCopySection,
+    kanji_suggestions: LocalizedCopySection,
+    payment_failure: LocalizedCopySection,
+    payment_success: LocalizedCopySection,
+    purchase_result: LocalizedCopySection,
+    terms: LocalizedCopySection,
+    top: LocalizedCopySection,
+}
+
+macro_rules! web_copy_section {
+    ($section:literal) => {
+        LocalizedCopySection::from_sources(
+            $section,
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/content/i18n/",
+                $section,
+                "/en.json"
+            )),
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/content/i18n/",
+                $section,
+                "/ja.json"
+            )),
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/content/i18n/",
+                $section,
+                "/zh.json"
+            )),
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/content/i18n/",
+                $section,
+                "/zhtw.json"
+            )),
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/content/i18n/",
+                $section,
+                "/ar.json"
+            )),
+        )
+    };
+}
+
+impl WebCopyDocument {
+    fn load() -> Self {
+        Self {
+            common: web_copy_section!("common"),
+            about: web_copy_section!("about"),
+            blog_article: web_copy_section!("blog_article"),
+            blog_index: web_copy_section!("blog_index"),
+            commercial_transactions: web_copy_section!("commercial_transactions"),
+            design: web_copy_section!("design"),
+            kanji_suggestions: web_copy_section!("kanji_suggestions"),
+            payment_failure: web_copy_section!("payment_failure"),
+            payment_success: web_copy_section!("payment_success"),
+            purchase_result: web_copy_section!("purchase_result"),
+            terms: web_copy_section!("terms"),
+            top: web_copy_section!("top"),
+        }
+    }
+
+    fn section(&self, section: &str) -> &LocalizedCopySection {
+        match section {
+            "common" => &self.common,
+            "about" => &self.about,
+            "blog_article" => &self.blog_article,
+            "blog_index" => &self.blog_index,
+            "commercial_transactions" => &self.commercial_transactions,
+            "design" => &self.design,
+            "kanji_suggestions" => &self.kanji_suggestions,
+            "payment_failure" => &self.payment_failure,
+            "payment_success" => &self.payment_success,
+            "purchase_result" => &self.purchase_result,
+            "terms" => &self.terms,
+            "top" => &self.top,
+            _ => panic!("unknown web copy section: {section}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LocalizedCopySection {
+    en: HashMap<String, String>,
+    ja: HashMap<String, String>,
+    zh: HashMap<String, String>,
+    zhtw: HashMap<String, String>,
+    ar: HashMap<String, String>,
+}
+
+impl LocalizedCopySection {
+    fn from_sources(section: &str, en: &str, ja: &str, zh: &str, zhtw: &str, ar: &str) -> Self {
+        let en = parse_web_copy_locale(section, "en", en);
+        let ja = parse_web_copy_locale(section, "ja", ja);
+        let zh = parse_web_copy_locale(section, "zh", zh);
+        let zhtw = parse_web_copy_locale(section, "zhtw", zhtw);
+        let ar = parse_web_copy_locale(section, "ar", ar);
+        assert_web_copy_key_parity(
+            section,
+            &en,
+            &[("ja", &ja), ("zh", &zh), ("zhtw", &zhtw), ("ar", &ar)],
+        );
+        Self {
+            en,
+            ja,
+            zh,
+            zhtw,
+            ar,
+        }
+    }
+
+    fn for_locale(&self, locale: &str) -> &HashMap<String, String> {
+        match web_copy_locale_key(locale) {
+            "ja" => &self.ja,
+            "zh" => &self.zh,
+            "zhtw" => &self.zhtw,
+            "ar" => &self.ar,
+            _ => &self.en,
+        }
+    }
+}
+
+fn parse_web_copy_locale(section: &str, locale: &str, source: &str) -> HashMap<String, String> {
+    serde_json::from_str(source).unwrap_or_else(|error| {
+        panic!("checked-in web copy JSON must be valid: {section}/{locale}: {error}")
+    })
+}
+
+fn assert_web_copy_key_parity(
+    section: &str,
+    en: &HashMap<String, String>,
+    localized_maps: &[(&str, &HashMap<String, String>)],
+) {
+    let en_keys = en.keys().collect::<HashSet<_>>();
+    for (locale, localized) in localized_maps {
+        let localized_keys = localized.keys().collect::<HashSet<_>>();
+        if localized_keys != en_keys {
+            let missing = en_keys
+                .difference(&localized_keys)
+                .map(|key| key.as_str())
+                .collect::<Vec<_>>();
+            let extra = localized_keys
+                .difference(&en_keys)
+                .map(|key| key.as_str())
+                .collect::<Vec<_>>();
+            panic!(
+                "web copy key mismatch in {section}/{locale}: missing={missing:?} extra={extra:?}"
+            );
+        }
+    }
+}
+
+fn web_language_registry() -> &'static WebLanguageRegistry {
+    WEB_LANGUAGE_REGISTRY.get_or_init(|| {
+        WebLanguageRegistry::from_json(LANGUAGE_REGISTRY_JSON)
+            .expect("checked-in language registry must be valid for web")
+    })
+}
+
+fn web_copy_document() -> &'static WebCopyDocument {
+    WEB_COPY_DOCUMENT.get_or_init(WebCopyDocument::load)
+}
+
+fn web_copy_locale_key(locale: &str) -> &'static str {
+    let normalized = normalize_registry_code(locale).replace('_', "-");
+    if normalized == "ja" || normalized == "jp" || normalized.starts_with("ja-") {
+        return "ja";
+    }
+    if normalized == "zhtw"
+        || normalized == "zh-hant"
+        || normalized == "zh-tw"
+        || normalized == "zh-hk"
+        || normalized == "zh-mo"
+        || normalized.starts_with("zh-hant-")
+    {
+        return "zhtw";
+    }
+    if normalized == "zh" || normalized == "zh-hans" || normalized.starts_with("zh-") {
+        return "zh";
+    }
+    if normalized == "ar" || normalized.starts_with("ar-") {
+        return "ar";
+    }
+    "en"
+}
+
+fn web_copy_text(section: &str, locale: &str, key: &str) -> &'static str {
+    let section_name = section;
+    let section = web_copy_document().section(section);
+    let localized = section.for_locale(locale);
+    localized
+        .get(key)
+        .or_else(|| section.en.get(key))
+        .map(String::as_str)
+        .unwrap_or_else(|| panic!("missing web copy key: {section_name}.{key}"))
+}
+
+fn normalize_registry_code(raw: &str) -> String {
+    raw.trim().to_lowercase()
+}
+
+fn normalize_locale_input(raw: &str) -> String {
+    normalize_registry_code(raw).replace('_', "-")
 }
 
 #[derive(Debug, Clone)]
@@ -154,6 +554,24 @@ struct BlogPost {
     image_url: String,
     image_alt: String,
     image_alt_ja: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct BlogPostMetadata {
+    slug: String,
+    published_date: String,
+    last_modified_date: String,
+    image_url: String,
+    locales: HashMap<String, BlogPostLocaleMetadata>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BlogPostLocaleMetadata {
+    date_display: String,
+    title: String,
+    excerpt: String,
+    meta_description: String,
+    image_alt: String,
 }
 
 #[derive(Debug, Clone)]
@@ -303,8 +721,9 @@ struct TopPageTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -324,8 +743,9 @@ struct AboutTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -352,8 +772,9 @@ struct PageTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     purchase_action_url: String,
     purchase_note: String,
@@ -496,8 +917,9 @@ struct PaymentSuccessTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -519,8 +941,9 @@ struct PaymentFailureTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -539,8 +962,9 @@ struct CommercialTransactionsTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -559,8 +983,9 @@ struct TermsTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     about_url: String,
@@ -577,8 +1002,9 @@ struct BlogIndexTemplate {
     meta_description: String,
     robots_meta: String,
     canonical_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    x_default_url: String,
+    seo_language_links: Vec<LanguageLink>,
+    language_links: Vec<LanguageLink>,
     company_url: String,
     top_url: String,
     terms_url: String,
@@ -596,8 +1022,8 @@ struct BlogArticleTemplate {
     robots_meta: String,
     canonical_url: String,
     x_default_url: String,
-    lang_ja_url: String,
-    lang_en_url: String,
+    seo_language_links: Vec<LanguageLink>,
+    language_links: Vec<LanguageLink>,
     og_image_url: String,
     company_url: String,
     top_url: String,
@@ -607,6 +1033,63 @@ struct BlogArticleTemplate {
     privacy_policy_url: String,
     post: BlogPostView,
     body_html: String,
+}
+
+macro_rules! impl_template_copy_methods {
+    ($type:ty, $section:literal) => {
+        impl $type {
+            #[allow(dead_code)]
+            fn copy_text(&self, key: &str) -> &str {
+                web_copy_text($section, &self.selected_locale, key)
+            }
+
+            #[allow(dead_code)]
+            fn copy_html(&self, key: &str) -> &str {
+                web_copy_text($section, &self.selected_locale, key)
+            }
+
+            #[allow(dead_code)]
+            fn language_active_class(&self, route_code: &str) -> &str {
+                if self.selected_locale == route_code {
+                    " is-active"
+                } else {
+                    ""
+                }
+            }
+
+            #[allow(dead_code)]
+            fn html_dir(&self) -> &str {
+                html_dir_for_locale(&self.selected_locale)
+            }
+
+            #[allow(dead_code)]
+            fn html_lang(&self) -> &str {
+                web_language_registry()
+                    .enabled_language_for_input(&self.selected_locale)
+                    .map(|language| language.bcp47.as_str())
+                    .unwrap_or(&self.selected_locale)
+            }
+        }
+    };
+}
+
+impl_template_copy_methods!(TopPageTemplate, "top");
+impl_template_copy_methods!(AboutTemplate, "about");
+impl_template_copy_methods!(PageTemplate, "design");
+impl_template_copy_methods!(KanjiSuggestionsTemplate, "kanji_suggestions");
+impl_template_copy_methods!(PurchaseResultTemplate, "purchase_result");
+impl_template_copy_methods!(PaymentSuccessTemplate, "payment_success");
+impl_template_copy_methods!(PaymentFailureTemplate, "payment_failure");
+impl_template_copy_methods!(CommercialTransactionsTemplate, "commercial_transactions");
+impl_template_copy_methods!(TermsTemplate, "terms");
+impl_template_copy_methods!(BlogIndexTemplate, "blog_index");
+impl_template_copy_methods!(BlogArticleTemplate, "blog_article");
+
+fn html_dir_for_locale(locale: &str) -> &'static str {
+    match locale.trim().to_ascii_lowercase().as_str() {
+        "ar" | "fa" | "he" | "ps" | "ur" => "rtl",
+        _ => "ltr",
+    }
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -1305,7 +1788,41 @@ async fn run() -> Result<()> {
     let cfg = load_config().context("failed to load config")?;
     let state = build_state(&cfg).await?;
 
-    let app = Router::new()
+    let app = build_router(state.clone());
+
+    let addr = format!("0.0.0.0:{}", cfg.port);
+    if let Some(project_id) = cfg.firestore_project_id.as_deref() {
+        println!(
+            "hanko web listening on http://localhost:{} mode={} source={} project={} locale={} kanji_api={}",
+            cfg.port,
+            cfg.mode.as_str(),
+            state.source.label(),
+            project_id,
+            cfg.locale,
+            cfg.api_base_url
+        );
+    } else {
+        println!(
+            "hanko web listening on http://localhost:{} mode={} source={} locale={} kanji_api={}",
+            cfg.port,
+            cfg.mode.as_str(),
+            state.source.label(),
+            cfg.locale,
+            cfg.api_base_url
+        );
+    }
+
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .with_context(|| format!("failed to bind {addr}"))?;
+
+    axum::serve(listener, app)
+        .await
+        .context("web server terminated unexpectedly")
+}
+
+fn build_router(state: AppState) -> Router {
+    Router::new()
         .route("/", get(handle_top))
         .route("/robots.txt", get(handle_robots_txt))
         .route("/sitemap.xml", get(handle_sitemap_xml))
@@ -1351,37 +1868,7 @@ async fn run() -> Result<()> {
             header::CACHE_CONTROL,
             HeaderValue::from_static("no-cache, no-store, must-revalidate"),
         ))
-        .with_state(state.clone());
-
-    let addr = format!("0.0.0.0:{}", cfg.port);
-    if let Some(project_id) = cfg.firestore_project_id.as_deref() {
-        println!(
-            "hanko web listening on http://localhost:{} mode={} source={} project={} locale={} kanji_api={}",
-            cfg.port,
-            cfg.mode.as_str(),
-            state.source.label(),
-            project_id,
-            cfg.locale,
-            cfg.api_base_url
-        );
-    } else {
-        println!(
-            "hanko web listening on http://localhost:{} mode={} source={} locale={} kanji_api={}",
-            cfg.port,
-            cfg.mode.as_str(),
-            state.source.label(),
-            cfg.locale,
-            cfg.api_base_url
-        );
-    }
-
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .with_context(|| format!("failed to bind {addr}"))?;
-
-    axum::serve(listener, app)
-        .await
-        .context("web server terminated unexpectedly")
+        .with_state(state)
 }
 
 async fn build_state(cfg: &AppConfig) -> Result<AppState> {
@@ -2087,26 +2574,18 @@ fn collect_font_stylesheet_urls(fonts: &[FontOption]) -> Vec<String> {
 
 fn load_blog_posts() -> Result<Vec<BlogPost>> {
     let mut posts = Vec::new();
-    for entry in std::fs::read_dir(WEB_BLOG_ARTICLES_DIR).with_context(|| {
-        format!("failed to read blog articles directory {WEB_BLOG_ARTICLES_DIR}")
-    })? {
+    for entry in std::fs::read_dir(WEB_BLOG_CONTENT_DIR)
+        .with_context(|| format!("failed to read blog content directory {WEB_BLOG_CONTENT_DIR}"))?
+    {
         let entry = entry.with_context(|| {
-            format!("failed to read blog article entry in {WEB_BLOG_ARTICLES_DIR}")
+            format!("failed to read blog content entry in {WEB_BLOG_CONTENT_DIR}")
         })?;
         let path = entry.path();
-        if path.extension().and_then(|extension| extension.to_str()) != Some("html") {
-            continue;
-        }
-        let Some(file_name) = path.file_name().and_then(|file_name| file_name.to_str()) else {
-            continue;
-        };
-        if file_name.ends_with(".ja.html") {
+        if !path.is_dir() {
             continue;
         }
 
-        let source = std::fs::read_to_string(&path)
-            .with_context(|| format!("failed to read blog article {}", path.display()))?;
-        posts.push(parse_blog_post_from_article(&path, &source)?);
+        posts.push(load_blog_post_from_content_dir(&path)?);
     }
 
     posts.sort_by(|left, right| {
@@ -2118,142 +2597,101 @@ fn load_blog_posts() -> Result<Vec<BlogPost>> {
     Ok(posts)
 }
 
-fn parse_blog_post_from_article(path: &FsPath, source: &str) -> Result<BlogPost> {
-    let (front_matter, _) = split_blog_article_source(source)?;
-    let front_matter = front_matter.with_context(|| {
-        format!(
-            "missing blog metadata front matter in article {}",
-            path.display()
-        )
-    })?;
-    let metadata = parse_blog_front_matter(front_matter)
-        .with_context(|| format!("failed to parse blog metadata in {}", path.display()))?;
-    let fallback_slug = path
-        .file_stem()
-        .and_then(|file_stem| file_stem.to_str())
-        .context("blog article file name should be valid utf-8")?
-        .to_owned();
-    let slug = metadata
-        .get("slug")
-        .cloned()
-        .unwrap_or(fallback_slug)
-        .trim()
-        .to_owned();
+fn load_blog_post_from_content_dir(path: &std::path::Path) -> Result<BlogPost> {
+    let metadata_path = path.join("metadata.json");
+    let source = std::fs::read_to_string(&metadata_path)
+        .with_context(|| format!("failed to read blog metadata {}", metadata_path.display()))?;
+    let metadata = serde_json::from_str::<BlogPostMetadata>(&source)
+        .with_context(|| format!("failed to parse blog metadata {}", metadata_path.display()))?;
+    let slug = metadata.slug.trim().to_owned();
     if !is_safe_slug(&slug) {
-        bail!("invalid blog slug in {}: {slug}", path.display());
+        bail!("invalid blog slug in {}: {slug}", metadata_path.display());
+    }
+    let dir_slug = path
+        .file_name()
+        .and_then(|file_name| file_name.to_str())
+        .context("blog content directory name should be valid utf-8")?;
+    if dir_slug != slug {
+        bail!(
+            "blog metadata slug must match directory name: {} has slug {slug}",
+            path.display()
+        );
+    }
+    for locale in ["en", "ja"] {
+        let article_path = path.join(format!("{locale}.html"));
+        if !article_path.is_file() {
+            bail!("missing blog article body {}", article_path.display());
+        }
     }
 
-    let excerpt = required_blog_metadata(&metadata, "excerpt")?;
-    let excerpt_ja = required_blog_metadata(&metadata, "excerpt_ja")?;
-    let published_date = required_blog_metadata(&metadata, "date")?;
+    let published_date = metadata.published_date;
     ensure_valid_sitemap_lastmod(&published_date)
-        .with_context(|| format!("invalid blog date in {}", path.display()))?;
-    let last_modified_date = metadata
-        .get("lastmod")
-        .cloned()
-        .unwrap_or_else(|| published_date.clone());
-    ensure_valid_sitemap_lastmod(&last_modified_date)
-        .with_context(|| format!("invalid blog lastmod in {}", path.display()))?;
+        .with_context(|| format!("invalid blog published_date in {}", metadata_path.display()))?;
+    let last_modified_date = metadata.last_modified_date;
+    ensure_valid_sitemap_lastmod(&last_modified_date).with_context(|| {
+        format!(
+            "invalid blog last_modified_date in {}",
+            metadata_path.display()
+        )
+    })?;
+    let en = required_blog_locale_metadata(&metadata.locales, "en", &metadata_path)?;
+    let ja = required_blog_locale_metadata(&metadata.locales, "ja", &metadata_path)?;
     Ok(BlogPost {
         slug,
         published_date,
         last_modified_date,
-        date_display: required_blog_metadata(&metadata, "date_display")?,
-        date_display_ja: required_blog_metadata(&metadata, "date_display_ja")?,
-        title: required_blog_metadata(&metadata, "title")?,
-        title_ja: required_blog_metadata(&metadata, "title_ja")?,
-        meta_description: metadata
-            .get("meta_description")
-            .cloned()
-            .unwrap_or_else(|| excerpt.clone()),
-        meta_description_ja: metadata
-            .get("meta_description_ja")
-            .cloned()
-            .unwrap_or_else(|| excerpt_ja.clone()),
-        excerpt,
-        excerpt_ja,
-        image_url: required_blog_metadata(&metadata, "image_url")?,
-        image_alt: required_blog_metadata(&metadata, "image_alt")?,
-        image_alt_ja: required_blog_metadata(&metadata, "image_alt_ja")?,
+        date_display: required_blog_locale_value(en, "date_display", &metadata_path)?,
+        date_display_ja: required_blog_locale_value(ja, "date_display", &metadata_path)?,
+        title: required_blog_locale_value(en, "title", &metadata_path)?,
+        title_ja: required_blog_locale_value(ja, "title", &metadata_path)?,
+        excerpt: required_blog_locale_value(en, "excerpt", &metadata_path)?,
+        excerpt_ja: required_blog_locale_value(ja, "excerpt", &metadata_path)?,
+        meta_description: required_blog_locale_value(en, "meta_description", &metadata_path)?,
+        meta_description_ja: required_blog_locale_value(ja, "meta_description", &metadata_path)?,
+        image_url: required_blog_metadata_value(&metadata.image_url, "image_url", &metadata_path)?,
+        image_alt: required_blog_locale_value(en, "image_alt", &metadata_path)?,
+        image_alt_ja: required_blog_locale_value(ja, "image_alt", &metadata_path)?,
     })
 }
 
-fn required_blog_metadata(metadata: &HashMap<String, String>, key: &str) -> Result<String> {
-    metadata
-        .get(key)
-        .filter(|value| !value.trim().is_empty())
-        .cloned()
-        .with_context(|| format!("missing required blog metadata key `{key}`"))
+fn required_blog_locale_metadata<'a>(
+    locales: &'a HashMap<String, BlogPostLocaleMetadata>,
+    locale: &str,
+    path: &std::path::Path,
+) -> Result<&'a BlogPostLocaleMetadata> {
+    locales.get(locale).with_context(|| {
+        format!(
+            "missing blog metadata locale `{locale}` in {}",
+            path.display()
+        )
+    })
 }
 
-fn split_blog_article_source(source: &str) -> Result<(Option<&str>, &str)> {
-    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-    let Some(remainder) = source
-        .strip_prefix("---\n")
-        .or_else(|| source.strip_prefix("---\r\n"))
-    else {
-        return Ok((None, source));
+fn required_blog_locale_value(
+    metadata: &BlogPostLocaleMetadata,
+    key: &str,
+    path: &std::path::Path,
+) -> Result<String> {
+    let value = match key {
+        "date_display" => &metadata.date_display,
+        "title" => &metadata.title,
+        "excerpt" => &metadata.excerpt,
+        "meta_description" => &metadata.meta_description,
+        "image_alt" => &metadata.image_alt,
+        _ => bail!("unknown blog metadata key `{key}`"),
     };
-
-    for delimiter in ["\n---\n", "\r\n---\r\n", "\n---\r\n", "\r\n---\n"] {
-        if let Some(index) = remainder.find(delimiter) {
-            let metadata = &remainder[..index];
-            let body = &remainder[index + delimiter.len()..];
-            return Ok((Some(metadata), body.trim_start()));
-        }
-    }
-
-    bail!("blog article front matter is missing a closing delimiter")
+    required_blog_metadata_value(value, key, path)
 }
 
-fn parse_blog_front_matter(source: &str) -> Result<HashMap<String, String>> {
-    let mut metadata = HashMap::new();
-    for (line_index, line) in source.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            bail!("invalid metadata line {}: {line}", line_index + 1);
-        };
-        let key = key.trim();
-        if key.is_empty() {
-            bail!("empty metadata key on line {}", line_index + 1);
-        }
-        metadata.insert(
-            key.to_owned(),
-            parse_blog_metadata_value(value.trim())
-                .with_context(|| format!("invalid value for metadata key `{key}`"))?,
+fn required_blog_metadata_value(value: &str, key: &str, path: &std::path::Path) -> Result<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        bail!(
+            "missing required blog metadata key `{key}` in {}",
+            path.display()
         );
     }
-    Ok(metadata)
-}
-
-fn parse_blog_metadata_value(value: &str) -> Result<String> {
-    if !(value.starts_with('"') && value.ends_with('"') && value.len() >= 2) {
-        bail!("metadata values must be double-quoted strings");
-    }
-
-    let mut parsed = String::new();
-    let mut chars = value[1..value.len() - 1].chars();
-    while let Some(ch) = chars.next() {
-        if ch != '\\' {
-            parsed.push(ch);
-            continue;
-        }
-
-        let escaped = chars.next().context("unterminated escape sequence")?;
-        match escaped {
-            '"' => parsed.push('"'),
-            '\\' => parsed.push('\\'),
-            'n' => parsed.push('\n'),
-            'r' => parsed.push('\r'),
-            't' => parsed.push('\t'),
-            other => bail!("unsupported escape sequence \\{other}"),
-        }
-    }
-
-    Ok(parsed)
+    Ok(value.to_owned())
 }
 
 fn blog_post_cards(posts: &[BlogPost], base_url: &str, locale: &str) -> Vec<BlogPostCard> {
@@ -2304,16 +2742,15 @@ fn read_blog_article_body(slug: &str, locale: &str) -> Result<String> {
     if !is_safe_slug(slug) {
         bail!("invalid blog slug");
     }
-    let path = if is_japanese_locale(locale) {
-        format!("{WEB_BLOG_ARTICLES_DIR}/{slug}.ja.html")
+    let route_code = if is_japanese_locale(locale) {
+        "ja"
     } else {
-        format!("{WEB_BLOG_ARTICLES_DIR}/{slug}.html")
+        "en"
     };
+    let path = format!("{WEB_BLOG_CONTENT_DIR}/{slug}/{route_code}.html");
     let source = std::fs::read_to_string(&path)
         .with_context(|| format!("failed to read blog article {path}"))?;
-    let (_, body_html) = split_blog_article_source(&source)
-        .with_context(|| format!("failed to split blog article {path}"))?;
-    Ok(body_html.to_owned())
+    Ok(source)
 }
 
 fn is_safe_slug(slug: &str) -> bool {
@@ -2369,20 +2806,13 @@ async fn render_top_page(
     };
 
     let template = TopPageTemplate {
-        page_title: localized_text(
-            &selected_locale,
-            "宝石印鑑をオンラインでデザイン | STONE SIGNATURE",
-            "Custom gemstone seals | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "宝石印鑑をオンラインでデザインして、日本語または英語で注文できます。",
-            "Design custom hand-carved gemstone seals online and order in English or Japanese.",
-        ),
-        robots_meta: "index,follow".to_owned(),
-        canonical_url: top_url(site_base_url, "en"),
-        lang_ja_url: top_url(site_base_url, "ja"),
-        lang_en_url: top_url(site_base_url, "en"),
+        page_title: web_copy_text("top", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("top", &selected_locale, "seo_description").to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
+        canonical_url: canonical_url_for_path(site_base_url, "/", &selected_locale),
+        x_default_url: x_default_url_for_path(site_base_url, "/"),
+        seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/"),
+        language_links: language_links_for_path(site_base_url, "/"),
         company_url: company_url(site_base_url),
         selected_locale: selected_locale.clone(),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
@@ -2435,23 +2865,14 @@ async fn render_about_page(
         Err(response) => return response,
     };
     let site_base_url = state.site_base_url.as_str();
-    let lang_ja_url = about_url(site_base_url, "ja");
-    let lang_en_url = about_url(site_base_url, "en");
     let template = AboutTemplate {
-        page_title: localized_text(
-            &selected_locale,
-            "STONE SIGNATUREとは | STONE SIGNATURE",
-            "About STONE SIGNATURE | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "STONE SIGNATUREは、宝石を使った印鑑をオンラインで選び、印影をデザインして注文できるサービスです。",
-            "Learn how STONE SIGNATURE lets you choose a gemstone seal online, design the seal impression, and place your order.",
-        ),
-        robots_meta: "index,follow".to_owned(),
-        canonical_url: lang_en_url.clone(),
-        lang_ja_url,
-        lang_en_url,
+        page_title: web_copy_text("about", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("about", &selected_locale, "seo_description").to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
+        canonical_url: canonical_url_for_path(site_base_url, "/about", &selected_locale),
+        x_default_url: x_default_url_for_path(site_base_url, "/about"),
+        seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/about"),
+        language_links: language_links_for_path(site_base_url, "/about"),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -2545,38 +2966,30 @@ async fn render_design_page(
         material_filters: catalog.material_filters,
         selected_color_family: material_filter_state.color_family.clone(),
         selected_pattern_primary: material_filter_state.pattern_primary.clone(),
-        page_title: localized_text(
-            &selected_locale,
-            "デザイン作成 | STONE SIGNATURE",
-            "Design your seal | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "印影、出品個体、お届け先を順に選んで、そのまま購入まで進めます。",
-            "Choose the seal text, listing, and shipping details, then continue to checkout.",
-        ),
-        robots_meta: "index,follow".to_owned(),
+        page_title: web_copy_text("design", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("design", &selected_locale, "seo_description").to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
         purchase_action_url: if state.mode == RunMode::Mock {
             site_url(site_base_url, "/mock/purchase")
         } else {
             site_url(site_base_url, "/purchase")
         },
-        purchase_note: if state.mode == RunMode::Mock {
-            localized_text(
-                &selected_locale,
-                "モック注文を確定します。",
-                "This confirms a mock order.",
-            )
-        } else {
-            localized_text(
-                &selected_locale,
-                "Stripe Checkout に遷移して決済します。",
-                "You will be redirected to Stripe Checkout to complete payment.",
-            )
-        },
-        canonical_url: design_url(site_base_url, "en"),
-        lang_ja_url: design_url_with_filters(site_base_url, "ja", &material_filter_state),
-        lang_en_url: design_url_with_filters(site_base_url, "en", &material_filter_state),
+        purchase_note: web_copy_text(
+            "design",
+            &selected_locale,
+            if state.mode == RunMode::Mock {
+                "purchase_note_mock"
+            } else {
+                "purchase_note_live"
+            },
+        )
+        .to_owned(),
+        canonical_url: canonical_url_for_path(site_base_url, "/design", &selected_locale),
+        x_default_url: x_default_url_for_path(site_base_url, "/design"),
+        seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/design"),
+        language_links: language_links_with_urls(|language| {
+            design_url_with_filters(site_base_url, &language.route_code, &material_filter_state)
+        }),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -2639,20 +3052,14 @@ async fn render_blog_index_page(
         }
     };
     let template = BlogIndexTemplate {
-        page_title: localized_text(
-            &selected_locale,
-            "ジャーナル | STONE SIGNATURE",
-            "Journal | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "STONE SIGNATURE の石印、手彫り、朱肉にまつわる記事をご覧ください。",
-            "Read STONE SIGNATURE journal stories on gemstone seals, hand carving, and vermilion ink.",
-        ),
-        robots_meta: "index,follow".to_owned(),
-        canonical_url: blog_index_url(site_base_url, "en"),
-        lang_ja_url: blog_index_url(site_base_url, "ja"),
-        lang_en_url: blog_index_url(site_base_url, "en"),
+        page_title: web_copy_text("blog_index", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("blog_index", &selected_locale, "seo_description")
+            .to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
+        canonical_url: canonical_url_for_path(site_base_url, "/blog", &selected_locale),
+        x_default_url: x_default_url_for_path(site_base_url, "/blog"),
+        seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/blog"),
+        language_links: language_links_for_path(site_base_url, "/blog"),
         company_url: company_url(site_base_url),
         selected_locale: selected_locale.clone(),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
@@ -2733,11 +3140,19 @@ async fn render_blog_article_page(
     let template = BlogArticleTemplate {
         page_title: format!("{} | STONE SIGNATURE", &localized_post.title),
         meta_description: localized_post.meta_description.clone(),
-        robots_meta: "index,follow".to_owned(),
-        canonical_url: blog_article_url(site_base_url, &post.slug, &selected_locale),
+        robots_meta: robots_meta_for_locale(&selected_locale),
+        canonical_url: canonical_url_for_path(
+            site_base_url,
+            &format!("/blog/{}", post.slug),
+            &selected_locale,
+        ),
         x_default_url: blog_article_url(site_base_url, &post.slug, "en"),
-        lang_ja_url: blog_article_url(site_base_url, &post.slug, "ja"),
-        lang_en_url: blog_article_url(site_base_url, &post.slug, "en"),
+        seo_language_links: seo_language_links_with_urls(|language| {
+            blog_article_url(site_base_url, &post.slug, &language.route_code)
+        }),
+        language_links: language_links_with_urls(|language| {
+            blog_article_url(site_base_url, &post.slug, &language.route_code)
+        }),
         og_image_url: absolute_content_url(site_base_url, &localized_post.image_url),
         company_url: company_url(site_base_url),
         selected_locale: selected_locale.clone(),
@@ -3057,16 +3472,9 @@ async fn render_payment_success_page(
             "/commercial-transactions",
             &selected_locale,
         ),
-        page_title: localized_text(
-            &selected_locale,
-            "支払い完了 | STONE SIGNATURE",
-            "Payment complete | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "ご注文の支払いが完了しました。Stripeの決済完了メールをご確認ください。",
-            "Your payment was received. Check your Stripe payment receipt for order details and next steps.",
-        ),
+        page_title: web_copy_text("payment_success", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("payment_success", &selected_locale, "seo_description")
+            .to_owned(),
         robots_meta: "noindex,follow".to_owned(),
         canonical_url: payment_result_locale_url(site_base_url, "/payment/success", &query, "en"),
         has_order_id: !order_id.is_empty(),
@@ -3075,8 +3483,23 @@ async fn render_payment_success_page(
         session_id,
         has_app_redirect_url,
         app_redirect_url,
-        lang_en_url: payment_result_locale_url(site_base_url, "/payment/success", &query, "en"),
-        lang_ja_url: payment_result_locale_url(site_base_url, "/payment/success", &query, "ja"),
+        x_default_url: payment_result_locale_url(site_base_url, "/payment/success", &query, "en"),
+        seo_language_links: seo_language_links_with_urls(|language| {
+            payment_result_locale_url(
+                site_base_url,
+                "/payment/success",
+                &query,
+                &language.route_code,
+            )
+        }),
+        language_links: language_links_with_urls(|language| {
+            payment_result_locale_url(
+                site_base_url,
+                "/payment/success",
+                &query,
+                &language.route_code,
+            )
+        }),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -3144,24 +3567,32 @@ async fn render_payment_failure_page(
             "/commercial-transactions",
             &selected_locale,
         ),
-        page_title: localized_text(
-            &selected_locale,
-            "支払い未完了 | STONE SIGNATURE",
-            "Payment incomplete | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "お支払いが完了しませんでした。カード情報をご確認のうえ、購入画面から再度お試しください。",
-            "Payment did not complete. Check your card details and return to the purchase page to try again.",
-        ),
+        page_title: web_copy_text("payment_failure", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("payment_failure", &selected_locale, "seo_description")
+            .to_owned(),
         robots_meta: "noindex,follow".to_owned(),
         canonical_url: payment_result_locale_url(site_base_url, "/payment/failure", &query, "en"),
         has_order_id: !order_id.is_empty(),
         order_id,
         has_app_redirect_url,
         app_redirect_url,
-        lang_en_url: payment_result_locale_url(site_base_url, "/payment/failure", &query, "en"),
-        lang_ja_url: payment_result_locale_url(site_base_url, "/payment/failure", &query, "ja"),
+        x_default_url: payment_result_locale_url(site_base_url, "/payment/failure", &query, "en"),
+        seo_language_links: seo_language_links_with_urls(|language| {
+            payment_result_locale_url(
+                site_base_url,
+                "/payment/failure",
+                &query,
+                &language.route_code,
+            )
+        }),
+        language_links: language_links_with_urls(|language| {
+            payment_result_locale_url(
+                site_base_url,
+                "/payment/failure",
+                &query,
+                &language.route_code,
+            )
+        }),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -3209,24 +3640,28 @@ async fn render_commercial_transactions_page(
         Err(response) => return response,
     };
     let site_base_url = state.site_base_url.as_str();
-    let lang_ja_url = commercial_transactions_url(site_base_url, "ja");
-    let lang_en_url = commercial_transactions_url(site_base_url, "en");
     let template = CommercialTransactionsTemplate {
         contact_url: inquiry_url(site_base_url, &selected_locale),
-        page_title: localized_text(
+        page_title: web_copy_text("commercial_transactions", &selected_locale, "seo_title")
+            .to_owned(),
+        meta_description: web_copy_text(
+            "commercial_transactions",
             &selected_locale,
-            "特定商取引法に基づく表記 | STONE SIGNATURE",
-            "Legal Notice | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
+            "seo_description",
+        )
+        .to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
+        canonical_url: canonical_url_for_path(
+            site_base_url,
+            "/commercial-transactions",
             &selected_locale,
-            "販売業者情報、支払い方法、配送、返品など、特定商取引法に基づく表記をご確認ください。",
-            "Read the legal notice for STONE SIGNATURE, including seller information, payment methods, delivery, and returns.",
         ),
-        robots_meta: "index,follow".to_owned(),
-        canonical_url: lang_en_url.clone(),
-        lang_ja_url,
-        lang_en_url,
+        x_default_url: x_default_url_for_path(site_base_url, "/commercial-transactions"),
+        seo_language_links: indexed_hreflang_links_for_path(
+            site_base_url,
+            "/commercial-transactions",
+        ),
+        language_links: language_links_for_path(site_base_url, "/commercial-transactions"),
         company_url: company_url(site_base_url),
         top_url: localized_navigation_page_url(site_base_url, "/", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -3276,24 +3711,15 @@ async fn render_terms_page(
         Err(response) => return response,
     };
     let site_base_url = state.site_base_url.as_str();
-    let lang_ja_url = terms_url(site_base_url, "ja");
-    let lang_en_url = terms_url(site_base_url, "en");
     let template = TermsTemplate {
         contact_url: inquiry_url(site_base_url, &selected_locale),
-        page_title: localized_text(
-            &selected_locale,
-            "利用規約 | STONE SIGNATURE",
-            "Terms of Service | STONE SIGNATURE",
-        ),
-        meta_description: localized_text(
-            &selected_locale,
-            "注文、支払い、配送、返品、準拠法など、STONE SIGNATURE の利用規約をご確認ください。",
-            "Read the STONE SIGNATURE terms of service, including order formation, payment, delivery, returns, and governing law.",
-        ),
-        robots_meta: "index,follow".to_owned(),
-        canonical_url: lang_en_url.clone(),
-        lang_ja_url,
-        lang_en_url,
+        page_title: web_copy_text("terms", &selected_locale, "seo_title").to_owned(),
+        meta_description: web_copy_text("terms", &selected_locale, "seo_description").to_owned(),
+        robots_meta: robots_meta_for_locale(&selected_locale),
+        canonical_url: canonical_url_for_path(site_base_url, "/terms", &selected_locale),
+        x_default_url: x_default_url_for_path(site_base_url, "/terms"),
+        seo_language_links: indexed_hreflang_links_for_path(site_base_url, "/terms"),
+        language_links: language_links_for_path(site_base_url, "/terms"),
         company_url: company_url(site_base_url),
         terms_url: localized_navigation_page_url(site_base_url, "/terms", &selected_locale),
         about_url: localized_navigation_page_url(site_base_url, "/about", &selected_locale),
@@ -3809,36 +4235,15 @@ fn resolve_request_locale(requested: Option<&str>, locale: &str, default_locale:
 }
 
 fn parse_supported_locale(raw: &str) -> Option<&'static str> {
-    let normalized = raw.trim().to_lowercase();
-    if normalized.is_empty() {
-        return None;
-    }
-    if normalized == "jp" {
-        return Some("ja");
-    }
-    if let Some(locale) = supported_locale_exact(&normalized) {
-        return Some(locale);
-    }
-    let language = normalized
-        .split(['-', '_'])
-        .next()
-        .unwrap_or(normalized.as_str());
-    supported_locale_exact(language)
+    web_language_registry()
+        .enabled_language_for_input(raw)
+        .map(|language| language.route_code.as_str())
 }
 
 fn parse_path_locale(raw: &str) -> Option<&'static str> {
-    let normalized = raw.trim().to_lowercase();
-    if normalized == "jp" {
-        return Some("ja");
-    }
-    supported_locale_exact(&normalized)
-}
-
-fn supported_locale_exact(locale: &str) -> Option<&'static str> {
-    SUPPORTED_LOCALES
-        .iter()
-        .copied()
-        .find(|supported| *supported == locale)
+    web_language_registry()
+        .enabled_language_for_path_segment(raw)
+        .map(|language| language.route_code.as_str())
 }
 
 fn is_japanese_locale(locale: &str) -> bool {
@@ -3897,25 +4302,135 @@ fn locale_query_params(locale: &str) -> Vec<String> {
 }
 
 fn localized_page_path(path: &str, locale: &str) -> String {
-    let normalized = parse_supported_locale(locale).unwrap_or(DEFAULT_LOCALE);
-    if normalized == DEFAULT_LOCALE {
+    let registry = web_language_registry();
+    let language = registry
+        .enabled_language_for_input(locale)
+        .unwrap_or_else(|| registry.default_language());
+    localized_page_path_for_language(path, language)
+}
+
+fn localized_page_path_for_language(path: &str, language: &WebLanguage) -> String {
+    if language.route_code == DEFAULT_LOCALE {
         return path.to_owned();
     }
 
     let path = if path.is_empty() { "/" } else { path };
     if path == "/" {
-        return format!("/{normalized}/");
+        return format!("/{}/", language.url_prefix);
     }
 
     if let Some(path) = path.strip_prefix('/') {
-        format!("/{normalized}/{path}")
+        format!("/{}/{path}", language.url_prefix)
     } else {
-        format!("/{normalized}/{path}")
+        format!("/{}/{path}", language.url_prefix)
     }
 }
 
 fn localized_page_url(base_url: &str, path: &str, locale: &str) -> String {
     site_url(base_url, &localized_page_path(path, locale))
+}
+
+fn language_links_for_path(base_url: &str, path: &str) -> Vec<LanguageLink> {
+    language_links_for_path_with_registry(web_language_registry(), base_url, path)
+}
+
+fn language_links_with_urls<F>(url_for_language: F) -> Vec<LanguageLink>
+where
+    F: Fn(&WebLanguage) -> String,
+{
+    web_language_registry()
+        .enabled_languages()
+        .iter()
+        .map(|language| language_link_with_url(language, url_for_language(language)))
+        .collect()
+}
+
+fn seo_language_links_with_urls<F>(url_for_language: F) -> Vec<LanguageLink>
+where
+    F: Fn(&WebLanguage) -> String,
+{
+    web_language_registry()
+        .indexed_languages()
+        .map(|language| language_link_with_url(language, url_for_language(language)))
+        .collect()
+}
+
+fn language_links_for_path_with_registry(
+    registry: &WebLanguageRegistry,
+    base_url: &str,
+    path: &str,
+) -> Vec<LanguageLink> {
+    registry
+        .enabled_languages()
+        .iter()
+        .map(|language| language_link_for_path(base_url, path, language))
+        .collect()
+}
+
+fn canonical_url_for_path(base_url: &str, path: &str, locale: &str) -> String {
+    canonical_url_for_path_with_registry(web_language_registry(), base_url, path, locale)
+}
+
+fn robots_meta_for_locale(locale: &str) -> String {
+    web_language_registry()
+        .enabled_language_exact(locale)
+        .filter(|language| language.indexed)
+        .map(|_| "index,follow")
+        .unwrap_or("noindex,follow")
+        .to_owned()
+}
+
+fn canonical_url_for_path_with_registry(
+    registry: &WebLanguageRegistry,
+    base_url: &str,
+    path: &str,
+    locale: &str,
+) -> String {
+    let language = registry
+        .enabled_language_exact(locale)
+        .filter(|language| language.indexed)
+        .unwrap_or_else(|| registry.default_language());
+    site_url(base_url, &localized_page_path_for_language(path, language))
+}
+
+fn x_default_url_for_path(base_url: &str, path: &str) -> String {
+    site_url(
+        base_url,
+        &localized_page_path_for_language(path, web_language_registry().default_language()),
+    )
+}
+
+fn indexed_hreflang_links_for_path(base_url: &str, path: &str) -> Vec<LanguageLink> {
+    indexed_hreflang_links_for_path_with_registry(web_language_registry(), base_url, path)
+}
+
+fn indexed_hreflang_links_for_path_with_registry(
+    registry: &WebLanguageRegistry,
+    base_url: &str,
+    path: &str,
+) -> Vec<LanguageLink> {
+    registry
+        .indexed_languages()
+        .map(|language| language_link_for_path(base_url, path, language))
+        .collect()
+}
+
+fn language_link_for_path(base_url: &str, path: &str, language: &WebLanguage) -> LanguageLink {
+    language_link_with_url(
+        language,
+        site_url(base_url, &localized_page_path_for_language(path, language)),
+    )
+}
+
+fn language_link_with_url(language: &WebLanguage, url: String) -> LanguageLink {
+    LanguageLink {
+        route_code: language.route_code.clone(),
+        bcp47: language.bcp47.clone(),
+        label: language.native_name.clone(),
+        url,
+        is_default: language.route_code == DEFAULT_LOCALE,
+        is_indexed: language.indexed,
+    }
 }
 
 #[cfg(test)]
@@ -4033,14 +4548,40 @@ fn build_robots_txt(base_url: &str) -> String {
 }
 
 fn sitemap_url_entry(base_url: &str, path: &str, lastmod: &str) -> Result<String> {
+    sitemap_url_entry_with_registry(web_language_registry(), base_url, path, lastmod)
+}
+
+fn sitemap_url_entry_with_registry(
+    registry: &WebLanguageRegistry,
+    base_url: &str,
+    path: &str,
+    lastmod: &str,
+) -> Result<String> {
     ensure_canonical_sitemap_path(path)?;
     ensure_valid_sitemap_lastmod(lastmod)?;
 
-    let en_url = localized_page_url(base_url, path, "en");
-    let ja_url = localized_page_url(base_url, path, "ja");
-    Ok(format!(
-        "  <url>\n    <loc>{en_url}</loc>\n    <lastmod>{lastmod}</lastmod>\n    <xhtml:link rel=\"alternate\" hreflang=\"en\" href=\"{en_url}\" />\n    <xhtml:link rel=\"alternate\" hreflang=\"ja\" href=\"{ja_url}\" />\n    <xhtml:link rel=\"alternate\" hreflang=\"x-default\" href=\"{en_url}\" />\n  </url>\n  <url>\n    <loc>{ja_url}</loc>\n    <lastmod>{lastmod}</lastmod>\n    <xhtml:link rel=\"alternate\" hreflang=\"en\" href=\"{en_url}\" />\n    <xhtml:link rel=\"alternate\" hreflang=\"ja\" href=\"{ja_url}\" />\n    <xhtml:link rel=\"alternate\" hreflang=\"x-default\" href=\"{en_url}\" />\n  </url>\n"
-    ))
+    let links = indexed_hreflang_links_for_path_with_registry(registry, base_url, path);
+    let Some(default_link) = links.iter().find(|link| link.is_default) else {
+        bail!("sitemap path requires an indexed default language: {path}");
+    };
+    let mut entry = String::new();
+    for loc_link in &links {
+        entry.push_str("  <url>\n");
+        entry.push_str(&format!("    <loc>{}</loc>\n", loc_link.url));
+        entry.push_str(&format!("    <lastmod>{lastmod}</lastmod>\n"));
+        for alternate in &links {
+            entry.push_str(&format!(
+                "    <xhtml:link rel=\"alternate\" hreflang=\"{}\" href=\"{}\" />\n",
+                alternate.bcp47, alternate.url
+            ));
+        }
+        entry.push_str(&format!(
+            "    <xhtml:link rel=\"alternate\" hreflang=\"x-default\" href=\"{}\" />\n",
+            default_link.url
+        ));
+        entry.push_str("  </url>\n");
+    }
+    Ok(entry)
 }
 
 fn build_sitemap_xml(base_url: &str) -> Result<String> {
@@ -4934,11 +5475,13 @@ fn read_array_field(data: &BTreeMap<String, JsonValue>, key: &str) -> Vec<JsonVa
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::to_bytes;
+    use axum::body::{Body, to_bytes};
     use axum::extract::Form;
+    use axum::http::Request;
     use serde_json::json;
     use std::collections::{BTreeMap, HashMap};
     use std::sync::Arc;
+    use tower::ServiceExt;
 
     const TEST_SITE_BASE_URL: &str = "https://finitefield.org";
     const TEST_ALT_SITE_BASE_URL: &str = "https://inkanfield.org";
@@ -4972,6 +5515,55 @@ mod tests {
             locale: "ja".to_owned(),
             default_locale: "ja".to_owned(),
             site_base_url: TEST_SITE_BASE_URL.to_owned(),
+        }
+    }
+
+    async fn route_get(path: &str) -> Response {
+        build_router(mock_state())
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(path)
+                    .body(Body::empty())
+                    .expect("test request should build"),
+            )
+            .await
+            .expect("router should respond")
+    }
+
+    async fn route_get_html(path: &str) -> (StatusCode, String) {
+        let response = route_get(path).await;
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should be readable");
+        (
+            status,
+            String::from_utf8(body.to_vec()).expect("response body should be utf-8"),
+        )
+    }
+
+    fn language_registry_entry(
+        route_code: &str,
+        bcp47: &str,
+        native_name: &str,
+        english_name: &str,
+        text_direction: RegistryTextDirection,
+        enabled: bool,
+        indexed: bool,
+        url_prefix: &str,
+    ) -> LanguageRegistryEntry {
+        LanguageRegistryEntry {
+            route_code: route_code.to_owned(),
+            bcp47: bcp47.to_owned(),
+            native_name: native_name.to_owned(),
+            english_name: english_name.to_owned(),
+            text_direction,
+            web: LanguageRegistryWebConfig {
+                enabled,
+                indexed,
+                url_prefix: url_prefix.to_owned(),
+            },
         }
     }
 
@@ -5436,7 +6028,7 @@ mod tests {
         )
         .expect("top body should be utf-8");
 
-        assert!(top_html.contains(r#"<html lang="en">"#));
+        assert!(top_html.contains(r#"<html lang="en" dir="ltr">"#));
         assert!(top_html.contains(r#"<span class="top-brand__subtitle">Seal Field</span>"#));
         assert!(top_html.contains("A gemstone seal made just for you."));
         assert!(!top_html.contains("あなただけの宝石印鑑"));
@@ -5451,13 +6043,104 @@ mod tests {
         )
         .expect("about body should be utf-8");
 
-        assert!(about_html.contains(r#"<html lang="en">"#));
+        assert!(about_html.contains(r#"<html lang="en" dir="ltr">"#));
         assert!(about_html.contains(r#"<span class="top-brand__subtitle">Seal Field</span>"#));
         assert!(about_html.contains("Your seal, made from gemstone"));
         assert!(
             about_html.contains("STONE SIGNATURE is a service for choosing a gemstone seal online")
         );
         assert!(!about_html.contains("宝石でつくる、あなたの印鑑"));
+    }
+
+    #[tokio::test]
+    async fn web_router_resolves_supported_and_unknown_locale_prefixes() {
+        let (about_status, about_html) = route_get_html("/about").await;
+        assert_eq!(about_status, StatusCode::OK);
+        assert!(about_html.contains(r#"<html lang="en" dir="ltr">"#));
+        assert!(
+            about_html.contains(r#"<link rel="canonical" href="https://finitefield.org/about">"#)
+        );
+        assert!(about_html.contains("Your seal, made from gemstone"));
+
+        let (ja_about_status, ja_about_html) = route_get_html("/ja/about").await;
+        assert_eq!(ja_about_status, StatusCode::OK);
+        assert!(ja_about_html.contains(r#"<html lang="ja" dir="ltr">"#));
+        assert!(
+            ja_about_html
+                .contains(r#"<link rel="canonical" href="https://finitefield.org/ja/about">"#)
+        );
+        assert!(ja_about_html.contains("宝石でつくる、あなたの印鑑"));
+
+        let (en_about_status, en_about_html) = route_get_html("/en/about").await;
+        assert_eq!(en_about_status, StatusCode::OK);
+        assert!(en_about_html.contains(r#"<html lang="en" dir="ltr">"#));
+        assert!(
+            en_about_html
+                .contains(r#"<link rel="canonical" href="https://finitefield.org/about">"#),
+            "/en/about must remain non-canonical English compatibility"
+        );
+
+        for (path, html_lang, html_dir, expected_title, expected_seo_title, expected_meta) in [
+            (
+                "/zh/about",
+                "zh-Hans",
+                "ltr",
+                "用宝石制作你的印章",
+                "关于 STONE SIGNATURE | STONE SIGNATURE",
+                "了解 STONE SIGNATURE 如何让你在线选择宝石印章、设计印面并完成下单。",
+            ),
+            (
+                "/zhtw/about",
+                "zh-Hant",
+                "ltr",
+                "用寶石製作你的印章",
+                "關於 STONE SIGNATURE | STONE SIGNATURE",
+                "了解 STONE SIGNATURE 如何讓你線上選擇寶石印章、設計印面並完成下單。",
+            ),
+            (
+                "/ar/about",
+                "ar",
+                "rtl",
+                "ختمك مصنوع من حجر كريم",
+                "عن STONE SIGNATURE | STONE SIGNATURE",
+                "تعرف على طريقة اختيار ختم من حجر كريم عبر STONE SIGNATURE، وتصميم طبعة الختم، وإرسال طلبك.",
+            ),
+        ] {
+            let (status, body) = route_get_html(path).await;
+            assert_eq!(status, StatusCode::OK, "{path} should render for QA");
+            assert!(body.contains(&format!(r#"<html lang="{html_lang}" dir="{html_dir}">"#)));
+            assert!(
+                body.contains(expected_title),
+                "{path} must render pilot locale page content"
+            );
+            assert!(
+                body.contains(&format!("<title>{expected_seo_title}</title>")),
+                "{path} must render pilot locale SEO title"
+            );
+            assert!(
+                body.contains(&format!(
+                    r#"<meta name="description" content="{expected_meta}">"#
+                )),
+                "{path} must render pilot locale meta description"
+            );
+            assert!(
+                body.contains(r#"<meta name="robots" content="noindex,follow">"#),
+                "{path} must remain non-indexed until all public web surfaces are ready"
+            );
+            assert!(
+                body.contains(r#"<link rel="canonical" href="https://finitefield.org/about">"#),
+                "{path} should canonicalize to the indexed default until public launch"
+            );
+        }
+
+        for path in ["/xx/about"] {
+            let (status, body) = route_get_html(path).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{path} should 404");
+            assert!(
+                !body.contains("Your seal, made from gemstone"),
+                "{path} must not fall back to English content"
+            );
+        }
     }
 
     #[test]
@@ -5470,8 +6153,9 @@ mod tests {
                     .to_owned(),
             robots_meta: "index,follow".to_owned(),
             canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
-            lang_ja_url: top_url(TEST_SITE_BASE_URL, "ja"),
-            lang_en_url: top_url(TEST_SITE_BASE_URL, "en"),
+            x_default_url: top_url(TEST_SITE_BASE_URL, "en"),
+            seo_language_links: indexed_hreflang_links_for_path(TEST_SITE_BASE_URL, "/"),
+            language_links: language_links_for_path(TEST_SITE_BASE_URL, "/"),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "en"),
             about_url: about_url(TEST_SITE_BASE_URL, "en"),
@@ -5511,6 +6195,82 @@ mod tests {
     }
 
     #[test]
+    fn language_switcher_renders_registry_language_links() {
+        let registry = WebLanguageRegistry::from_entries(vec![
+            language_registry_entry(
+                "en",
+                "en",
+                "English",
+                "English",
+                RegistryTextDirection::Ltr,
+                true,
+                true,
+                "",
+            ),
+            language_registry_entry(
+                "fr",
+                "fr",
+                "Français",
+                "French",
+                RegistryTextDirection::Ltr,
+                true,
+                false,
+                "fr",
+            ),
+            language_registry_entry(
+                "ja",
+                "ja",
+                "日本語",
+                "Japanese",
+                RegistryTextDirection::Ltr,
+                true,
+                true,
+                "ja",
+            ),
+        ])
+        .expect("fixture registry should load");
+        let template = TopPageTemplate {
+            selected_locale: "fr".to_owned(),
+            page_title: "Custom gemstone seals | STONE SIGNATURE".to_owned(),
+            meta_description:
+                "Design custom hand-carved gemstone seals online and order in English or Japanese."
+                    .to_owned(),
+            robots_meta: "index,follow".to_owned(),
+            canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
+            x_default_url: top_url(TEST_SITE_BASE_URL, "en"),
+            seo_language_links: indexed_hreflang_links_for_path_with_registry(
+                &registry,
+                TEST_SITE_BASE_URL,
+                "/",
+            ),
+            language_links: language_links_for_path_with_registry(
+                &registry,
+                TEST_SITE_BASE_URL,
+                "/",
+            ),
+            company_url: company_url(TEST_SITE_BASE_URL),
+            top_url: top_url(TEST_SITE_BASE_URL, "en"),
+            about_url: about_url(TEST_SITE_BASE_URL, "en"),
+            design_url: design_url(TEST_SITE_BASE_URL, "en"),
+            blog_index_url: blog_index_url(TEST_SITE_BASE_URL, "en"),
+            terms_url: terms_url(TEST_SITE_BASE_URL, "en"),
+            commercial_transactions_url: commercial_transactions_url(TEST_SITE_BASE_URL, "en"),
+            privacy_policy_url: privacy_policy_url(TEST_SITE_BASE_URL, "en"),
+            blog_posts: Vec::new(),
+        };
+
+        let html = render_html(&template).expect("top page should render");
+
+        assert_eq!(html.matches("data-language-option=").count(), 3);
+        assert!(!html.contains(
+            r#"<link rel="alternate" hreflang="fr" href="https://finitefield.org/fr/">"#
+        ));
+        assert!(html.contains(
+            r#"class="top-language-switcher__item is-active" href="https://finitefield.org/fr/" hreflang="fr" data-language-option="fr">Français</a>"#
+        ));
+    }
+
+    #[test]
     fn top_page_renders_journal_cards() {
         let template = TopPageTemplate {
             selected_locale: "en".to_owned(),
@@ -5520,8 +6280,9 @@ mod tests {
                     .to_owned(),
             robots_meta: "index,follow".to_owned(),
             canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
-            lang_ja_url: top_url(TEST_SITE_BASE_URL, "ja"),
-            lang_en_url: top_url(TEST_SITE_BASE_URL, "en"),
+            x_default_url: top_url(TEST_SITE_BASE_URL, "en"),
+            seo_language_links: indexed_hreflang_links_for_path(TEST_SITE_BASE_URL, "/"),
+            language_links: language_links_for_path(TEST_SITE_BASE_URL, "/"),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "en"),
             about_url: about_url(TEST_SITE_BASE_URL, "en"),
@@ -5612,8 +6373,9 @@ mod tests {
                 "宝石印鑑をオンラインでデザインして、日本語または英語で注文できます。".to_owned(),
             robots_meta: "index,follow".to_owned(),
             canonical_url: top_url(TEST_SITE_BASE_URL, "en"),
-            lang_ja_url: top_url(TEST_SITE_BASE_URL, "ja"),
-            lang_en_url: top_url(TEST_SITE_BASE_URL, "en"),
+            x_default_url: top_url(TEST_SITE_BASE_URL, "en"),
+            seo_language_links: indexed_hreflang_links_for_path(TEST_SITE_BASE_URL, "/"),
+            language_links: language_links_for_path(TEST_SITE_BASE_URL, "/"),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "ja"),
             about_url: about_url(TEST_SITE_BASE_URL, "ja"),
@@ -5806,7 +6568,7 @@ mod tests {
         )
         .expect("blog index body should be utf-8");
 
-        assert!(index_html.contains(r#"<html lang="ja">"#));
+        assert!(index_html.contains(r#"<html lang="ja" dir="ltr">"#));
         assert!(index_html.contains("<title>ジャーナル | STONE SIGNATURE</title>"));
         assert!(index_html.contains("ハンコとは？日本のパーソナルシール完全ガイド"));
         assert!(index_html.contains("ハンコと印鑑の違いとは？"));
@@ -5912,6 +6674,12 @@ mod tests {
         assert!(english_html.contains("Gemstone"));
         assert!(english_html.contains("Seal design"));
         assert!(english_html.contains("One of a kind"));
+        assert!(
+            english_html.contains(r#"<link rel="canonical" href="https://finitefield.org/about">"#)
+        );
+        assert!(english_html.contains(
+            r#"<link rel="alternate" hreflang="x-default" href="https://finitefield.org/about">"#
+        ));
         assert!(english_html.contains(r#"href="https://finitefield.org/about""#));
         assert!(english_html.contains("window.location.href='https://finitefield.org/design'"));
 
@@ -5937,6 +6705,13 @@ mod tests {
         assert!(japanese_html.contains("宝石印鑑を、もっと選びやすく。"));
         assert!(japanese_html.contains("宝石を使った印鑑をオンラインで選び"));
         assert!(japanese_html.contains("天然石ならではの色や模様"));
+        assert!(
+            japanese_html
+                .contains(r#"<link rel="canonical" href="https://finitefield.org/ja/about">"#)
+        );
+        assert!(japanese_html.contains(
+            r#"<link rel="alternate" hreflang="x-default" href="https://finitefield.org/about">"#
+        ));
         assert!(japanese_html.contains(r#"href="https://finitefield.org/ja/about""#));
         assert!(japanese_html.contains("window.location.href='https://finitefield.org/ja/design'"));
     }
@@ -5960,18 +6735,28 @@ mod tests {
                 &PaymentRedirectQuery::default(),
                 "en",
             ),
-            lang_ja_url: payment_result_locale_url(
-                TEST_SITE_BASE_URL,
-                "/payment/success",
-                &PaymentRedirectQuery::default(),
-                "ja",
-            ),
-            lang_en_url: payment_result_locale_url(
+            x_default_url: payment_result_locale_url(
                 TEST_SITE_BASE_URL,
                 "/payment/success",
                 &PaymentRedirectQuery::default(),
                 "en",
             ),
+            seo_language_links: seo_language_links_with_urls(|language| {
+                payment_result_locale_url(
+                    TEST_SITE_BASE_URL,
+                    "/payment/success",
+                    &PaymentRedirectQuery::default(),
+                    &language.route_code,
+                )
+            }),
+            language_links: language_links_with_urls(|language| {
+                payment_result_locale_url(
+                    TEST_SITE_BASE_URL,
+                    "/payment/success",
+                    &PaymentRedirectQuery::default(),
+                    &language.route_code,
+                )
+            }),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "en"),
             about_url: about_url(TEST_SITE_BASE_URL, "en"),
@@ -6000,18 +6785,28 @@ mod tests {
                 &PaymentRedirectQuery::default(),
                 "en",
             ),
-            lang_ja_url: payment_result_locale_url(
-                TEST_SITE_BASE_URL,
-                "/payment/failure",
-                &PaymentRedirectQuery::default(),
-                "ja",
-            ),
-            lang_en_url: payment_result_locale_url(
+            x_default_url: payment_result_locale_url(
                 TEST_SITE_BASE_URL,
                 "/payment/failure",
                 &PaymentRedirectQuery::default(),
                 "en",
             ),
+            seo_language_links: seo_language_links_with_urls(|language| {
+                payment_result_locale_url(
+                    TEST_SITE_BASE_URL,
+                    "/payment/failure",
+                    &PaymentRedirectQuery::default(),
+                    &language.route_code,
+                )
+            }),
+            language_links: language_links_with_urls(|language| {
+                payment_result_locale_url(
+                    TEST_SITE_BASE_URL,
+                    "/payment/failure",
+                    &PaymentRedirectQuery::default(),
+                    &language.route_code,
+                )
+            }),
             company_url: company_url(TEST_SITE_BASE_URL),
             top_url: top_url(TEST_SITE_BASE_URL, "en"),
             about_url: about_url(TEST_SITE_BASE_URL, "en"),
@@ -6025,6 +6820,313 @@ mod tests {
         let failure_html = render_html(&failure_template).expect("payment failure should render");
         assert!(failure_html.contains(r#"<title>Payment incomplete | STONE SIGNATURE</title>"#));
         assert!(failure_html.contains(r#"<meta name="robots" content="noindex,follow">"#));
+    }
+
+    #[test]
+    fn web_language_registry_loads_checked_in_route_model() {
+        let entries: Vec<LanguageRegistryEntry> =
+            serde_json::from_str(LANGUAGE_REGISTRY_JSON).expect("registry should parse");
+        assert_eq!(entries.len(), 68);
+
+        let registry =
+            WebLanguageRegistry::from_json(LANGUAGE_REGISTRY_JSON).expect("registry should load");
+        assert_eq!(
+            registry
+                .enabled_languages()
+                .iter()
+                .map(|language| language.route_code.as_str())
+                .collect::<Vec<_>>(),
+            vec!["ar", "en", "ja", "zh", "zhtw"]
+        );
+
+        let english = registry
+            .enabled_language_exact("en")
+            .expect("English should be enabled for web");
+        assert_eq!(english.bcp47, "en");
+        assert_eq!(english.url_prefix, "");
+        assert_eq!(english.text_direction, RegistryTextDirection::Ltr);
+
+        let japanese = registry
+            .enabled_language_for_path_segment("jp")
+            .expect("legacy jp path segment should resolve to Japanese");
+        assert_eq!(japanese.route_code, "ja");
+        assert_eq!(japanese.url_prefix, "ja");
+        assert_eq!(japanese.english_name, "Japanese");
+
+        assert_eq!(parse_supported_locale("ja-JP"), Some("ja"));
+        for locale in ["zhtw", "zh-Hant", "zh_Hant", "zh-TW", "zh-HK", "zh-MO"] {
+            assert_eq!(
+                parse_supported_locale(locale),
+                Some("zhtw"),
+                "{locale} must resolve to Traditional Chinese"
+            );
+        }
+        for locale in ["zh", "zh-Hans", "zh_Hans", "zh-CN"] {
+            assert_eq!(
+                parse_supported_locale(locale),
+                Some("zh"),
+                "{locale} must resolve to Simplified Chinese"
+            );
+        }
+        assert_eq!(parse_path_locale("ja"), Some("ja"));
+        assert_eq!(parse_path_locale("zhtw"), Some("zhtw"));
+        assert_eq!(parse_path_locale("ar"), Some("ar"));
+        assert_eq!(robots_meta_for_locale("ar"), "noindex,follow");
+        assert_eq!(robots_meta_for_locale("en"), "index,follow");
+
+        let links = language_links_for_path(TEST_SITE_BASE_URL, "/about");
+        assert_eq!(
+            links
+                .iter()
+                .map(|link| (
+                    link.route_code.as_str(),
+                    link.label.as_str(),
+                    link.is_default
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                ("ar", "العربية", false),
+                ("en", "English", true),
+                ("ja", "日本語", false),
+                ("zh", "简体中文", false),
+                ("zhtw", "繁體中文", false),
+            ]
+        );
+    }
+
+    #[test]
+    fn registry_backed_links_include_non_indexed_enabled_languages() {
+        let registry = WebLanguageRegistry::from_entries(vec![
+            language_registry_entry(
+                "en",
+                "en",
+                "English",
+                "English",
+                RegistryTextDirection::Ltr,
+                true,
+                true,
+                "",
+            ),
+            language_registry_entry(
+                "fr",
+                "fr",
+                "Français",
+                "French",
+                RegistryTextDirection::Ltr,
+                true,
+                false,
+                "fr",
+            ),
+            language_registry_entry(
+                "ja",
+                "ja",
+                "日本語",
+                "Japanese",
+                RegistryTextDirection::Ltr,
+                true,
+                true,
+                "ja",
+            ),
+        ])
+        .expect("fixture registry should load");
+
+        let links = language_links_for_path_with_registry(&registry, TEST_SITE_BASE_URL, "/about");
+        assert_eq!(
+            links
+                .iter()
+                .map(|link| (link.route_code.as_str(), link.url.as_str(), link.is_indexed))
+                .collect::<Vec<_>>(),
+            vec![
+                ("en", "https://finitefield.org/about", true),
+                ("fr", "https://finitefield.org/fr/about", false),
+                ("ja", "https://finitefield.org/ja/about", true),
+            ]
+        );
+
+        let indexed_links =
+            indexed_hreflang_links_for_path_with_registry(&registry, TEST_SITE_BASE_URL, "/about");
+        assert_eq!(
+            indexed_links
+                .iter()
+                .map(|link| (link.bcp47.as_str(), link.url.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("en", "https://finitefield.org/about"),
+                ("ja", "https://finitefield.org/ja/about"),
+            ]
+        );
+
+        assert_eq!(
+            canonical_url_for_path_with_registry(&registry, TEST_SITE_BASE_URL, "/about", "fr"),
+            "https://finitefield.org/about"
+        );
+        assert_eq!(
+            canonical_url_for_path_with_registry(&registry, TEST_SITE_BASE_URL, "/about", "ja"),
+            "https://finitefield.org/ja/about"
+        );
+
+        let sitemap_entry =
+            sitemap_url_entry_with_registry(&registry, TEST_SITE_BASE_URL, "/about", "2026-05-11")
+                .expect("fixture sitemap entry should build");
+        assert!(sitemap_entry.contains("<loc>https://finitefield.org/about</loc>"));
+        assert!(sitemap_entry.contains("<loc>https://finitefield.org/ja/about</loc>"));
+        assert!(!sitemap_entry.contains("https://finitefield.org/fr/about"));
+    }
+
+    #[test]
+    fn web_copy_document_loads_typed_sections() {
+        let copy = web_copy_document();
+        assert_eq!(copy.common.en["brand_subtitle"], "Seal Field");
+        assert_eq!(copy.common.ja["brand_subtitle"], "印鑑フィールド");
+        assert_eq!(copy.common.zh["brand_subtitle"], "印章设计");
+        assert_eq!(copy.common.zhtw["brand_subtitle"], "印章設計");
+        assert_eq!(copy.common.ar["brand_subtitle"], "تصميم الأختام");
+        assert_eq!(
+            web_copy_text("top", "en", "seo_title"),
+            "Custom gemstone seals | STONE SIGNATURE"
+        );
+        assert_eq!(
+            web_copy_text("design", "ja", "purchase_note_live"),
+            "Stripe Checkout に遷移して決済します。"
+        );
+        assert_eq!(
+            web_copy_text("commercial_transactions", "en", "seo_title"),
+            "Legal Notice | STONE SIGNATURE"
+        );
+        assert_eq!(
+            web_copy_text("top", "zh-Hans", "seo_title"),
+            "在线定制宝石印章 | STONE SIGNATURE"
+        );
+        assert_eq!(
+            web_copy_text("top", "zh-Hant", "seo_title"),
+            "線上訂製寶石印章 | STONE SIGNATURE"
+        );
+        assert_eq!(
+            web_copy_text("top", "zhtw", "seo_title"),
+            "線上訂製寶石印章 | STONE SIGNATURE"
+        );
+        assert_eq!(
+            web_copy_text("top", "ar", "seo_title"),
+            "أختام أحجار كريمة مخصصة | STONE SIGNATURE"
+        );
+        assert_eq!(
+            web_copy_text("top", "fr", "seo_title"),
+            "Custom gemstone seals | STONE SIGNATURE"
+        );
+    }
+
+    #[test]
+    fn web_copy_locale_files_keep_matching_keys() {
+        let copy = web_copy_document();
+        for (section_name, section) in [
+            ("common", &copy.common),
+            ("about", &copy.about),
+            ("blog_article", &copy.blog_article),
+            ("blog_index", &copy.blog_index),
+            ("commercial_transactions", &copy.commercial_transactions),
+            ("design", &copy.design),
+            ("kanji_suggestions", &copy.kanji_suggestions),
+            ("payment_failure", &copy.payment_failure),
+            ("payment_success", &copy.payment_success),
+            ("purchase_result", &copy.purchase_result),
+            ("terms", &copy.terms),
+            ("top", &copy.top),
+        ] {
+            let en_keys = section.en.keys().collect::<HashSet<_>>();
+            assert_eq!(
+                section.ja.keys().collect::<HashSet<_>>(),
+                en_keys,
+                "{section_name}/ja keys must match en"
+            );
+            assert_eq!(
+                section.zh.keys().collect::<HashSet<_>>(),
+                en_keys,
+                "{section_name}/zh keys must match en"
+            );
+            assert_eq!(
+                section.zhtw.keys().collect::<HashSet<_>>(),
+                en_keys,
+                "{section_name}/zhtw keys must match en"
+            );
+            assert_eq!(
+                section.ar.keys().collect::<HashSet<_>>(),
+                en_keys,
+                "{section_name}/ar keys must match en"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn pilot_payment_routes_render_localized_copy() {
+        for (path, expected_dir, expected_title, expected_seo_title, expected_meta) in [
+            (
+                "/zh/payment/success",
+                "ltr",
+                "付款已完成",
+                "付款完成 | STONE SIGNATURE",
+                "你的付款已收到。请查看 Stripe 付款收据，确认订单详情和下一步。",
+            ),
+            (
+                "/zhtw/payment/success",
+                "ltr",
+                "付款已完成",
+                "付款完成 | STONE SIGNATURE",
+                "你的付款已收到。請查看 Stripe 付款收據，確認訂單詳情和下一步。",
+            ),
+            (
+                "/ar/payment/success",
+                "rtl",
+                "اكتمل الدفع",
+                "اكتمل الدفع | STONE SIGNATURE",
+                "تم استلام دفعتك. راجع إيصال الدفع من Stripe لمعرفة تفاصيل الطلب والخطوات التالية.",
+            ),
+            (
+                "/zh/payment/failure",
+                "ltr",
+                "付款未完成",
+                "付款未完成 | STONE SIGNATURE",
+                "付款未完成。请检查银行卡信息，并返回购买页面重试。",
+            ),
+            (
+                "/zhtw/payment/failure",
+                "ltr",
+                "付款未完成",
+                "付款未完成 | STONE SIGNATURE",
+                "付款未完成。請檢查卡片資訊，並返回購買頁面重試。",
+            ),
+            (
+                "/ar/payment/failure",
+                "rtl",
+                "لم يكتمل الدفع",
+                "الدفع غير مكتمل | STONE SIGNATURE",
+                "لم يكتمل الدفع. تحقق من بيانات البطاقة وعد إلى صفحة الشراء للمحاولة مرة أخرى.",
+            ),
+        ] {
+            let (status, body) = route_get_html(path).await;
+            assert_eq!(status, StatusCode::OK, "{path} should render for QA");
+            assert!(
+                body.contains(&format!(r#"dir="{expected_dir}""#)),
+                "{path} must render the expected text direction"
+            );
+            assert!(
+                body.contains(expected_title),
+                "{path} must render localized payment result copy"
+            );
+            assert!(
+                body.contains(&format!("<title>{expected_seo_title}</title>")),
+                "{path} must render localized payment SEO title"
+            );
+            assert!(
+                body.contains(&format!(
+                    r#"<meta name="description" content="{expected_meta}">"#
+                )),
+                "{path} must render localized payment meta description"
+            );
+            assert!(
+                body.contains(r#"<meta name="robots" content="noindex,follow">"#),
+                "{path} must remain non-indexed because payment result pages are not SEO targets"
+            );
+        }
     }
 
     #[test]
@@ -6063,7 +7165,11 @@ mod tests {
         );
         assert_eq!(
             design_url(TEST_SITE_BASE_URL, "zhtw"),
-            "https://finitefield.org/design"
+            "https://finitefield.org/zhtw/design"
+        );
+        assert_eq!(
+            design_url(TEST_SITE_BASE_URL, "ar"),
+            "https://finitefield.org/ar/design"
         );
         assert_eq!(
             blog_index_url(TEST_ALT_SITE_BASE_URL, "en"),
@@ -6261,6 +7367,44 @@ mod tests {
                 "hankofield://checkout/success?checkout=success&order_id=ord_456&session_id=sess_123&lang=ja"
             )
         );
+    }
+
+    #[test]
+    fn pilot_payment_result_urls_preserve_app_return_route_codes() {
+        let query = PaymentRedirectQuery {
+            checkout: Some("success".to_owned()),
+            session_id: Some("sess_123".to_owned()),
+            order_id: Some("ord_456".to_owned()),
+            return_to: Some("app".to_owned()),
+            ..PaymentRedirectQuery::default()
+        };
+
+        for (locale, expected_path, expected_app_url) in [
+            (
+                "zh",
+                "https://finitefield.org/zh/payment/success?checkout=success&session_id=sess_123&order_id=ord_456&return_to=app",
+                "hankofield://checkout/success?checkout=success&order_id=ord_456&session_id=sess_123&lang=zh",
+            ),
+            (
+                "zhtw",
+                "https://finitefield.org/zhtw/payment/success?checkout=success&session_id=sess_123&order_id=ord_456&return_to=app",
+                "hankofield://checkout/success?checkout=success&order_id=ord_456&session_id=sess_123&lang=zhtw",
+            ),
+            (
+                "ar",
+                "https://finitefield.org/ar/payment/success?checkout=success&session_id=sess_123&order_id=ord_456&return_to=app",
+                "hankofield://checkout/success?checkout=success&order_id=ord_456&session_id=sess_123&lang=ar",
+            ),
+        ] {
+            assert_eq!(
+                payment_result_locale_url(TEST_SITE_BASE_URL, "/payment/success", &query, locale),
+                expected_path
+            );
+            assert_eq!(
+                app_checkout_return_url("success", &query, locale).as_deref(),
+                Some(expected_app_url)
+            );
+        }
     }
 
     #[tokio::test]

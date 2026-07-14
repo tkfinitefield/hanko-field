@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/localization/app_localization.dart';
+import '../../../app/localization/language_registry.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/errors/core_errors.dart';
 import '../../../core/widgets/core_widgets.dart';
@@ -2334,9 +2335,7 @@ class _StateTipCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tipPrefix = context.l10n.locale.languageCode == 'ja'
-        ? 'ヒント: '
-        : 'Tip: ';
+    final tipPrefix = context.l10n.designTipPrefix;
 
     return HankoSurfaceCard(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
@@ -2556,11 +2555,13 @@ class _TipBadge extends StatelessWidget {
 }
 
 String _reasonLanguageFor(BuildContext context) {
-  final languageCode = context.l10n.locale.languageCode;
-  return languageCode == 'ja' ? 'ja' : 'en';
+  return fallbackRouteCodeForLocale(context.l10n.locale);
 }
 
-String _genderLabel(HankoLocalizations l10n, KanjiCandidateGender gender) {
+String _genderLabel(
+  GeneratedHankoLocalizations l10n,
+  KanjiCandidateGender gender,
+) {
   return switch (gender) {
     KanjiCandidateGender.unspecified => l10n.designGenderUnspecified,
     KanjiCandidateGender.male => l10n.designGenderMale,
@@ -2568,7 +2569,10 @@ String _genderLabel(HankoLocalizations l10n, KanjiCandidateGender gender) {
   };
 }
 
-String _kanjiStyleLabel(HankoLocalizations l10n, KanjiNameStyle style) {
+String _kanjiStyleLabel(
+  GeneratedHankoLocalizations l10n,
+  KanjiNameStyle style,
+) {
   return switch (style) {
     KanjiNameStyle.japanese => l10n.designKanjiStyleJapanese,
     KanjiNameStyle.chinese => l10n.designKanjiStyleChinese,
@@ -2576,14 +2580,17 @@ String _kanjiStyleLabel(HankoLocalizations l10n, KanjiNameStyle style) {
   };
 }
 
-String _sealShapeLabel(HankoLocalizations l10n, SealShape shape) {
+String _sealShapeLabel(GeneratedHankoLocalizations l10n, SealShape shape) {
   return switch (shape) {
     SealShape.square => l10n.sealShapeSquare,
     SealShape.round => l10n.sealShapeRound,
   };
 }
 
-String _sealStyleNameLabel(HankoLocalizations l10n, SealStyleName style) {
+String _sealStyleNameLabel(
+  GeneratedHankoLocalizations l10n,
+  SealStyleName style,
+) {
   return switch (style) {
     SealStyleName.traditional => l10n.sealStyleTraditional,
     SealStyleName.elegant => l10n.sealStyleElegant,
@@ -2593,7 +2600,7 @@ String _sealStyleNameLabel(HankoLocalizations l10n, SealStyleName style) {
 }
 
 String _sealStrokeWeightLabel(
-  HankoLocalizations l10n,
+  GeneratedHankoLocalizations l10n,
   SealStrokeWeight strokeWeight,
 ) {
   return switch (strokeWeight) {
@@ -2602,7 +2609,10 @@ String _sealStrokeWeightLabel(
   };
 }
 
-String _sealBalanceLabel(HankoLocalizations l10n, SealBalance balance) {
+String _sealBalanceLabel(
+  GeneratedHankoLocalizations l10n,
+  SealBalance balance,
+) {
   return switch (balance) {
     SealBalance.airy => l10n.sealBalanceAiry,
     SealBalance.balanced => l10n.sealBalanceBalanced,

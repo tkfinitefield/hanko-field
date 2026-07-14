@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "task": "M10-T02",
+  "date": "2026-06-18",
+  "release_candidate": {
+    "platform": "ios",
+    "artifact": "app/build/ios/ipa/STONE SIGNATURE.ipa",
+    "artifact_committed": false,
+    "bytes": 31355322,
+    "display_size": "31.5MB",
+    "sha256": "b74de0d4c300acfbdfba44f1c6423693835b999a2ea876b835cca1684349c427",
+    "version": "1.1.0+11",
+    "bundle_identifier": "org.finitefield.hankofield",
+    "archive": "app/build/ios/archive/Runner.xcarchive",
+    "archive_display_size": "193.7MB"
+  },
+  "signing": {
+    "status": "verified",
+    "codesign_verify": "valid on disk; satisfies its Designated Requirement",
+    "authority": "Apple Distribution: Finite Field, K.K. (5267S9U4PR)",
+    "team_identifier": "5267S9U4PR",
+    "provisioning_profile": "iOS Team Store Provisioning Profile: org.finitefield.hankofield",
+    "provisioning_profile_expires": "2027-05-04 15:57:13 JST",
+    "signed_time": "2026-06-18 22:30:54 JST",
+    "cdhash": "5fec4855307c0674bcdce9ba53243649931d8ddb"
+  },
+  "build": {
+    "command": "cd app && flutter build ipa --release --export-options-plist=ios/ExportOptions.plist",
+    "status": "pass",
+    "flutter": "3.44.1 stable",
+    "dart": "3.12.1",
+    "xcode": "16.4",
+    "xcode_build": "16F6",
+    "iphoneos_sdk": "18.5",
+    "export_method": "app-store-connect",
+    "export_options": "app/ios/ExportOptions.plist",
+    "warnings": [
+      "This Mac's active developer directory is /Library/Developer/CommandLineTools, so the local build used DEVELOPER_DIR and a temporary xcrun wrapper to run Xcode 16.4 without changing global xcode-select state.",
+      "Flutter reports that all iOS plugins are Swift Packages while the project still has CocoaPods integration; removing CocoaPods is a future cleanup, not a release blocker for this IPA."
+    ]
+  },
+  "configuration_changes": {
+    "ios_platform_registered_in_flutter_metadata": true,
+    "development_team": "5267S9U4PR",
+    "fastlane_uses_export_options": true,
+    "manage_app_version_and_build_number": false,
+    "swift_package_manager_integration_added_by_flutter": true
+  },
+  "private_material": {
+    "ipa_ignored": true,
+    "app_store_connect_keys_ignored": true,
+    "provisioning_profiles_ignored": true,
+    "committed": false
+  },
+  "preservation": {
+    "registry_flags_changed": false,
+    "translation_values_changed": false,
+    "credentials_changed": false,
+    "upload_performed": false,
+    "polling_streaming_sse_websocket_changed": false
+  }
+}

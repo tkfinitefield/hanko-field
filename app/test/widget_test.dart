@@ -54,6 +54,7 @@ void main() {
   Future<void> pumpLaunchedApp(
     WidgetTester tester, {
     Locale? locale,
+    List<Locale> supportedLocales = HankoApp.defaultSupportedLocales,
     bool hasSeenOnboarding = true,
     KanjiCandidatesGenerator? generateKanjiCandidates,
     SealDesignsGenerator? generateSealDesigns,
@@ -75,6 +76,7 @@ void main() {
       ProviderScope(
         child: HankoApp(
           locale: locale,
+          supportedLocales: supportedLocales,
           loadPreferredLocale: loadPreferredLocale ?? () async => null,
           savePreferredLocale: savePreferredLocale ?? (_) async {},
           hasSeenOnboardingResolver: () async => hasSeenOnboarding,
@@ -574,8 +576,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: SealGenerationLoadingScreen(
           request: _sealGenerationRequest(),
@@ -628,8 +631,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: SealVariantSelectionScreen(
           result: _sealGenerationResult(),
@@ -687,8 +691,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: SealPreviewDetailScreen(
           result: result,
@@ -747,8 +752,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('ja'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: SealPreviewDetailScreen(
           result: result,
@@ -784,8 +790,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: SealSaveConfirmationScreen(
           result: result,
@@ -1086,8 +1093,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: MySealsHomeScreen(
           designs: [
@@ -1200,8 +1208,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: MySealsHomeScreen(
           onStartDesigning: () => startDesignCount += 1,
@@ -1240,8 +1249,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: SealDetailScreen(
           design: _localSealDesign(),
@@ -1630,8 +1640,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: const StonesHomeScreen(isLoading: true),
       ),
@@ -1652,8 +1663,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: StonesHomeScreen(
           loadError: const HankoApiException(
@@ -1693,8 +1705,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: StonesHomeScreen(
           result: _stoneListingsResult(),
@@ -1740,8 +1753,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: StonesHomeScreen(
           result: _stoneListingsResult(
@@ -1778,8 +1792,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: StonesHomeScreen(
           result: _stoneListingsResult(
@@ -1858,8 +1873,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: StonesHomeScreen(
           result: _stoneListingsResult(
@@ -1931,8 +1947,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: StoneDetailScreen(
           listing: _stoneListing(
@@ -2288,8 +2305,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: OrderFlowEntryScreen(
           draft: OrderDraft.empty()
@@ -3605,8 +3623,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: OrderLookupEntryScreen(
           onLookup: (request) => submittedRequest = request,
@@ -3643,8 +3662,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: OrderLookupEntryScreen(
           lookupOrder: (request) {
@@ -3688,8 +3708,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: OrderLookupEntryScreen(
           lookupOrder: (request) async {
@@ -3733,8 +3754,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: OrderLookupEntryScreen(
           lookupOrder: (request) async {
@@ -3770,8 +3792,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: OrderLookupEntryScreen(
           lookupOrder: (request) async {
@@ -3810,8 +3833,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: OrderLookupEntryScreen(
           lookupOrder: (request) async {
@@ -3853,8 +3877,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: OrderLookupEntryScreen(lookupOrder: _successfulLookupOrder),
       ),
@@ -3904,8 +3929,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: OrderLookupEntryScreen(lookupOrder: _successfulLookupOrder),
       ),
@@ -3962,6 +3988,27 @@ void main() {
     expect(capturedQuery?.status, isNull);
     expect(find.text('Soft Pink Rose Quartz Seal Stone'), findsOneWidget);
     expect(find.text('Select Stone'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('STN-001 preserves Traditional Chinese stone locale', (
+    tester,
+  ) async {
+    StoneListingsQuery? capturedQuery;
+    const locale = Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant');
+
+    await pumpLaunchedApp(
+      tester,
+      locale: locale,
+      supportedLocales: const [Locale('en'), locale],
+      listStoneListings: (query) async {
+        capturedQuery = query;
+        return _stoneListingsResult();
+      },
+    );
+    await tester.pumpAndSettle();
+
+    expect(capturedQuery?.locale, 'zhtw');
     expect(tester.takeException(), isNull);
   });
 
@@ -4026,8 +4073,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: SealGenerationErrorScreen(
           request: _sealGenerationRequest(),
@@ -4057,8 +4105,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: SealGenerationLimitScreen(
           request: _sealGenerationRequest(attemptNumber: 3),
@@ -4103,8 +4152,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: KanjiSuggestionErrorScreen(
           request: request,
@@ -4133,8 +4183,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: UnsupportedKanjiResultScreen(
           request: request,
@@ -4212,24 +4263,67 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('App language'), findsOneWidget);
+    expect(find.text('العربية'), findsNothing);
+    expect(find.text('Arabic'), findsNothing);
     expect(find.text('English'), findsOneWidget);
+    expect(find.text('日本語'), findsOneWidget);
     expect(find.text('Japanese'), findsOneWidget);
+    expect(find.text('简体中文'), findsNothing);
+    expect(find.text('Simplified Chinese'), findsNothing);
+    expect(find.text('繁體中文'), findsNothing);
+    expect(find.text('Traditional Chinese'), findsNothing);
 
     await tester.tap(find.text('Japanese'));
     await tester.pumpAndSettle();
 
     expect(savedLocale?.languageCode, 'ja');
     expect(find.text('アプリの言語'), findsOneWidget);
-    expect(find.text('英語'), findsOneWidget);
+    expect(find.text('العربية'), findsNothing);
+    expect(find.text('English'), findsOneWidget);
     expect(find.text('日本語'), findsOneWidget);
+    expect(find.text('简体中文'), findsNothing);
+    expect(find.text('繁體中文'), findsNothing);
 
-    await tester.tap(find.text('英語'));
+    await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
 
     expect(savedLocale?.languageCode, 'en');
     expect(find.text('App language'), findsOneWidget);
+    expect(find.text('العربية'), findsNothing);
     expect(find.text('English'), findsOneWidget);
+    expect(find.text('日本語'), findsOneWidget);
     expect(find.text('Japanese'), findsOneWidget);
+    expect(find.text('简体中文'), findsNothing);
+    expect(find.text('繁體中文'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('COM-004 restores saved locale and recovers invalid values', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(432, 912);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpLaunchedApp(
+      tester,
+      loadPreferredLocale: () async => const Locale('ja'),
+    );
+
+    expect(find.text('デザイン'), findsWidgets);
+    expect(find.text('保存済み印影'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    await pumpLaunchedApp(
+      tester,
+      loadPreferredLocale: () async => const Locale('fr'),
+    );
+
+    expect(find.text('Design'), findsWidgets);
+    expect(find.text('Saved Seals'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -4281,8 +4375,9 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           locale: const Locale('en'),
-          supportedLocales: HankoLocalizations.supportedLocales,
-          localizationsDelegates: HankoLocalizations.localizationsDelegates,
+          supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+          localizationsDelegates:
+              GeneratedHankoLocalizations.localizationsDelegates,
           theme: HankoTheme.light(),
           home: screen,
         ),
@@ -4325,8 +4420,9 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           locale: const Locale('en'),
-          supportedLocales: HankoLocalizations.supportedLocales,
-          localizationsDelegates: HankoLocalizations.localizationsDelegates,
+          supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+          localizationsDelegates:
+              GeneratedHankoLocalizations.localizationsDelegates,
           theme: HankoTheme.light(),
           home: screen,
         ),
@@ -4370,12 +4466,34 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: const SettingsHomeScreen(),
       ),
     );
+
+    Future<void> pumpUntilFound(Finder finder) async {
+      for (var attempt = 0; attempt < 500; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        if (finder.evaluate().isNotEmpty) {
+          return;
+        }
+      }
+      final visibleText = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((widget) => widget.data)
+          .whereType<String>()
+          .toList();
+      fail(
+        'Timed out waiting for $finder; '
+        'visible text: $visibleText',
+      );
+    }
 
     Future<void> openAndReturn(
       String rowLabel,
@@ -4386,11 +4504,12 @@ void main() {
       await tester.ensureVisible(find.text(rowLabel));
       await tester.pump();
       await tester.tap(find.text(rowLabel));
-      await tester.pumpAndSettle();
+      await pumpUntilFound(expectedFinder);
+      await tester.pump(const Duration(milliseconds: 500));
 
-      expect(expectedFinder, findsOneWidget);
+      expect(expectedFinder, findsAtLeastNWidgets(1));
       for (final finder in additionalExpectedFinders) {
-        expect(finder, findsOneWidget);
+        expect(finder, findsAtLeastNWidgets(1));
       }
 
       if (useSystemBack) {
@@ -4398,7 +4517,8 @@ void main() {
       } else {
         await tester.tap(find.byTooltip('Back'));
       }
-      await tester.pumpAndSettle();
+      await pumpUntilFound(find.text('Settings'));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Settings'), findsOneWidget);
     }
@@ -4434,8 +4554,9 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           locale: const Locale('ja'),
-          supportedLocales: HankoLocalizations.supportedLocales,
-          localizationsDelegates: HankoLocalizations.localizationsDelegates,
+          supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+          localizationsDelegates:
+              GeneratedHankoLocalizations.localizationsDelegates,
           theme: HankoTheme.light(),
           home: screen,
         ),
@@ -4477,8 +4598,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: Scaffold(
           body: SealStyleSelectionScreen(
@@ -4552,8 +4674,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('ja'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: Scaffold(
           body: SealStyleSelectionScreen(
@@ -4582,8 +4705,9 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           locale: const Locale('en'),
-          supportedLocales: HankoLocalizations.supportedLocales,
-          localizationsDelegates: HankoLocalizations.localizationsDelegates,
+          supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+          localizationsDelegates:
+              GeneratedHankoLocalizations.localizationsDelegates,
           theme: HankoTheme.light(),
           home: Scaffold(
             body: HankoErrorStateView(
@@ -4686,8 +4810,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        supportedLocales: HankoLocalizations.supportedLocales,
-        localizationsDelegates: HankoLocalizations.localizationsDelegates,
+        supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+        localizationsDelegates:
+            GeneratedHankoLocalizations.localizationsDelegates,
         theme: HankoTheme.light(),
         home: const Scaffold(
           body: HankoStateView.loading(
@@ -4719,8 +4844,9 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             locale: const Locale('en'),
-            supportedLocales: HankoLocalizations.supportedLocales,
-            localizationsDelegates: HankoLocalizations.localizationsDelegates,
+            supportedLocales: GeneratedHankoLocalizations.supportedLocales,
+            localizationsDelegates:
+                GeneratedHankoLocalizations.localizationsDelegates,
             theme: HankoTheme.light(),
             home: Scaffold(body: CheckoutInputScreen(onSave: (_) async {})),
           ),

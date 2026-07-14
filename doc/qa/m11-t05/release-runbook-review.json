@@ -1,0 +1,97 @@
+{
+  "format_version": 1,
+  "task": "M11-T05",
+  "reviewed_at": "2026-06-18T23:59:00+09:00",
+  "runbook_path": "doc/localized-release-runbook.md",
+  "source_plan_path": "doc/multilingual-release-plan.md",
+  "route_code_count": 68,
+  "required_sections": [
+    "language_addition_flow",
+    "store_metadata_update_flow",
+    "fastlane_release_flow",
+    "post_release_monitoring_and_cleanup",
+    "rollback"
+  ],
+  "required_commands": [
+    "make i18n-check",
+    "make store-metadata-check",
+    "make google-play-metadata-check",
+    "make app-store-metadata-check",
+    "make screenshot-metadata-check",
+    "make android-fastlane-check",
+    "make ios-fastlane-check",
+    "make release-secret-guardrails-check",
+    "make i18n-ci"
+  ],
+  "future_language_steps": [
+    "confirm route code in config/languages.json",
+    "keep release.enabled=false until translation, layout, metadata, and release checks pass",
+    "add app, web, api, and store metadata content",
+    "use intention sidecars for approved holdouts",
+    "promote registry flags in staged order"
+  ],
+  "store_metadata_paths": [
+    "release/store_metadata/source/",
+    "release/store_metadata/google_play",
+    "release/store_metadata/app_store"
+  ],
+  "fastlane_lanes": [
+    "app/android: bundle exec fastlane android metadata",
+    "app/android: bundle exec fastlane android internal",
+    "app/android: bundle exec fastlane android production",
+    "app/ios: bundle exec fastlane ios metadata",
+    "app/ios: bundle exec fastlane ios testflight_upload",
+    "app/ios: bundle exec fastlane ios production"
+  ],
+  "post_release_checks": [
+    "make i18n-diagnostics-check",
+    "make i18n-support-triage-check",
+    "make i18n-translation-patches-check",
+    "make i18n-migration-cleanup-check"
+  ],
+  "summary": {
+    "future_language_steps_documented": true,
+    "store_metadata_steps_documented": true,
+    "fastlane_release_steps_documented": true,
+    "post_release_cleanup_documented": true,
+    "production_secrets_excluded": true
+  },
+  "validation": [
+    {
+      "command": "node --check scripts/i18n/release_runbook.mjs",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-release-runbook-check",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-release-runbook-test",
+      "status": "pass"
+    },
+    {
+      "command": "jq empty doc/qa/m11-t05/release-runbook-review.json",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-ci",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --cached --check",
+      "status": "pass"
+    }
+  ],
+  "preservation": {
+    "registry_flags_changed": false,
+    "translation_values_changed": false,
+    "release_enabled_changed": false,
+    "credentials_changed": false,
+    "production_support_export_committed": false,
+    "polling_streaming_sse_websocket_changed": false
+  }
+}

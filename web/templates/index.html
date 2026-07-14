@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ selected_locale }}">
+<html lang="{{ self.html_lang() }}" dir="{{ self.html_dir() }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,9 +7,10 @@
   <meta name="description" content="{{ meta_description }}">
   <meta name="robots" content="{{ robots_meta }}">
   <link rel="canonical" href="{{ canonical_url }}">
-  <link rel="alternate" hreflang="ja" href="{{ lang_ja_url }}">
-  <link rel="alternate" hreflang="en" href="{{ lang_en_url }}">
-  <link rel="alternate" hreflang="x-default" href="{{ canonical_url }}">
+  {% for language_link in seo_language_links %}
+  <link rel="alternate" hreflang="{{ language_link.bcp47 }}" href="{{ language_link.url }}">
+  {% endfor %}
+  <link rel="alternate" hreflang="x-default" href="{{ x_default_url }}">
   <meta property="og:type" content="website">
   <meta property="og:title" content="{{ page_title }}">
   <meta property="og:description" content="{{ meta_description }}">
@@ -39,7 +40,7 @@
           <img class="top-brand__logo" src="/static/site-logo.png" alt="" aria-hidden="true">
           <div class="top-brand__text">
             <h1 class="top-brand__title">STONE SIGNATURE</h1>
-            <span class="top-brand__subtitle">{% if selected_locale == "ja" %}印鑑フィールド{% else %}Seal Field{% endif %}</span>
+            <span class="top-brand__subtitle">{{ self.copy_text("design_001") }}</span>
           </div>
         </div>
       </a>
@@ -49,8 +50,9 @@
             <span class="material-symbols-outlined top-brand__icon" aria-hidden="true">language</span>
           </summary>
           <div class="top-language-switcher__menu" role="menu" aria-label="Language options">
-            <a class="top-language-switcher__item{% if selected_locale == "ja" %} is-active{% endif %}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
-            <a class="top-language-switcher__item{% if selected_locale == "en" %} is-active{% endif %}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
+            {% for language_link in language_links %}
+            <a class="top-language-switcher__item{{ self.language_active_class(language_link.route_code) }}" href="{{ language_link.url }}" hreflang="{{ language_link.bcp47 }}" data-language-option="{{ language_link.route_code }}">{{ language_link.label }}</a>
+            {% endfor %}
           </div>
         </details>
       </div>
@@ -62,20 +64,16 @@
     <div class="design-page__lead">
       <div class="design-page__lead-copy">
         <h2 class="design-page__title">
-          {% if selected_locale == "ja" %}デザイン作成{% else %}Design{% endif %}
+          {{ self.copy_text("design_090") }}
         </h2>
         <p class="design-page__intro">
-          {% if selected_locale == "ja" %}
-          印影、出品個体、お届け先を順に選んで、そのまま購入まで進めます。
-          {% else %}
-          Choose the seal text, listing, and shipping details, then continue to checkout.
-          {% endif %}
+          {{ self.copy_html("design_002")|safe }}
         </p>
       </div>
     </div>
 
     <section class="design-page__content">
-      <nav class="step-track" aria-label="{% if selected_locale == "ja" %}注文ステップ{% else %}Order steps{% endif %}">
+      <nav class="step-track" aria-label="{{ self.copy_text("design_003") }}">
         <ol class="step-track-list" role="list">
           <li class="step-track-item">
             <button
@@ -91,7 +89,7 @@
                   </svg>
                   <span class="step-track-number">01</span>
                 </span>
-                <span class="step-track-title">{% if selected_locale == "ja" %}デザイン{% else %}Design{% endif %}</span>
+                <span class="step-track-title">{{ self.copy_text("design_004") }}</span>
               </span>
             </button>
             <div aria-hidden="true" class="step-track-separator">
@@ -113,7 +111,7 @@
                   </svg>
                   <span class="step-track-number">02</span>
                 </span>
-                <span class="step-track-title">{% if selected_locale == "ja" %}出品個体{% else %}Listing{% endif %}</span>
+                <span class="step-track-title">{{ self.copy_text("design_005") }}</span>
               </span>
             </button>
             <div aria-hidden="true" class="step-track-separator">
@@ -135,7 +133,7 @@
                   </svg>
                   <span class="step-track-number">03</span>
                 </span>
-                <span class="step-track-title">{% if selected_locale == "ja" %}購入{% else %}Purchase{% endif %}</span>
+                <span class="step-track-title">{{ self.copy_text("design_006") }}</span>
               </span>
             </button>
           </li>
@@ -155,12 +153,12 @@
             <div class="design-controls">
               <section class="seal-text-section" aria-labelledby="seal-text-heading">
                 <div class="field-label-row">
-                  <p class="field-label" id="seal-text-heading">{% if selected_locale == "ja" %}お名前（印影テキスト）{% else %}Name for the seal text{% endif %}</p>
-                  <button type="button" id="toggle-writing-mode" class="mode-toggle-button">{% if selected_locale == "ja" %}縦横変換{% else %}Swap layout{% endif %}</button>
+                  <p class="field-label" id="seal-text-heading">{{ self.copy_text("design_007") }}</p>
+                  <button type="button" id="toggle-writing-mode" class="mode-toggle-button">{{ self.copy_text("design_008") }}</button>
                 </div>
                 <div class="seal-lines-input">
                   <div>
-                    <label class="field-label compact" for="seal_line1">{% if selected_locale == "ja" %}1行目{% else %}Line 1{% endif %}</label>
+                    <label class="field-label compact" for="seal_line1">{{ self.copy_text("design_009") }}</label>
                     <input
                       id="seal_line1"
                       name="seal_line1"
@@ -174,7 +172,7 @@
                     >
                   </div>
                   <div>
-                    <label class="field-label compact" for="seal_line2">{% if selected_locale == "ja" %}2行目{% else %}Line 2{% endif %}</label>
+                    <label class="field-label compact" for="seal_line2">{{ self.copy_text("design_010") }}</label>
                     <input
                       id="seal_line2"
                       name="seal_line2"
@@ -187,32 +185,32 @@
                     >
                   </div>
                 </div>
-                <p class="field-hint">{% if selected_locale == "ja" %}1行目と2行目の合計2文字まで{% else %}Use up to 2 characters total across the two lines.{% endif %}</p>
+                <p class="field-hint">{{ self.copy_text("design_011") }}</p>
                 <p class="field-error" id="seal_text_error" role="alert" aria-live="polite"></p>
-                <label class="field-label" for="kanji_style">{% if selected_locale == "ja" %}フォントスタイル{% else %}Font style{% endif %}</label>
+                <label class="field-label" for="kanji_style">{{ self.copy_text("design_012") }}</label>
                 <select id="kanji_style" name="kanji_style">
-                  <option value="japanese" selected>{% if selected_locale == "ja" %}日本スタイル{% else %}Japanese style{% endif %}</option>
-                  <option value="chinese">{% if selected_locale == "ja" %}中国スタイル{% else %}Chinese style{% endif %}</option>
-                  <option value="taiwanese">{% if selected_locale == "ja" %}台湾スタイル{% else %}Taiwanese style{% endif %}</option>
+                  <option value="japanese" selected>{{ self.copy_text("design_013") }}</option>
+                  <option value="chinese">{{ self.copy_text("design_014") }}</option>
+                  <option value="taiwanese">{{ self.copy_text("design_015") }}</option>
                 </select>
-                <p class="field-hint">{% if selected_locale == "ja" %}選んだスタイルに合わせてフォントが表示されます。{% else %}Fonts are filtered to the selected style.{% endif %}</p>
+                <p class="field-hint">{{ self.copy_text("design_016") }}</p>
 
                 <div class="ai-box">
-                  <h3>{% if selected_locale == "ja" %}漢字名提案{% else %}Kanji name suggestions{% endif %}</h3>
-                  <p>{% if selected_locale == "ja" %}本名と性別を入力して、今選んでいるフォントスタイルに合う候補を生成できます。{% else %}Enter a name and gender preference to generate suggestions that match the selected font style.{% endif %}</p>
-                  <label class="field-label" for="real_name">{% if selected_locale == "ja" %}本名{% else %}Name{% endif %}</label>
+                  <h3>{{ self.copy_text("design_017") }}</h3>
+                  <p>{{ self.copy_text("design_018") }}</p>
+                  <label class="field-label" for="real_name">{{ self.copy_text("design_019") }}</label>
                   <input
                     id="real_name"
                     name="real_name"
                     type="text"
                     autocomplete="off"
-                    placeholder="{% if selected_locale == "ja" %}例: 山田 太郎{% else %}e.g. Michael Smith{% endif %}"
+                    placeholder="{{ self.copy_text("design_020") }}"
                   >
-                  <label class="field-label" for="candidate_gender">{% if selected_locale == "ja" %}性別{% else %}Gender preference{% endif %}</label>
+                  <label class="field-label" for="candidate_gender">{{ self.copy_text("design_021") }}</label>
                   <select id="candidate_gender" name="candidate_gender">
-                    <option value="unspecified" selected>{% if selected_locale == "ja" %}選択なし{% else %}No preference{% endif %}</option>
-                    <option value="male">{% if selected_locale == "ja" %}男性{% else %}Masculine{% endif %}</option>
-                    <option value="female">{% if selected_locale == "ja" %}女性{% else %}Feminine{% endif %}</option>
+                    <option value="unspecified" selected>{{ self.copy_text("design_022") }}</option>
+                    <option value="male">{{ self.copy_text("design_023") }}</option>
+                    <option value="female">{{ self.copy_text("design_024") }}</option>
                   </select>
                   <button
                     type="button"
@@ -222,10 +220,10 @@
                     hx-swap="innerHTML"
                     hx-include="#real_name,#candidate_gender,#kanji_style,#locale"
                   >
-                    {% if selected_locale == "ja" %}候補を生成{% else %}Generate suggestions{% endif %}
+                    {{ self.copy_text("design_025") }}
                   </button>
                   <div id="kanji-suggestions" class="suggestions-box" role="status" aria-live="polite" aria-atomic="true">
-                    <p class="placeholder">{% if selected_locale == "ja" %}本名を入力して候補を生成してください。{% else %}Enter your name to generate suggestions.{% endif %}</p>
+                    <p class="placeholder">{{ self.copy_text("design_026") }}</p>
                   </div>
                 </div>
               </section>
@@ -233,39 +231,35 @@
             </div>
 
             <aside class="preview-card">
-              <h3>{% if selected_locale == "ja" %}プレビュー{% else %}Preview{% endif %}</h3>
+              <h3>{{ self.copy_text("design_027") }}</h3>
               <div id="seal-preview" class="seal-preview is-square mode-single-char" aria-live="polite">
                 <div id="seal-preview-text" class="seal-preview-text">
                   <span id="seal-preview-line1">印</span>
                   <span id="seal-preview-line2" hidden></span>
                 </div>
               </div>
-              <p id="preview-caption">{% if selected_locale == "ja" %}角{% else %}Square{% endif %} / {{ default_font_label }}</p>
+              <p id="preview-caption">{{ self.copy_text("design_028") }} / {{ default_font_label }}</p>
 
               <fieldset class="shape-fieldset">
-                <legend>{% if selected_locale == "ja" %}形状{% else %}Shape{% endif %}</legend>
+                <legend>{{ self.copy_text("design_029") }}</legend>
                 <label class="option-chip">
                   <input type="radio" name="shape" value="square" checked>
-                  <span>{% if selected_locale == "ja" %}角印{% else %}Square seal{% endif %}</span>
+                  <span>{{ self.copy_text("design_030") }}</span>
                 </label>
                 <label class="option-chip">
                   <input type="radio" name="shape" value="round">
-                  <span>{% if selected_locale == "ja" %}丸印{% else %}Round seal{% endif %}</span>
+                  <span>{{ self.copy_text("design_031") }}</span>
                 </label>
               </fieldset>
 
               <div class="shape-switch-note" role="note">
-                {% if selected_locale == "en" %}
-                <strong>Note:</strong> The gemstone listings can be used with either shape.
-                {% else %}
-                <strong>補足:</strong> 宝石個体は丸印・角印のどちらでも選べます。
-                {% endif %}
+                {{ self.copy_html("design_032")|safe }}
               </div>
 
               <div class="preview-config">
                 <input type="hidden" id="font" name="font" value="{{ default_font_key }}">
-                <p class="field-label compact">{% if selected_locale == "ja" %}フォント一覧{% else %}Font list{% endif %}</p>
-                <div class="font-chip-list" role="listbox" aria-label="{% if selected_locale == "ja" %}フォント選択{% else %}Font selection{% endif %}">
+                <p class="field-label compact">{{ self.copy_text("design_033") }}</p>
+                <div class="font-chip-list" role="listbox" aria-label="{{ self.copy_text("design_034") }}">
                   {% for font in fonts %}
                   <button
                     type="button"
@@ -287,40 +281,36 @@
           </div>
 
           <div class="step-actions">
-            <button type="button" class="primary" data-next-step="2">{% if selected_locale == "ja" %}出品個体選びへ進む{% else %}Next: Listing{% endif %}</button>
+            <button type="button" class="primary" data-next-step="2">{{ self.copy_text("design_035") }}</button>
           </div>
         </section>
 
         <section class="step-panel" data-step-panel="2">
           <div class="section-title-wrap">
-            <h2>{% if selected_locale == "ja" %}出品個体を選ぶ{% else %}Choose listing{% endif %}</h2>
+            <h2>{{ self.copy_text("design_036") }}</h2>
             <p>
-              {% if selected_locale == "ja" %}
-              質感・重さ・用途と価格を見ながら出品個体を決めます。宝石個体は丸印・角印のどちらでも選べます。
-              {% else %}
-              Compare texture, weight, use, and price to pick your listing. The gemstone listings can be used with either shape.
-              {% endif %}
+              {{ self.copy_html("design_037")|safe }}
             </p>
           </div>
 
           <div class="material-filter-panel" data-material-filter-panel>
             <div class="material-filter-panel__header">
-              <p class="material-filter-panel__title">{% if selected_locale == "ja" %}絞り込み{% else %}Filters{% endif %}</p>
+              <p class="material-filter-panel__title">{{ self.copy_text("design_038") }}</p>
               <button type="button" class="material-filter-reset" data-material-filter-reset>
-                {% if selected_locale == "ja" %}すべて解除{% else %}Clear all{% endif %}
+                {{ self.copy_text("design_039") }}
               </button>
             </div>
 
             <p class="material-filter-shape">
-              <span>{% if selected_locale == "ja" %}選択中の形状{% else %}Selected shape{% endif %}</span>
-              <strong data-material-filter-shape-label>{% if selected_locale == "ja" %}角印{% else %}Square seal{% endif %}</strong>
+              <span>{{ self.copy_text("design_040") }}</span>
+              <strong data-material-filter-shape-label>{{ self.copy_text("design_041") }}</strong>
             </p>
 
             <div class="material-filter-groups">
               <div class="material-filter-group">
-                <span class="material-filter-group__label">{% if selected_locale == "ja" %}色{% else %}Color{% endif %}</span>
-                <div class="material-filter-chip-list" data-material-filter-group="color" role="group" aria-label="{% if selected_locale == "ja" %}色で絞り込む{% else %}Filter by color{% endif %}">
-                  <button type="button" class="material-filter-chip{% if selected_color_family == "" %} is-selected{% endif %}" data-filter-value="" aria-pressed="{% if selected_color_family == "" %}true{% else %}false{% endif %}">{% if selected_locale == "ja" %}すべて{% else %}All{% endif %}</button>
+                <span class="material-filter-group__label">{{ self.copy_text("design_042") }}</span>
+                <div class="material-filter-chip-list" data-material-filter-group="color" role="group" aria-label="{{ self.copy_text("design_043") }}">
+                  <button type="button" class="material-filter-chip{% if selected_color_family == "" %} is-selected{% endif %}" data-filter-value="" aria-pressed="{% if selected_color_family == "" %}true{% else %}false{% endif %}">{{ self.copy_text("design_044") }}</button>
                   {% for option in material_filters.color_options %}
                   <button type="button" class="material-filter-chip{% if option.value == selected_color_family %} is-selected{% endif %}" data-filter-value="{{ option.value }}" aria-pressed="{% if option.value == selected_color_family %}true{% else %}false{% endif %}">{{ option.label }}</button>
                   {% endfor %}
@@ -328,9 +318,9 @@
               </div>
 
               <div class="material-filter-group">
-                <span class="material-filter-group__label">{% if selected_locale == "ja" %}模様{% else %}Pattern{% endif %}</span>
-                <div class="material-filter-chip-list" data-material-filter-group="pattern" role="group" aria-label="{% if selected_locale == "ja" %}模様で絞り込む{% else %}Filter by pattern{% endif %}">
-                  <button type="button" class="material-filter-chip{% if selected_pattern_primary == "" %} is-selected{% endif %}" data-filter-value="" aria-pressed="{% if selected_pattern_primary == "" %}true{% else %}false{% endif %}">{% if selected_locale == "ja" %}すべて{% else %}All{% endif %}</button>
+                <span class="material-filter-group__label">{{ self.copy_text("design_045") }}</span>
+                <div class="material-filter-chip-list" data-material-filter-group="pattern" role="group" aria-label="{{ self.copy_text("design_046") }}">
+                  <button type="button" class="material-filter-chip{% if selected_pattern_primary == "" %} is-selected{% endif %}" data-filter-value="" aria-pressed="{% if selected_pattern_primary == "" %}true{% else %}false{% endif %}">{{ self.copy_text("design_047") }}</button>
                   {% for option in material_filters.pattern_options %}
                   <button type="button" class="material-filter-chip{% if option.value == selected_pattern_primary %} is-selected{% endif %}" data-filter-value="{{ option.value }}" aria-pressed="{% if option.value == selected_pattern_primary %}true{% else %}false{% endif %}">{{ option.label }}</button>
                   {% endfor %}
@@ -340,11 +330,7 @@
 
             <p class="material-filter-summary" data-material-filter-summary aria-live="polite"></p>
             <p class="material-filter-empty" data-material-filter-empty hidden>
-              {% if selected_locale == "ja" %}
-              条件に一致する出品個体がありません。フィルタを解除してください。
-              {% else %}
-              No listings match the current filters. Clear one or more filters.
-              {% endif %}
+              {{ self.copy_html("design_048")|safe }}
             </p>
           </div>
 
@@ -395,59 +381,59 @@
           </div>
 
           <div class="step-actions">
-            <button type="button" class="ghost" data-prev-step="1">{% if selected_locale == "ja" %}戻る{% else %}Back{% endif %}</button>
-            <button type="button" class="primary" data-next-step="3">{% if selected_locale == "ja" %}購入へ進む{% else %}Next: Purchase{% endif %}</button>
+            <button type="button" class="ghost" data-prev-step="1">{{ self.copy_text("design_049") }}</button>
+            <button type="button" class="primary" data-next-step="3">{{ self.copy_text("design_050") }}</button>
           </div>
         </section>
 
         <section class="step-panel" data-step-panel="3">
           <div class="section-title-wrap">
-            <h2>{% if selected_locale == "ja" %}購入{% else %}Purchase{% endif %}</h2>
-            <p>{% if selected_locale == "ja" %}内容を確認して、支払いへ進みます。{% else %}Review the details, then continue to payment.{% endif %}</p>
+            <h2>{{ self.copy_text("design_051") }}</h2>
+            <p>{{ self.copy_text("design_052") }}</p>
           </div>
 
           <div class="purchase-grid">
             <section class="checkout-card">
-              <h3>{% if selected_locale == "ja" %}お届け先情報{% else %}Shipping details{% endif %}</h3>
+              <h3>{{ self.copy_text("design_053") }}</h3>
               <div class="checkout-form-grid">
                 <div class="field-span-full">
-                  <label class="field-label" for="recipient_name">{% if selected_locale == "ja" %}お届け先氏名{% else %}Recipient name{% endif %}</label>
+                  <label class="field-label" for="recipient_name">{{ self.copy_text("design_054") }}</label>
                   <input
                     id="recipient_name"
                     name="recipient_name"
                     type="text"
                     required
                     autocomplete="name"
-                    placeholder="{% if selected_locale == "ja" %}例: 山田 太郎{% else %}e.g. Michael Smith{% endif %}"
+                    placeholder="{{ self.copy_text("design_055") }}"
                   >
                 </div>
 
                 <div>
-                  <label class="field-label" for="email">{% if selected_locale == "ja" %}メールアドレス{% else %}Email address{% endif %}</label>
+                  <label class="field-label" for="email">{{ self.copy_text("design_056") }}</label>
                   <input
                     id="email"
                     name="email"
                     type="email"
                     required
                     autocomplete="email"
-                    placeholder="{% if selected_locale == "ja" %}you@example.com{% else %}name@example.com{% endif %}"
+                    placeholder="{{ self.copy_text("design_057") }}"
                   >
                 </div>
 
                 <div>
-                  <label class="field-label" for="phone">{% if selected_locale == "ja" %}電話番号{% else %}Phone number{% endif %}</label>
+                  <label class="field-label" for="phone">{{ self.copy_text("design_058") }}</label>
                   <input
                     id="phone"
                     name="phone"
                     type="tel"
                     required
                     autocomplete="tel"
-                    placeholder="{% if selected_locale == "ja" %}+81 90 1234 5678{% else %}+1 415 555 0123{% endif %}"
+                    placeholder="{{ self.copy_text("design_059") }}"
                   >
                 </div>
 
                 <div>
-                  <label class="field-label" for="country">{% if selected_locale == "ja" %}国 / Country{% else %}Country{% endif %}</label>
+                  <label class="field-label" for="country">{{ self.copy_text("design_060") }}</label>
                   <select id="country" name="country" required>
                     {% for c in countries %}
                     <option value="{{ c.code }}" data-label="{{ c.label }}" data-shipping="{{ c.shipping }}" {% if loop.first %}selected{% endif %}>{{ c.label }} ({{ c.code }})</option>
@@ -456,124 +442,116 @@
                 </div>
 
                 <div>
-                  <label class="field-label" for="postal_code">{% if selected_locale == "ja" %}郵便番号 / ZIP{% else %}Postal code{% endif %}</label>
+                  <label class="field-label" for="postal_code">{{ self.copy_text("design_061") }}</label>
                   <input
                     id="postal_code"
                     name="postal_code"
                     type="text"
                     required
                     autocomplete="postal-code"
-                    placeholder="{% if selected_locale == "ja" %}100-0001{% else %}94103{% endif %}"
+                    placeholder="{{ self.copy_text("design_062") }}"
                   >
                 </div>
 
                 <div>
-                  <label class="field-label" for="state">{% if selected_locale == "ja" %}都道府県 / 州{% else %}State / Prefecture{% endif %}</label>
+                  <label class="field-label" for="state">{{ self.copy_text("design_063") }}</label>
                   <input
                     id="state"
                     name="state"
                     type="text"
                     required
                     autocomplete="address-level1"
-                    placeholder="{% if selected_locale == "ja" %}東京都{% else %}California{% endif %}"
+                    placeholder="{{ self.copy_text("design_064") }}"
                   >
                 </div>
 
                 <div>
-                  <label class="field-label" for="city">{% if selected_locale == "ja" %}市区町村 / City{% else %}City{% endif %}</label>
+                  <label class="field-label" for="city">{{ self.copy_text("design_065") }}</label>
                   <input
                     id="city"
                     name="city"
                     type="text"
                     required
                     autocomplete="address-level2"
-                    placeholder="{% if selected_locale == "ja" %}千代田区{% else %}San Francisco{% endif %}"
+                    placeholder="{{ self.copy_text("design_066") }}"
                   >
                 </div>
 
                 <div class="field-span-full">
-                  <label class="field-label" for="address_line1">{% if selected_locale == "ja" %}住所1{% else %}Address line 1{% endif %}</label>
+                  <label class="field-label" for="address_line1">{{ self.copy_text("design_067") }}</label>
                   <input
                     id="address_line1"
                     name="address_line1"
                     type="text"
                     required
                     autocomplete="address-line1"
-                    placeholder="{% if selected_locale == "ja" %}丸の内1-1-1{% else %}1 Market St{% endif %}"
+                    placeholder="{{ self.copy_text("design_068") }}"
                   >
                 </div>
 
                 <div class="field-span-full">
-                  <label class="field-label" for="address_line2">{% if selected_locale == "ja" %}住所2（任意）{% else %}Address line 2 (optional){% endif %}</label>
+                  <label class="field-label" for="address_line2">{{ self.copy_text("design_069") }}</label>
                   <input
                     id="address_line2"
                     name="address_line2"
                     type="text"
                     autocomplete="address-line2"
-                    placeholder="{% if selected_locale == "ja" %}建物名・部屋番号など{% else %}Apt 12B, building name, etc.{% endif %}"
+                    placeholder="{{ self.copy_text("design_070") }}"
                   >
                 </div>
               </div>
             </section>
 
             <section class="summary-card">
-              <h3>{% if selected_locale == "ja" %}注文サマリー{% else %}Order summary{% endif %}</h3>
+              <h3>{{ self.copy_text("design_071") }}</h3>
               <dl class="summary-list">
                 <div>
-                  <dt>{% if selected_locale == "ja" %}印影テキスト{% else %}Seal text{% endif %}</dt>
+                  <dt>{{ self.copy_text("design_072") }}</dt>
                   <dd id="summary-seal-lines">-</dd>
                 </div>
                 <div>
-                  <dt>{% if selected_locale == "ja" %}形状{% else %}Shape{% endif %}</dt>
+                  <dt>{{ self.copy_text("design_073") }}</dt>
                   <dd id="summary-shape">-</dd>
                 </div>
                 <div>
-                  <dt>{% if selected_locale == "ja" %}フォント{% else %}Font{% endif %}</dt>
+                  <dt>{{ self.copy_text("design_074") }}</dt>
                   <dd id="summary-font">-</dd>
                 </div>
                 <div>
-                  <dt>{% if selected_locale == "ja" %}出品個体{% else %}Listing{% endif %}</dt>
+                  <dt>{{ self.copy_text("design_075") }}</dt>
                   <dd id="summary-listing">-</dd>
                 </div>
                 <div>
-                  <dt>{% if selected_locale == "ja" %}配送先の国{% else %}Shipping country{% endif %}</dt>
+                  <dt>{{ self.copy_text("design_076") }}</dt>
                   <dd id="summary-country">-</dd>
                 </div>
                 <div>
-                  <dt>{% if selected_locale == "ja" %}商品価格{% else %}Item total{% endif %}</dt>
+                  <dt>{{ self.copy_text("design_077") }}</dt>
                   <dd id="summary-subtotal">-</dd>
                 </div>
                 <div>
-                  <dt>{% if selected_locale == "ja" %}送料{% else %}Shipping{% endif %}</dt>
+                  <dt>{{ self.copy_text("design_078") }}</dt>
                   <dd id="summary-shipping">-</dd>
                 </div>
                 <div>
-                  <dt>{% if selected_locale == "ja" %}合計{% else %}Total{% endif %}</dt>
+                  <dt>{{ self.copy_text("design_079") }}</dt>
                   <dd id="summary-total">-</dd>
                 </div>
               </dl>
             </section>
 
             <section class="checkout-card purchase-action-card">
-              <h3>{% if selected_locale == "ja" %}お支払い{% else %}Payment{% endif %}</h3>
+              <h3>{{ self.copy_text("design_080") }}</h3>
               <label class="terms-check">
                 <input id="terms_agreed" name="terms_agreed" type="checkbox" required>
                 <span>
-                  {% if selected_locale == "ja" %}
+                  {{ self.copy_text("design_091") }}
                   <a
                     href="{{ terms_url }}"
                     target="_blank"
                     rel="noopener noreferrer"
                     style="color:inherit;text-decoration:underline;"
-                  >利用規約</a>に同意する
-                  {% else %}
-                  I agree to the <a
-                    href="{{ terms_url }}"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style="color:inherit;text-decoration:underline;"
-                  >terms of service</a>
-                  {% endif %}
+                  >{{ self.copy_text("design_092") }}</a>{{ self.copy_text("design_093") }}
                 </span>
               </label>
 
@@ -582,10 +560,10 @@
                 id="purchase-submit"
                 type="submit"
                 class="primary full"
-                data-ready-label="{% if selected_locale == "ja" %}支払う{% else %}Pay now{% endif %}"
-                data-submitting-label="{% if selected_locale == "ja" %}送信中...{% else %}Submitting...{% endif %}"
+                data-ready-label="{{ self.copy_text("design_081") }}"
+                data-submitting-label="{{ self.copy_text("design_082") }}"
               >
-                {% if selected_locale == "ja" %}支払う{% else %}Pay now{% endif %}
+                {{ self.copy_text("design_083") }}
               </button>
               <div id="purchase-status" class="purchase-status" role="status" aria-live="polite"></div>
               <div id="purchase-result" class="purchase-result" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -593,7 +571,7 @@
           </div>
 
           <div class="step-actions">
-            <button type="button" class="ghost" data-prev-step="2">{% if selected_locale == "ja" %}戻る{% else %}Back{% endif %}</button>
+            <button type="button" class="ghost" data-prev-step="2">{{ self.copy_text("design_084") }}</button>
           </div>
         </section>
       </form>
@@ -609,11 +587,11 @@
         </a>
       </div>
       <div class="top-footer__links">
-        <a class="top-footer__link" href="{{ about_url }}">{% if selected_locale == "ja" %}STONE SIGNATUREとは{% else %}About STONE SIGNATURE{% endif %}</a>
-        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{% if selected_locale == "ja" %}特商法に基づく表記{% else %}Legal Notice{% endif %}</a>
-        <a class="top-footer__link" href="{{ terms_url }}">{% if selected_locale == "ja" %}利用規約{% else %}Terms of Service{% endif %}</a>
-        <a class="top-footer__link" href="{{ privacy_policy_url }}">{% if selected_locale == "ja" %}プライバシーポリシー{% else %}Privacy Policy{% endif %}</a>
-        <a class="top-footer__link" href="{{ company_url }}">{% if selected_locale == "ja" %}運営会社{% else %}Company{% endif %}</a>
+        <a class="top-footer__link" href="{{ about_url }}">{{ self.copy_text("design_085") }}</a>
+        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{{ self.copy_text("design_086") }}</a>
+        <a class="top-footer__link" href="{{ terms_url }}">{{ self.copy_text("design_087") }}</a>
+        <a class="top-footer__link" href="{{ privacy_policy_url }}">{{ self.copy_text("design_088") }}</a>
+        <a class="top-footer__link" href="{{ company_url }}">{{ self.copy_text("design_089") }}</a>
       </div>
       <div class="top-footer__copyright">
         © STONE SIGNATURE

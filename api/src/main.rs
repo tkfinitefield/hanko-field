@@ -4,7 +4,7 @@ use std::{
     io::Cursor,
     net::SocketAddr,
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::Duration as StdDuration,
 };
 
@@ -33,6 +33,7 @@ use sha2::{Digest, Sha256};
 use tokio::net::TcpListener;
 use uuid::Uuid;
 
+mod language_registry;
 mod seal_fonts;
 mod seal_renderer;
 
@@ -41,13 +42,32 @@ const MAX_REQUEST_BODY_BYTES: usize = 1 << 20;
 const DEFAULT_PORT: &str = "3050";
 const DEFAULT_LOCALE: &str = "ja";
 const DEFAULT_CURRENCY: &str = "USD";
-const DEFAULT_JA_CURRENCY: &str = "JPY";
 const DEFAULT_STRIPE_CHECKOUT_SUCCESS_URL: &str =
     "http://127.0.0.1:3052/payment/success?session_id={CHECKOUT_SESSION_ID}";
 const DEFAULT_STRIPE_CHECKOUT_CANCEL_URL: &str = "http://127.0.0.1:3052/payment/failure";
 const DEFAULT_STRIPE_APP_CHECKOUT_SUCCESS_URL: &str =
     "hankofield://checkout/success?session_id={CHECKOUT_SESSION_ID}";
 const DEFAULT_STRIPE_APP_CHECKOUT_CANCEL_URL: &str = "hankofield://checkout/cancel";
+const CHECKOUT_COPY_EN_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/checkout/en.json"
+));
+const CHECKOUT_COPY_JA_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/checkout/ja.json"
+));
+const CHECKOUT_COPY_ZH_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/checkout/zh.json"
+));
+const CHECKOUT_COPY_ZHTW_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/checkout/zhtw.json"
+));
+const CHECKOUT_COPY_AR_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/checkout/ar.json"
+));
 const STRIPE_CHECKOUT_SESSIONS_URL: &str = "https://api.stripe.com/v1/checkout/sessions";
 const STRIPE_CHECKOUT_API_VERSION: &str = "2025-07-30.basil";
 const STRIPE_WEBHOOK_TOLERANCE_SECONDS: i64 = 5 * 60;
@@ -420,6 +440,13 @@ struct OrderCheckoutContext {
     contact_email: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct CheckoutCopy {
+    product_name_template: String,
+    product_description_template: String,
+    shape_labels: HashMap<String, String>,
+}
+
 #[derive(Debug, Clone)]
 struct StripeWebhookEvent {
     provider_event_id: String,
@@ -493,6 +520,9 @@ struct GenerateKanjiCandidatesRequest {
 struct GenerateKanjiCandidatesInput {
     real_name: String,
     reason_language: String,
+    reason_language_requested: String,
+    reason_language_route_code: String,
+    reason_language_fallback_reason: Option<&'static str>,
     gender: CandidateGender,
     kanji_style: KanjiStyle,
     count: usize,
@@ -1288,11 +1318,14 @@ async fn handle_catalog(
         }
     };
 
-    let requested_locale = query
-        .locale
-        .unwrap_or_else(|| cfg.default_locale.clone())
-        .trim()
-        .to_lowercase();
+    let Some(requested_locale) = requested_locale_route_code(query.locale, &cfg.default_locale)
+    else {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_locale",
+            "unsupported locale",
+        );
+    };
     let pricing_currency = resolve_pricing_currency(&cfg, &requested_locale);
 
     if !cfg
@@ -1477,11 +1510,14 @@ async fn handle_stone_listings(
         }
     };
 
-    let requested_locale = query
-        .locale
-        .unwrap_or_else(|| cfg.default_locale.clone())
-        .trim()
-        .to_lowercase();
+    let Some(requested_locale) = requested_locale_route_code(query.locale, &cfg.default_locale)
+    else {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_locale",
+            "unsupported locale",
+        );
+    };
     let pricing_currency = resolve_pricing_currency(&cfg, &requested_locale);
 
     if !cfg
@@ -1603,11 +1639,14 @@ async fn handle_stone_listing_detail(
         }
     };
 
-    let requested_locale = query
-        .locale
-        .unwrap_or_else(|| cfg.default_locale.clone())
-        .trim()
-        .to_lowercase();
+    let Some(requested_locale) = requested_locale_route_code(query.locale, &cfg.default_locale)
+    else {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_locale",
+            "unsupported locale",
+        );
+    };
     let pricing_currency = resolve_pricing_currency(&cfg, &requested_locale);
 
     if !cfg
@@ -1730,6 +1769,15 @@ async fn handle_generate_kanji_candidates(State(state): State<AppState>, body: B
         json!({
             "real_name": input.real_name,
             "reason_language": input.reason_language,
+            "reason_language_requested": input.reason_language_requested,
+            "reason_language_route_code": input.reason_language_route_code,
+            "reason_language_fallback": input.reason_language_fallback_reason.map(|reason| {
+                json!({
+                    "used": true,
+                    "reason": reason,
+                    "fallback_to": input.reason_language,
+                })
+            }),
             "gender": input.gender.as_str(),
             "kanji_style": input.kanji_style.as_str(),
             "candidates": candidates.into_iter().map(|candidate| {
@@ -4063,23 +4111,26 @@ async fn upsert_named_document(
 }
 
 fn default_public_config() -> PublicConfig {
-    let mut currency_by_locale = HashMap::new();
-    currency_by_locale.insert("ja".to_owned(), DEFAULT_JA_CURRENCY.to_owned());
-    currency_by_locale.insert("en".to_owned(), DEFAULT_CURRENCY.to_owned());
+    public_config_from_registry()
+        .expect("checked-in language registry should generate public config")
+}
 
-    PublicConfig {
-        supported_locales: vec!["ja".to_owned(), "en".to_owned()],
-        default_locale: DEFAULT_LOCALE.to_owned(),
-        default_currency: DEFAULT_CURRENCY.to_owned(),
-        currency_by_locale,
-    }
+fn public_config_from_registry() -> Result<PublicConfig> {
+    let cfg = language_registry::public_config_from_registry()?;
+    Ok(PublicConfig {
+        supported_locales: cfg.supported_locales,
+        default_locale: cfg.default_locale,
+        default_currency: cfg.default_currency,
+        currency_by_locale: cfg.currency_by_locale,
+    })
 }
 
 fn normalize_public_config(cfg: PublicConfig) -> PublicConfig {
+    let registry_config = default_public_config();
     let mut normalized = Vec::with_capacity(cfg.supported_locales.len());
     let mut seen = HashSet::with_capacity(cfg.supported_locales.len());
     for locale in cfg.supported_locales {
-        let value = locale.trim().to_lowercase();
+        let value = normalize_locale_route_code(&locale).unwrap_or_default();
         if value.is_empty() || seen.contains(&value) {
             continue;
         }
@@ -4088,37 +4139,41 @@ fn normalize_public_config(cfg: PublicConfig) -> PublicConfig {
     }
 
     if normalized.is_empty() {
-        normalized = vec!["ja".to_owned(), "en".to_owned()];
+        normalized = registry_config.supported_locales.clone();
     }
 
-    let mut default_locale = cfg.default_locale.trim().to_lowercase();
+    let mut default_locale = normalize_locale_route_code(&cfg.default_locale).unwrap_or_default();
     if default_locale.is_empty() || !contains(&normalized, &default_locale) {
-        default_locale = DEFAULT_LOCALE.to_owned();
-    }
-    if !contains(&normalized, &default_locale) {
-        normalized.insert(0, default_locale.clone());
+        default_locale = if contains(&normalized, &registry_config.default_locale) {
+            registry_config.default_locale.clone()
+        } else {
+            normalized
+                .first()
+                .cloned()
+                .unwrap_or_else(|| DEFAULT_LOCALE.to_owned())
+        };
     }
 
-    let default_currency = normalize_currency_code(&cfg.default_currency)
-        .unwrap_or_else(|| DEFAULT_CURRENCY.to_owned());
+    let default_currency = language_registry::normalize_currency_code(&cfg.default_currency)
+        .unwrap_or_else(|| registry_config.default_currency.clone());
 
     let mut currency_by_locale = HashMap::new();
     for (locale, currency) in cfg.currency_by_locale {
-        let locale = locale.trim().to_lowercase();
+        let locale = normalize_locale_route_code(&locale).unwrap_or_default();
         if locale.is_empty() || !contains(&normalized, &locale) {
             continue;
         }
-        let Some(currency) = normalize_currency_code(&currency) else {
+        let Some(currency) = language_registry::normalize_currency_code(&currency) else {
             continue;
         };
         currency_by_locale.insert(locale, currency);
     }
     for locale in &normalized {
-        let fallback_currency = if locale == DEFAULT_LOCALE {
-            DEFAULT_JA_CURRENCY.to_owned()
-        } else {
-            default_currency.clone()
-        };
+        let fallback_currency = registry_config
+            .currency_by_locale
+            .get(locale)
+            .cloned()
+            .unwrap_or_else(|| default_currency.clone());
         currency_by_locale
             .entry(locale.clone())
             .or_insert(fallback_currency);
@@ -4133,11 +4188,17 @@ fn normalize_public_config(cfg: PublicConfig) -> PublicConfig {
 }
 
 fn normalize_currency_code(raw: &str) -> Option<String> {
-    let value = raw.trim().to_uppercase();
-    if value.len() != 3 || !value.chars().all(|ch| ch.is_ascii_alphabetic()) {
-        return None;
-    }
-    Some(value)
+    language_registry::normalize_currency_code(raw)
+}
+
+fn normalize_locale_route_code(raw: &str) -> Option<String> {
+    language_registry::route_code_for_locale(raw)
+}
+
+fn requested_locale_route_code(raw: Option<String>, default_locale: &str) -> Option<String> {
+    raw.as_deref()
+        .map(normalize_locale_route_code)
+        .unwrap_or_else(|| Some(default_locale.to_owned()))
 }
 
 fn resolve_currency_for_locale(cfg: &PublicConfig, locale: &str) -> String {
@@ -4257,7 +4318,8 @@ fn normalize_create_order_input(input: CreateOrderInput) -> CreateOrderInput {
 
     CreateOrderInput {
         channel: input.channel.trim().to_lowercase(),
-        locale: input.locale.trim().to_lowercase(),
+        locale: normalize_locale_route_code(&input.locale)
+            .unwrap_or_else(|| input.locale.trim().to_lowercase()),
         idempotency_key: input.idempotency_key.trim().to_owned(),
         terms_agreed: input.terms_agreed,
         seal: SealInput {
@@ -4296,7 +4358,8 @@ fn normalize_create_order_input(input: CreateOrderInput) -> CreateOrderInput {
         },
         contact: ContactInput {
             email: input.contact.email.trim().to_owned(),
-            preferred_locale: input.contact.preferred_locale.trim().to_lowercase(),
+            preferred_locale: normalize_locale_route_code(&input.contact.preferred_locale)
+                .unwrap_or_else(|| input.contact.preferred_locale.trim().to_lowercase()),
         },
         customer_confirmation: input.customer_confirmation.map(|customer_confirmation| {
             CustomerConfirmationInput {
@@ -4667,17 +4730,15 @@ fn validate_generate_kanji_candidates_request(
         bail!("real_name must be 120 characters or fewer");
     }
 
-    let reason_language = request
-        .reason_language
-        .unwrap_or_else(|| "en".to_owned())
-        .trim()
-        .to_owned();
-    if reason_language.is_empty() {
+    let reason_language_raw = request.reason_language.as_deref().unwrap_or("en").trim();
+    if reason_language_raw.is_empty() {
         bail!("reason_language is required");
     }
-    if reason_language.chars().count() > 32 {
+    if reason_language_raw.chars().count() > 32 {
         bail!("reason_language must be 32 characters or fewer");
     }
+    let reason_language_resolution =
+        language_registry::reason_language_for_locale(Some(reason_language_raw));
 
     let gender = parse_candidate_gender(request.gender.as_deref())?;
     let kanji_style = parse_kanji_style(request.kanji_style.as_deref())?;
@@ -4689,7 +4750,10 @@ fn validate_generate_kanji_candidates_request(
 
     Ok(GenerateKanjiCandidatesInput {
         real_name,
-        reason_language,
+        reason_language: reason_language_resolution.prompt_language,
+        reason_language_requested: reason_language_resolution.requested_locale,
+        reason_language_route_code: reason_language_resolution.route_code,
+        reason_language_fallback_reason: reason_language_resolution.fallback_reason,
         gender,
         kanji_style,
         count,
@@ -6624,6 +6688,8 @@ fn build_stripe_checkout_session_form(
     return_to_app: bool,
 ) -> Vec<(String, String)> {
     let product_name = build_checkout_product_name(order);
+    let product_description = build_checkout_product_description(order);
+    let return_locale = checkout_return_locale(order);
     let checkout_currency = stripe_checkout_currency(&order.currency);
     let success_base_url = if return_to_app {
         &stripe_checkout.app_success_url
@@ -6639,12 +6705,12 @@ fn build_stripe_checkout_session_form(
     let mut success_params = vec![
         ("checkout", "success"),
         ("order_id", order.order_id.as_str()),
-        ("lang", order.order_locale.as_str()),
+        ("lang", return_locale.as_str()),
     ];
     let mut cancel_params = vec![
         ("checkout", "cancel"),
         ("order_id", order.order_id.as_str()),
-        ("lang", order.order_locale.as_str()),
+        ("lang", return_locale.as_str()),
     ];
     if return_to_app {
         success_params.push(("return_to", "app"));
@@ -6669,6 +6735,10 @@ fn build_stripe_checkout_session_form(
         (
             "line_items[0][price_data][product_data][name]".to_owned(),
             product_name,
+        ),
+        (
+            "line_items[0][price_data][product_data][description]".to_owned(),
+            product_description,
         ),
         ("metadata[order_id]".to_owned(), order.order_id.clone()),
         (
@@ -6771,42 +6841,85 @@ fn append_query_params(base_url: &str, params: &[(&str, &str)]) -> String {
 }
 
 fn build_checkout_product_name(order: &OrderCheckoutContext) -> String {
-    let listing_label = order.listing_label.trim();
-    if is_japanese_locale(&order.order_locale) {
-        let shape_label = checkout_shape_label_ja(&order.seal_shape);
-        return format!(
-            "宝石印鑑 ({}、{})",
-            display_or_dash(listing_label),
-            display_or_dash(shape_label),
-        );
-    }
+    let copy = checkout_copy_for_locale(&order.order_locale);
+    let listing_label = display_or_dash(order.listing_label.trim());
+    let shape_label = display_or_dash(checkout_shape_label(copy, &order.seal_shape));
 
-    let shape_label = checkout_shape_label_en(&order.seal_shape);
-    format!(
-        "Stone seal ({}; {})",
-        display_or_dash(listing_label),
-        display_or_dash(shape_label),
-    )
+    render_checkout_product_name_template(&copy.product_name_template, listing_label, shape_label)
 }
 
-fn is_japanese_locale(locale: &str) -> bool {
-    locale.trim().to_lowercase().starts_with("ja")
+fn build_checkout_product_description(order: &OrderCheckoutContext) -> String {
+    checkout_copy_for_locale(&order.order_locale)
+        .product_description_template
+        .clone()
 }
 
-fn checkout_shape_label_ja(shape: &str) -> &str {
-    match shape.trim().to_lowercase().as_str() {
-        "round" => "丸",
-        "square" => "角",
-        _ => "",
+fn checkout_return_locale(order: &OrderCheckoutContext) -> String {
+    normalize_locale_route_code(&order.order_locale).unwrap_or_else(|| DEFAULT_LOCALE.to_owned())
+}
+
+fn checkout_copy_for_locale(locale: &str) -> &'static CheckoutCopy {
+    let route_code = checkout_copy_route_code(locale);
+    let copies = checkout_copies();
+
+    copies
+        .get(route_code)
+        .or_else(|| copies.get("en"))
+        .expect("checkout copy map must contain en")
+}
+
+fn checkout_copies() -> &'static HashMap<&'static str, CheckoutCopy> {
+    static CHECKOUT_COPIES: OnceLock<HashMap<&'static str, CheckoutCopy>> = OnceLock::new();
+
+    CHECKOUT_COPIES.get_or_init(|| {
+        [
+            ("en", CHECKOUT_COPY_EN_JSON),
+            ("ja", CHECKOUT_COPY_JA_JSON),
+            ("zh", CHECKOUT_COPY_ZH_JSON),
+            ("zhtw", CHECKOUT_COPY_ZHTW_JSON),
+            ("ar", CHECKOUT_COPY_AR_JSON),
+        ]
+        .into_iter()
+        .map(|(route_code, source)| {
+            let copy = serde_json::from_str::<CheckoutCopy>(source)
+                .unwrap_or_else(|error| panic!("invalid checkout copy for {route_code}: {error}"));
+            (route_code, copy)
+        })
+        .collect()
+    })
+}
+
+fn checkout_copy_route_code(locale: &str) -> &'static str {
+    let value = locale.trim().to_lowercase().replace('_', "-");
+    let language = value.split('-').next().unwrap_or_default();
+
+    match value.as_str() {
+        "zhtw" | "zh-hant" | "zh-tw" | "zh-hk" | "zh-mo" => "zhtw",
+        "zh" | "zh-hans" | "zh-cn" | "zh-sg" => "zh",
+        "ar" => "ar",
+        _ if language == "ja" => "ja",
+        _ if language == "zh" => "zh",
+        _ if language == "ar" => "ar",
+        _ => "en",
     }
 }
 
-fn checkout_shape_label_en(shape: &str) -> &str {
-    match shape.trim().to_lowercase().as_str() {
-        "round" => "circle",
-        "square" => "square",
-        _ => "",
-    }
+fn checkout_shape_label<'a>(copy: &'a CheckoutCopy, shape: &str) -> &'a str {
+    let shape_key = shape.trim().to_lowercase();
+    copy.shape_labels
+        .get(shape_key.as_str())
+        .map(String::as_str)
+        .unwrap_or_default()
+}
+
+fn render_checkout_product_name_template(
+    template: &str,
+    listing_label: &str,
+    shape_label: &str,
+) -> String {
+    template
+        .replace("{listing_label}", listing_label)
+        .replace("{shape_label}", shape_label)
 }
 
 fn build_payment_intent_shipping(order: &OrderCheckoutContext) -> Option<JsonValue> {
@@ -6930,18 +7043,14 @@ fn stripe_order_id_from_object(object: &JsonValue) -> String {
 fn validate_create_order_request(request: CreateOrderRequest) -> Result<CreateOrderInput> {
     let idempotency_key_pattern =
         Regex::new(r"^[A-Za-z0-9_-]{8,128}$").expect("idempotency key regex must compile");
-    let locale_pattern =
-        Regex::new(r"^[a-z]{2,3}(-[a-z0-9]{2,8})*$").expect("locale regex must compile");
 
     let channel = request.channel.trim().to_lowercase();
     if channel != "app" && channel != "web" {
         bail!("channel must be one of app or web");
     }
 
-    let locale = request.locale.trim().to_lowercase();
-    if !locale_pattern.is_match(&locale) {
-        bail!("locale must be a valid BCP-47 lowercase tag");
-    }
+    let locale = normalize_locale_route_code(&request.locale)
+        .ok_or_else(|| anyhow!("locale must map to a supported route code"))?;
 
     let idempotency_key = request.idempotency_key.trim().to_owned();
     if !idempotency_key_pattern.is_match(&idempotency_key) {
@@ -7025,10 +7134,8 @@ fn validate_create_order_request(request: CreateOrderRequest) -> Result<CreateOr
         bail!("contact.email must be valid");
     }
 
-    let preferred_locale = request.contact.preferred_locale.trim().to_lowercase();
-    if !locale_pattern.is_match(&preferred_locale) {
-        bail!("contact.preferred_locale must be a valid BCP-47 lowercase tag");
-    }
+    let preferred_locale = normalize_locale_route_code(&request.contact.preferred_locale)
+        .ok_or_else(|| anyhow!("contact.preferred_locale must map to a supported route code"))?;
 
     Ok(CreateOrderInput {
         channel,
@@ -8148,14 +8255,123 @@ mod tests {
     }
 
     #[test]
+    fn m4_t07_resolve_localized_falls_back_for_missing_requested_value() {
+        let values = HashMap::from([
+            ("en".to_owned(), "Jade".to_owned()),
+            ("ja".to_owned(), " ".to_owned()),
+            ("zhtw".to_owned(), "青田石".to_owned()),
+        ]);
+
+        assert_eq!(resolve_localized(&values, "fr", "zhtw"), "青田石");
+        assert_eq!(resolve_localized(&values, "ja", "en"), "Jade");
+    }
+
+    #[test]
+    fn m4_t07_requested_locale_accepts_supported_route_and_bcp47_values() {
+        assert_eq!(
+            requested_locale_route_code(Some("zh-Hant".to_owned()), "en").as_deref(),
+            Some("zhtw")
+        );
+        assert_eq!(
+            requested_locale_route_code(Some("en-US".to_owned()), "ja").as_deref(),
+            Some("en")
+        );
+        assert_eq!(
+            requested_locale_route_code(None, "ja").as_deref(),
+            Some("ja")
+        );
+    }
+
+    #[test]
+    fn m4_t07_requested_locale_rejects_unsupported_values() {
+        assert_eq!(
+            requested_locale_route_code(Some("xx".to_owned()), "en"),
+            None
+        );
+        assert_eq!(
+            requested_locale_route_code(Some("../ja".to_owned()), "en"),
+            None
+        );
+    }
+
+    #[test]
     fn default_public_config_sets_ja_to_jpy() {
         let cfg = default_public_config();
+        assert_eq!(cfg.supported_locales, vec!["ar", "en", "ja", "zh", "zhtw"]);
+        assert_eq!(cfg.default_locale, "ja");
+        assert_eq!(cfg.default_currency, "USD");
         assert_eq!(
             cfg.currency_by_locale.get("ja").map(String::as_str),
             Some("JPY")
         );
         assert_eq!(
+            cfg.currency_by_locale.get("ar").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("zh").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("zhtw").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
             cfg.currency_by_locale.get("en").map(String::as_str),
+            Some("USD")
+        );
+    }
+
+    #[test]
+    fn normalize_public_config_uses_registry_defaults_for_missing_values() {
+        let cfg = normalize_public_config(PublicConfig {
+            supported_locales: Vec::new(),
+            default_locale: String::new(),
+            default_currency: String::new(),
+            currency_by_locale: HashMap::new(),
+        });
+
+        assert_eq!(cfg.supported_locales, vec!["ar", "en", "ja", "zh", "zhtw"]);
+        assert_eq!(cfg.default_locale, "ja");
+        assert_eq!(cfg.default_currency, "USD");
+        assert_eq!(
+            cfg.currency_by_locale.get("en").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("ja").map(String::as_str),
+            Some("JPY")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("ar").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("zh").map(String::as_str),
+            Some("USD")
+        );
+        assert_eq!(
+            cfg.currency_by_locale.get("zhtw").map(String::as_str),
+            Some("USD")
+        );
+    }
+
+    #[test]
+    fn normalize_public_config_maps_bcp47_locales_to_route_codes() {
+        let cfg = normalize_public_config(PublicConfig {
+            supported_locales: vec!["EN-US".to_owned(), "zh-Hant".to_owned()],
+            default_locale: "zh_Hant".to_owned(),
+            default_currency: "usd".to_owned(),
+            currency_by_locale: HashMap::from([
+                ("en-US".to_owned(), "usd".to_owned()),
+                ("zh-Hant".to_owned(), "usd".to_owned()),
+            ]),
+        });
+
+        assert_eq!(cfg.supported_locales, vec!["en", "zhtw"]);
+        assert_eq!(cfg.default_locale, "zhtw");
+        assert_eq!(
+            cfg.currency_by_locale.get("zhtw").map(String::as_str),
             Some("USD")
         );
     }
@@ -8563,6 +8779,13 @@ mod tests {
             "Stone seal (Rose Quartz; circle)"
         );
         assert_eq!(
+            stripe_form_value(
+                &form,
+                "line_items[0][price_data][product_data][description]"
+            ),
+            "Custom stone seal order"
+        );
+        assert_eq!(
             stripe_form_value(&form, "payment_intent_data[shipping][address][country]"),
             "US"
         );
@@ -8589,14 +8812,168 @@ mod tests {
 
     #[test]
     fn build_checkout_product_name_uses_japanese_format_for_ja_locale() {
-        let order = OrderCheckoutContext {
+        let order = checkout_product_name_context("ja", "翡翠", "square");
+
+        assert_eq!(build_checkout_product_name(&order), "宝石印鑑 (翡翠、角)");
+    }
+
+    #[test]
+    fn build_checkout_product_name_uses_english_format_for_non_ja_locale() {
+        let order = checkout_product_name_context("en", "Jade", "round");
+
+        assert_eq!(
+            build_checkout_product_name(&order),
+            "Stone seal (Jade; circle)"
+        );
+    }
+
+    #[test]
+    fn build_checkout_product_name_uses_simplified_chinese_copy_for_zh_locale() {
+        let order = checkout_product_name_context("zh-CN", "青田石", "round");
+
+        assert_eq!(
+            build_checkout_product_name(&order),
+            "宝石印章（青田石，圆）"
+        );
+    }
+
+    #[test]
+    fn build_checkout_product_name_uses_traditional_chinese_copy_for_zhtw_locale() {
+        let order = checkout_product_name_context("zh_Hant", "青田石", "square");
+
+        assert_eq!(
+            build_checkout_product_name(&order),
+            "寶石印章（青田石，方）"
+        );
+    }
+
+    #[test]
+    fn build_checkout_product_name_uses_arabic_copy_for_ar_locale() {
+        let order = checkout_product_name_context("ar-EG", "حجر اليشم", "square");
+
+        assert_eq!(
+            build_checkout_product_name(&order),
+            "ختم حجر كريم (حجر اليشم؛ مربع)"
+        );
+        assert_eq!(
+            build_checkout_product_description(&order),
+            "طلب ختم حجر كريم مخصص"
+        );
+    }
+
+    #[test]
+    fn stripe_checkout_return_urls_preserve_normalized_route_code() {
+        let mut order = order_checkout_context_fixture();
+        let checkout = stripe_checkout_config_fixture();
+
+        order.order_locale = "zh-Hans".to_owned();
+        let simplified_form =
+            build_stripe_checkout_session_form(&checkout, &order, "customer@example.com", true);
+
+        assert_eq!(
+            stripe_form_value(&simplified_form, "success_url"),
+            "hankofield://checkout/success?session_id={CHECKOUT_SESSION_ID}&checkout=success&order_id=order_1&lang=zh&return_to=app"
+        );
+        assert_eq!(
+            stripe_form_value(&simplified_form, "cancel_url"),
+            "hankofield://checkout/cancel?checkout=cancel&order_id=order_1&lang=zh&return_to=app"
+        );
+
+        order.order_locale = "zh-Hant".to_owned();
+        let form =
+            build_stripe_checkout_session_form(&checkout, &order, "customer@example.com", true);
+
+        assert_eq!(
+            stripe_form_value(&form, "success_url"),
+            "hankofield://checkout/success?session_id={CHECKOUT_SESSION_ID}&checkout=success&order_id=order_1&lang=zhtw&return_to=app"
+        );
+        assert_eq!(
+            stripe_form_value(&form, "cancel_url"),
+            "hankofield://checkout/cancel?checkout=cancel&order_id=order_1&lang=zhtw&return_to=app"
+        );
+    }
+
+    #[test]
+    fn m4_t07_checkout_language_persistence_uses_normalized_order_route_code() {
+        let mut order = order_checkout_context_fixture();
+        order.order_locale = "zh_TW".to_owned();
+        let checkout = stripe_checkout_config_fixture();
+
+        let form =
+            build_stripe_checkout_session_form(&checkout, &order, "customer@example.com", true);
+
+        assert!(
+            stripe_form_value(&form, "success_url").contains("lang=zhtw"),
+            "success_url should persist normalized checkout language"
+        );
+        assert!(
+            stripe_form_value(&form, "cancel_url").contains("lang=zhtw"),
+            "cancel_url should persist normalized checkout language"
+        );
+    }
+
+    #[test]
+    fn pilot_checkout_return_urls_preserve_arabic_route_code() {
+        let mut order = order_checkout_context_fixture();
+        order.order_locale = "ar-EG".to_owned();
+        let checkout = stripe_checkout_config_fixture();
+
+        let form =
+            build_stripe_checkout_session_form(&checkout, &order, "customer@example.com", true);
+
+        assert_eq!(
+            stripe_form_value(&form, "success_url"),
+            "hankofield://checkout/success?session_id={CHECKOUT_SESSION_ID}&checkout=success&order_id=order_1&lang=ar&return_to=app"
+        );
+        assert_eq!(
+            stripe_form_value(&form, "cancel_url"),
+            "hankofield://checkout/cancel?checkout=cancel&order_id=order_1&lang=ar&return_to=app"
+        );
+        assert_eq!(
+            stripe_form_value(&form, "line_items[0][price_data][product_data][name]"),
+            "ختم حجر كريم (Rose Quartz؛ دائري)"
+        );
+    }
+
+    #[test]
+    fn checkout_copy_templates_have_required_placeholders() {
+        for (route_code, copy) in checkout_copies() {
+            assert!(
+                copy.product_name_template.contains("{listing_label}"),
+                "{route_code} checkout template must contain listing_label placeholder"
+            );
+            assert!(
+                copy.product_name_template.contains("{shape_label}"),
+                "{route_code} checkout template must contain shape_label placeholder"
+            );
+            assert!(
+                !copy.product_description_template.trim().is_empty(),
+                "{route_code} checkout description template must not be empty"
+            );
+            assert!(
+                copy.shape_labels.contains_key("round"),
+                "{route_code} checkout shape labels must include round"
+            );
+            assert!(
+                copy.shape_labels.contains_key("square"),
+                "{route_code} checkout shape labels must include square"
+            );
+        }
+    }
+
+    fn checkout_product_name_context(
+        order_locale: &str,
+        listing_label: &str,
+        seal_shape: &str,
+    ) -> OrderCheckoutContext {
+        OrderCheckoutContext {
             order_id: "order_1".to_owned(),
-            order_locale: "ja".to_owned(),
+            order_locale: order_locale.to_owned(),
             status: "pending_payment".to_owned(),
             payment_status: "unpaid".to_owned(),
             listing_key: String::new(),
-            listing_label: "翡翠".to_owned(),
-            seal_shape: "square".to_owned(),
+            listing_label: listing_label.to_owned(),
+            seal_shape: seal_shape.to_owned(),
             shipping_country_code: "JP".to_owned(),
             shipping_recipient_name: "田中 太郎".to_owned(),
             shipping_phone: "09000001111".to_owned(),
@@ -8608,38 +8985,7 @@ mod tests {
             total: 12345,
             currency: DEFAULT_CURRENCY.to_owned(),
             contact_email: "buyer@example.com".to_owned(),
-        };
-
-        assert_eq!(build_checkout_product_name(&order), "宝石印鑑 (翡翠、角)");
-    }
-
-    #[test]
-    fn build_checkout_product_name_uses_english_format_for_non_ja_locale() {
-        let order = OrderCheckoutContext {
-            order_id: "order_1".to_owned(),
-            order_locale: "en".to_owned(),
-            status: "pending_payment".to_owned(),
-            payment_status: "unpaid".to_owned(),
-            listing_key: String::new(),
-            listing_label: "Jade".to_owned(),
-            seal_shape: "round".to_owned(),
-            shipping_country_code: "US".to_owned(),
-            shipping_recipient_name: "John Doe".to_owned(),
-            shipping_phone: "5551234567".to_owned(),
-            shipping_postal_code: "10001".to_owned(),
-            shipping_state: "NY".to_owned(),
-            shipping_city: "New York".to_owned(),
-            shipping_address_line1: "1 Main St".to_owned(),
-            shipping_address_line2: "Suite 101".to_owned(),
-            total: 12345,
-            currency: DEFAULT_CURRENCY.to_owned(),
-            contact_email: "buyer@example.com".to_owned(),
-        };
-
-        assert_eq!(
-            build_checkout_product_name(&order),
-            "Stone seal (Jade; circle)"
-        );
+        }
     }
 
     #[test]
@@ -8846,6 +9192,32 @@ mod tests {
 
         let input = validate_create_order_request(request).expect("request must be valid");
         assert_eq!(input.shipping.country_code, "JP");
+    }
+
+    #[test]
+    fn validate_create_order_request_normalizes_bcp47_locale_to_route_code() {
+        let mut request = valid_app_create_order_request();
+        request.locale = "zh-Hant".to_owned();
+        request.contact.preferred_locale = "zh_TW".to_owned();
+
+        let input = validate_create_order_request(request).expect("request must be valid");
+
+        assert_eq!(input.locale, "zhtw");
+        assert_eq!(input.contact.preferred_locale, "zhtw");
+    }
+
+    #[test]
+    fn m4_t07_create_order_request_rejects_unsupported_locale_values() {
+        let mut request = valid_app_create_order_request();
+        request.locale = "xx".to_owned();
+        assert_create_order_error_contains(request, "locale must map to a supported route code");
+
+        let mut request = valid_app_create_order_request();
+        request.contact.preferred_locale = "../ja".to_owned();
+        assert_create_order_error_contains(
+            request,
+            "contact.preferred_locale must map to a supported route code",
+        );
     }
 
     #[test]
@@ -11043,6 +11415,9 @@ mod tests {
         let input =
             validate_generate_kanji_candidates_request(request).expect("request must be valid");
         assert_eq!(input.reason_language, "en");
+        assert_eq!(input.reason_language_requested, "en");
+        assert_eq!(input.reason_language_route_code, "en");
+        assert_eq!(input.reason_language_fallback_reason, None);
         assert_eq!(input.gender, CandidateGender::Unspecified);
         assert_eq!(input.kanji_style, KanjiStyle::Japanese);
         assert_eq!(input.count, DEFAULT_KANJI_CANDIDATE_COUNT);
@@ -11063,6 +11438,47 @@ mod tests {
         assert_eq!(input.gender, CandidateGender::Male);
         assert_eq!(input.kanji_style, KanjiStyle::Chinese);
         assert_eq!(input.count, 3);
+    }
+
+    #[test]
+    fn validate_generate_kanji_candidates_request_maps_route_code_prompt_language() {
+        let request = GenerateKanjiCandidatesRequest {
+            real_name: "山田 太郎".to_owned(),
+            reason_language: Some("ja-JP".to_owned()),
+            gender: None,
+            kanji_style: None,
+            count: Some(3),
+        };
+
+        let input =
+            validate_generate_kanji_candidates_request(request).expect("request must be valid");
+
+        assert_eq!(input.reason_language, "ja");
+        assert_eq!(input.reason_language_requested, "ja-jp");
+        assert_eq!(input.reason_language_route_code, "ja");
+        assert_eq!(input.reason_language_fallback_reason, None);
+    }
+
+    #[test]
+    fn validate_generate_kanji_candidates_request_falls_back_for_unsupported_prompt_language() {
+        let request = GenerateKanjiCandidatesRequest {
+            real_name: "Mei".to_owned(),
+            reason_language: Some("zh_Hant".to_owned()),
+            gender: None,
+            kanji_style: Some("taiwanese".to_owned()),
+            count: Some(3),
+        };
+
+        let input =
+            validate_generate_kanji_candidates_request(request).expect("request must be valid");
+
+        assert_eq!(input.reason_language, "en");
+        assert_eq!(input.reason_language_requested, "zh-hant");
+        assert_eq!(input.reason_language_route_code, "zhtw");
+        assert_eq!(
+            input.reason_language_fallback_reason,
+            Some("unsupported_prompt_language")
+        );
     }
 
     #[test]
@@ -11232,6 +11648,9 @@ mod tests {
         let input = GenerateKanjiCandidatesInput {
             real_name: "山田 太郎".to_owned(),
             reason_language: "ja".to_owned(),
+            reason_language_requested: "ja".to_owned(),
+            reason_language_route_code: "ja".to_owned(),
+            reason_language_fallback_reason: None,
             gender: CandidateGender::Male,
             kanji_style: KanjiStyle::Japanese,
             count: 6,
@@ -11250,6 +11669,9 @@ mod tests {
         let input = GenerateKanjiCandidatesInput {
             real_name: "山田 太郎".to_owned(),
             reason_language: "en".to_owned(),
+            reason_language_requested: "zhtw".to_owned(),
+            reason_language_route_code: "zhtw".to_owned(),
+            reason_language_fallback_reason: Some("unsupported_prompt_language"),
             gender: CandidateGender::Unspecified,
             kanji_style: KanjiStyle::Chinese,
             count: 4,

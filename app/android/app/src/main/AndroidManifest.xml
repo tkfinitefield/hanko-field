@@ -41,6 +41,9 @@
                 <data android:scheme="https" android:host="finitefield.org" android:pathPrefix="/payment"/>
                 <data android:scheme="https" android:host="finitefield.org" android:pathPrefix="/en/payment"/>
                 <data android:scheme="https" android:host="finitefield.org" android:pathPrefix="/ja/payment"/>
+                <data android:scheme="https" android:host="finitefield.org" android:pathPrefix="/zh/payment"/>
+                <data android:scheme="https" android:host="finitefield.org" android:pathPrefix="/zhtw/payment"/>
+                <data android:scheme="https" android:host="finitefield.org" android:pathPrefix="/ar/payment"/>
             </intent-filter>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
@@ -49,6 +52,9 @@
                 <data android:scheme="https" android:host="www.finitefield.org" android:pathPrefix="/payment"/>
                 <data android:scheme="https" android:host="www.finitefield.org" android:pathPrefix="/en/payment"/>
                 <data android:scheme="https" android:host="www.finitefield.org" android:pathPrefix="/ja/payment"/>
+                <data android:scheme="https" android:host="www.finitefield.org" android:pathPrefix="/zh/payment"/>
+                <data android:scheme="https" android:host="www.finitefield.org" android:pathPrefix="/zhtw/payment"/>
+                <data android:scheme="https" android:host="www.finitefield.org" android:pathPrefix="/ar/payment"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

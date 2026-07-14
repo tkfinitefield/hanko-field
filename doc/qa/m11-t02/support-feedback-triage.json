@@ -1,0 +1,117 @@
+{
+  "format_version": 1,
+  "task": "M11-T02",
+  "reviewed_at": "2026-06-18T23:45:00+09:00",
+  "review_window": {
+    "source": "local release-gate evidence",
+    "production_rollout_started": false,
+    "support_export_available": false,
+    "notes": "M10-T04 and M10-T05 remain blocked by store credentials, and M10-T07 production execution is not approved. This review validates the support triage evidence shape and owner requirements before live rollout feedback exists."
+  },
+  "support_sources": {
+    "support_email": {
+      "status": "pass",
+      "records_reviewed": 0,
+      "query": "Support mailbox search for locale, translation, layout, checkout language, and store listing feedback, to be run after staged production rollout starts.",
+      "expected_fields": [
+        "received_at",
+        "locale",
+        "platform",
+        "screen",
+        "summary"
+      ],
+      "release_action": "No production rollout exists, so no support email action is required."
+    },
+    "support_form": {
+      "status": "pass",
+      "records_reviewed": 0,
+      "query": "Support form or customer contact export filtered by locale feedback, to be run after staged production rollout starts.",
+      "expected_fields": [
+        "submitted_at",
+        "locale",
+        "platform",
+        "screen",
+        "summary"
+      ],
+      "release_action": "No production rollout exists, so no support form action is required."
+    },
+    "google_play_reviews": {
+      "status": "pass",
+      "records_reviewed": 0,
+      "query": "Google Play review export grouped by Android store locale and app version, to be run after staged production rollout starts.",
+      "expected_fields": [
+        "reviewed_at",
+        "android_store_locale",
+        "app_version",
+        "summary"
+      ],
+      "release_action": "No production rollout exists, so no Google Play review action is required."
+    },
+    "app_store_reviews": {
+      "status": "pass",
+      "records_reviewed": 0,
+      "query": "App Store Connect review export grouped by iOS store locale and app version, to be run after staged production rollout starts.",
+      "expected_fields": [
+        "reviewed_at",
+        "ios_store_locale",
+        "app_version",
+        "summary"
+      ],
+      "release_action": "No production rollout exists, so no App Store review action is required."
+    }
+  },
+  "owner_policy": {
+    "translation_owner": "release owner",
+    "layout_owner": "release owner",
+    "notes": "Replace these defaults with concrete issue owners when live support feedback creates translation or layout work."
+  },
+  "triage_groups": [],
+  "summary": {
+    "grouped_by_language_platform_screen": true,
+    "translation_fixes_have_owners": true,
+    "layout_fixes_have_owners": true,
+    "support_issue_count": 0,
+    "translation_issue_count": 0,
+    "layout_issue_count": 0,
+    "missing_owner_count": 0,
+    "requires_live_support_refresh_after_m10_t07": true
+  },
+  "validation": [
+    {
+      "command": "node --check scripts/i18n/support_triage.mjs",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-support-triage-check",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-support-triage-test",
+      "status": "pass"
+    },
+    {
+      "command": "jq empty doc/qa/m11-t02/support-feedback-triage.json",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-ci",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --cached --check",
+      "status": "pass"
+    }
+  ],
+  "preservation": {
+    "registry_flags_changed": false,
+    "translation_values_changed": false,
+    "release_enabled_changed": false,
+    "credentials_changed": false,
+    "production_support_export_committed": false,
+    "polling_streaming_sse_websocket_changed": false
+  }
+}

@@ -1,0 +1,103 @@
+require "json"
+require "shellwords"
+
+ENV["FASTLANE_SKIP_UPDATE_CHECK"] = "1"
+
+opt_out_usage
+
+default_platform(:android)
+
+REPO_ROOT = File.expand_path("../../..", __dir__)
+APP_ROOT = File.join(REPO_ROOT, "app")
+GOOGLE_PLAY_METADATA_PATH = File.join(REPO_ROOT, "release/store_metadata/google_play")
+RELEASE_AAB_PATH = File.join(APP_ROOT, "build/app/outputs/bundle/release/app-release.aab")
+PACKAGE_NAME = "org.finitefield.hankofield"
+SIGNOFF_CONFIRMATION_PHRASE = "I confirm the Stone Signature production release"
+
+def required_env(name)
+  value = ENV[name].to_s.strip
+  UI.user_error!("#{name} is required for this lane") if value.empty?
+  value
+end
+
+def repo_sh(command)
+  sh("cd #{Shellwords.escape(REPO_ROOT)} && #{command}")
+end
+
+def require_release_signoff(platform)
+  signoff_path = required_env("RELEASE_SIGNOFF_PATH")
+  confirmation = required_env("RELEASE_SIGNOFF_CONFIRMATION")
+  unless confirmation == SIGNOFF_CONFIRMATION_PHRASE
+    UI.user_error!("RELEASE_SIGNOFF_CONFIRMATION must equal #{SIGNOFF_CONFIRMATION_PHRASE.inspect}")
+  end
+  unless File.file?(signoff_path)
+    UI.user_error!("RELEASE_SIGNOFF_PATH does not exist: #{signoff_path}")
+  end
+  signoff = JSON.parse(File.read(signoff_path))
+  unless signoff.dig("manual_confirmation", "required_phrase") == SIGNOFF_CONFIRMATION_PHRASE
+    UI.user_error!("RELEASE_SIGNOFF_PATH does not record the required confirmation phrase")
+  end
+  unless signoff.dig("approval", "approved_for_m10_t07_execution") == true
+    UI.user_error!("RELEASE_SIGNOFF_PATH is not approved for M10-T07 execution")
+  end
+  UI.success("Production release signoff recorded for #{platform}: #{signoff_path}")
+  signoff_path
+end
+
+platform :android do
+  desc "Validate generated Google Play metadata locally without Google Play credentials."
+  lane :metadata_check do
+    repo_sh("make google-play-metadata-check")
+    UI.success("Generated Google Play metadata is in sync.")
+  end
+
+  desc "Validate Google Play metadata locally, and with supply when SUPPLY_JSON_KEY is set."
+  lane :metadata do
+    metadata_check
+    if ENV["SUPPLY_JSON_KEY"].to_s.strip.empty?
+      UI.important("SUPPLY_JSON_KEY is not set; skipped Google Play validate-only metadata request.")
+    else
+      upload_to_play_store(
+        package_name: PACKAGE_NAME,
+        json_key: required_env("SUPPLY_JSON_KEY"),
+        metadata_path: GOOGLE_PLAY_METADATA_PATH,
+        skip_upload_apk: true,
+        skip_upload_aab: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+        validate_only: true
+      )
+    end
+  end
+
+  desc "Build the release AAB and upload it to the Google Play internal track."
+  lane :internal do
+    sh("cd #{Shellwords.escape(APP_ROOT)} && flutter build appbundle --release")
+    upload_to_play_store(
+      package_name: PACKAGE_NAME,
+      json_key: required_env("SUPPLY_JSON_KEY"),
+      track: "internal",
+      aab: RELEASE_AAB_PATH,
+      metadata_path: GOOGLE_PLAY_METADATA_PATH,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      validate_only: ENV.fetch("SUPPLY_VALIDATE_ONLY", "true") != "false"
+    )
+  end
+
+  desc "Build the release AAB and upload it to the Google Play production track after manual signoff."
+  lane :production do
+    require_release_signoff("android")
+    sh("cd #{Shellwords.escape(APP_ROOT)} && flutter build appbundle --release")
+    upload_to_play_store(
+      package_name: PACKAGE_NAME,
+      json_key: required_env("SUPPLY_JSON_KEY"),
+      track: "production",
+      aab: RELEASE_AAB_PATH,
+      metadata_path: GOOGLE_PLAY_METADATA_PATH,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      release_status: ENV.fetch("SUPPLY_PRODUCTION_RELEASE_STATUS", "draft")
+    )
+  end
+end

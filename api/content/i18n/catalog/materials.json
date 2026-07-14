@@ -1,0 +1,130 @@
+{
+  "wood": {
+    "label": {
+      "en": "Wood",
+      "ja": "木材",
+      "zh": "木材",
+      "zhtw": "木材",
+      "ar": "خشب"
+    },
+    "description": {
+      "en": "A lightweight material with natural grain that gives the seal a warm, organic feel.",
+      "ja": "自然な木目と軽さがあり、あたたかみのある印象に仕上がる材質です。",
+      "zh": "质地轻盈，带有天然木纹，让印章呈现温润自然的感觉。",
+      "zhtw": "質地輕盈，帶有天然木紋，讓印章呈現溫潤自然的感覺。",
+      "ar": "مادة خفيفة ذات عروق طبيعية تمنح الختم إحساسا دافئا وعضويا."
+    }
+  },
+  "qingtian_stone": {
+    "label": {
+      "en": "Qingtian Stone",
+      "ja": "青田石",
+      "zh": "青田石",
+      "zhtw": "青田石",
+      "ar": "حجر تشينغتيان"
+    },
+    "description": {
+      "en": "A classic seal-carving stone associated with Qingtian, Zhejiang, known for its fine texture and ease of carving.",
+      "ja": "中国浙江省青田産として知られる代表的な篆刻石で、きめ細かく彫りやすい石材です。",
+      "zh": "代表性的篆刻石材，源自浙江青田，以细腻质地和易于雕刻而闻名。",
+      "zhtw": "代表性的篆刻石材，源自浙江青田，以細膩質地和易於雕刻而聞名。",
+      "ar": "حجر كلاسيكي لنقش الأختام يرتبط بتشينغتيان في تشجيانغ، ويشتهر بملمسه الناعم وسهولة نحته."
+    }
+  },
+  "shoushan_stone": {
+    "label": {
+      "en": "Shoushan Stone",
+      "ja": "寿山石",
+      "zh": "寿山石",
+      "zhtw": "壽山石",
+      "ar": "حجر شوشان"
+    },
+    "description": {
+      "en": "A seal stone associated with Shoushan, Fujian, valued for its range of colors and smooth carving feel.",
+      "ja": "中国福建省寿山産として知られる印材石で、色味の幅と滑らかな彫り心地が特徴です。",
+      "zh": "源自福建寿山的印材石，以丰富色彩和顺滑的雕刻手感而受到喜爱。",
+      "zhtw": "源自福建壽山的印材石，以豐富色彩和順滑的雕刻手感而受到喜愛。",
+      "ar": "حجر أختام يرتبط بشوشان في فوجيان، ويقدر لتنوع ألوانه وملمسه السلس أثناء النحت."
+    }
+  },
+  "balin_stone": {
+    "label": {
+      "en": "Balin Stone",
+      "ja": "巴林石",
+      "zh": "巴林石",
+      "zhtw": "巴林石",
+      "ar": "حجر بالين"
+    },
+    "description": {
+      "en": "A seal stone associated with Inner Mongolia, known for varied colors and patterns with moderate hardness.",
+      "ja": "中国内モンゴル産として知られる印材石で、色柄の変化とほどよい硬さを持つ材質です。",
+      "zh": "源自内蒙古的印材石，色彩和纹理变化丰富，硬度适中。",
+      "zhtw": "源自內蒙古的印材石，色彩和紋理變化豐富，硬度適中。",
+      "ar": "حجر أختام يرتبط بمنغوليا الداخلية، ويعرف بتنوع ألوانه ونقوشه وصلابته المتوسطة."
+    }
+  },
+  "yili_stone": {
+    "label": {
+      "en": "Yili Stone",
+      "ja": "伊犁石",
+      "zh": "伊犁石",
+      "zhtw": "伊犁石",
+      "ar": "حجر ييلي"
+    },
+    "description": {
+      "en": "A seal stone associated with the Yili region of Xinjiang, with subdued colors and a natural stone texture.",
+      "ja": "中国新疆ウイグル自治区の伊犁地域に由来する印材石で、落ち着いた色味と素朴な石質が特徴です。",
+      "zh": "源自新疆伊犁地区的印材石，色调沉稳，带有朴素自然的石质感。",
+      "zhtw": "源自新疆伊犁地區的印材石，色調沉穩，帶有樸素自然的石質感。",
+      "ar": "حجر أختام يرتبط بمنطقة ييلي في شينجيانغ، بألوان هادئة وملمس حجري طبيعي."
+    }
+  },
+  "laos_stone": {
+    "label": {
+      "en": "Laos Stone",
+      "ja": "ラオス石",
+      "zh": "老挝石",
+      "zhtw": "寮國石",
+      "ar": "حجر لاوس"
+    },
+    "description": {
+      "en": "A seal stone commonly traded as Laos stone, known for its softer texture and ease of carving.",
+      "ja": "ラオス産として流通する印材石で、やわらかめの石質と彫刻しやすさが特徴です。",
+      "zh": "常以老挝石流通的印材石，质地较柔和，易于雕刻。",
+      "zhtw": "常以寮國石流通的印材石，質地較柔和，易於雕刻。",
+      "ar": "حجر أختام يعرف تجاريا باسم حجر لاوس، ويمتاز بملمسه الأكثر ليونة وسهولة نحته."
+    }
+  },
+  "xixia_stone": {
+    "label": {
+      "en": "Xixia Stone",
+      "ja": "西峡石",
+      "zh": "西峡石",
+      "zhtw": "西峽石",
+      "ar": "حجر شيشيا"
+    },
+    "description": {
+      "en": "A seal stone associated with Xixia, Henan, with a dense structure and calm, refined texture.",
+      "ja": "中国河南省西峡産として知られる印材石で、緻密で落ち着いた質感を持つ材質です。",
+      "zh": "源自河南西峡的印材石，结构致密，质感沉稳细致。",
+      "zhtw": "源自河南西峽的印材石，結構緻密，質感沉穩細緻。",
+      "ar": "حجر أختام يرتبط بشيشيا في خنان، ببنية كثيفة وملمس هادئ ومصقول."
+    }
+  },
+  "frozen_stone": {
+    "label": {
+      "en": "Frozen Stone",
+      "ja": "凍石",
+      "zh": "冻石",
+      "zhtw": "凍石",
+      "ar": "حجر الصقيع"
+    },
+    "description": {
+      "en": "A seal-carving stone with a moist, semi-translucent appearance reminiscent of frozen stone.",
+      "ja": "凍ったような半透明感としっとりした質感が特徴の、篆刻向けの石材です。",
+      "zh": "适合篆刻的石材，带有湿润的半透明感，仿佛凝结的冻石。",
+      "zhtw": "適合篆刻的石材，帶有濕潤的半透明感，彷彿凝結的凍石。",
+      "ar": "حجر مناسب لنقش الأختام، له مظهر رطب شبه شفاف يذكر بالحجر المتجمد."
+    }
+  }
+}

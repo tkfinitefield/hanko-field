@@ -61,7 +61,10 @@ CheckoutReturnResult? parseCheckoutReturnUri(Uri uri) {
       'checkout_session_id',
       'sessionId',
     ]),
-    locale: _firstPresentQueryValue(uri, const ['lang', 'locale']),
+    locale: _normalizeCheckoutReturnLocale(
+      _firstPresentQueryValue(uri, const ['lang', 'locale']) ??
+          _checkoutReturnPathLocale(uri),
+    ),
   );
 }
 
@@ -102,10 +105,33 @@ List<String> _checkoutReturnSegments(Uri uri) {
           .toList(growable: false);
 
   if (segments.isNotEmpty &&
-      (segments.first == 'en' || segments.first == 'ja')) {
+      (segments.first == 'en' ||
+          segments.first == 'ja' ||
+          segments.first == 'zh' ||
+          segments.first == 'zhtw' ||
+          segments.first == 'ar')) {
     return segments.skip(1).toList(growable: false);
   }
   return segments;
+}
+
+String? _checkoutReturnPathLocale(Uri uri) {
+  final segments =
+      <String>[
+            if (uri.scheme == 'hankofield' && uri.host.isNotEmpty) uri.host,
+            ...uri.pathSegments,
+          ]
+          .map((segment) => segment.trim())
+          .where((segment) => segment.isNotEmpty)
+          .toList(growable: false);
+  if (segments.isEmpty) {
+    return null;
+  }
+  final first = segments.first.toLowerCase();
+  return switch (first) {
+    'en' || 'ja' || 'zh' || 'zhtw' || 'ar' => first,
+    _ => null,
+  };
 }
 
 CheckoutReturnOutcome? _outcomeFromToken(String? token) {
@@ -125,4 +151,19 @@ String? _firstPresentQueryValue(Uri uri, List<String> keys) {
     }
   }
   return null;
+}
+
+String? _normalizeCheckoutReturnLocale(String? locale) {
+  final value = locale?.trim().replaceAll('_', '-').toLowerCase();
+  if (value == null || value.isEmpty) {
+    return null;
+  }
+
+  return switch (value) {
+    'zh-hant' || 'zh-tw' || 'zh-hk' || 'zh-mo' => 'zhtw',
+    'zh-hans' || 'zh-cn' || 'zh-sg' => 'zh',
+    'en-us' || 'en-gb' => 'en',
+    'ja-jp' => 'ja',
+    _ => value,
+  };
 }

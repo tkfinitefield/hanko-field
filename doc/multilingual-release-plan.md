@@ -1,0 +1,5900 @@
+# Stone Signature 68-Language Localization and Release Specification
+
+## 1. Purpose
+
+Stone Signature currently has English, Japanese, and Chinese localization scope
+at the product level. The implementation is not yet route-wide: the Flutter app
+and Rust web frontend still contain important English/Japanese hard-coded paths,
+and any existing Chinese copy or data must be migrated into the new `zh` /
+`zhtw` structure instead of being lost. The next target is to support the same
+route-wide language set used by finitefield.org: 68 language codes.
+
+This document is an implementation contract for that work. It defines the
+language registry, localization file layout, migration plan, validation tools,
+release metadata workflow, fastlane introduction, QA gates, rollout strategy,
+and rollback expectations.
+
+The goal is not to copy finitefield.org's generator exactly. The goal is a
+smaller Stone Signature workflow that makes translation work simple,
+repeatable, reviewable, and compatible with future app store releases.
+
+## 2. Goals and Non-Goals
+
+### Goals
+
+- Define one canonical language registry for app, web, API, release metadata,
+  and validation tooling.
+- Support the finitefield.org route-wide 68 language codes.
+- Preserve existing English, Japanese, and Chinese assets during migration.
+- Keep English URLs unprefixed and all non-English web URLs under
+  `/{route_code}/...`.
+- Make Flutter UI strings translatable without editing Dart source for each
+  language.
+- Make web page copy translatable without adding Askama `if ja else en`
+  branches.
+- Keep API catalog localization compatible with existing Firestore `*_i18n`
+  maps.
+- Provide commands that show translation status, generate missing-file reports,
+  validate placeholders, and detect unintended English leftovers.
+- Prepare app store metadata and screenshots for fastlane `supply` and
+  `deliver`.
+- Keep release automation safe by separating public metadata from private
+  credentials and signing material.
+- Preserve existing app navigation architecture: `declarative_nav` and
+  `miniriverpod`.
+- Preserve repository policy that web and admin screens must not add polling,
+  SSE, or WebSocket behavior.
+
+### Non-Goals
+
+- Do not implement translations in this document task.
+- Do not introduce a new navigation package such as `go_router`.
+- Do not replace Firebase, Firestore, Stripe, Askama, htmx, or ironframe.
+- Do not make the admin UI fully localized for external users. Admin can remain
+  Japanese/internal unless a later task explicitly changes that.
+- Do not upload to Google Play or App Store Connect until metadata-only lanes
+  and internal/TestFlight lanes have been tested.
+- Do not commit Google Play service account JSON, Apple API keys, keystore
+  passwords, or private signing certificates.
+
+## 3. Current Behavior and Files
+
+The repo inspection below calls out the main hard-coded English/Japanese paths.
+During implementation, any existing Chinese source strings, catalog values,
+store metadata, or manually prepared copy must be imported into `zh` or `zhtw`
+before replacing the old structure.
+
+### Flutter App
+
+Relevant files:
+
+- `app/lib/app/localization/hanko_localizations.dart`
+- `app/lib/app/app.dart`
+- `app/lib/features/settings/presentation/settings_home_screen.dart`
+- `app/lib/features/settings/presentation/settings_content.dart`
+- `app/lib/features/design/presentation/design_home_screen.dart`
+- `app/lib/features/order/presentation/order_flow_entry_screen.dart`
+- `app/lib/features/common/data/app_launch_store.dart`
+- `app/pubspec.yaml`
+
+Current behavior:
+
+- `HankoLocalizations.supportedLocales` contains only `Locale('en')` and
+  `Locale('ja')`.
+- All app strings live in one hand-written Dart file.
+- Settings language selection is hard-coded to English and Japanese rows.
+- Long settings/help/legal content is stored as Dart constants and switches on
+  `languageCode == 'ja'`.
+- Kanji candidate `reasonLanguage` falls back to `ja` or `en`.
+- `MaterialApp` already uses `onGenerateTitle`, `supportedLocales`, and
+  `localizationsDelegates`, so the entry point is ready for generated
+  localization delegates.
+- `app/pubspec.yaml` is the version source and currently has `version:
+  1.1.0+11`.
+
+### Web
+
+Relevant files:
+
+- `web/src/main.rs`
+- `web/templates/top.html`
+- `web/templates/index.html`
+- `web/templates/about.html`
+- `web/templates/blog_index.html`
+- `web/templates/blog_article.html`
+- `web/templates/payment_success.html`
+- `web/templates/payment_failure.html`
+- `web/templates/terms.html`
+- `web/templates/commercial_transactions.html`
+- `web/blog/articles/*.html`
+- `web/static/input.css`
+- `web/Makefile`
+
+Current behavior:
+
+- `SUPPORTED_LOCALES` is fixed to `["en", "ja"]`.
+- `parse_supported_locale`, `parse_path_locale`, `localized_page_path`, and
+  sitemap generation all depend on that fixed list.
+- Templates expose `lang_ja_url` and `lang_en_url`, and render only two language
+  choices.
+- Most page copy is either inline in Askama templates or inline in Rust via
+  `localized_text(locale, ja, en)`.
+- Blog content is stored as English HTML and Japanese `.ja.html` HTML files.
+- Sitemap and `hreflang` output are hard-coded to English and Japanese.
+
+### API and Firestore
+
+Relevant files:
+
+- `api/src/main.rs`
+- `api/src/bin/seed_catalog.rs`
+- `api/assets/fonts/README.md`
+- `api/assets/fonts/profiles.json`
+- `api/src/seal_fonts.rs`
+- `doc/firebase-firestore-design.md`
+
+Current behavior:
+
+- `/v1/config/public` returns `supported_locales`, `default_locale`,
+  `default_currency`, and `currency_by_locale`.
+- Default public config supports only `ja` and `en`.
+- `api/src/bin/seed_catalog.rs` seeds `app_config/public.supported_locales` as
+  `["ja", "en"]`.
+- Catalog records already use maps such as `label_i18n`, `description_i18n`,
+  `title_i18n`, `story_i18n`, and `photo_alt_i18n`.
+- API catalog response code resolves those maps by requested locale with
+  fallback.
+- Checkout product name formatting is Japanese-vs-English.
+- Seal rendering font coverage is separate from UI localization. Seal engraving
+  remains limited to approved CJK Han glyph rules.
+
+### Admin
+
+Relevant files:
+
+- `admin/src/main.rs`
+- `admin/templates/*.html`
+- `admin/static/admin.js`
+
+Current behavior:
+
+- Admin is internal and Japanese-oriented.
+- Admin reads and writes localized Firestore maps for some catalog fields.
+- Admin should not become the primary 68-language translation UI in this plan.
+- Admin must not add polling or streaming.
+
+### Release and Deep Links
+
+Relevant files:
+
+- `app/android/app/build.gradle.kts`
+- `app/android/app/src/main/AndroidManifest.xml`
+- `app/android/key.properties` if present locally
+- `app/ios/Runner/Info.plist`
+- `app/ios/Runner.xcodeproj/project.pbxproj`
+- `doc/app-release-deep-link-config.md`
+
+Current behavior:
+
+- Android application ID is `org.finitefield.hankofield`.
+- iOS bundle identifier is `org.finitefield.hankofield`.
+- Android release signing is wired in Gradle and fails clearly when required
+  local signing files are missing.
+- Deep link and Universal Link paths currently list `/payment/*`,
+  `/en/payment/*`, and `/ja/payment/*`.
+- App-originated Stripe Checkout returns include `lang`.
+- No fastlane files are present.
+
+## 4. Target Language Set
+
+Use these 68 route codes:
+
+```text
+ar, az, be, bg, bn, cs, da, de, el, en, es, et, fa, fi, fr, gu, he, hi, hr,
+hu, hy, id, is, it, ja, ka, kk, km, kn, ko, ky, lo, lt, lv, mk, ml, mn, mr,
+ms, my, ne, nl, no, pa, pl, ps, pt, ro, ru, si, sk, sl, sq, sr, sv, sw, ta,
+te, tg, th, tl, tr, uk, ur, uz, vi, zh, zhtw
+```
+
+### Special Mapping Rules
+
+| Route code | Meaning | BCP-47 target | Notes |
+| --- | --- | --- | --- |
+| `en` | English | `en` or `en-US` for stores | Default unprefixed web URL. |
+| `ja` | Japanese | `ja` or `ja-JP` for stores | Use `JPY` by default. |
+| `zh` | Simplified Chinese | `zh-Hans` or `zh-CN` | Keep route code `zh`. |
+| `zhtw` | Traditional Chinese | `zh-Hant` or `zh-TW` | Keep route code `zhtw`. |
+| `no` | Norwegian | `no` | Must be quoted if YAML is ever used. Prefer JSON. |
+| `ar`, `fa`, `he`, `ps`, `ur` | RTL languages | language-specific | Must render with RTL text direction. |
+
+## 5. Canonical Language Registry
+
+### File
+
+Add:
+
+```text
+config/languages.json
+```
+
+Use JSON to avoid YAML boolean pitfalls such as `no`.
+
+### Schema
+
+The registry is an array of language entries:
+
+```json
+[
+  {
+    "route_code": "zhtw",
+    "bcp47": "zh-Hant",
+    "flutter": {
+      "languageCode": "zh",
+      "scriptCode": "Hant",
+      "countryCode": null
+    },
+    "native_name": "繁體中文",
+    "english_name": "Traditional Chinese",
+    "text_direction": "ltr",
+    "fallback": "en",
+    "currency": "USD",
+    "web": {
+      "enabled": true,
+      "indexed": false,
+      "url_prefix": "zhtw"
+    },
+    "app": {
+      "enabled": true,
+      "selectable": false
+    },
+    "release": {
+      "enabled": false,
+      "android_store_locale": "zh-TW",
+      "ios_store_locale": "zh-Hant"
+    }
+  }
+]
+```
+
+Field rules:
+
+- `route_code` is the stable repo code used in file names and web URLs.
+- `bcp47` is the normalized language tag used in HTML `lang`, `hreflang`, API
+  metadata, and diagnostics.
+- `flutter.languageCode` is required.
+- `flutter.scriptCode` is required for script-sensitive locales such as
+  `zh-Hans` and `zh-Hant`; otherwise it can be null.
+- `flutter.countryCode` should be null unless a region is necessary.
+- `text_direction` must be `ltr` or `rtl`.
+- `fallback` must point to another `route_code`, usually `en`; the default
+  route can use null to terminate fallback chains.
+- `currency` is the default pricing currency for this locale. Use `JPY` for
+  `ja`; use `USD` for all others unless a business rule says otherwise.
+- `web.enabled` controls URL parsing and page rendering.
+- `web.indexed` controls sitemap and indexable `hreflang`. Initial rollout can
+  render more languages than it indexes.
+- `app.enabled` controls whether ARB/assets must exist and whether generated
+  localization includes the language.
+- `app.selectable` controls whether users can manually choose it in settings.
+- `release.enabled` controls whether store metadata must be generated.
+- Store locale fields can be null when a platform does not support that locale.
+
+### Registry Consumers
+
+The registry must be consumed by:
+
+- Flutter localization validation.
+- Flutter language settings UI.
+- Web locale parsing.
+- Web language switcher generation.
+- Web `hreflang` generation.
+- Web sitemap generation.
+- API public config seed.
+- API locale validation and fallback.
+- Translation status and todo commands.
+- Store metadata generation.
+- fastlane metadata upload lanes.
+
+Do not create separate hard-coded locale lists in app, web, or API after this
+registry exists.
+
+## 6. Translation File Layout
+
+### Flutter UI Strings
+
+Add:
+
+```text
+app/l10n.yaml
+app/lib/l10n/app_en.arb
+app/lib/l10n/app_ja.arb
+app/lib/l10n/app_zh.arb
+app/lib/l10n/app_zh_Hant.arb
+```
+
+Final state includes one ARB per `app.enabled` language. ARB file names must use
+Flutter locale suffixes, not route codes. For example, route code `zhtw` maps to
+Flutter locale `zh_Hant`, so the ARB file is `app_zh_Hant.arb`.
+
+ARB rules:
+
+- `app_en.arb` is the base file.
+- Every key in `app_en.arb` must exist in every enabled locale file.
+- Every ARB file must map back to exactly one `route_code` in
+  `config/languages.json`.
+- Placeholders must match exactly across languages.
+- ICU plural/select syntax must parse.
+- Generated output should be imported by `app/lib/app/app.dart`.
+- `MaterialApp` should use generated `localizationsDelegates` and
+  `supportedLocales`.
+- `onGenerateTitle` must remain localized.
+
+### Flutter Long-Form Content
+
+Move long settings/help/legal content out of Dart constants:
+
+```text
+app/assets/i18n/settings/en.json
+app/assets/i18n/settings/ja.json
+app/assets/i18n/settings/zh.json
+app/assets/i18n/settings/zhtw.json
+```
+
+This JSON should cover:
+
+- About
+- How it works
+- FAQ
+- Privacy summary
+- Terms summary
+- Contact/support copy
+
+Rules:
+
+- The JSON shape must be identical for every enabled language.
+- The loader must fallback using the registry fallback chain.
+- Missing content must show a recoverable localized error, not crash settings.
+- Add the assets path to `app/pubspec.yaml`.
+
+### Web Copy
+
+Add:
+
+```text
+web/content/i18n/common/en.json
+web/content/i18n/top/en.json
+web/content/i18n/design/en.json
+web/content/i18n/about/en.json
+web/content/i18n/blog_index/en.json
+web/content/i18n/payment_success/en.json
+web/content/i18n/payment_failure/en.json
+web/content/i18n/terms/en.json
+web/content/i18n/commercial_transactions/en.json
+```
+
+Final state includes matching locale files for every `web.enabled` language.
+
+Rules:
+
+- Keep all user-visible strings out of Askama conditionals.
+- Rust should deserialize page copy into typed structs.
+- Templates should render fields, not branch on locale.
+- Shared header/footer/language-switcher copy belongs in `common`.
+- Page-specific SEO title, meta description, OG title, and body copy belong in
+  page-specific files.
+
+### Web Blog Content
+
+Current files are `.html` and `.ja.html`. Migrate to:
+
+```text
+web/content/blog/<slug>/en.html
+web/content/blog/<slug>/ja.html
+web/content/blog/<slug>/zh.html
+web/content/blog/<slug>/metadata.json
+```
+
+`metadata.json` should contain language-keyed metadata:
+
+```json
+{
+  "slug": "hanko-vs-inkan",
+  "published_date": "2026-01-01",
+  "last_modified_date": "2026-01-01",
+  "locales": {
+    "en": {
+      "title": "...",
+      "excerpt": "...",
+      "meta_description": "...",
+      "image_alt": "..."
+    }
+  }
+}
+```
+
+Rules:
+
+- If a blog locale is missing, non-indexed fallback rendering is allowed only
+  during migration.
+- Indexed blog locale pages must have translated body and metadata.
+- Canonical URL should be the localized page URL for localized articles.
+- `x-default` should point to English.
+
+### API and Seed Content
+
+Use registry-driven content sources for seed generation:
+
+```text
+api/content/i18n/catalog/materials.json
+api/content/i18n/catalog/stone_listings.json
+api/content/i18n/catalog/facet_tags.json
+api/content/i18n/catalog/countries.json
+api/content/i18n/checkout/en.json
+api/content/i18n/checkout/ja.json
+```
+
+The exact file split can change during implementation, but seed data must no
+longer require adding new Rust struct fields such as `label_fr` or
+`description_fr` for every new language.
+
+## 7. Runtime Behavior
+
+### Locale Selection
+
+App locale priority:
+
+1. Explicit test override passed to `HankoApp`.
+2. User-selected preferred language from `AppLaunchStore`.
+3. Platform locale if it maps to an `app.enabled` registry entry.
+4. Registry default, initially `en` for UI fallback unless product policy
+   changes.
+
+Web locale priority:
+
+1. Path prefix, for example `/fr/about`.
+2. `lang` query parameter where currently supported for checkout/payment
+   compatibility.
+3. Configured `HANKO_WEB_LOCALE`.
+4. Registry default.
+
+API locale priority:
+
+1. Request locale parameter or request body locale.
+2. Contact preferred locale when order context requires it.
+3. Public config default locale.
+4. Registry fallback chain.
+
+### Fallback Order
+
+For any localized map or content file:
+
+1. Requested route code.
+2. `fallback` from `config/languages.json`.
+3. Default route code.
+4. `en`.
+5. First non-empty value.
+
+Fallback use must be observable in diagnostics. A release-enabled locale should
+not silently fallback for user-visible copy unless the key is registered in an
+intention sidecar.
+
+### URL Rules
+
+- English stays unprefixed: `/`, `/about`, `/blog/<slug>`.
+- Every non-English locale is prefixed:
+  `/ja/`, `/fr/about`, `/zhtw/blog/<slug>`.
+- `/en/...` may remain accepted for compatibility and redirects, but canonical
+  English URLs must be unprefixed.
+- Unknown locale prefixes return 404, not English content.
+- `zhtw` remains the path prefix for Traditional Chinese.
+
+### Deep Link Rules
+
+Update `doc/app-release-deep-link-config.md` and platform association files
+when localized payment paths expand.
+
+Required behavior:
+
+- Custom scheme remains the primary app-originated return:
+  `hankofield://checkout/*`.
+- Universal Links/App Links must allow all release-enabled web payment prefixes
+  when app links are used.
+- Existing `/payment/*`, `/en/payment/*`, and `/ja/payment/*` routes must remain
+  compatible.
+- Checkout return parsing must continue accepting both `lang` and `locale`.
+
+## 8. UI and Accessibility Requirements
+
+### App Language Settings
+
+The language settings screen must:
+
+- Render from `config/languages.json`.
+- Show `native_name` and optionally `english_name`.
+- Mark the selected language.
+- Exclude languages where `app.selectable` is false.
+- Preserve the existing selected locale if a newly added language is not yet
+  selectable.
+- Save `route_code`, not platform store locale.
+- Recover gracefully if an old saved locale is no longer enabled.
+
+### Web Language Switcher
+
+The language switcher must:
+
+- Render from `web.enabled` language entries.
+- Use `native_name`.
+- Set `hreflang` to `bcp47`.
+- Mark the current locale.
+- Link to the same page in the target locale when translated.
+- Link to the locale home page or hide the link if a page is not enabled.
+- Remain keyboard accessible.
+
+### RTL
+
+For RTL languages:
+
+- Flutter must use `TextDirection.rtl`.
+- HTML must set `dir="rtl"` on `<html>` or a top-level container.
+- Icons with directional meaning must be reviewed.
+- Numeric values, currency, order IDs, email addresses, and URLs must remain
+  readable.
+
+### Text Overflow
+
+All screens must tolerate longer translations:
+
+- Avoid fixed one-line button labels where a translated phrase can wrap.
+- Avoid fixed-width label columns for localized labels.
+- Check compact mobile widths.
+- Check checkout, settings, catalog filters, and payment result pages first.
+
+## 9. Admin and Data Entry Requirements
+
+Admin remains an internal Japanese-first tool in this plan, but it must not
+damage multilingual data.
+
+Requirements:
+
+- Existing admin save flows must preserve unknown keys in `*_i18n` maps.
+- Editing Japanese or English fields must not drop `fr`, `zh`, `zhtw`, or other
+  translated values.
+- If admin adds UI for multi-language fields, it should start with a compact
+  "localized values" editor driven by the registry, not 68 always-visible form
+  fields.
+- Admin list/detail pages may continue showing Japanese labels by default.
+- Admin must not add polling, SSE, or WebSocket behavior.
+
+## 10. Tooling Commands
+
+Add these Make targets at the repository root:
+
+```text
+make i18n-generate
+make i18n-status
+make i18n-todo
+make i18n-check
+make i18n-check LANGS=zh,zhtw
+make i18n-check FILE=app/lib/l10n/app_fr.arb
+make i18n-export
+make i18n-import
+make release-metadata-generate
+make release-metadata-check
+```
+
+Implementation can live under:
+
+```text
+scripts/i18n/
+  languages_check.rs or languages_check.py
+  i18n_status.rs or i18n_status.py
+  i18n_todo.rs or i18n_todo.py
+  i18n_check.rs or i18n_check.py
+  release_metadata_generate.rs or release_metadata_generate.py
+```
+
+Use Rust if the checks need to share parsing code with `api` or `web`; use
+Python if it keeps the scripts materially smaller. The first implementation can
+be script-based and later promoted into a crate if needed.
+
+### `make i18n-status`
+
+Output:
+
+- total registry languages
+- enabled app languages
+- enabled web languages
+- release-enabled store languages
+- missing app ARB files
+- missing app settings JSON files
+- missing web page copy files
+- missing store metadata files
+- fallback usage summary
+
+This command must be read-only.
+
+### `make i18n-todo`
+
+Output:
+
+- file path
+- locale
+- missing key
+- base English value
+- current fallback value if any
+- suggested sidecar path
+
+Options:
+
+- `LANGS=fr,de`
+- `FILE=<path>`
+- `OUT=<path>`
+
+### `make i18n-check`
+
+Checks:
+
+- `config/languages.json` parses and contains unique route codes.
+- Every non-null fallback points to an existing route code.
+- Every route code has valid BCP-47 output metadata.
+- RTL languages are marked correctly.
+- App ARB files have identical keys.
+- ARB placeholders and metadata match base.
+- App settings JSON shape matches base.
+- Web copy JSON shape matches base.
+- Blog metadata and body exist for indexed languages.
+- API seed content contains required locale maps or intentional fallback
+  declarations.
+- Non-English values do not equal English unless declared.
+- Intention sidecars use allowed reason codes.
+- Store metadata source exists for release-enabled languages.
+
+Exit code:
+
+- `0` means clean.
+- non-zero means missing, malformed, or unapproved fallback.
+
+### Intention Sidecars
+
+Use sidecars for intentional English or shared values:
+
+```text
+app/lib/l10n/app_fr_intentions.json
+app/assets/i18n/settings/fr_intentions.json
+web/content/i18n/top/fr_intentions.json
+api/content/i18n/catalog/fr_intentions.json
+release/store_metadata/source/fr_intentions.json
+```
+
+Allowed reason codes:
+
+- `brand_name`
+- `legal_entity_name`
+- `product_name`
+- `technical_identifier`
+- `url`
+- `email`
+- `currency_code`
+- `country_code`
+- `kanji_character`
+- `code_literal`
+- `font_name`
+- `law_name`
+- `intentionally_english`
+
+Sidecar shape:
+
+```json
+{
+  "appTitle": "brand_name",
+  "support.emailLabel": "email"
+}
+```
+
+## 11. Subsystem Scope Reference
+
+This section summarizes the work by subsystem. It is not the execution
+checklist. Use Section 12 for the strict task order, starting from `M0-T01`.
+
+### Foundation Registry
+
+Files likely touched:
+
+- `config/languages.json`
+- `Makefile`
+- `scripts/i18n/*`
+- `doc/multilingual-release-plan.md`
+
+Scope items:
+
+- Add `config/languages.json` with all 68 route codes.
+- Mark `web.enabled`, `app.enabled`, and `release.enabled` separately.
+- Set `release.enabled` false for all newly added languages until store
+  metadata and screenshots are ready.
+- Implement registry validation.
+- Add `make i18n-status`.
+- Add tests or snapshot fixtures for `zh`, `zhtw`, `no`, and RTL entries.
+
+Acceptance criteria:
+
+- `make i18n-status` lists all 68 route codes.
+- Duplicate route codes fail validation.
+- Invalid fallback codes fail validation.
+- `no` remains a string route code.
+- `zhtw` resolves to Traditional Chinese platform metadata.
+
+### Flutter Generated Localization
+
+Files likely touched:
+
+- `app/l10n.yaml`
+- `app/lib/l10n/*.arb`
+- `app/lib/app/app.dart`
+- `app/lib/app/localization/*`
+- `app/lib/features/settings/presentation/settings_home_screen.dart`
+- `app/lib/features/settings/presentation/settings_content.dart`
+- `app/lib/features/common/data/app_launch_store.dart`
+- `app/pubspec.yaml`
+- `app/test/widget_test.dart`
+
+Scope items:
+
+- Create base `app_en.arb` from existing English strings.
+- Create `app_ja.arb` from existing Japanese strings.
+- Configure Flutter `gen-l10n`.
+- Replace hand-written localization accessors with generated accessors.
+- Keep a temporary compatibility wrapper only if it materially reduces the
+  migration risk.
+- Move long settings content to JSON assets.
+- Load language settings rows from the registry.
+- Store preferred `route_code`.
+- Add fallback for old saved `en` and `ja` values.
+- Add RTL handling.
+- Add UI tests for `en`, `ja`, `zh`, `zhtw`, and one RTL locale once those
+  files exist.
+
+Acceptance criteria:
+
+- `flutter gen-l10n` or `flutter pub get` generates localization output.
+- `flutter test` passes.
+- English and Japanese app text remains equivalent to current behavior.
+- Language settings no longer contains hard-coded English/Japanese rows.
+- Missing settings JSON shows a recoverable error state or falls back without
+  crashing.
+
+### Web Copy Extraction
+
+Files likely touched:
+
+- `web/src/main.rs`
+- `web/templates/*.html`
+- `web/content/i18n/**/*.json`
+- `web/blog/articles/*`
+- `web/content/blog/**/*`
+- `web/Makefile`
+
+Scope items:
+
+- Add language registry loader for `web`.
+- Replace `SUPPORTED_LOCALES` with registry-backed validation.
+- Introduce `LanguageLink` and page copy structs.
+- Extract `top`, `index/design`, `about`, `blog_index`, `payment_success`,
+  `payment_failure`, `terms`, and `commercial_transactions` copy to JSON.
+- Remove `lang_ja_url` and `lang_en_url` fields from templates.
+- Replace hard-coded `hreflang` tags with a loop over language links.
+- Generate sitemap entries from indexed registry languages.
+- Migrate blog article metadata and bodies to language-keyed content.
+- Preserve current English and Japanese URLs.
+- Keep `/en/...` compatibility behavior if existing inbound links require
+  it, but do not make `/en/...` canonical.
+
+Acceptance criteria:
+
+- `cargo test` for `web` passes.
+- Unknown locale path returns 404.
+- `/about` renders English canonical.
+- `/ja/about` renders Japanese canonical.
+- A non-indexed enabled locale can render for QA without appearing in sitemap.
+- `hreflang` includes all indexed locales and `x-default`.
+- Templates no longer contain `if selected_locale == "ja"` for user-visible
+  copy.
+
+### API, Firestore Seed, and Checkout
+
+Files likely touched:
+
+- `api/src/main.rs`
+- `api/src/bin/seed_catalog.rs`
+- `api/content/i18n/**/*`
+- `doc/firebase-firestore-design.md`
+- `doc/app-release-deep-link-config.md`
+
+Scope items:
+
+- Load or generate public config supported locales from the registry.
+- Replace hard-coded seed locale arrays with registry data.
+- Move catalog seed text from Rust structs to data files or map-based seed
+  structures.
+- Preserve unknown locale keys when reading/writing Firestore maps.
+- Extend checkout product labels to data-driven localized templates.
+- Define `reason_language` mapping for Gemini prompts:
+  - supported languages use their BCP-47 code if prompt quality is acceptable
+  - unsupported prompt languages fallback to English
+  - fallback must be visible in response diagnostics
+- Add tests for `zh`, `zhtw`, unsupported locale rejection, and fallback.
+
+Acceptance criteria:
+
+- `/v1/config/public` returns registry-driven supported locales.
+- Catalog requests for a supported locale do not fail.
+- Missing catalog values fallback predictably.
+- Checkout URLs preserve selected `lang`.
+- Checkout product names are data-driven for at least `en`, `ja`, `zh`, and
+  `zhtw` before wider rollout.
+
+### Admin Data Preservation
+
+Files likely touched:
+
+- `admin/src/main.rs`
+- `admin/templates/material_*`
+- `admin/templates/stone_listing_*`
+- `admin/templates/country_*`
+- `admin/templates/facet_tag_*`
+
+Scope items:
+
+- Audit every admin form that writes a Firestore `*_i18n` map.
+- Ensure saves merge edited fields into existing maps instead of replacing
+  maps with only `ja` / `en`.
+- Add tests for preserving unknown locale keys.
+- Optionally add a collapsed localized-values editor for catalog records.
+
+Acceptance criteria:
+
+- Editing a Japanese material label preserves existing `fr`, `zh`, and `zhtw`
+  values.
+- Admin remains usable without rendering 68 visible inputs by default.
+- No admin polling, SSE, or WebSocket behavior is added.
+
+### Translation Tooling
+
+Files likely touched:
+
+- `Makefile`
+- `scripts/i18n/*`
+- `app/lib/l10n/*`
+- `app/assets/i18n/**/*`
+- `web/content/i18n/**/*`
+- `api/content/i18n/**/*`
+- `release/store_metadata/source/*`
+
+Scope items:
+
+- Implement `make i18n-todo`.
+- Implement `make i18n-check`.
+- Implement sidecar validation.
+- Implement placeholder/ICU validation for ARB.
+- Implement JSON shape validation for long-form content.
+- Implement English-leftover checks.
+- Add CI target once checks are stable.
+
+Acceptance criteria:
+
+- Missing locale files are reported with actionable paths.
+- Placeholder mismatch fails the check.
+- Unapproved English leftovers fail the check for non-English locales.
+- Approved sidecar entries suppress only the intended key.
+- `LANGS=` and `FILE=` filters work.
+
+### 68-Language Content Rollout
+
+Files likely touched:
+
+- all localization content paths
+- release metadata source paths
+
+Scope items:
+
+- Translate base app ARB files.
+- Translate app long-form settings files.
+- Translate web page copy.
+- Translate blog metadata and bodies for indexed languages.
+- Translate catalog and checkout seed content.
+- Translate store metadata.
+- Run tiered QA.
+- Enable languages in stages:
+  - render-only
+  - app-selectable
+  - web-indexed
+  - store-release-enabled
+
+Acceptance criteria:
+
+- Each stage has a registry flag change and validation evidence.
+- No language becomes store-release-enabled without metadata and screenshot
+  readiness.
+- No indexed web language has untranslated page title, meta description, or
+  primary body copy.
+
+### Store Metadata and fastlane
+
+Files likely touched:
+
+- `release/store_metadata/source/*.json`
+- `release/store_metadata/google_play/**`
+- `release/store_metadata/app_store/**`
+- `app/android/Gemfile`
+- `app/android/Gemfile.lock`
+- `app/android/fastlane/Appfile`
+- `app/android/fastlane/Fastfile`
+- `app/ios/Gemfile`
+- `app/ios/Gemfile.lock`
+- `app/ios/fastlane/Appfile`
+- `app/ios/fastlane/Fastfile`
+- `.gitignore`
+- `doc/app-release-deep-link-config.md`
+
+Scope items:
+
+- Add source store metadata JSON per release-enabled language.
+- Generate Google Play metadata folders.
+- Generate App Store metadata folders.
+- Add fastlane with Bundler.
+- Add metadata-only Android lane.
+- Add metadata-only iOS lane.
+- Add Google Play internal lane.
+- Add TestFlight lane.
+- Add production lanes only after internal lanes are proven.
+- Add `.gitignore` entries for private service account JSON, Apple API key
+  files, exported `.ipa`, generated keystores, and local fastlane reports if
+  needed.
+
+Acceptance criteria:
+
+- `bundle exec fastlane metadata` can run from `app/android` and `app/ios`
+  without uploading binaries.
+- Internal Google Play lane uploads an AAB to internal testing.
+- TestFlight lane uploads a signed IPA.
+- Production lanes require explicit manual confirmation.
+- Store metadata generation validates unsupported store locales before upload.
+
+## 12. Detailed Delivery Milestones and Tasks
+
+This section is the canonical execution checklist. Start at `M0-T01` and move
+down the page in order. Do not start the next milestone until the current
+milestone's exit gate is satisfied, unless a later task is only a read-only
+investigation that does not change code, content, release metadata, or
+production configuration.
+
+Keep task IDs stable when creating GitHub issues or PR checklists.
+
+A task is complete only when:
+
+- the implementation or document change is merged
+- relevant tests or validation commands have passing evidence
+- unrelated dirty worktree changes are not included
+- rollout or rollback notes are updated when user-visible behavior changes
+
+### Milestone Dependency Order
+
+| Milestone | Purpose | Depends on | Exit gate |
+| --- | --- | --- | --- |
+| M0 | Baseline inventory and migration safety | none | Existing English, Japanese, and Chinese assets are inventoried. |
+| M1 | Registry and read-only tooling | M0 | `make i18n-status` reads the 68-language registry. |
+| M2 | Flutter app migration | M1 | App uses generated localization for existing languages. |
+| M3 | Web copy and route migration | M2 | Web renders registry-backed localized pages. |
+| M4 | API, catalog, and checkout localization | M3 | Public config, catalog, and checkout are registry-backed. |
+| M5 | Admin data preservation | M4 | Admin saves do not drop unknown locale keys. |
+| M6 | Translation workflow tooling | M5 | `make i18n-check` blocks missing or unsafe translations. |
+| M7 | Pilot language rollout | M6 | `zh`, `zhtw`, and one RTL locale pass render QA. |
+| M8 | Store metadata and fastlane | M7 | Metadata-only fastlane lanes pass. |
+| M9 | 68-language content production | M8 | Target language batches pass translation checks. |
+| M10 | Release QA and staged launch | M9 | Internal/TestFlight release evidence is recorded. |
+| M11 | Post-release monitoring and cleanup | M10 | Locale diagnostics and support runbook are ready. |
+
+### M0: Baseline Inventory and Migration Safety
+
+- [x] `M0-T01` Inventory existing app strings.
+  Output: a short inventory of Dart localization keys, long settings content,
+  and any existing Chinese app copy.
+  Done when: every source file that will be migrated to ARB or JSON is listed.
+- [x] `M0-T02` Inventory existing web copy and blog content.
+  Output: page-by-page list of template strings, Rust inline copy, blog files,
+  SEO metadata, and current `hreflang` behavior.
+  Done when: every web route in the current sitemap has a migration target.
+- [x] `M0-T03` Inventory API, catalog, checkout, and Firestore locale data.
+  Output: list of `*_i18n` maps, seed constants, checkout labels, and fallback
+  rules.
+  Done when: no catalog or checkout copy is left without an owner path.
+- [x] `M0-T04` Inventory release metadata and deep-link state.
+  Output: current app identifiers, version source, signing assumptions,
+  checkout return paths, and store copy locations.
+  Done when: fastlane setup can proceed without rediscovering release basics.
+- [x] `M0-T05` Record migration safety rules.
+  Output: checklist for preserving existing English, Japanese, and Chinese
+  content during each migration PR.
+  Done when: the checklist is referenced from later migration issues.
+
+#### M0-T05 Migration Safety Rules
+
+Completed on 2026-06-18. Use this checklist in every migration PR that moves
+localized app strings, web copy, blog content, API seed data, catalog maps,
+checkout copy, release metadata, deep-link paths, or store metadata.
+
+Preservation gates:
+
+- Scope gate: list the M0 inventory rows touched by the PR and identify the
+  source files being replaced, moved, or deleted.
+- Source snapshot gate: before moving copy, record the current `en`, `ja`,
+  `zh`, and `zhtw` state for every affected key, route, catalog item, checkout
+  label, store field, or metadata field.
+- English and Japanese gate: existing English and Japanese values must move
+  mechanically to the new ARB, JSON, HTML, or Firestore-map target unless the PR
+  explicitly documents a product-copy change.
+- Chinese asset gate: any existing Chinese source value must be assigned to
+  `zh` or `zhtw`, duplicated intentionally when the source script is ambiguous,
+  or recorded in an intention sidecar before the old source is removed.
+- Intention sidecar gate: brand names, legal entity names, URLs, email
+  addresses, product codes, font names, country codes, currency codes, order
+  IDs, Storage paths, Stripe identifiers, Firebase identifiers, bundle IDs, and
+  package IDs can remain unchanged only when the target file has a nearby
+  sidecar entry with a reason code.
+- Placeholder gate: placeholders, ICU arguments, HTML anchors, route names,
+  query parameters, Stripe return placeholders such as `{CHECKOUT_SESSION_ID}`,
+  and Firebase/Storage paths must be preserved exactly.
+- Route and deep-link gate: English canonical web URLs remain unprefixed,
+  `/en/payment/*` compatibility remains until explicitly removed, and every
+  non-English route code must resolve through the registry.
+- Firestore map gate: API and admin writes must merge localized maps without
+  dropping unknown locale keys.
+- Release secret gate: keystore files, passwords, service account JSON, Apple
+  API keys, fastlane reports that contain private data, exported binaries, and
+  signing certificates must not be committed or copied into public metadata.
+- Fallback gate: release-enabled locales must not silently fall back for
+  user-visible copy unless the fallback is recorded in an approved intention
+  sidecar and visible in diagnostics.
+- Validation gate: each migration PR must include the narrow validation command
+  that proves the moved content still parses, renders, or seeds correctly.
+- Dirty-worktree gate: stage only files owned by the migration PR and preserve
+  unrelated local changes.
+
+Until dedicated sidecar tooling exists, place intention sidecars beside the
+target file and include the stable key path, source file, source value, target
+locale, reason code, reviewer, and date. Use a small controlled reason list:
+`brand_name`, `legal_entity`, `url_or_email`, `code_or_identifier`,
+`product_model_or_font`, `payment_provider`, `source_not_available`,
+`pending_human_translation`, and `locale_not_release_enabled`.
+
+Each later migration issue or PR checklist must reference `M0-T05` and state:
+
+- M0 inventory rows touched
+- source files removed or replaced
+- target files created or updated
+- English and Japanese preservation evidence
+- Chinese `zh` and `zhtw` disposition
+- intentional holdout sidecars updated
+- validation commands run
+- rollback path for user-visible behavior
+
+Later task reference map:
+
+| Task | Required M0-T05 use |
+| --- | --- |
+| `M2-T02`, `M2-T04` | Preserve current app ARB and settings content while moving Chinese assets and long-form settings JSON. |
+| `M3-T03`, `M3-T06` | Preserve current web copy, SEO metadata, and blog URLs during JSON and blog layout extraction. |
+| `M4-T02`, `M4-T04`, `M4-T05` | Preserve catalog, checkout, Stripe return, and route-code behavior while moving API content to data files. |
+| `M5-T02`, `M5-T03` | Prove admin/API localized-map writes keep unknown locale keys. |
+| `M8-T01`, `M8-T06` | Preserve store copy ownership and keep signing or fastlane private material out of the repository. |
+| `M9-T01`, `M9-T03`, `M9-T06` | Keep generated locale files, holdouts, and frozen release-candidate translations reviewable. |
+| `M10-T03` | Verify localized payment paths and deep links without breaking existing return routes. |
+
+#### M0-T01 App String Inventory
+
+Completed on 2026-06-18. This inventory covers Flutter app strings only. It
+identifies every current source file whose user-visible app copy must move to
+ARB or JSON during `M2`.
+
+ARB migration sources:
+
+| Source file | Current content | Migration target | Notes |
+| --- | --- | --- | --- |
+| `app/lib/app/localization/hanko_localizations.dart` | Hand-written `HankoLocalizations`, fixed `supportedLocales`, 387 public string getters, `_HankoStrings`, `_localizedValues`, English values, Japanese values, and `settingsVersionMessage(String version)` placeholder replacement. | `app/lib/l10n/app_en.arb`, `app/lib/l10n/app_ja.arb`, generated localizations, and temporary compatibility wrapper if needed. | This is the primary short UI string source. Preserve key names where practical so existing widget usage can be migrated mechanically. |
+| `app/lib/features/design/presentation/design_home_screen.dart` | Inline localized tip prefix: `Tip: ` / `ヒント: `. Also contains `reason_language` mapping from UI locale to `ja` or `en`. | ARB key for the tip prefix. Registry-backed reason-language adapter, not an ARB text key. | The tip prefix is user-visible copy outside `HankoLocalizations` and must not be missed. |
+| `app/lib/features/order_lookup/presentation/order_lookup_entry_screen.dart` | Inline localized status labels in `_statusLabel` for payment, production, shipping, and fulfillment values such as `paid`, `pending_payment`, `in_production`, `shipped`, and `fulfilled`. | ARB keys or ICU/select-backed helper for status labels. | These labels are currently English/Japanese ternaries and must become generated localization keys before more locales are enabled. |
+
+Long-form JSON migration sources:
+
+| Source file | Current content | Migration target | Notes |
+| --- | --- | --- | --- |
+| `app/lib/features/settings/presentation/settings_content.dart` | `_enContent` and `_jaContent` for About, How it works, FAQ, Privacy, Terms, and Contact. Includes headings, paragraph bodies, FAQ items, legal sections, official URLs, contact URL, and support email. | `app/assets/i18n/settings/en.json`, `app/assets/i18n/settings/ja.json`, and matching files for later enabled languages. | Keep URLs, email address, brand names, legal entity names, and governing-law text eligible for intention sidecars rather than forcing translation. |
+
+Integration files that contain locale wiring but are not text sources:
+
+- `app/lib/app/localization/app_localization.dart` only re-exports the current
+  localization file. It should be updated or removed after generated
+  localizations are introduced, but it has no strings to migrate.
+- `app/lib/app/app.dart` wires `HankoLocalizations.supportedLocales`,
+  `localizationsDelegates`, `onGenerateTitle`, saved locale selection, and
+  `_reasonLanguageForCurrentLocale`. It needs registry/generated-localization
+  integration in `M2`, but no ARB/JSON content originates here.
+- `app/lib/features/settings/presentation/settings_home_screen.dart` renders
+  hard-coded English/Japanese language rows from existing localization keys. It
+  should render registry-driven language rows in `M2`, but the label source is
+  currently `hanko_localizations.dart`.
+- `app/test/widget_test.dart` contains locale-specific expectations and helper
+  `MaterialApp` setup using `HankoLocalizations.supportedLocales` and
+  `localizationsDelegates`. Update these tests with the `M2` migration, but do
+  not treat test literals as source translation copy.
+
+Existing Chinese app copy:
+
+- No standalone `zh` or `zhtw` Flutter locale file, map, or asset exists in the
+  current app source.
+- Existing Chinese-related UI labels are language-style labels inside
+  `hanko_localizations.dart`: `designKanjiStyleChinese` and
+  `designKanjiStyleTaiwanese` in English and Japanese.
+- Existing Chinese-related long-form references are descriptive Japanese/English
+  content in `settings_content.dart`, such as shipping from the partner workshop
+  in China. These are not Chinese translations and should migrate as part of
+  `en` / `ja` settings JSON.
+
+#### M0-T02 Web Copy and Blog Inventory
+
+Completed on 2026-06-18. This inventory covers the Rust web frontend, Askama
+templates, browser-side dynamic copy, blog article files, SEO metadata, and
+current sitemap / `hreflang` behavior. Every route that is currently emitted by
+the sitemap has a migration target below.
+
+Current web locale behavior:
+
+- `web/src/main.rs` uses `SUPPORTED_LOCALES: &["en", "ja"]`.
+- `parse_supported_locale`, `parse_path_locale`, `localized_page_path`,
+  `localized_page_url`, language-switcher URL fields, sitemap generation, and
+  `hreflang` output are all tied to English and Japanese.
+- `localized_text(locale, ja, en)` owns page-level inline Rust copy such as SEO
+  title, meta description, purchase notes, and noindex payment-page metadata.
+- Askama templates render many user-visible strings through
+  `{% if selected_locale == "ja" %}` branches.
+- Sitemap entries currently emit English and Japanese alternates plus
+  `x-default`. English canonical URLs are unprefixed.
+
+Web route migration targets:
+
+| Current route | Current source files and copy owners | Current SEO / `hreflang` behavior | Migration target |
+| --- | --- | --- | --- |
+| `/`, `/{locale}`, `/{locale}/` | `render_top_page`, `web/templates/top.html`, blog card metadata from `web/blog/articles/*.html`. | Indexed. English canonical is `/`; Japanese alternate is `/ja/`; `x-default` points to English. Page title and meta description come from `localized_text`. | `web/content/i18n/top/<lang>.json`, shared header/footer/language-switcher copy in `web/content/i18n/common/<lang>.json`, and blog card metadata from migrated blog metadata. |
+| `/about`, `/{locale}/about` | `render_about_page`, `web/templates/about.html`. | Indexed. English canonical is `/about`; Japanese alternate is `/ja/about`; `x-default` points to English. Page title and meta description come from `localized_text`. | `web/content/i18n/about/<lang>.json` plus `common/<lang>.json`. |
+| `/design`, `/{locale}/design` | `render_design_page`, `web/templates/index.html`, `web/templates/kanji_suggestions.html`, `web/templates/purchase_result.html`, `web/static/app.js`, API catalog labels. | Indexed. English canonical is `/design`; Japanese alternate is `/ja/design`; `x-default` points to English. Page title, meta description, and purchase note come from `localized_text`. | `web/content/i18n/design/<lang>.json` for page and JavaScript dynamic copy, plus fragment copy either in `design/<lang>.json` or dedicated `kanji_suggestions/<lang>.json` and `purchase_result/<lang>.json`. API catalog labels remain catalog-owned. |
+| `/blog`, `/{locale}/blog` | `render_blog_index_page`, `web/templates/blog_index.html`, blog front matter card fields. | Indexed. English canonical is `/blog`; Japanese alternate is `/ja/blog`; `x-default` points to English. Page title and meta description come from `localized_text`; card metadata comes from article front matter. | `web/content/i18n/blog_index/<lang>.json`, `common/<lang>.json`, and migrated blog `metadata.json` files. |
+| `/blog/{slug}`, `/{locale}/blog/{slug}` | `render_blog_article_page`, `web/templates/blog_article.html`, English article body files, Japanese `.ja.html` body files, and front matter metadata. | Indexed for each current blog slug. Canonical URL is the localized article URL. Alternates are English, Japanese, and `x-default` English. | `web/content/blog/<slug>/<lang>.html` and `web/content/blog/<slug>/metadata.json` with language-keyed title, excerpt, meta description, date display, and image alt text. |
+| `/terms`, `/{locale}/terms` | `render_terms_page`, `web/templates/terms.html`. | Indexed. English canonical is `/terms`; Japanese alternate is `/ja/terms`; `x-default` points to English. Page title and meta description come from `localized_text`. | `web/content/i18n/terms/<lang>.json` plus intention sidecars for legal entity names, addresses, governing-law terms, URLs, and other values that should intentionally remain unchanged. |
+| `/commercial-transactions`, `/{locale}/commercial-transactions` | `render_commercial_transactions_page`, `web/templates/commercial_transactions.html`. | Indexed. English canonical is `/commercial-transactions`; Japanese alternate is `/ja/commercial-transactions`; `x-default` points to English. Page title and meta description come from `localized_text`. | `web/content/i18n/commercial_transactions/<lang>.json` plus intention sidecars for seller name, representative name, address, phone, email, production origin, payment provider names, and legal labels that should intentionally remain unchanged. |
+| `/payment/success`, `/{locale}/payment/success` | `render_payment_success_page`, `web/templates/payment_success.html`. | Not in the sitemap. Rendered with `noindex`; page title and meta description come from `localized_text`. | `web/content/i18n/payment_success/<lang>.json` plus `common/<lang>.json`. Keep localized paths compatible for checkout return URLs. |
+| `/payment/failure`, `/{locale}/payment/failure` | `render_payment_failure_page`, `web/templates/payment_failure.html`. | Not in the sitemap. Rendered with `noindex`; page title and meta description come from `localized_text`. | `web/content/i18n/payment_failure/<lang>.json` plus `common/<lang>.json`. Keep localized paths compatible for checkout return URLs. |
+| `/sitemap.xml` | `handle_sitemap_xml`, `build_sitemap_xml`, `sitemap_url_entry`, `SITEMAP_STATIC_PAGES`, and loaded blog post metadata. | Emits English and Japanese `<url>` entries for indexed static pages, the blog index, and every blog article. `hreflang` values are hard-coded to `en`, `ja`, and `x-default`. | Registry-driven sitemap builder using `web.indexed`, route-code to BCP-47 mapping, localized canonical URLs, and fallback exclusion for non-indexed QA languages. |
+| `/robots.txt` | `handle_robots_txt`, `build_robots_txt`, and sitemap URL generation. | No localized route and no page copy. Points crawlers to `/sitemap.xml`. | No translation file needed. Keep sitemap URL generation aligned with the registry-backed web base URL. |
+| `/kanji`, `/mock/kanji` | `handle_kanji_suggestions`, `web/templates/kanji_suggestions.html`. | Fragment endpoints; not in sitemap. Locale comes from request context or mock path. | Fragment copy in `web/content/i18n/design/<lang>.json` or `web/content/i18n/kanji_suggestions/<lang>.json`. |
+| `/purchase`, `/mock/purchase` | `handle_purchase_impl`, `web/templates/purchase_result.html`. | Fragment endpoints; not in sitemap. Locale comes from request context or mock path. | Fragment copy in `web/content/i18n/design/<lang>.json` or `web/content/i18n/purchase_result/<lang>.json`. |
+
+Template copy inventory:
+
+| Template | Current copy pattern | Migration target |
+| --- | --- | --- |
+| `web/templates/top.html` | 11 Japanese-locale conditional branches. | `top/<lang>.json` and `common/<lang>.json`. |
+| `web/templates/index.html` | 91 Japanese-locale conditional branches for the design page, filters, seal preview, checkout form, and supporting text. | `design/<lang>.json`, common copy, and fragment JSON where useful. |
+| `web/templates/about.html` | 19 Japanese-locale conditional branches. | `about/<lang>.json`. |
+| `web/templates/blog_index.html` | 7 Japanese-locale conditional branches. | `blog_index/<lang>.json` and blog metadata. |
+| `web/templates/blog_article.html` | 7 Japanese-locale conditional branches around article chrome and navigation. | `common/<lang>.json`, blog chrome fields, and blog metadata. |
+| `web/templates/payment_success.html` | 26 Japanese-locale conditional branches. | `payment_success/<lang>.json`. |
+| `web/templates/payment_failure.html` | 24 Japanese-locale conditional branches. | `payment_failure/<lang>.json`. |
+| `web/templates/terms.html` | 38 Japanese-locale conditional branches. | `terms/<lang>.json` plus legal intention sidecars. |
+| `web/templates/commercial_transactions.html` | 46 Japanese-locale conditional branches. | `commercial_transactions/<lang>.json` plus legal intention sidecars. |
+| `web/templates/kanji_suggestions.html` | 5 Japanese-locale conditional branches. | `design/<lang>.json` or `kanji_suggestions/<lang>.json`. |
+| `web/templates/purchase_result.html` | 7 Japanese-locale conditional branches. | `design/<lang>.json` or `purchase_result/<lang>.json`. |
+
+Rust inline copy and route owner inventory:
+
+- `TopPageTemplate`, `AboutTemplate`, `PageTemplate`, `BlogIndexTemplate`,
+  `BlogArticleTemplate`, `PaymentSuccessTemplate`, `PaymentFailureTemplate`,
+  `CommercialTransactionsTemplate`, and `TermsTemplate` carry localized SEO,
+  language-switcher URLs, and template fields.
+- `render_top_page`, `render_about_page`, `render_design_page`,
+  `render_blog_index_page`, `render_payment_success_page`,
+  `render_payment_failure_page`, `render_commercial_transactions_page`, and
+  `render_terms_page` contain page-level `localized_text` calls that should
+  move into page JSON files.
+- `render_blog_article_page` resolves language-specific article bodies and
+  metadata from `BlogPost`.
+- `handle_purchase_impl` and checkout validation helpers contain inline
+  `localized_text` error messages for form validation and purchase failures.
+  Move these to checkout or purchase-result JSON with stable keys.
+- `SUPPORTED_LOCALES`, `parse_supported_locale`, `parse_path_locale`,
+  `localized_page_path`, `localized_page_url`, `top_url`, `design_url`,
+  `blog_index_url`, `blog_article_url`, and `sitemap_url_entry` are the main
+  route and SEO functions that must become registry-backed.
+- `web/static/app.js` owns browser-side user-visible copy for filter summaries,
+  empty states, form validation, purchase submit states, htmx errors, Kanji
+  reading labels, selected Kanji messages, preview shape labels, and fallback
+  summary text. This copy must move to JSON consumed by the design page so
+  adding a language does not require editing JavaScript source.
+
+Blog content inventory:
+
+| Slug | Current files | Current metadata owner | Migration target |
+| --- | --- | --- | --- |
+| `chinese-chop-seal-vs-japanese-hanko` | `web/blog/articles/chinese-chop-seal-vs-japanese-hanko.html`, `web/blog/articles/chinese-chop-seal-vs-japanese-hanko.ja.html` | English front matter with Japanese fields. | `web/content/blog/chinese-chop-seal-vs-japanese-hanko/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `custom-jade-seal` | `web/blog/articles/custom-jade-seal.html`, `web/blog/articles/custom-jade-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/custom-jade-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `custom-stone-seal-gift` | `web/blog/articles/custom-stone-seal-gift.html`, `web/blog/articles/custom-stone-seal-gift.ja.html` | English front matter with Japanese fields. | `web/content/blog/custom-stone-seal-gift/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `english-name-kanji-seal` | `web/blog/articles/english-name-kanji-seal.html`, `web/blog/articles/english-name-kanji-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/english-name-kanji-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `hanko-vs-inkan` | `web/blog/articles/hanko-vs-inkan.html`, `web/blog/articles/hanko-vs-inkan.ja.html` | English front matter with Japanese fields. | `web/content/blog/hanko-vs-inkan/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `how-to-choose-stone-seal` | `web/blog/articles/how-to-choose-stone-seal.html`, `web/blog/articles/how-to-choose-stone-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/how-to-choose-stone-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `jade-agate-qingtian-stone-seal` | `web/blog/articles/jade-agate-qingtian-stone-seal.html`, `web/blog/articles/jade-agate-qingtian-stone-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/jade-agate-qingtian-stone-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `japanese-hanko-souvenir` | `web/blog/articles/japanese-hanko-souvenir.html`, `web/blog/articles/japanese-hanko-souvenir.ja.html` | English front matter with Japanese fields. | `web/content/blog/japanese-hanko-souvenir/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `luxury-personal-seal` | `web/blog/articles/luxury-personal-seal.html`, `web/blog/articles/luxury-personal-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/luxury-personal-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `one-of-a-kind-stone-seal` | `web/blog/articles/one-of-a-kind-stone-seal.html`, `web/blog/articles/one-of-a-kind-stone-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/one-of-a-kind-stone-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `personal-seal-symbol-of-identity` | `web/blog/articles/personal-seal-symbol-of-identity.html`, `web/blog/articles/personal-seal-symbol-of-identity.ja.html` | English front matter with Japanese fields. | `web/content/blog/personal-seal-symbol-of-identity/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `personal-seals-for-artists` | `web/blog/articles/personal-seals-for-artists.html`, `web/blog/articles/personal-seals-for-artists.ja.html` | English front matter with Japanese fields. | `web/content/blog/personal-seals-for-artists/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `what-is-a-hanko` | `web/blog/articles/what-is-a-hanko.html`, `web/blog/articles/what-is-a-hanko.ja.html` | English front matter with Japanese fields. | `web/content/blog/what-is-a-hanko/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `what-is-a-personal-seal` | `web/blog/articles/what-is-a-personal-seal.html`, `web/blog/articles/what-is-a-personal-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/what-is-a-personal-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+| `what-to-engrave-on-seal` | `web/blog/articles/what-to-engrave-on-seal.html`, `web/blog/articles/what-to-engrave-on-seal.ja.html` | English front matter with Japanese fields. | `web/content/blog/what-to-engrave-on-seal/en.html`, `ja.html`, future locale HTML files, and `metadata.json`. |
+
+Current blog migration notes:
+
+- Each current slug has an English article file and a Japanese `.ja.html`
+  article file.
+- Current English front matter owns `title`, `excerpt`, `date`,
+  `date_display`, `meta_description`, `image_url`, and `image_alt`.
+- Current English front matter also owns Japanese metadata fields such as
+  `title_ja`, `excerpt_ja`, `date_display_ja`, `meta_description_ja`, and
+  `image_alt_ja`.
+- The existing article bodies are parallel English/Japanese files, not a
+  directory-based locale structure.
+- No standalone `zh` or `zhtw` web article translation exists today. Chinese
+  subject matter in slugs such as `chinese-chop-seal-vs-japanese-hanko`,
+  `english-name-kanji-seal`, `custom-jade-seal`, and
+  `jade-agate-qingtian-stone-seal` is topical content, not Chinese locale copy.
+
+Sitemap coverage and migration targets:
+
+- Current indexed static sitemap routes are `/`, `/about`, `/design`,
+  `/terms`, and `/commercial-transactions`, with English and Japanese URL
+  entries for each route.
+- `/blog` is indexed with English and Japanese URL entries.
+- All 15 blog article slugs above are indexed with English and Japanese URL
+  entries.
+- `/payment/success` and `/payment/failure` are localized user-visible pages
+  but are intentionally excluded from the sitemap and rendered as `noindex`.
+- `/kanji`, `/purchase`, `/mock/kanji`, `/mock/purchase`, admin proxy routes,
+  and static asset routes are not sitemap routes. They still need localized
+  fragment copy where they render user-visible UI.
+- The migration target for sitemap and `hreflang` behavior is the M3 registry
+  loader plus page availability checks. Non-indexed QA languages must be
+  renderable without being emitted in `/sitemap.xml`.
+
+#### M0-T03 API, Catalog, Checkout, and Firestore Locale Inventory
+
+Completed on 2026-06-18. This inventory covers Rust API runtime locale
+resolution, Firestore `*_i18n` maps, seed constants, checkout labels, Stripe
+Checkout locale propagation, and admin-managed catalog writes. Every current
+catalog or checkout copy source has an owner path below.
+
+Current API locale behavior:
+
+- `api/src/main.rs` owns `PublicConfig`, catalog response shaping, order
+  creation, Stripe Checkout session creation, Gemini Kanji candidate prompt
+  language handling, and fallback resolution.
+- `app_config/public` currently resolves to `supported_locales=["en","ja"]`,
+  `default_locale="ja"`, `default_currency="USD"`, and
+  `currency_by_locale={"ja":"JPY","en":"USD"}`.
+- `default_public_config()` is the runtime fallback when Firestore config is
+  missing or incomplete. `api/src/bin/seed_catalog.rs` writes the same locale
+  and currency policy into Firestore.
+- API catalog endpoints reject unsupported `locale` values after loading public
+  config. Order creation rejects unsupported `orders.locale` and
+  `contact.preferred_locale`.
+- `resolve_localized(values, requested_locale, default_locale)` falls back in
+  this order: requested locale, default locale, `ja`, then the first non-empty
+  value by sorted key.
+- `lookup_locale` accepts exact locale keys and base-language lookup for
+  hyphenated BCP-47 values.
+
+Firestore locale data inventory:
+
+| Firestore owner | Current localized fields | Runtime reader | Admin / seed writer | Migration owner path |
+| --- | --- | --- | --- | --- |
+| `app_config/public` | `supported_locales`, `default_locale`, `default_currency`, `currency_by_locale`. | `get_public_config`, `normalize_public_config`, `resolve_pricing_currency`. | `api/src/bin/seed_catalog.rs::app_config_public_document`. | `config/languages.json` as source of truth; generated/seeded public config in `M4-T01`. |
+| `materials/{material_key}` | `label_i18n`, `description_i18n`, `photos[].alt_i18n`, plus non-map fields `comparison_texture_ja`, `comparison_texture_en`, `comparison_weight_ja`, `comparison_weight_en`, `comparison_usage_ja`, `comparison_usage_en`. | `/v1/catalog` resolves label, description, photo alt; material labels also feed stone-listing cards. | `api/src/bin/seed_catalog.rs::material_document`, admin material create/update/photo flows, and mock snapshots. | `api/content/i18n/catalog/materials.json`. Convert comparison preview fields to registry-keyed maps such as `comparison_i18n.texture.<lang>`, or store the equivalent under the material JSON before seeding. |
+| `facet_tags/{facet_type:key}` | `label_i18n`; `aliases` are canonicalization/search helpers, not translated UI copy. | `/v1/catalog` and stone-listing filter builders resolve tag labels by locale. | `api/src/bin/seed_catalog.rs::facet_tag_document`, admin facet tag create/update flows, and mock snapshots. | `api/content/i18n/catalog/facet_tags.json`, with aliases kept locale-neutral unless a later search task adds localized aliases. |
+| `stone_listings/{listing_id}` | `title_i18n`, `description_i18n`, `story_i18n`, `photos[].alt_i18n`. | `/v1/catalog`, `/v1/stone-listings`, checkout order snapshots, and app/web listing cards. | `api/src/bin/seed_catalog.rs::stone_listing_document`, admin stone-listing create/update/photo flows, and mock snapshots. | `api/content/i18n/catalog/stone_listings.json` or per-listing JSON files if the list grows. Keep `facets.*`, `material_key`, `size`, and prices locale-neutral. |
+| `countries/{country_code}` | `label_i18n`. | `/v1/catalog`, order creation shipping snapshot, admin order display. | `api/src/bin/seed_catalog.rs::country_document`, admin country create/update flows, and mock snapshots. | `api/content/i18n/catalog/countries.json`. Keep ISO country code and shipping fees locale-neutral. |
+| `orders/{order_id}` | `locale`, `contact.preferred_locale`, snapshot maps `material.label_i18n`, `listing.title_i18n`, `listing.description_i18n`, `listing.primary_photo.alt_i18n`, `shipping.country_label_i18n`. | Order lookup/status, admin order detail, Stripe checkout context, receipt/support language decisions. | `create_order`, `build_order_fields`, and order status/shipping admin mutations. | Runtime order snapshots remain in Firestore. Values come from catalog maps at order creation and should preserve all available locale keys for historical display. |
+| `fonts/{font_key}` | `label` only; older `label_i18n` fallback is read for compatibility. | Catalog font list and seal renderer selection. | `api/src/bin/seed_catalog.rs::font_document`; admin font create/update uses single `label`. | No translation file in this plan. Font labels are product/style names and remain locale-neutral unless a later product decision changes that. |
+
+Seed constant inventory:
+
+| Source | Current constants | Translation ownership |
+| --- | --- | --- |
+| `api/src/bin/seed_catalog.rs::app_config_public_document` | Registry-backed `en` / `ja` locale list and `USD` / `JPY` currency map. | Generated from `config/languages.json`; no hand-maintained duplicate list remains. |
+| `api/src/bin/seed_catalog.rs::font_seeds` | 6 font records with single labels and `kanji_style` values: `zen_maru_gothic`, `kosugi_maru`, `potta_one`, `kiwi_maru`, `wdxl_lubrifont_jp_n`, `ai_generated_seal`. | Locale-neutral font catalog. Do not move to ARB/JSON unless font display names become translated product copy. |
+| `api/src/bin/seed_catalog.rs::material_seeds` | 8 material master records with locale-neutral keys and sort order: `wood`, `qingtian_stone`, `shoushan_stone`, `balin_stone`, `yili_stone`, `laos_stone`, `xixia_stone`, `frozen_stone`. | `api/content/i18n/catalog/materials.json` owns labels and descriptions. Preserve Chinese-origin material names as topical content, not Chinese translations. |
+| `api/src/bin/seed_catalog.rs::stone_listing_seeds` | 3 published listing records with facet keys, size, listing code, Storage paths, USD/JPY prices, and sort order. | `api/content/i18n/catalog/stone_listings.json` owns title, description, story, and photo alt text. |
+| `api/src/bin/seed_catalog.rs::facet_tag_seeds` | 6 tag records with locale-neutral `key`, `facet_type`, aliases, and sort order: `color:green`, `color:yellow`, `color:white`, `pattern:cloud`, `pattern:veined`, `pattern:plain`. | `api/content/i18n/catalog/facet_tags.json` owns labels; aliases remain canonical. |
+| `api/src/bin/seed_catalog.rs::country_seeds` | 6 country records with ISO country codes, USD/JPY shipping fees, and sort order: `JP`, `US`, `CA`, `GB`, `AU`, `SG`. | `api/content/i18n/catalog/countries.json` owns labels; fees stay in `shipping_fee_by_currency`. |
+| `admin/src/main.rs::new_mock_snapshot` | Mock catalog data for admin/dev with Japanese/English maps for materials, listings, facet tags, countries, and order fixtures. | Treat as fixture data. It can either be generated from the same catalog JSON in `M5`, or kept as a small test fixture that must pass the same missing-key checks. |
+| `web/src/main.rs::new_mock_catalog_source` | Web mock/dev catalog fallback used when Firestore catalog load fails in dev. | After M3/M4, derive from the same catalog JSON or mark as fixture-only so it cannot become a hidden untranslated production source. |
+
+Checkout copy and locale propagation inventory:
+
+| Checkout owner | Current behavior | Migration owner path |
+| --- | --- | --- |
+| `api/src/main.rs::build_checkout_product_name` | Hard-coded Japanese format for `ja*`: `宝石印鑑 ({listing_label}、{shape})`; all other locales use English `Stone seal ({listing_label}; {shape})`. | `api/content/i18n/checkout/<lang>.json` with keys for product name template, separator/punctuation, and shape labels. |
+| `checkout_shape_label_ja` / `checkout_shape_label_en` | Hard-coded labels for `round` and `square`. Non-Japanese locales always use English. | `api/content/i18n/checkout/<lang>.json`, or a shared `shape_labels` map generated from registry-backed checkout copy. |
+| `build_stripe_checkout_session_form` | Adds `lang={order_locale}` to success and cancel URLs, and uses order locale for app-return URLs. Sends `customer_email` and `payment_intent_data[receipt_email]` for Stripe-native receipts. | Keep locale propagation in code, but normalize route code through `config/languages.json`. Receipt language is not currently customized beyond Stripe/customer settings. |
+| `create_order` / `validate_create_order_request` | Validates lowercase BCP-47-like `locale` and `contact.preferred_locale`, then checks both against `supported_locales`. | Registry-backed validation in `M4-T05`; route code should remain the persisted value. |
+| `OrderCheckoutContext::resolve_order_listing_fields` | Resolves listing/material label from order snapshot maps using order locale and default locale. | Keep snapshot resolution; add diagnostics in `M6` when checkout falls back for release-enabled languages. |
+| Gemini Kanji candidates | `reason_language` defaults to `en` if missing; API validates it as a short string and writes it back into candidate responses. Prompt labels support Japanese or English through `reason_language_label`. | Registry-backed `reason_language` mapping in `M4-T06`; not catalog copy, but it is a locale-dependent API field. |
+
+Fallback and preservation rules for later implementation:
+
+- `resolve_localized` currently falls back to `ja`, while this plan's general
+  target fallback is registry fallback, default route code, `en`, then first
+  non-empty value. M4 must intentionally update this order or document why API
+  catalog fallback stays Japanese-first.
+- Admin create/update flows currently edit only `ja` and `en` entries for
+  `label_i18n`, `description_i18n`, `title_i18n`, `story_i18n`, and
+  `alt_i18n`. Some updates preserve unknown keys by inserting into existing
+  maps, but Firestore writes use full map fields. M5 must audit these writes
+  before adding 68-language catalog data.
+- `comparison_texture_ja/en`, `comparison_weight_ja/en`, and
+  `comparison_usage_ja/en` are not `*_i18n` maps. They need a migration target
+  before more languages are enabled.
+- Order snapshots should not be backfilled from changed catalog translations
+  after checkout. New orders should snapshot the catalog maps available at the
+  time of order creation.
+- Existing Chinese-related catalog values are material names and origins such
+  as Qingtian, Shoushan, Balin, Yili, Xixia, Laos stone, and China production
+  references. They are English/Japanese catalog content today, not `zh` or
+  `zhtw` translations. When Chinese locale files are introduced, these values
+  should be translated or intentionally preserved via sidecars according to the
+  catalog translation policy.
+
+#### M0-T04 Release Metadata and Deep-Link Inventory
+
+Completed on 2026-06-18. This inventory covers app identifiers, version source,
+release signing assumptions, checkout return paths, associated-domain state,
+and current store-copy locations. It is the baseline needed before adding
+fastlane in `M8`.
+
+Current app identifiers and version source:
+
+| Platform | Current value | Source file | Notes for fastlane |
+| --- | --- | --- | --- |
+| Android namespace | `org.finitefield.hankofield` | `app/android/app/build.gradle.kts` | Keep aligned with package name and Play Console package. |
+| Android application ID | `org.finitefield.hankofield` | `app/android/app/build.gradle.kts` | Recommended Android `Appfile` package name. |
+| Android app label | `STONE SIGNATURE` | `app/android/app/src/main/res/values/strings.xml` | Store metadata should use generated localized metadata, not this resource file. |
+| iOS bundle identifier | `org.finitefield.hankofield` | `app/ios/Runner.xcodeproj/project.pbxproj`, surfaced through `PRODUCT_BUNDLE_IDENTIFIER` in `app/ios/Runner/Info.plist`. | Recommended iOS `Appfile` app identifier. |
+| iOS display name / bundle name | `STONE SIGNATURE` | `app/ios/Runner/Info.plist` | App Store metadata should be generated separately. |
+| Flutter package version | `1.1.0+11` | `app/pubspec.yaml` | Treat this as the committed version source. Local generated Android files can drift and should not be used as release metadata source. |
+| Android version code/name | `flutter.versionCode` / `flutter.versionName` | `app/android/app/build.gradle.kts`, generated from Flutter tooling. | fastlane build lanes should call Flutter from `app/` or pass explicit build name/number from the release process. |
+| iOS build number/name | `$(FLUTTER_BUILD_NUMBER)` / `$(FLUTTER_BUILD_NAME)` | `app/ios/Runner/Info.plist`, `app/ios/Runner.xcodeproj/project.pbxproj`. | fastlane iOS lanes should rely on Flutter build args or the committed `pubspec.yaml` version. |
+
+Release signing and credential assumptions:
+
+| Area | Current state | Required handling before fastlane |
+| --- | --- | --- |
+| Android release signing | Gradle reads `app/android/key.properties` and expects `app/android/app/upload-keystore.jks` for release builds. Release builds fail with a clear `GradleException` when either file is missing. | Treat `key.properties`, keystores, passwords, and exported AAB/APK files as private local or CI-secret material. Do not commit them. |
+| Android signing fingerprint | `doc/app-release-deep-link-config.md` says `assetlinks.json` must include the release signing certificate SHA-256 fingerprint for `org.finitefield.hankofield`. | Add a fastlane/setup note for retrieving and validating the upload/app signing fingerprint before hosting association files. |
+| iOS signing | Xcode project uses automatic signing style for the test target and Runner build settings attach `Runner/Runner.entitlements` to Debug, Release, and Profile. No Apple team ID or API key is committed. | fastlane should use App Store Connect API key files or CI secrets. Do not commit API key JSON/P8 files or provisioning secrets. |
+| Secret ignore coverage | `.gitignore` currently ignores Firebase admin SDK files and `api/.secrets.local`, but Android signing files and future fastlane private files are not explicitly listed. Current signing files are local untracked files. | `M8-T06` must add ignore rules for Android key properties, keystores, Apple API keys, service account JSON, exported `.ipa`, generated AAB/APK/fastlane reports, and local screenshots if needed. |
+
+Checkout return and deep-link state:
+
+| Surface | Current route or config | Source files | Localization impact |
+| --- | --- | --- | --- |
+| Custom scheme | `hankofield://checkout/*` with host `checkout`. | `app/android/app/src/main/AndroidManifest.xml`, `app/ios/Runner/Info.plist`, `app/lib/features/order/domain/checkout_return.dart`. | Primary app-originated Stripe return path. Locale is carried by `lang` or `locale` query parameter. |
+| Android App Links | Verified HTTPS intent filters for `finitefield.org` and `www.finitefield.org`, path prefixes `/payment`, `/en/payment`, and `/ja/payment`. | `app/android/app/src/main/AndroidManifest.xml`, covered by `app/test/platform_deep_link_config_test.dart`. | Must expand from hard-coded `en` / `ja` prefixes to registry-generated payment prefixes when release-enabled web payment paths expand. |
+| iOS Universal Links | Associated domains `applinks:finitefield.org` and `applinks:www.finitefield.org`. | `app/ios/Runner/Runner.entitlements`, covered by `app/test/platform_deep_link_config_test.dart`. | Hosted AASA path list must include localized payment prefixes when they are enabled. |
+| Hosted association files | No `assetlinks.json` or `apple-app-site-association` file is committed. | `doc/app-release-deep-link-config.md` documents required hosted URLs. | Add generation or documented manual hosting before broader localized payment paths are released. |
+| Web payment pages | `/payment/success`, `/payment/failure`, `/ja/payment/success`, `/ja/payment/failure`; `/en/payment/*` is retained as compatibility in app link config. | `web/src/main.rs`, payment templates, and `doc/app-release-deep-link-config.md`. | M3/M10 must verify every release-enabled payment prefix. English canonical remains unprefixed, but `/en/payment/*` compatibility must not break existing app links. |
+| API web return URLs | `API_PSP_STRIPE_CHECKOUT_SUCCESS_URL` and `API_PSP_STRIPE_CHECKOUT_CANCEL_URL` point to public web payment pages in `.env.prod.example`. | `.env.prod.example`, `api/src/main.rs::StripeCheckoutConfig`. | Browser checkout stays on web. The API appends checkout outcome, order ID, and `lang`. |
+| API app return URLs | `API_PSP_STRIPE_APP_CHECKOUT_SUCCESS_URL=hankofield://checkout/success?session_id={CHECKOUT_SESSION_ID}` and `API_PSP_STRIPE_APP_CHECKOUT_CANCEL_URL=hankofield://checkout/cancel`. | `.env.prod.example`, `doc/app-release-deep-link-config.md`, `api/src/main.rs`. | App-originated checkout uses custom scheme when `return_to_app=true`; API appends `checkout`, `order_id`, `lang`, and `return_to=app`. |
+| App return parser | Parses `hankofield://checkout/...`, `/payment/...`, `/checkout/...`, and localized web returns; strips only leading `en` or `ja` path segments today. | `app/lib/features/order/domain/checkout_return.dart`, `app/test/checkout_return_test.dart`. | Must become registry-aware before 68 localized payment routes are enabled. |
+
+Current store-copy locations:
+
+| Copy type | Current source | Migration target |
+| --- | --- | --- |
+| App name in installed Android/iOS app | `app/android/app/src/main/res/values/strings.xml`, `app/ios/Runner/Info.plist`, app localization `appTitle`. | Keep runtime app name stable unless product decides localized names. Store listing names belong in `release/store_metadata/source/<lang>.json`. |
+| Flutter app description | `app/pubspec.yaml` contains a developer/package description, not store metadata. | Do not use as store listing copy. Generate store metadata from `release/store_metadata/source/<lang>.json`. |
+| Web app manifest copy | `app/web/manifest.json` has PWA name, short name, and description. | Not a mobile store metadata source; include in web/PWA localization only if the web app surface is released. |
+| App Store Review explanation | `doc/app-mvp-screen-design.md` has Japanese App Store Review notes explaining native app value. | Use as a reference when drafting `review_notes` / reviewer instructions, but not as localized public metadata. |
+| Public legal/support URLs | App settings content and web templates point to finitefield.org privacy/contact/legal pages. | Store metadata source should carry support URL, marketing URL, and privacy policy URL per platform/locale. |
+| Existing fastlane/store metadata files | No `app/android/fastlane`, `app/ios/fastlane`, `Gemfile`, or `release/store_metadata/**` files are present. | `M8` creates source JSON, generated Google Play/App Store metadata folders, Bundler files, and metadata-only lanes. |
+
+Fastlane setup readiness notes:
+
+- Android fastlane can use `package_name("org.finitefield.hankofield")`.
+- iOS fastlane can use `app_identifier("org.finitefield.hankofield")`.
+- Metadata generation must validate platform-specific locale support before
+  writing Google Play or App Store folders.
+- Binary upload lanes must remain separate from metadata-only lanes.
+- Production lanes must require manual confirmation after internal Google Play
+  and TestFlight lanes are proven.
+- Deep-link association files and platform manifests must be updated from the
+  language registry before release-enabled localized payment paths go live.
+
+### M1: Registry and Read-Only Tooling
+
+- [x] `M1-T01` Add `config/languages.json`.
+  Output: all 68 route codes with BCP-47, Flutter, text direction, fallback,
+  currency, web, app, and release fields.
+  Done when: `no`, `zh`, `zhtw`, and RTL entries validate correctly.
+- [x] `M1-T02` Add a registry parser shared by scripts.
+  Output: one typed parser or data model used by status/check commands.
+  Done when: duplicate route codes and invalid fallback values fail tests.
+- [x] `M1-T03` Add `make i18n-status`.
+  Output: read-only status report for app, web, API, and release metadata.
+  Done when: it reports missing files without modifying the working tree.
+- [x] `M1-T04` Add registry fixtures.
+  Output: focused test fixtures for `en`, `ja`, `zh`, `zhtw`, `no`, and RTL.
+  Done when: fixture tests cover route code, BCP-47, Flutter, and store fields.
+- [x] `M1-T05` Document registry update rules.
+  Output: short maintainer notes for adding, disabling, or indexing a language.
+  Done when: future language changes do not require reading implementation code.
+
+#### M1-T01 Language Registry
+
+Completed on 2026-06-18. Added `config/languages.json` with the full 68-code
+route list from Section 4 in the same order.
+
+Initial flag policy:
+
+- `en` and `ja` are the only initially enabled, indexed, and selectable
+  languages because they match the current app and web behavior.
+- The other 66 route codes are registered but start with `web.enabled=false`,
+  `app.enabled=false`, and `release.enabled=false` so M1 does not expose
+  unfinished routes, app locales, or store metadata.
+- `zh` maps to `zh-Hans` with Flutter `scriptCode=Hans`.
+- `zhtw` maps to `zh-Hant` with Flutter `scriptCode=Hant`.
+- `no` stays a JSON string route code and BCP-47 value.
+- `ar`, `fa`, `he`, `ps`, and `ur` are marked `rtl`; all other entries are
+  `ltr`.
+- English has `url_prefix=""` and `fallback=null` to terminate fallback chains.
+  Every other language uses its route code as `url_prefix` and falls back to
+  `en`.
+- `ja` uses `JPY`; all other entries use `USD` until a business rule changes.
+- Store locale fields are filled only for `en`, `ja`, `zh`, and `zhtw` in this
+  baseline. Other languages keep null store locale fields until M8 validates
+  platform support.
+
+#### M1-T02 Language Registry Parser
+
+Completed on 2026-06-18. Added `scripts/i18n/registry.mjs` as the shared
+registry parser for future M1 status/check scripts.
+
+Parser contract:
+
+- `loadLanguageRegistry()` reads `config/languages.json` by default.
+- `parseLanguageRegistry()` validates already-loaded JSON and returns
+  `languages` plus `byRouteCode`.
+- `getLanguageByRouteCode()` gives downstream scripts a single lookup helper.
+- `RegistryValidationError` carries a stable `errors` array for command output.
+- Validation rejects duplicate route codes, fallback values that do not point
+  to an existing route code, and fallback values that point to the same route.
+- Validation also checks required nested app, web, Flutter, and release fields
+  so later status/check scripts can rely on a typed shape.
+
+Test command:
+
+```sh
+make i18n-registry-test
+```
+
+#### M1-T03 I18n Status Command
+
+Completed on 2026-06-18. Added `scripts/i18n/status.mjs` and the root
+`make i18n-status` target.
+
+Status contract:
+
+- The command reads `config/languages.json` through the shared registry parser.
+- It reports enabled app, web, and release languages.
+- It reports missing app ARB files and settings JSON for `app.enabled`
+  languages.
+- It reports missing web page-copy JSON files for `web.enabled` languages.
+- It reports missing API catalog and checkout content files for `web.enabled`
+  languages.
+- It reports release metadata source files only for `release.enabled`
+  languages, so M1 does not require future store metadata before M8.
+- The command exits successfully when files are missing because this is a
+  read-only status report, not the later blocking `i18n-check` gate.
+- `make i18n-status-test` covers missing-file reporting and confirms the status
+  builder does not modify the inspected workspace.
+
+Current expected M1 output reports missing files for the existing enabled
+English and Japanese app, web, and API targets. That is intentional until M2,
+M3, and M4 move content into the new file layout.
+
+#### M1-T04 Registry Fixtures
+
+Completed on 2026-06-18. Added `scripts/i18n/fixtures/registry-core.json` as a
+focused fixture for the language entries that are most likely to break parser
+or platform mapping assumptions.
+
+Fixture coverage:
+
+- `en`: default route with empty URL prefix, null fallback, Flutter `en`, and
+  `en-US` store locale fields.
+- `ja`: existing enabled app/web locale with `JPY`, Flutter `ja`, and Japanese
+  store locale fields.
+- `zh`: Simplified Chinese route mapped to BCP-47 `zh-Hans`, Flutter
+  `languageCode=zh`, `scriptCode=Hans`, and `zh-CN` / `zh-Hans` store locale
+  fields.
+- `zhtw`: Traditional Chinese route mapped to BCP-47 `zh-Hant`, Flutter
+  `languageCode=zh`, `scriptCode=Hant`, and `zh-TW` / `zh-Hant` store locale
+  fields.
+- `no`: JSON-safe Norwegian route code and BCP-47 value.
+- `ar`, `fa`, `he`, `ps`, and `ur`: RTL entries with null store locale fields
+  until M8 platform support validation.
+
+Test command:
+
+```sh
+make i18n-registry-test
+```
+
+#### M1-T05 Registry Update Rules
+
+Completed on 2026-06-18. Use these notes when changing
+`config/languages.json`; future language changes should not require reading the
+parser or status script implementation.
+
+Registry edit checklist:
+
+- Edit only `config/languages.json` for registry data changes.
+- Keep `route_code` stable once a language has shipped. It is used in file
+  names, stored settings, web URLs, checkout return URLs, diagnostics, and
+  translation sidecars.
+- Keep the array order aligned with the Section 4 route-code list unless a
+  future task deliberately redefines ordering.
+- Keep JSON, not YAML, so `no` remains the Norwegian route code and not a
+  boolean-like value.
+- Use `fallback=null` only for the default route, currently `en`. Every other
+  non-null fallback must point to an existing route code and must not point to
+  itself.
+- Use `url_prefix=""` only for `en`; every other web route uses its `route_code`
+  as the prefix.
+- Keep `zh` as Simplified Chinese with BCP-47 `zh-Hans` and Flutter
+  `languageCode=zh`, `scriptCode=Hans`.
+- Keep `zhtw` as Traditional Chinese with BCP-47 `zh-Hant` and Flutter
+  `languageCode=zh`, `scriptCode=Hant`.
+- Keep `ar`, `fa`, `he`, `ps`, and `ur` marked `rtl`; all other current entries
+  are `ltr`.
+- Use `JPY` for `ja`; use `USD` for other locales until a product or pricing
+  task explicitly changes currency behavior.
+- Store locale fields may stay null until M8 validates platform support. Do not
+  guess Google Play or App Store locale identifiers when enabling release.
+- Update `scripts/i18n/fixtures/registry-core.json` when changing `en`, `ja`,
+  `zh`, `zhtw`, `no`, or any RTL registry assumptions.
+
+Flag transitions:
+
+| Goal | Required registry fields | Required evidence |
+| --- | --- | --- |
+| Render web route for QA | `web.enabled=true`, `web.indexed=false` | `make i18n-status` lists expected web files, and the route has content or an approved fallback plan. |
+| Index web route publicly | `web.enabled=true`, `web.indexed=true` | M3 SEO, canonical, `hreflang`, sitemap, and translated page-content checks pass. |
+| Include in generated app localization | `app.enabled=true` | M2 ARB/settings assets exist, placeholder checks pass, and app startup does not fall back unexpectedly. |
+| Show in app language settings | `app.enabled=true`, `app.selectable=true` | M2 language settings UI can display the native name and preserve saved `route_code`. |
+| Generate store metadata | `release.enabled=true`, platform store locale fields set where supported | M8 metadata generation validates required fields and secret/signing guardrails are in place. |
+
+Disabling rules:
+
+- Prefer turning off the narrowest flag instead of removing the entry.
+- To stop public discovery but keep QA routes, set `web.indexed=false` and keep
+  `web.enabled=true`.
+- To stop web rendering, set `web.enabled=false` and verify no sitemap,
+  language-switcher, or checkout return path still expects that route.
+- To remove a language from app selection, set `app.selectable=false` first; set
+  `app.enabled=false` only after saved user preferences and generated assets
+  have a fallback/migration path.
+- To stop store metadata generation, set `release.enabled=false` and keep store
+  locale fields as historical mapping data unless platform support was wrong.
+- Do not delete shipped route codes without a separate migration and rollback
+  plan covering URLs, saved app settings, checkout returns, and sidecars.
+
+Required validation after any registry edit:
+
+```sh
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status
+```
+
+Run `make i18n-status-test` when changing status-report expectations, file
+layout rules, or enabled-language behavior.
+
+### M2: Flutter App Migration
+
+- [x] `M2-T01` Introduce Flutter `gen-l10n`.
+  Output: `app/l10n.yaml`, `app_en.arb`, `app_ja.arb`, and generated delegates.
+  Done when: app builds with generated localization for English and Japanese.
+- [x] `M2-T02` Migrate existing Chinese app assets.
+  Output: `app_zh.arb`, `app_zh_Hant.arb`, or approved fallback sidecars.
+  Done when: existing Chinese product copy is not lost during ARB migration and
+  the `M0-T05` migration-safety checklist is satisfied.
+- [x] `M2-T03` Replace hand-written localization accessors.
+  Output: generated localization access in `HankoApp` and feature screens.
+  Done when: compatibility wrapper is removed or documented as temporary.
+- [x] `M2-T04` Move long settings content to JSON assets.
+  Output: registry-keyed JSON files under `app/assets/i18n/settings/`.
+  Done when: settings content can be translated without editing Dart source and
+  the `M0-T05` migration-safety checklist is satisfied.
+- [x] `M2-T05` Render language settings from the registry.
+  Output: selectable language rows using `native_name`, `english_name`, and
+  `app.selectable`.
+  Done when: English/Japanese rows are no longer hard-coded.
+- [x] `M2-T06` Persist and normalize preferred route code.
+  Output: saved `route_code` with fallback for old `en` and `ja` values.
+  Done when: restart keeps the selected language and invalid values recover.
+- [x] `M2-T07` Add RTL and overflow coverage.
+  Output: widget tests or screenshot checks for one RTL locale and long text.
+  Done when: settings, checkout, and order screens do not visibly overflow.
+
+#### M2-T01 Flutter gen-l10n Baseline
+
+Completed on 2026-06-18. Added Flutter `gen-l10n` configuration and generated
+English/Japanese delegates without replacing the existing hand-written
+`HankoLocalizations` API yet.
+
+Implementation notes:
+
+- `app/l10n.yaml` generates source files under
+  `app/lib/l10n/generated/`.
+- `app/lib/l10n/app_en.arb` and `app/lib/l10n/app_ja.arb` contain the initial
+  generated `appTitle` key.
+- `app/pubspec.yaml` sets `flutter.generate=true` and declares `intl` as a
+  direct dependency, matching Flutter's generated localization import.
+- `HankoLocalizations.localizationsDelegates` now includes
+  `GeneratedHankoLocalizations.delegate` before the existing hand-written
+  delegate.
+- M2-T03 still owns the larger replacement of `context.l10n` and hand-written
+  string accessors with generated localization access.
+
+Validation:
+
+```sh
+flutter gen-l10n
+flutter test test/generated_hanko_localizations_test.dart
+flutter analyze
+flutter build apk --debug
+```
+
+Full `flutter test` was also attempted, but existing widget tests failed on a
+pre-existing Flutter framework assertion about `ListTile` under `DecoratedBox`
+in checkout flows. The focused generated-localization test passed.
+
+#### M2-T02 Chinese App Asset Migration
+
+Completed on 2026-06-18. Added Simplified and Traditional Chinese ARB files for
+the app localization migration baseline and copied the existing Chinese-related
+style labels into generated-localization keys.
+
+Implementation notes:
+
+- `app/lib/l10n/app_zh.arb` provides the Simplified Chinese baseline for route
+  code `zh`.
+- `app/lib/l10n/app_zh_Hant.arb` provides the Traditional Chinese baseline for
+  route code `zhtw`.
+- `designKanjiStyleChinese` and `designKanjiStyleTaiwanese` now exist in the
+  generated ARB schema for `en`, `ja`, `zh`, and `zh_Hant`, preserving the
+  existing product-style labels before `M2-T03` replaces hand-written accessors.
+- `app/lib/l10n/app_zh_intentions.json` and
+  `app/lib/l10n/app_zh_Hant_intentions.json` record `appTitle` as a
+  `brand_name` holdout because `STONE SIGNATURE` intentionally remains English.
+
+M0-T05 preservation evidence:
+
+- M0 inventory rows touched: `hanko_localizations.dart` Chinese-related style
+  labels and generated ARB baseline files.
+- Source files removed or replaced: none.
+- Target files created or updated: `app_en.arb`, `app_ja.arb`, `app_zh.arb`,
+  `app_zh_Hant.arb`, generated localization output, and Chinese intention
+  sidecars.
+- English and Japanese preservation evidence: existing `Chinese style`,
+  `Taiwanese style`, `中国スタイル`, and `台湾スタイル` values were copied into
+  matching ARB keys.
+- Chinese `zh` and `zhtw` disposition: `zh` uses Simplified Chinese labels;
+  `zhtw` uses Traditional Chinese labels through Flutter locale `zh_Hant`.
+- Intentional holdout sidecars updated: Chinese ARB `appTitle` entries are
+  covered by `brand_name` sidecars.
+- Rollback path: remove the new Chinese ARB/sidecar files and regenerate
+  localization output; existing hand-written `HankoLocalizations` runtime
+  behavior remains unchanged until `M2-T03`.
+
+Validation:
+
+```sh
+flutter gen-l10n
+flutter test test/generated_hanko_localizations_test.dart
+flutter analyze
+make i18n-status-test
+make i18n-status
+```
+
+#### M2-T03 Generated Localization Access
+
+Completed on 2026-06-18. Replaced the hand-written short-string localization
+map with Flutter `gen-l10n` output while preserving the existing import path
+used by app screens.
+
+Implementation notes:
+
+- `app/lib/l10n/app_en.arb` and `app/lib/l10n/app_ja.arb` now contain the
+  migrated short UI strings from the previous `HankoLocalizations` map.
+- `settingsVersionMessage` is now a generated placeholder method instead of a
+  hand-written template replacement.
+- The inline design tip prefix and order lookup status labels were added to ARB
+  so they no longer branch on `locale.languageCode` in feature code.
+- `app/lib/app/localization/hanko_localizations.dart` no longer contains the
+  hand-written delegate, `_HankoStrings`, or `_localizedValues`. It now keeps a
+  temporary compatibility shim: `typedef HankoLocalizations =
+  GeneratedHankoLocalizations`, the existing `context.l10n` extension, and a
+  generated-locale-to-`Locale` extension for existing helper code.
+- `hankoSupportedLocales` remains `en` and `ja` only, matching the registry's
+  current app-enabled languages. The generated `zh` and `zh_Hant` files remain
+  available for migration coverage but are not exposed by app locale selection
+  in this task.
+- `zh` and `zh_Hant` currently use English fallback for strings not migrated as
+  Chinese assets in `M2-T02`; completing those translations belongs to the pilot
+  and freeze milestones.
+
+Validation:
+
+```sh
+flutter gen-l10n
+flutter test test/generated_hanko_localizations_test.dart
+flutter analyze
+flutter build apk --debug
+make i18n-status-test
+make i18n-status
+jq empty app/lib/l10n/app_en.arb app/lib/l10n/app_ja.arb \
+  app/lib/l10n/app_zh.arb app/lib/l10n/app_zh_Hant.arb
+```
+
+Full `flutter test` was also attempted. It still fails on the pre-existing
+Flutter `ListTile` under `DecoratedBox` assertion in checkout widget tests,
+matching the earlier M2-T01 validation note.
+
+#### M2-T04 Settings JSON Assets
+
+Completed on 2026-06-18. Moved the long settings content out of Dart constants
+and into JSON assets so future translation work can update structured content
+files without editing Flutter source.
+
+Implementation notes:
+
+- `app/assets/i18n/settings/en.json` and
+  `app/assets/i18n/settings/ja.json` now hold the About, How it works, FAQ,
+  Privacy, Terms, and Contact long-form settings copy.
+- `app/assets/i18n/settings/en_intentions.json` and
+  `app/assets/i18n/settings/ja_intentions.json` record intentional holdouts
+  for brand names, legal entity names, URLs, email addresses, and payment
+  provider names.
+- `app/lib/features/settings/presentation/settings_content.dart` now parses
+  settings content from JSON assets and keeps typed content models for the UI.
+- `app/lib/features/settings/presentation/settings_home_screen.dart` loads
+  long-form settings content asynchronously with `FutureBuilder` while keeping
+  language and version screens synchronous.
+- `app/pubspec.yaml` registers `assets/i18n/settings/` as a Flutter asset
+  directory.
+- `make i18n-status` now reports `app: 4/4 present`, with no missing app
+  asset groups.
+
+M0-T05 preservation evidence:
+
+- M0 inventory rows touched: `settings_content.dart` long-form settings copy
+  migration sources.
+- Source files removed or replaced: the inline Dart constants in
+  `settings_content.dart` were removed and replaced by JSON-backed loading.
+- Target files created or updated: English/Japanese settings JSON files,
+  English/Japanese intention sidecars, the settings content loader, the
+  settings home screen loader, the Flutter asset registration, and focused
+  settings content tests.
+- English and Japanese preservation evidence: JSON assets were generated from
+  the existing Dart constants, then verified by focused parser/asset tests and
+  settings navigation widget tests.
+- Chinese `zh` and `zhtw` disposition: no standalone Chinese settings source
+  existed for this screen. Existing Chinese references were topical
+  English/Japanese content, such as the partner workshop in China, so Chinese
+  settings JSON files are deferred until pilot translation.
+- Intentional holdout sidecars updated: `STONE SIGNATURE`, `Finite Field,
+  K.K.`, finitefield.org URLs, `dev@finitefield.org`, and `Stripe Checkout`
+  are recorded with the M0-T05 reason codes.
+- Rollback path: restore the previous Dart constants in
+  `settings_content.dart`, remove the settings asset directory and
+  `pubspec.yaml` asset entry, then remove the focused settings content test.
+
+Validation:
+
+```sh
+jq empty app/assets/i18n/settings/en.json \
+  app/assets/i18n/settings/ja.json \
+  app/assets/i18n/settings/en_intentions.json \
+  app/assets/i18n/settings/ja_intentions.json
+flutter test test/settings_content_test.dart
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 settings rows navigate to destination screens"
+flutter test test/widget_test.dart \
+  --plain-name "localizes non-tab feature entry screens"
+flutter analyze
+flutter build apk --debug
+make i18n-status-test
+make i18n-status
+```
+
+Full `flutter test` was also attempted. It still fails on the pre-existing
+Flutter `ListTile` under `DecoratedBox` assertion in checkout widget tests. In
+that full-suite run, the settings navigation test also timed out after the
+checkout assertion failures, while the same settings navigation test passed
+when run by itself.
+
+#### M2-T05 Registry-Driven Language Settings
+
+Completed on 2026-06-18. Replaced the hard-coded English/Japanese language
+selection rows with rows loaded from the canonical language registry.
+
+Implementation notes:
+
+- `app/lib/app/localization/language_registry.dart` reads
+  `config/languages.json` as a Flutter asset and parses the subset needed by
+  the app language settings UI.
+- The settings language screen now renders only entries where
+  `app.enabled=true` and `app.selectable=true`.
+- Each row uses `native_name` as the primary label and shows `english_name` as
+  supporting text when it differs from the native name.
+- Locale selection is derived from the registry's `flutter.languageCode`,
+  `flutter.scriptCode`, and `flutter.countryCode` fields, so future selectable
+  script-sensitive locales can be represented without adding hard-coded rows.
+- `app/pubspec.yaml` registers `../config/languages.json` as a Flutter asset
+  so the app consumes the checked-in registry instead of a duplicated app-only
+  locale list.
+- `M2-T06` still owns changing persistence from the current `Locale` value to a
+  normalized saved `route_code`.
+
+Validation:
+
+```sh
+jq empty config/languages.json
+flutter test test/language_registry_test.dart
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 switches the app language from settings"
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 settings rows navigate to destination screens"
+flutter test test/widget_test.dart \
+  --plain-name "localizes non-tab feature entry screens"
+flutter analyze
+flutter build apk --debug
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+```
+
+Full `flutter test` was also attempted. It still fails on the pre-existing
+Flutter `ListTile` under `DecoratedBox` assertion in checkout widget tests. In
+that full-suite run, the settings navigation test also timed out after the
+checkout assertion failures, while the same settings navigation test passed
+when run by itself.
+
+#### M2-T06 Preferred Route Code Persistence
+
+Completed on 2026-06-18. Updated app language persistence to store the registry
+`route_code` instead of deriving storage directly from a Flutter
+`Locale.languageCode`.
+
+Implementation notes:
+
+- `AppLaunchStore` now writes the preferred language to `preferred_route_code`.
+- `AppLaunchStore.preferredRouteCode()` reads `preferred_route_code` first and
+  falls back to the legacy `preferred_language_code` key, preserving existing
+  `en` and `ja` saved values.
+- Preferred route code writes are trimmed and lowercased before storage.
+- `HankoApp` now maps saved route codes to enabled registry Flutter locales
+  through `AppLanguageRegistry`.
+- `HankoApp` maps selected Flutter locales back to enabled registry
+  `route_code` values before saving.
+- Unsupported or no-longer-enabled saved values resolve to no preferred locale,
+  allowing the app to recover to the normal locale fallback behavior.
+- `AppLaunchStore` accepts injectable database factory and path resolver values
+  so route-code migration behavior is covered without touching device storage.
+
+Validation:
+
+```sh
+flutter test test/app_launch_store_test.dart test/language_registry_test.dart
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 switches the app language from settings"
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 restores saved locale and recovers invalid values"
+flutter test test/widget_test.dart \
+  --plain-name "COM-004 settings rows navigate to destination screens"
+flutter analyze
+flutter build apk --debug
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+```
+
+Full `flutter test` was also attempted. It still fails on the pre-existing
+Flutter `ListTile` under `DecoratedBox` assertion in checkout widget tests. In
+that full-suite run, the settings navigation test also timed out after the
+checkout assertion failures, while the same settings navigation test passed
+when run by itself.
+
+#### M2-T07 RTL and Overflow Coverage
+
+Completed on 2026-06-18. Added focused RTL and large-text probes for the app
+screens that are most likely to regress during the route-wide language rollout.
+
+Implementation notes:
+
+- Added `app/test/rtl_overflow_test.dart` to render settings, checkout input,
+  order lookup, and order review screens with RTL direction, 320 px width, and
+  1.3x text scaling.
+- The RTL probe captures Flutter framework errors, including `RenderFlex` and
+  overflow exceptions, so visible layout regressions are caught as tests.
+- Added `text_direction` parsing to `AppLanguageRegistry`, with an assertion
+  that the checked-in `ar` registry entry parses as `TextDirection.rtl`.
+- Fixed the order review status pill found by the new probe by using
+  `AlignmentDirectional.centerStart` and a flexible two-line ellipsized label.
+
+Validation:
+
+```sh
+flutter test test/language_registry_test.dart test/rtl_overflow_test.dart
+flutter analyze
+flutter build apk --debug
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+Full `flutter test` was also attempted. It still fails on the pre-existing
+Flutter `ListTile` under `DecoratedBox` assertion in checkout widget tests. In
+that full-suite run, the settings navigation test also timed out after the
+checkout assertion failures, while the same settings navigation test passed
+when run by itself.
+
+### M3: Web Copy and Route Migration
+
+- [x] `M3-T01` Add a web registry loader.
+  Output: web-side language model for route parsing, links, `hreflang`, and
+  sitemap generation.
+  Done when: `SUPPORTED_LOCALES` is no longer the source of truth.
+- [x] `M3-T02` Create typed web copy structs.
+  Output: JSON-backed structs for common layout, SEO, top, design, about, blog,
+  payment, terms, and commercial transaction pages.
+  Done when: templates render data fields instead of locale conditionals.
+- [x] `M3-T03` Extract existing English, Japanese, and Chinese web copy.
+  Output: localized JSON files under `web/content/i18n/`.
+  Done when: current visible copy is preserved after extraction and the
+  `M0-T05` migration-safety checklist is satisfied.
+- [x] `M3-T04` Replace language switcher fields.
+  Output: `LanguageLink` list replacing `lang_ja_url` and `lang_en_url`.
+  Done when: the switcher can render more than two languages.
+- [x] `M3-T05` Generate `hreflang`, canonical URLs, and sitemap entries.
+  Output: registry-driven SEO output using `web.indexed`.
+  Done when: non-indexed QA languages render but do not enter the sitemap.
+- [x] `M3-T06` Migrate blog content layout.
+  Output: `web/content/blog/<slug>/<lang>.html` plus language-keyed metadata.
+  Done when: English and Japanese blog pages retain their current URLs and the
+  `M0-T05` migration-safety checklist is satisfied.
+- [x] `M3-T07` Add web routing tests.
+  Output: tests for `/about`, `/ja/about`, `/zhtw/...`, `/en/...`, and unknown
+  locale prefixes.
+  Done when: unknown locale prefixes return 404 instead of English content.
+
+#### M3-T01 Web Registry Loader
+
+Completed on 2026-06-18. Added a web-side language registry model backed by the
+checked-in 68-language `config/languages.json` file.
+
+Implementation notes:
+
+- Removed the `SUPPORTED_LOCALES` constant from `web/src/main.rs`.
+- Added `WebLanguageRegistry`, `WebLanguage`, and `LanguageLink` helpers for
+  web route-code parsing, path-prefix parsing, localized URL generation,
+  link generation, and indexed `hreflang`/sitemap generation.
+- Kept the current public URL behavior: English remains unprefixed, Japanese
+  remains under `/ja/`, and disabled route codes such as `zhtw` still do not
+  become routable web locales.
+- Preserved the legacy `jp` alias for Japanese route parsing.
+- Switched sitemap alternate generation from hard-coded `en`/`ja` strings to
+  registry languages where `web.indexed=true`.
+- Added tests that load the checked-in 68-language registry, verify the enabled
+  web language set, and confirm non-indexed enabled languages can be linkable
+  without entering indexed `hreflang` output.
+
+Validation:
+
+```sh
+cargo test --manifest-path web/Cargo.toml
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T02 Typed Web Copy Structs
+
+Completed on 2026-06-18. Added a JSON-backed web copy document and moved
+template-visible English/Japanese copy out of Askama locale conditionals.
+
+Implementation notes:
+
+- Added `web/content/i18n/web-copy.json` as the interim JSON source for common
+  layout, SEO, top, design, about, blog, payment, terms, commercial transaction,
+  kanji suggestion, and purchase-result copy.
+- Added typed Rust loader structs for the web copy document and localized
+  sections.
+- Added template copy helpers so Askama templates render copy through
+  `self.copy_text(...)` and `self.copy_html(...)` instead of
+  `selected_locale == "ja"` content branches.
+- Moved page title and meta description copy for top, design, about, blog
+  index, payment success, payment failure, terms, and commercial transaction
+  pages to JSON-backed copy.
+- Removed `selected_locale == ...` branches from `web/templates/*.html`.
+  Language-switcher active state now uses a helper method instead of inline
+  template locale comparisons.
+- Left runtime validation and API error messages in Rust for later API/checkout
+  localization tasks; those are not template-visible page copy.
+
+Validation:
+
+```sh
+cargo test --manifest-path web/Cargo.toml
+cargo fmt --manifest-path web/Cargo.toml -- --check
+jq empty config/languages.json web/content/i18n/web-copy.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+! rg -n 'selected_locale == "ja"|selected_locale == "en"' web/templates
+node - <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const copy = JSON.parse(fs.readFileSync('web/content/i18n/web-copy.json', 'utf8'));
+const sections = {
+  'top.html': 'top',
+  'about.html': 'about',
+  'index.html': 'design',
+  'kanji_suggestions.html': 'kanji_suggestions',
+  'purchase_result.html': 'purchase_result',
+  'payment_success.html': 'payment_success',
+  'payment_failure.html': 'payment_failure',
+  'commercial_transactions.html': 'commercial_transactions',
+  'terms.html': 'terms',
+  'blog_index.html': 'blog_index',
+  'blog_article.html': 'blog_article',
+};
+for (const [file, section] of Object.entries(sections)) {
+  const source = fs.readFileSync(path.join('web/templates', file), 'utf8');
+  for (const match of source.matchAll(/self\.copy_(?:text|html)\("([^"]+)"\)/g)) {
+    for (const lang of ['en', 'ja']) {
+      if (!copy[section]?.[lang]?.[match[1]]) {
+        throw new Error(`${file}:${match[1]}:${lang}`);
+      }
+    }
+  }
+}
+NODE
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T03 Web Copy Extraction
+
+Completed on 2026-06-18. Replaced the interim single web copy document with
+localized JSON files under `web/content/i18n/<section>/<locale>.json`.
+
+Implementation notes:
+
+- Split `web/content/i18n/web-copy.json` into per-section files for `en`, `ja`,
+  and `zh`.
+- Added runtime loading for the split files while preserving the typed
+  `WebCopyDocument` surface used by templates.
+- Added `zh` copy files with the same key shape as English and Japanese. No
+  standalone Chinese web source existed before this migration, so `zh` is a
+  baseline extraction file for later translation and remains disabled for web
+  routing until a later rollout task.
+- Kept current visible English and Japanese page copy, SEO titles, and SEO
+  descriptions unchanged after extraction.
+- Added key-parity checks for every loaded web copy section so translation work
+  can proceed by editing JSON values without adding Rust fields.
+- Removed the obsolete `web/content/i18n/web-copy.json` source.
+
+M0-T05 preservation evidence:
+
+- Inventory rows touched: web template-visible page copy, SEO metadata, payment
+  result copy, terms/commercial-transaction copy, kanji suggestion fragments,
+  and purchase-result fragments.
+- English and Japanese disposition: existing strings were copied into matching
+  `en.json` and `ja.json` files and remain the only enabled web routes.
+- Chinese disposition: no standalone Chinese web locale source existed; `zh`
+  files preserve key parity for the future Simplified Chinese translation pass
+  without changing current routing.
+- Rollback path: restore `web/content/i18n/web-copy.json`, revert the
+  `WebCopyDocument::load` split-file loader, and remove the section
+  directories.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+jq empty config/languages.json web/content/i18n/*/*.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+! rg -n 'selected_locale == "ja"|selected_locale == "en"' web/templates
+node - <<'NODE'
+const fs = require('fs');
+const sections = fs.readdirSync('web/content/i18n')
+  .filter((name) => fs.statSync(`web/content/i18n/${name}`).isDirectory())
+  .sort();
+for (const section of sections) {
+  const base = Object.keys(JSON.parse(fs.readFileSync(`web/content/i18n/${section}/en.json`, 'utf8'))).sort();
+  for (const lang of ['ja', 'zh']) {
+    const keys = Object.keys(JSON.parse(fs.readFileSync(`web/content/i18n/${section}/${lang}.json`, 'utf8'))).sort();
+    if (JSON.stringify(keys) !== JSON.stringify(base)) {
+      throw new Error(`${section}/${lang} keys do not match en`);
+    }
+  }
+}
+NODE
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T04 Registry-Backed Language Switcher
+
+Completed on 2026-06-18. Replaced the fixed `lang_ja_url` and `lang_en_url`
+template fields with a registry-backed `LanguageLink` list.
+
+Implementation notes:
+
+- Updated all public web page templates with language switchers to loop over
+  `language_links`.
+- Reused `LanguageLink` for both the header language menu and the existing
+  alternate-language head links.
+- Added `language_links_with_urls` so page-specific URL builders can keep
+  existing behavior for design filters, blog slugs, and payment-result query
+  parameters.
+- Preserved current English and Japanese URLs while making the switcher capable
+  of rendering more than two enabled web languages.
+- Added a rendering test that injects an `en` / `fr` / `ja` registry fixture
+  and verifies the switcher renders all three language options with the current
+  language marked active.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+rg -n 'lang_ja_url|lang_en_url' web/src/main.rs web/templates
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T05 Indexed SEO Output
+
+Completed on 2026-06-18. Split UI language-switcher links from SEO alternate
+links and made canonical URLs follow the registry's indexed language state.
+
+Implementation notes:
+
+- Added `seo_language_links` to page templates so `<link rel="alternate">`
+  output is generated only from `web.indexed=true` languages.
+- Kept `language_links` as the UI switcher source, so non-indexed enabled
+  languages can still render for QA without becoming indexable alternates.
+- Added `x_default_url` separately from `canonical_url`, allowing localized
+  indexed pages such as `/ja/about` to use a Japanese canonical while
+  `x-default` continues to point to English.
+- Added canonical helpers that use the selected locale when it is indexed and
+  fallback to the default language when an enabled QA locale is not indexed.
+- Made sitemap entry generation testable with an injected registry and verified
+  that a non-indexed enabled `fr` fixture is excluded from sitemap output.
+- Preserved existing English and Japanese sitemap entries for static pages,
+  blog index, and blog articles.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+rg -n 'for language_link in seo_language_links|x_default_url' web/templates
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T06 Blog Content Layout Migration
+
+Completed on 2026-06-18. Migrated blog articles from front matter HTML files
+under `web/blog/articles/` to the language-keyed content layout under
+`web/content/blog/<slug>/`.
+
+Implementation notes:
+
+- Created `metadata.json`, `en.html`, and `ja.html` for each of the 15 current
+  blog article slugs.
+- Moved language-specific title, excerpt, meta description, date display, and
+  image alt text into `metadata.json.locales.en` and `metadata.json.locales.ja`.
+- Kept shared slug, published date, last modified date, and image URL at the
+  metadata root.
+- Updated the web blog loader to read `web/content/blog/<slug>/metadata.json`
+  and article bodies from `en.html` / `ja.html`.
+- Removed the old front matter parser and the obsolete
+  `web/blog/articles/*.html` / `*.ja.html` source files.
+- Preserved current public URLs such as `/blog/<slug>` and `/ja/blog/<slug>`.
+
+M0-T05 preservation evidence:
+
+- English and Japanese blog metadata were migrated from the old front matter
+  fields without value changes.
+- English and Japanese article bodies were split from the old files without
+  content changes.
+- Existing blog URLs, canonical URLs, `hreflang`, sitemap entries, and journal
+  card behavior are covered by the existing web tests.
+- Chinese disposition: no standalone Chinese blog article source existed before
+  this task. Future Chinese blog content can be added as additional locale HTML
+  files and metadata locale objects under the same slug directories.
+- Rollback path: restore `web/blog/articles/*.html` and `*.ja.html`, revert the
+  blog loader to front matter parsing, and remove `web/content/blog/`.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+jq empty web/content/blog/*/metadata.json
+node - <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = 'web/content/blog';
+const slugs = fs.readdirSync(root).filter((name) => fs.statSync(path.join(root, name)).isDirectory());
+if (slugs.length !== 15) throw new Error(`expected 15 blog slugs, got ${slugs.length}`);
+for (const slug of slugs) {
+  const dir = path.join(root, slug);
+  for (const file of ['metadata.json', 'en.html', 'ja.html']) {
+    if (!fs.statSync(path.join(dir, file)).isFile()) throw new Error(`${slug}/${file} missing`);
+  }
+  const metadata = JSON.parse(fs.readFileSync(path.join(dir, 'metadata.json'), 'utf8'));
+  if (metadata.slug !== slug) throw new Error(`${slug} metadata slug mismatch`);
+  for (const locale of ['en', 'ja']) {
+    if (!metadata.locales?.[locale]?.title) throw new Error(`${slug}/${locale} title missing`);
+  }
+}
+NODE
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M3-T07 Web Routing Tests
+
+Completed on 2026-06-18. Added router-level web tests for the public localized
+route behavior defined in the URL rules.
+
+Implementation notes:
+
+- Extracted the Axum router construction into `build_router(state)` so the
+  production server and tests use the same route table.
+- Added an HTTP-level test for `/about`, `/ja/about`, `/en/about`,
+  `/zhtw/about`, `/zhtw/blog/what-is-a-hanko`, and `/xx/about`.
+- Verified `/about` renders English content with the unprefixed English
+  canonical URL.
+- Verified `/ja/about` renders Japanese content with the Japanese canonical URL.
+- Preserved the current `/en/about` compatibility behavior while asserting the
+  canonical URL remains unprefixed `/about`.
+- Verified disabled or unknown locale prefixes return `404 Not Found` and do
+  not fall back to English page content.
+- Added `tower` as a web dev-dependency for `ServiceExt::oneshot` in routing
+  tests.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml web_router_resolves_supported_and_unknown_locale_prefixes
+cargo test --manifest-path web/Cargo.toml
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+### M4: API, Catalog, and Checkout Localization
+
+- [x] `M4-T01` Generate public config from the registry.
+  Output: `/v1/config/public` locales, defaults, and currency maps are
+  registry-backed.
+  Done when: seed and runtime config agree on supported locales.
+- [x] `M4-T02` Move seed catalog copy to data files or map-based structures.
+  Output: materials, stone listings, countries, and facet tags no longer need
+  per-language Rust struct fields.
+  Done when: adding `fr` does not require a new Rust field and the `M0-T05`
+  migration-safety checklist is satisfied.
+- [x] `M4-T03` Preserve unknown locale keys in API writes.
+  Output: merge behavior for localized Firestore maps.
+  Done when: existing `fr`, `zh`, or `zhtw` keys survive updates to `ja`.
+- [x] `M4-T04` Localize checkout product labels.
+  Output: data-driven checkout title and description templates.
+  Done when: checkout labels support at least `en`, `ja`, `zh`, and `zhtw` and
+  the `M0-T05` migration-safety checklist is satisfied.
+- [x] `M4-T05` Normalize checkout return locale handling.
+  Output: consistent handling for `lang`, `locale`, and preferred locale.
+  Done when: Stripe return URLs preserve the selected route code and the
+  `M0-T05` migration-safety checklist is satisfied.
+- [x] `M4-T06` Define Gemini `reason_language` mapping.
+  Output: registry-backed mapping from route code to prompt language.
+  Done when: unsupported prompt languages fallback with visible diagnostics.
+- [x] `M4-T07` Add API tests.
+  Output: tests for supported locale, missing value fallback, unsupported
+  locale rejection, and checkout language persistence.
+  Done when: API locale behavior can be changed safely.
+
+#### M4-T01 Registry-Backed Public Config
+
+Completed on 2026-06-18. Generated API public config from
+`config/languages.json` for both runtime fallback and Firestore seed output.
+
+Implementation notes:
+
+- Added `api/src/language_registry.rs` as the API-side reader for the checked-in
+  language registry.
+- Public config generation now uses registry entries with `app.enabled=true`.
+- Current generated public config remains `en` and `ja`, with default locale
+  `ja`, default currency `USD`, and currency map `en=USD`, `ja=JPY`.
+- `default_public_config()` now comes from the registry instead of a hand-coded
+  locale list.
+- `normalize_public_config()` now fills missing supported locales and missing
+  locale currency values from the registry-backed defaults.
+- `api/src/bin/seed_catalog.rs::app_config_public_document` now writes the same
+  registry-backed public config to Firestore.
+- Added runtime and seed tests proving the checked-in registry and seeded
+  `app_config/public` agree.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M4-T02 Catalog Seed Copy Data Files
+
+Completed on 2026-06-18. Moved catalog seed copy from per-language Rust struct
+fields to JSON data files under `api/content/i18n/catalog/`.
+
+Implementation notes:
+
+- Added `api/content/i18n/catalog/materials.json` for material labels and
+  descriptions.
+- Added `api/content/i18n/catalog/stone_listings.json` for listing title,
+  description, story, and photo alt text.
+- Added `api/content/i18n/catalog/facet_tags.json` for facet tag labels.
+- Added `api/content/i18n/catalog/countries.json` for shipping country labels.
+- Kept locale-neutral seed fields in Rust, including keys, listing codes,
+  sizes, facets, aliases, Storage paths, prices, and sort order.
+- Updated `api/src/bin/seed_catalog.rs` to load catalog copy via typed JSON
+  structs and write the same Firestore `*_i18n` maps as before.
+- Removed `label_ja`, `label_en`, `description_ja`, `description_en`,
+  `title_ja`, `title_en`, `story_ja`, and `story_en` fields from seed structs.
+- Added seed coverage tests so every Rust seed record must have matching `en`
+  and `ja` copy in the JSON files.
+
+M0-T05 preservation evidence:
+
+- English and Japanese material labels/descriptions, listing text, facet labels,
+  country labels, and listing photo alt text were moved without wording changes.
+- Locale-neutral catalog fields stayed in Rust and were not translated.
+- Chinese disposition: no standalone Chinese catalog copy existed before this
+  task. Future `zh` or `zhtw` values can be added as new JSON map keys without
+  adding Rust struct fields.
+- Rollback path: restore per-language fields to the seed structs and remove the
+  JSON include/load path.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml --bin seed_catalog
+cargo test --manifest-path api/Cargo.toml
+jq empty api/content/i18n/catalog/*.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M4-T03 Localized Map Preservation
+
+Completed on 2026-06-18. Added merge behavior for localized Firestore maps
+when catalog seed documents update existing Firestore records.
+
+Implementation notes:
+
+- Updated `api/src/bin/seed_catalog.rs::upsert_named_document` so existing
+  documents are read before patching and localized maps are merged into the
+  outgoing patch.
+- Preserved unknown locale keys in top-level `*_i18n` maps, such as
+  `label_i18n`, `description_i18n`, `title_i18n`, and `story_i18n`.
+- Preserved unknown locale keys in nested `photos[].alt_i18n` maps.
+- Kept seed-owned `en` and `ja` values authoritative, so edited English or
+  Japanese copy still updates on reseed while `fr`, `zh`, `zhtw`, or future
+  locale keys survive.
+- Added a seed test proving `fr`, `zh`, and `zhtw` keys survive a patch that
+  updates `en` and `ja`.
+
+M0-T05 preservation evidence:
+
+- English and Japanese seed output remains generated from the M4-T02 catalog
+  JSON files.
+- Locale-neutral catalog fields remain unchanged.
+- Chinese disposition: existing `zh` and `zhtw` Firestore values are preserved
+  during reseed even though no standalone Chinese catalog source exists yet.
+- Rollback path: remove the merge helper and return seed patching to direct
+  document replacement for localized maps.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml --bin seed_catalog
+cargo test --manifest-path api/Cargo.toml
+jq empty config/languages.json api/content/i18n/catalog/*.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M4-T04 Checkout Product Label Copy
+
+Completed on 2026-06-18. Moved Stripe Checkout product labels from hard-coded
+Rust branches to data-driven checkout copy files.
+
+Implementation notes:
+
+- Added `api/content/i18n/checkout/en.json` for the English product name,
+  product description, and shape labels.
+- Added `api/content/i18n/checkout/ja.json` for the Japanese product name,
+  product description, and shape labels.
+- Added `api/content/i18n/checkout/zh.json` and
+  `api/content/i18n/checkout/zhtw.json` so Checkout labels are ready for the
+  existing simplified and traditional Chinese route codes.
+- Updated `api/src/main.rs::build_checkout_product_name` to render the selected
+  template with `{listing_label}` and `{shape_label}` placeholders.
+- Updated Stripe Checkout form generation to send the selected
+  `product_data[description]` value from the same checkout copy file.
+- Added Checkout locale normalization for `ja*`, `zh`, `zh-CN`, `zh-Hans`,
+  `zh-Hant`, `zh-TW`, and `zhtw`, with English fallback for unsupported
+  locales.
+- Added tests for English, Japanese, simplified Chinese, traditional Chinese,
+  and required Checkout copy placeholders.
+
+M0-T05 preservation evidence:
+
+- Existing English output remains `Stone seal ({listing_label}; {shape_label})`.
+- Existing Japanese output remains `宝石印鑑 ({listing_label}、{shape_label})`.
+- Existing `round` and `square` shape labels for English and Japanese are
+  preserved.
+- Product descriptions are new data-driven copy; no previous description field
+  existed in the Stripe Checkout form.
+- Chinese disposition: simplified and traditional Chinese Checkout labels were
+  added as new JSON copy because no prior Chinese Checkout copy existed.
+- Rollback path: restore the previous hard-coded `build_checkout_product_name`
+  locale branch and remove `api/content/i18n/checkout/*.json`.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml checkout -- --nocapture
+cargo test --manifest-path api/Cargo.toml
+jq empty api/content/i18n/checkout/*.json config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M4-T05 Checkout Return Locale Normalization
+
+Completed on 2026-06-18. Normalized Checkout locale values to registry route
+codes before order persistence, Stripe return URL generation, and app return
+parsing.
+
+Implementation notes:
+
+- Added API-side registry lookup from route code and BCP-47-like locale tags to
+  canonical route codes.
+- Normalized `CreateOrderRequest.locale` and `contact.preferred_locale` before
+  storing order input, so values such as `zh-Hant` and `zh_TW` become `zhtw`.
+- Normalized public config and API catalog/listing `locale` query handling so
+  BCP-47 variants map to route codes without accepting unknown locales.
+- Updated Stripe Checkout success and cancel URLs to emit the normalized route
+  code in `lang`.
+- Added app-side registry lookup from `Locale` to route code for Checkout order
+  creation and manual Checkout resume handling.
+- Kept Checkout return parsing compatible with both `lang` and `locale`, and
+  normalized common BCP-47 variants such as `zh_Hant` and `zh-TW` to `zhtw`.
+- Added Rust and Flutter tests for route-code normalization, Checkout return
+  URLs, and app return parsing.
+
+M0-T05 preservation evidence:
+
+- Existing `en` and `ja` Checkout return URLs are unchanged.
+- Existing app return parsing still accepts `lang`.
+- Existing compatibility with `locale` query values is preserved and now
+  normalized to route codes.
+- Unknown API `locale` query values still return `invalid_locale` rather than
+  silently falling back.
+- Chinese disposition: Traditional Chinese route handling now preserves `zhtw`
+  instead of collapsing to `zh` when BCP-47 or Flutter locale forms are used.
+- Rollback path: remove the registry locale normalization helpers and return
+  API/app Checkout locale handling to raw lowercased language codes.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+dart format --set-exit-if-changed app/lib/app/app.dart app/lib/app/localization/language_registry.dart app/lib/features/order/domain/checkout_return.dart app/test/checkout_return_test.dart app/test/language_registry_test.dart
+cargo test --manifest-path api/Cargo.toml locale -- --nocapture
+cargo test --manifest-path api/Cargo.toml checkout -- --nocapture
+flutter test test/checkout_return_test.dart test/language_registry_test.dart
+cargo test --manifest-path api/Cargo.toml
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+Full Flutter suite note:
+
+- `flutter test` was attempted on 2026-06-18 and is blocked by existing
+  `ListTile background color or ink splashes may be invisible` assertions in
+  widget tests that exercise pre-existing decorated selection rows. The
+  M4-T05-specific Flutter tests above pass.
+
+#### M4-T06 Gemini Reason Language Mapping
+
+Completed on 2026-06-18. Added registry-backed `reason_language` resolution for
+Gemini Kanji candidate prompts and surfaced fallback diagnostics in API
+responses.
+
+Implementation notes:
+
+- Added API-side `reason_language_for_locale` resolution on top of
+  `config/languages.json` route-code and BCP-47 lookup.
+- Kept Gemini prompt languages limited to `en` and `ja` until prompt quality is
+  explicitly approved for additional languages.
+- Mapped supported route and BCP-47 values such as `en`, `en-US`, `ja`, and
+  `ja-JP` to their prompt languages.
+- Mapped known but unsupported prompt locales such as `zh`, `zhtw`,
+  `zh-Hans`, and `zh-Hant` to `en` with
+  `unsupported_prompt_language` fallback diagnostics.
+- Mapped unknown locale-like values to `en` with `unknown_locale` fallback
+  diagnostics instead of sending unsupported prompt language strings to Gemini.
+- Added API response diagnostics:
+  `reason_language_requested`, `reason_language_route_code`, and
+  `reason_language_fallback`.
+- Updated app-side reason-language selection to send route codes derived from
+  the Flutter locale, preserving `zhtw` for Traditional Chinese forms.
+- Added Rust and Flutter tests for supported prompt-language mapping,
+  unsupported fallback, unknown fallback, and Traditional Chinese route-code
+  preservation.
+
+M0-T05 preservation evidence:
+
+- Existing English requests still use `reason_language=en`.
+- Existing Japanese requests still use `reason_language=ja` and produce
+  Japanese prompt instructions.
+- Existing missing `reason_language` behavior remains English default.
+- Existing legacy aliases `english` and `japanese` remain accepted.
+- Chinese disposition: `zh` and `zhtw` are now preserved as requested route
+  context, but Gemini prompt copy falls back to English until Chinese prompt
+  quality is approved.
+- Rollback path: remove the reason-language registry resolver and response
+  diagnostics, then restore raw `reason_language` validation and the previous
+  app `ja` / `en` branch.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+dart format --set-exit-if-changed app/lib/app/app.dart app/lib/app/localization/language_registry.dart app/lib/features/design/presentation/design_home_screen.dart app/test/language_registry_test.dart
+cargo test --manifest-path api/Cargo.toml reason_language -- --nocapture
+cargo test --manifest-path api/Cargo.toml kanji -- --nocapture
+flutter test test/language_registry_test.dart
+cargo test --manifest-path api/Cargo.toml
+flutter test test/api_dto_test.dart test/language_registry_test.dart
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+#### M4-T07 API Locale Regression Tests
+
+Completed on 2026-06-18. Added focused API regression tests for locale behavior
+that must remain stable while the language registry expands.
+
+Implementation notes:
+
+- Added explicit supported-locale coverage for route codes and BCP-47 aliases,
+  including Traditional Chinese normalization to `zhtw`.
+- Added explicit unsupported-locale rejection coverage for route resolution and
+  create-order request validation.
+- Added localized-value fallback coverage for missing requested values and empty
+  localized strings.
+- Added checkout return URL coverage to verify that the selected language is
+  persisted as the normalized route code.
+
+M0-T05 preservation evidence:
+
+- Existing English and Japanese locale paths remain covered by existing tests.
+- Existing BCP-47 normalization behavior is preserved for create-order requests
+  and checkout return URLs.
+- Unsupported locale-like values continue to fail validation instead of being
+  silently coerced.
+- Rollback path: remove only the `m4_t07_*` regression tests if they need to be
+  replaced by higher-level HTTP handler tests.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml m4_t07 -- --nocapture
+cargo test --manifest-path api/Cargo.toml locale -- --nocapture
+cargo test --manifest-path api/Cargo.toml checkout -- --nocapture
+cargo test --manifest-path api/Cargo.toml
+jq empty config/languages.json
+make i18n-registry-test
+make i18n-status-test
+make i18n-status
+git diff --check
+git diff --cached --check
+```
+
+### M5: Admin Data Preservation
+
+- [x] `M5-T01` Audit admin localized form writes.
+  Output: list of every form that reads or writes a `*_i18n` map.
+  Done when: high-risk overwrite paths are identified.
+- [x] `M5-T02` Add merge helpers for localized maps.
+  Output: shared save behavior that edits selected keys without replacing the
+  whole map.
+  Done when: unknown locale keys are preserved by default and the `M0-T05`
+  migration-safety checklist is satisfied.
+- [x] `M5-T03` Add preservation tests.
+  Output: tests covering materials, stone listings, countries, and facet tags.
+  Done when: editing Japanese values preserves `fr`, `zh`, and `zhtw` values
+  and the `M0-T05` migration-safety checklist is satisfied.
+- [x] `M5-T04` Add optional compact localized-values editor.
+  Output: collapsed registry-driven editor if manual admin editing is needed.
+  Done when: the admin does not render 68 always-visible inputs.
+- [x] `M5-T05` Verify admin policy.
+  Output: review note confirming no polling, SSE, or WebSocket behavior was
+  added.
+  Done when: admin remains aligned with repository policy.
+
+#### M5-T01 Admin Localized Form Write Audit
+
+Completed on 2026-06-18. Audited admin forms, views, server mutations, and
+Firestore persistence paths that read or write localized maps.
+
+Audited source areas:
+
+- `admin/src/main.rs` data models, view models, form handlers, mutation methods,
+  Firestore serializers, and mock fixtures.
+- `admin/templates/*` create, edit, detail, and list templates that expose
+  localized fields.
+- Firestore write helpers that patch full localized map fields with
+  `PatchDocumentOptions.update_mask_field_paths`.
+
+Localized map inventory:
+
+| Admin area | Form or view | Reads | Writes | Current write behavior | Risk |
+| --- | --- | --- | --- | --- | --- |
+| Materials | `material_create.html`, `handle_material_create`, `create_material` | none for new form | `label_i18n`, `description_i18n` | Creates maps with only `ja` and `en` keys. | Low for new records; expected to start with editable admin languages only. |
+| Materials | `materials_list.html`, `material_detail.html`, `handle_material_patch`, `update_material` | `label_i18n.ja`, `label_i18n.en`, `description_i18n.ja`, `description_i18n.en` | `label_i18n`, `description_i18n` | Inserts `ja` and `en` into the loaded maps, then patches the full map fields. | High: full-map patch can overwrite concurrent or externally added locale keys if the admin snapshot is stale or parsing drops values. |
+| Stone listings | `stone_listing_create.html`, `handle_stone_listing_create`, `create_stone_listing` | none for new form | `title_i18n`, `description_i18n`, `story_i18n`, `photos[].alt_i18n` | Creates text maps with only `ja` and `en`; creates primary photo `alt_i18n` only for non-empty `ja` and `en`. | Medium: new records intentionally start narrow, but empty photo alt inputs omit keys. |
+| Stone listings | `stone_listings_list.html`, `stone_listing_detail.html`, `handle_stone_listing_patch`, `update_stone_listing` | `title_i18n.ja`, `title_i18n.en`, `description_i18n.ja`, `description_i18n.en`, `story_i18n.ja`, `story_i18n.en`, primary `photos[].alt_i18n.ja`, primary `photos[].alt_i18n.en` | `title_i18n`, `description_i18n`, `story_i18n`, `photos[].alt_i18n` through full `photos` array | Inserts `ja` and `en` into loaded text maps; primary photo alt removes `ja` or `en` when blank and otherwise updates those keys; persistence patches the full text maps and full `photos` array. | High: full-map and full-array patches are the broadest overwrite path, especially for `photos[].alt_i18n` and extra photo records. |
+| Facet tags | `facet_tag_create.html`, `handle_facet_tag_create`, `create_facet_tag` | none for new form | `label_i18n` | Creates map with only `ja` and `en` keys. | Low for new records; expected to start with editable admin languages only. |
+| Facet tags | `facet_tags_list.html`, `facet_tag_detail.html`, `handle_facet_tag_patch`, `update_facet_tag` | `label_i18n.ja`, `label_i18n.en` | `label_i18n` | Inserts `ja` and `en` into the loaded map, then patches the full map field. | High: full-map patch can overwrite locale keys not present in the loaded admin snapshot. |
+| Countries | `country_create.html`, `handle_country_create`, `create_country` | none for new form | `label_i18n` | Creates map with only `ja` and `en` keys. | Low for new records; expected to start with editable admin languages only. |
+| Countries | `countries_list.html`, `country_detail.html`, `handle_country_patch`, `update_country` | `label_i18n.ja`, `label_i18n.en` | `label_i18n` | Inserts `ja` and `en` into the loaded map, then patches the full map field. | High: full-map patch can overwrite locale keys not present in the loaded admin snapshot. |
+
+Non-target admin forms:
+
+- Orders status and shipping forms do not read or write `*_i18n` maps.
+- Fonts create and edit forms use a single `label` field, not `label_i18n`.
+- Material and stone-listing photo upload endpoints write storage paths only;
+  localized alt text is written by the stone-listing create and edit forms.
+- Delete forms remove entire records and are outside localized-map merge
+  behavior.
+
+High-risk paths to address in M5-T02:
+
+1. Add localized-map merge helpers for `label_i18n`, `description_i18n`,
+   `title_i18n`, and `story_i18n` that update selected route keys without
+   replacing the whole map.
+2. Add a photo-array merge helper for stone-listing primary photo alt text so
+   `photos[].alt_i18n` preserves unknown locale keys and non-primary photos by
+   default.
+3. Keep create flows scoped to `ja` and `en` unless M5-T04 introduces a compact
+   registry-driven editor for additional route codes.
+4. Add preservation tests in M5-T03 for materials, stone listings, countries,
+   and facet tags, including `fr`, `zh`, and `zhtw` keys.
+
+M0-T05 preservation evidence:
+
+- This task did not change runtime behavior or data writes.
+- Existing English and Japanese admin fields remain the only visible admin
+  inputs.
+- Unknown locale keys were identified as values that must be preserved by
+  M5-T02 merge helpers before broader 68-language content is introduced.
+- Rollback path: revert this documentation-only audit section and reopen
+  `M5-T01`.
+
+Validation:
+
+```sh
+rg -n "_i18n|label_ja|label_en|title_ja|title_en|description_ja|description_en|story_ja|story_en|photo_alt_ja|photo_alt_en" admin/src/main.rs admin/templates
+rg -n "persist_.*mutation|PatchDocumentOptions|update_mask_field_paths|fs_string_map|fs_material_photos" admin/src/main.rs
+git diff --check
+git diff --cached --check
+```
+
+#### M5-T02 Localized Map Merge Helpers
+
+Completed on 2026-06-18. Added shared admin merge behavior for localized maps
+and changed Firestore localized-map writes to target only the admin-editable
+route keys.
+
+Implementation notes:
+
+- Added `ADMIN_EDITABLE_LOCALE_KEYS` for the currently editable admin locales:
+  `ja` and `en`.
+- Added shared localized-map helpers for required text fields and optional
+  photo alt text.
+- Updated material, stone-listing, facet-tag, and country edit mutations to use
+  the shared merge helpers instead of open-coded `HashMap::insert` calls.
+- Updated Firestore persistence for `label_i18n`, `description_i18n`,
+  `title_i18n`, and `story_i18n` to use nested update masks such as
+  `label_i18n.ja` and `label_i18n.en` instead of patching the whole map field.
+- Kept create flows scoped to `ja` and `en`; broader route-code editing remains
+  deferred to M5-T04.
+- Kept stone-listing photo persistence array-based, but centralized primary
+  photo alt merging so unknown `photos[].alt_i18n` keys and non-primary photos
+  are preserved in the loaded admin snapshot.
+
+M0-T05 preservation evidence:
+
+- Existing Japanese and English admin inputs remain unchanged.
+- Firestore writes now update only the selected `ja` and `en` localized-map
+  subkeys, preserving unknown route keys by default.
+- Optional photo alt text still removes blank `ja` or `en` values as before,
+  while preserving unknown route keys.
+- No polling, SSE, or WebSocket behavior was added.
+- Rollback path: restore full-map update masks and direct `HashMap::insert`
+  calls, then reopen `M5-T02`.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path admin/Cargo.toml -- --check
+cargo test --manifest-path admin/Cargo.toml m5_t02 -- --nocapture
+cargo test --manifest-path admin/Cargo.toml
+rg -n '"(label_i18n|description_i18n|title_i18n|story_i18n)"\.to_owned\(\)|label_i18n\.ja|title_i18n\.ja|ADMIN_EDITABLE_LOCALE_KEYS|append_admin_localized_update_mask_paths|merge_admin_localized_map_values|merge_optional_admin_localized_map_values' admin/src/main.rs
+git diff --check
+git diff --cached --check
+```
+
+#### M5-T03 Admin Localized Map Preservation Tests
+
+Completed on 2026-06-18. Added admin regression tests proving that localized
+map edits preserve non-visible route keys.
+
+Implementation notes:
+
+- Added material edit coverage for `label_i18n` and `description_i18n`.
+- Added stone-listing edit coverage for `title_i18n`, `description_i18n`,
+  `story_i18n`, and primary `photos[].alt_i18n`.
+- Added country edit coverage for `label_i18n`.
+- Added facet-tag edit coverage for `label_i18n`.
+- Each test injects `fr`, `zh`, and `zhtw` values into the existing mock
+  snapshot, edits the normal admin `ja` / `en` fields, and asserts the injected
+  values remain after the mutation.
+
+M0-T05 preservation evidence:
+
+- Existing Japanese and English admin edit behavior remains covered by the
+  updated assertions.
+- Hidden `fr`, `zh`, and `zhtw` localized-map keys are now covered across all
+  M5-T01 high-risk admin areas.
+- No runtime UI, polling, SSE, or WebSocket behavior changed.
+- Rollback path: remove the `m5_t03_*` tests and reopen `M5-T03`; the M5-T02
+  merge implementation remains independently covered by `m5_t02_*` tests.
+
+Validation:
+
+```sh
+cargo fmt --manifest-path admin/Cargo.toml -- --check
+cargo test --manifest-path admin/Cargo.toml m5_t03 -- --nocapture
+cargo test --manifest-path admin/Cargo.toml
+git diff --check
+git diff --cached --check
+```
+
+#### M5-T04 Compact Localized Values Editor
+
+Completed on 2026-06-18. Added collapsed admin editors for optional manual
+localized-map edits beyond the normal `ja` / `en` fields.
+
+Implementation notes:
+
+- Added a registry-driven admin language list from `config/languages.json`.
+- The compact editor excludes the normal admin `ja` and `en` fields, leaving
+  66 additional route codes under a closed `<details>` block.
+- Added compact editors to material, stone-listing, country, and facet-tag
+  detail forms for the localized maps identified in M5-T01.
+- Added form parsing for `*_i18n__{route_code}` fields that accepts only
+  registry route codes outside `ja` / `en` and ignores blank values.
+- Updated admin edit mutations to merge non-empty compact-editor values into
+  the existing localized maps without dropping other route keys.
+- Updated localized-map Firestore update masks to include the loaded route
+  subkeys for edited maps, so saved extra route values can be persisted without
+  switching back to full-map writes.
+- Kept create forms scoped to `ja` and `en`; compact editing is available after
+  a record exists.
+
+M0-T05 preservation evidence:
+
+- Existing Japanese and English admin inputs remain unchanged and visible.
+- Additional route inputs are available only inside a collapsed details panel,
+  so admin screens do not show 68 always-visible localized inputs.
+- Blank compact-editor values are ignored and do not create empty translations.
+- Unknown or non-registry field names are ignored by the compact-editor parser.
+- No polling, SSE, or WebSocket behavior was added.
+- Rollback path: remove the compact-editor view fields, form parser, template
+  details blocks, and `m5_t04_*` tests, then reopen `M5-T04`.
+
+Validation:
+
+```sh
+jq empty config/languages.json
+cargo fmt --manifest-path admin/Cargo.toml -- --check
+cargo test --manifest-path admin/Cargo.toml m5_t04 -- --nocapture
+cargo test --manifest-path admin/Cargo.toml m5_t02 -- --nocapture
+cargo test --manifest-path admin/Cargo.toml m5_t03 -- --nocapture
+cargo test --manifest-path admin/Cargo.toml
+git diff --check
+git diff --cached --check
+```
+
+#### M5-T05 Admin Policy Verification
+
+Completed on 2026-06-18. Verified that the M5 admin localization work remains
+aligned with the repository policy: admin screens must not add polling,
+streaming, SSE, or WebSocket behavior.
+
+Reviewed source areas:
+
+- `AGENTS.md` and `doc/design.md` policy statements for admin/web screens.
+- `admin/src/main.rs` admin routes, handlers, and response helpers.
+- `admin/templates/*.html` htmx attributes and localized editor markup.
+- `admin/static/admin.js` browser-side behavior.
+- `admin/Cargo.toml` and `admin/Cargo.lock` dependency surface for streaming
+  or WebSocket-specific additions.
+
+Findings:
+
+- No admin `setInterval`, recurring `setTimeout`, EventSource, WebSocket,
+  server-sent event, or streaming response behavior is present.
+- Existing htmx `hx-trigger="... from:body"` usage is event-driven refresh
+  after local admin mutations, not polling or streaming.
+- Existing photo upload JavaScript uses one-shot `fetch` calls triggered by
+  user file selection or submit preparation, not long-lived connections.
+- M5-T04 compact localized editor is static form markup under closed
+  `<details>` elements and does not add any background network behavior.
+- Admin dependencies do not add a WebSocket or SSE crate surface for this work.
+
+M0-T05 preservation evidence:
+
+- Admin remains a request/response htmx interface with user-triggered actions.
+- No polling, SSE, WebSocket, or streaming behavior was added in M5.
+- Rollback path: if a future admin change introduces continuous refresh or
+  streaming behavior, remove that behavior and reopen `M5-T05`.
+
+Validation:
+
+```sh
+rg -n "poll|setInterval|setTimeout|EventSource|WebSocket|websocket|SSE|server-sent|stream|streaming|hx-trigger|hx-sse|hx-ws|ws://|wss://|tokio_stream|BroadcastStream|Sse|KeepAlive" admin admin/Cargo.toml admin/Cargo.lock
+rg -n "polling|streaming|SSE|WebSocket|admin|管理画面" doc/design.md AGENTS.md doc/multilingual-release-plan.md
+cargo fmt --manifest-path admin/Cargo.toml -- --check
+cargo test --manifest-path admin/Cargo.toml
+git diff --check
+git diff --cached --check
+```
+
+### M6: Translation Workflow Tooling
+
+- [x] `M6-T01` Implement `make i18n-todo`.
+  Output: actionable missing-key report with file, locale, key, base English
+  value, fallback value, and sidecar path.
+  Done when: `LANGS=` and `FILE=` filters work.
+- [x] `M6-T02` Implement `make i18n-check`.
+  Output: one validation gate for registry, ARB, JSON, web copy, API content,
+  sidecars, and release metadata.
+  Done when: missing or malformed content returns non-zero.
+- [x] `M6-T03` Validate ARB placeholders and ICU syntax.
+  Output: checks for placeholder names, metadata, plural/select syntax, and
+  generated Flutter locale mapping.
+  Done when: placeholder mismatch fails before runtime.
+- [x] `M6-T04` Validate JSON shape and fallback chains.
+  Output: shape comparison for settings, web copy, API content, and metadata.
+  Done when: fallback chains never point to missing or disabled languages.
+- [x] `M6-T05` Implement intention sidecar validation.
+  Output: allowed reason code checks and per-key suppression.
+  Done when: English leftovers are allowed only with approved sidecars.
+- [x] `M6-T06` Add export/import helpers.
+  Output: translation handoff files that can be reviewed and imported without
+  changing key order.
+  Done when: generated diffs remain deterministic.
+- [x] `M6-T07` Add CI integration after checks stabilize.
+  Output: CI target or documented command set for release branches.
+  Done when: release-enabled languages cannot regress silently.
+
+#### M6-T01 i18n Todo Report
+
+Completed on 2026-06-18. Added a repository-level `make i18n-todo` command
+for translation work planning.
+
+Implementation notes:
+
+- Added `scripts/i18n/todo.mjs`.
+- Added `scripts/i18n/todo.test.mjs`.
+- Added root Make targets:
+  - `make i18n-todo`
+  - `make i18n-todo-test`
+- The report is Markdown and includes `file`, `locale`, `key`, base English
+  value, fallback value, and sidecar path for every item.
+- Default scope follows registry-enabled app/web/API languages and excludes the
+  English source locale.
+- `LANGS=` narrows or expands the route-code set, with `LANGS=all` available
+  for the full registry.
+- `FILE=` limits the report to a specific base file, target file, or sidecar
+  path.
+- Per-locale files are checked for app ARB, app settings JSON, web content
+  JSON, and API checkout JSON.
+- API catalog files are checked as embedded language maps, using each `.en`
+  value as the base and reporting missing target route keys in the same file.
+- Missing target files are expanded into actionable missing-key rows from the
+  English base file instead of only reporting the file path.
+
+Examples:
+
+```sh
+make i18n-todo
+make i18n-todo LANGS=fr FILE=web/content/i18n/common/fr.json
+make i18n-todo LANGS=zh FILE=api/content/i18n/catalog/materials.json
+make i18n-todo LANGS=all
+```
+
+M0-T05 preservation evidence:
+
+- The command is read-only and does not generate or modify translation files.
+- Existing English, Japanese, Chinese, and Traditional Chinese source files are
+  left untouched.
+- Sidecar paths are reported but not created automatically, keeping manual
+  intention bookkeeping explicit.
+- Rollback path: remove `scripts/i18n/todo.mjs`, `scripts/i18n/todo.test.mjs`,
+  and the Make targets, then reopen `M6-T01`.
+
+Validation:
+
+```sh
+make i18n-todo
+make i18n-todo LANGS=zh FILE=web/content/i18n/top/zh.json
+make i18n-todo LANGS=fr FILE=web/content/i18n/common/fr.json
+make i18n-todo LANGS=zh FILE=api/content/i18n/catalog/materials.json
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T02 i18n Check Gate
+
+Completed on 2026-06-18. Added a single repository-level validation gate for
+localization content.
+
+Implementation notes:
+
+- Added `scripts/i18n/check.mjs`.
+- Added `scripts/i18n/check.test.mjs`.
+- Added root Make targets:
+  - `make i18n-check`
+  - `make i18n-check-test`
+- `make i18n-check` loads and validates `config/languages.json` through the
+  registry parser.
+- The check validates JSON syntax for app ARB files, app settings JSON, web
+  content JSON, API content JSON, existing intention sidecars, and existing
+  release metadata source JSON.
+- The check reuses `i18n-status` to fail when registry-enabled app, web, API,
+  or release metadata files are missing.
+- The check reuses `i18n-todo` to fail when target files or keys are missing.
+- `LANGS=` and `FILE=` are passed through to the todo/content validation layer,
+  so narrow checks can be run before broader checks.
+- Malformed content is reported as a check issue instead of aborting without a
+  summary.
+
+Examples:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=web/content/i18n/top/zh.json
+make i18n-check LANGS=zh FILE=api/content/i18n/catalog/materials.json
+```
+
+M0-T05 preservation evidence:
+
+- The command is read-only and does not generate, rewrite, or normalize
+  translation files.
+- Existing English, Japanese, Chinese, and Traditional Chinese content remains
+  untouched.
+- Missing sidecar and translation work is reported rather than auto-created.
+- Rollback path: remove `scripts/i18n/check.mjs`,
+  `scripts/i18n/check.test.mjs`, and the Make targets, then reopen `M6-T02`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=web/content/i18n/top/zh.json
+make i18n-check LANGS=zh FILE=api/content/i18n/catalog/materials.json
+make i18n-check-test
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
+node --check scripts/i18n/check.mjs
+node --check scripts/i18n/check.test.mjs
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T03 ARB Placeholder and ICU Validation
+
+Completed on 2026-06-18. Added ARB-specific validation to the localization
+gate so Flutter message issues fail before runtime.
+
+Implementation notes:
+
+- Added `scripts/i18n/arb.mjs`.
+- Added `scripts/i18n/arb.test.mjs`.
+- Added root Make target:
+  - `make i18n-arb-test`
+- Integrated ARB validation into `make i18n-check`.
+- The validator compares each target ARB message placeholder set against the
+  English source message.
+- English source messages with placeholders must define matching
+  `@messageKey.placeholders` metadata.
+- Existing metadata placeholder names must match the placeholders actually used
+  by the message value.
+- Basic ICU plural/select syntax is checked, including balanced braces, valid
+  selectors, supported ICU types, and required `other` options.
+- Registry Flutter locale mapping is checked against the expected ARB file and
+  `@@locale` value. For example, `zhtw` maps to `app_zh_Hant.arb` and
+  `@@locale: "zh_Hant"`.
+- Generated Flutter `supportedLocales` in
+  `app/lib/l10n/generated/generated_hanko_localizations.dart` is checked when
+  the generated file exists.
+- `FILE=` preserves narrow workflows: ARB validation runs for ARB file filters,
+  and non-ARB file filters continue to validate only the requested JSON/content
+  path.
+
+Examples:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=app/lib/l10n/app_zh.arb
+make i18n-check LANGS=zhtw FILE=app/lib/l10n/app_zh_Hant.arb
+make i18n-arb-test
+```
+
+M0-T05 preservation evidence:
+
+- The command is read-only and does not generate, rewrite, or normalize ARB
+  files.
+- Existing English, Japanese, Chinese, and Traditional Chinese ARB content
+  remains untouched.
+- Existing generated Flutter localization files are read for mapping
+  validation, not regenerated.
+- Rollback path: remove `scripts/i18n/arb.mjs`,
+  `scripts/i18n/arb.test.mjs`, the Make target, and the ARB integration in
+  `scripts/i18n/check.mjs`, then reopen `M6-T03`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=app/lib/l10n/app_zh.arb
+make i18n-check LANGS=zhtw FILE=app/lib/l10n/app_zh_Hant.arb
+make i18n-arb-test
+make i18n-check-test
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
+node --check scripts/i18n/arb.mjs
+node --check scripts/i18n/arb.test.mjs
+node --check scripts/i18n/check.mjs
+node --check scripts/i18n/check.test.mjs
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T04 JSON Shape and Fallback Validation
+
+Completed on 2026-06-18. Added JSON shape and fallback-chain validation to the
+localization gate.
+
+Implementation notes:
+
+- Added `scripts/i18n/json_shape.mjs`.
+- Added `scripts/i18n/json_shape.test.mjs`.
+- Added root Make target:
+  - `make i18n-json-shape-test`
+- Integrated JSON shape validation into `make i18n-check`.
+- App settings JSON is compared against
+  `app/assets/i18n/settings/en.json`.
+- Web content JSON is discovered from `web/content/i18n/*/en.json` and each
+  selected target file is compared against its English source shape.
+- API checkout JSON is compared against `api/content/i18n/checkout/en.json`.
+- API catalog files validate embedded language-map values so translated route
+  values keep the same scalar type as the English value.
+- Release metadata source JSON is compared against
+  `release/store_metadata/source/en.json` when the source metadata exists.
+- Shape comparison checks object keys, extra keys, scalar/object/array type
+  mismatches, array length, and nested array item shape.
+- Registry fallback chains are checked globally for missing targets, cycles,
+  and disabled fallback targets on enabled app, web, or release surfaces.
+- `FILE=` preserves narrow workflows: only the requested JSON family is shape
+  compared, while missing target files remain reported by `i18n-todo`.
+
+Examples:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=web/content/i18n/top/zh.json
+make i18n-json-shape-test
+```
+
+M0-T05 preservation evidence:
+
+- The command is read-only and does not generate, rewrite, or normalize JSON
+  files.
+- Existing English, Japanese, Chinese, and Traditional Chinese JSON content
+  remains untouched.
+- Existing release metadata is read only when present; missing release metadata
+  is still controlled by registry enablement and later fastlane milestones.
+- Rollback path: remove `scripts/i18n/json_shape.mjs`,
+  `scripts/i18n/json_shape.test.mjs`, the Make target, and the JSON shape
+  integration in `scripts/i18n/check.mjs`, then reopen `M6-T04`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-check LANGS=zh FILE=web/content/i18n/top/zh.json
+make i18n-json-shape-test
+make i18n-check-test
+make i18n-arb-test
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
+node --check scripts/i18n/json_shape.mjs
+node --check scripts/i18n/json_shape.test.mjs
+node --check scripts/i18n/check.mjs
+node --check scripts/i18n/check.test.mjs
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T05 Intention Sidecar Validation
+
+Completed on 2026-06-18. Added intention sidecar validation to the localization
+gate so same-as-English target values require an explicit per-key approval.
+
+Implementation notes:
+
+- Added `scripts/i18n/intentions.mjs`.
+- Added `scripts/i18n/intentions.test.mjs`.
+- Added root Make target:
+  - `make i18n-intentions-test`
+- Integrated intention validation into `make i18n-check`.
+- The validator accepts both sidecar shapes already present in the repository:
+  - compact map form such as `{ "appTitle": "brand_name" }`
+  - `entries` form with `key_path`, `target_locale`, and `reason_code`
+- Allowed reason codes include the M0 preservation codes and the Section 10
+  sidecar codes, including `brand_name`, `legal_entity`, `legal_entity_name`,
+  `url_or_email`, `url`, `email`, `code_literal`, `technical_identifier`,
+  `payment_provider`, `product_name`, and `intentionally_english`.
+- Exact same-as-English string values are checked for app ARB, app settings
+  JSON, web content JSON, API checkout JSON, API catalog language maps, and
+  release metadata source JSON when release metadata exists.
+- Empty strings are ignored as non-actionable placeholders.
+- API catalog approvals may use either `key.targetLocale` or an `entries`
+  record with `key_path` plus `target_locale`.
+- Added current Japanese sidecars for intentional holdouts in:
+  - `app/lib/l10n/app_ja_intentions.json`
+  - `web/content/i18n/common/ja_intentions.json`
+- Translated two Japanese legal-page labels that were ordinary copy rather
+  than intentional English holdouts:
+  - `commercial_transactions_025`: `製作地`
+  - `commercial_transactions_027`: `お届け目安`
+
+Examples:
+
+```sh
+make i18n-check
+make i18n-intentions-test
+node scripts/i18n/intentions.mjs
+```
+
+M0-T05 preservation evidence:
+
+- The command is read-only and does not generate, rewrite, or normalize
+  sidecars.
+- Existing sidecar files are validated for allowed reason codes before they can
+  suppress a same-as-English value.
+- Existing English source content remains untouched.
+- Japanese sidecars were added only for exact-English values that are intended
+  to remain shared labels, identifiers, or support values.
+- Rollback path: remove `scripts/i18n/intentions.mjs`,
+  `scripts/i18n/intentions.test.mjs`, the Make target, the new Japanese
+  sidecars, the Japanese label edits, and the intention integration in
+  `scripts/i18n/check.mjs`, then reopen `M6-T05`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-intentions-test
+make i18n-check-test
+make i18n-json-shape-test
+make i18n-arb-test
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
+node scripts/i18n/intentions.mjs
+node --check scripts/i18n/intentions.mjs
+node --check scripts/i18n/intentions.test.mjs
+node --check scripts/i18n/check.mjs
+node --check scripts/i18n/check.test.mjs
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T06 Translation Handoff Export and Import
+
+Completed on 2026-06-18. Added deterministic translation handoff helpers for
+reviewable export/import workflows.
+
+Implementation notes:
+
+- Added `scripts/i18n/handoff.mjs`.
+- Added `scripts/i18n/handoff.test.mjs`.
+- Added root Make targets:
+  - `make i18n-export`
+  - `make i18n-import`
+  - `make i18n-handoff-test`
+- `make i18n-export` emits a stable JSON handoff envelope with no timestamp or
+  machine-local metadata.
+- The handoff includes `source_file`, `target_file`, `target_locale`,
+  `sidecar_file`, `key_path`, `source_value`, `target_value`, and
+  `present`/`missing` status for each exported string.
+- `LANGS=` and `FILE=` use the same route-code and file-filter workflow as the
+  existing i18n tools.
+- App ARB, app settings JSON, web content JSON, API checkout JSON, release
+  metadata JSON, and API catalog language maps can be exported.
+- `make i18n-import IN=<file>` imports handoff values into target files while
+  preserving existing object key order.
+- Missing JSON and ARB target files are created from the English source
+  skeleton before imported values are applied.
+- Missing ARB targets keep metadata keys and receive target `@@locale` metadata
+  derived from the target ARB filename.
+- Catalog imports aggregate all updates for the same catalog file before
+  writing, so multi-locale handoff imports do not overwrite earlier locale
+  updates in the same run.
+
+Examples:
+
+```sh
+LANGS=ja FILE=web/content/i18n/common/ja.json make i18n-export > /tmp/handoff.json
+IN=/tmp/handoff.json make i18n-import
+LANGS=zh FILE=api/content/i18n/catalog/materials.json make i18n-export
+make i18n-handoff-test
+```
+
+M0-T05 preservation evidence:
+
+- Export is read-only and does not generate, rewrite, or normalize translation
+  files.
+- Import writes only files listed in the reviewed handoff input.
+- Existing target object order is preserved by updating values in place rather
+  than reconstructing existing files from sorted keys.
+- Handoff output is deterministic: repeated exports for the same scope produce
+  byte-identical JSON.
+- Rollback path: remove `scripts/i18n/handoff.mjs`,
+  `scripts/i18n/handoff.test.mjs`, and the Make targets, then reopen
+  `M6-T06`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/handoff.mjs
+node --check scripts/i18n/handoff.test.mjs
+make i18n-handoff-test
+LANGS=ja FILE=web/content/i18n/common/ja.json make i18n-export > /tmp/hanko-field-handoff-1.json
+LANGS=ja FILE=web/content/i18n/common/ja.json make i18n-export > /tmp/hanko-field-handoff-2.json
+cmp /tmp/hanko-field-handoff-1.json /tmp/hanko-field-handoff-2.json
+make i18n-check
+make i18n-check-test
+make i18n-intentions-test
+make i18n-json-shape-test
+make i18n-arb-test
+make i18n-todo-test
+make i18n-status-test
+make i18n-registry-test
+git diff --check
+git diff --cached --check
+```
+
+#### M6-T07 i18n CI Integration
+
+Completed on 2026-06-18. Added a CI-ready localization gate and a GitHub
+Actions workflow for release branch coverage.
+
+Implementation notes:
+
+- Added root Make target:
+  - `make i18n-ci`
+- Added `.github/workflows/i18n.yml`.
+- `make i18n-ci` runs JavaScript syntax checks for every i18n helper script.
+- `make i18n-ci` runs the blocking `make i18n-check` gate.
+- `make i18n-ci` runs all i18n test targets:
+  - `make i18n-check-test`
+  - `make i18n-arb-test`
+  - `make i18n-json-shape-test`
+  - `make i18n-intentions-test`
+  - `make i18n-handoff-test`
+  - `make i18n-todo-test`
+  - `make i18n-status-test`
+  - `make i18n-registry-test`
+- The GitHub Actions workflow uses Node.js 22 and runs `make i18n-ci`.
+- CI runs on pushes and pull requests targeting `main`, `master`, `language`,
+  and `release/**`, plus manual `workflow_dispatch`.
+- Because `make i18n-check` reads `config/languages.json`, any future language
+  with `release.enabled=true` is included in the release metadata and content
+  gate automatically.
+
+Examples:
+
+```sh
+make i18n-ci
+git push origin release/<name>
+```
+
+M0-T05 preservation evidence:
+
+- The CI gate is read-only and does not generate, rewrite, or normalize
+  translation files.
+- The workflow only runs Node-based localization checks and does not touch
+  admin or web runtime behavior.
+- No polling, streaming, SSE, or WebSocket behavior was added.
+- Rollback path: remove `.github/workflows/i18n.yml`, remove `make i18n-ci`,
+  and reopen `M6-T07`.
+
+Validation:
+
+```sh
+make i18n-ci
+make i18n-check
+git diff --check
+git diff --cached --check
+```
+
+### M7: Pilot Language Rollout
+
+- [x] `M7-T01` Enable pilot languages as render-only.
+  Output: registry flags for `zh`, `zhtw`, and `ar` with `web.indexed=false`
+  and `release.enabled=false`.
+  Done when: pilot languages render in QA without public indexing.
+- [ ] `M7-T02` Fill pilot app content.
+  Output: ARB and settings JSON for `zh`, `zhtw`, and `ar`.
+  Done when: pilot app screens launch without fallback for primary UI.
+- [x] `M7-T03` Fill pilot web and payment content.
+  Output: page JSON, payment result copy, and SEO fields for pilot routes.
+  Done when: `/zh/...`, `/zhtw/...`, and `/ar/...` render correctly.
+- [x] `M7-T04` Fill pilot API and checkout content.
+  Output: catalog fallback review and checkout templates for pilot languages.
+  Done when: pilot checkout labels and return routes preserve locale.
+- [x] `M7-T05` Run pilot screenshot QA.
+  Output: screenshots for app settings, design, checkout, web top/about/payment,
+  and RTL pages.
+  Done when: overflow and directionality findings are fixed or tracked.
+- [x] `M7-T06` Decide pilot public readiness.
+  Output: registry flag changes for app-selectable or web-indexed status.
+  Done when: each pilot language has explicit enablement evidence.
+
+#### M7-T01 Render-only Pilot Languages
+
+Completed on 2026-06-18. Enabled `zh`, `zhtw`, and `ar` as web render-only
+pilot languages while keeping them out of public indexing and store release.
+
+Implementation notes:
+
+- Updated `config/languages.json`:
+  - `zh.web.enabled=true`
+  - `zhtw.web.enabled=true`
+  - `ar.web.enabled=true`
+  - `web.indexed=false` remains set for all three pilot languages.
+  - `release.enabled=false` remains set for all three pilot languages.
+  - `app.enabled=false` remains set for all three pilot languages until
+    `M7-T02`.
+- Added render-only web copy placeholders for `zhtw` and `ar`.
+- Kept existing `zh` web copy and added sidecars where values intentionally
+  remain the same as English during the render-only stage.
+- Added `ar` checkout copy placeholders and sidecars.
+- Added `zh`, `zhtw`, and `ar` catalog language-map placeholders with
+  `locale_not_release_enabled` sidecar entries.
+- Updated catalog intention validation so multi-locale catalog sidecars such as
+  `materials_intentions.json` are not mistaken for a single target locale.
+- Updated web pages to emit `robots: noindex,follow` for non-indexed enabled
+  locales.
+- Existing indexed sitemap and SEO hreflang generation continue to include only
+  indexed languages.
+- Web route tests now confirm `/zh/about`, `/zhtw/about`, and `/ar/about`
+  render for QA, use `noindex,follow`, and canonicalize to the indexed English
+  page until public readiness.
+
+Examples:
+
+```sh
+make i18n-check
+cargo test --manifest-path web/Cargo.toml
+```
+
+M0-T05 preservation evidence:
+
+- Existing English and Japanese copy remains unchanged.
+- Existing Chinese web copy remains in `zh`; `zhtw` and `ar` are render-only
+  placeholders, not release-ready translations.
+- Same-as-English placeholder values are explicitly approved with
+  `locale_not_release_enabled`.
+- The pilot languages remain `release.enabled=false`, so store metadata and
+  fastlane release paths are not activated.
+- Rollback path: set `web.enabled=false` for `zh`, `zhtw`, and `ar`, remove the
+  pilot placeholder files and sidecars, revert the noindex helper if no longer
+  needed, and reopen `M7-T01`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-ci
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+git diff --check
+git diff --cached --check
+```
+
+#### M7-T02 Pilot App Content
+
+Reopened on 2026-07-14. `zh`, `zhtw`, and `ar` remain available for forced app
+rendering, but user selection is disabled because their ARBs still contain
+deferred English fallback entries.
+
+Implementation notes:
+
+- Updated `config/languages.json`:
+  - `zh.app.enabled=true`
+  - `zh.app.selectable=false`
+  - `zhtw.app.enabled=true`
+  - `zhtw.app.selectable=false`
+  - `ar.app.enabled=true`
+  - `ar.app.selectable=false`
+  - `release.enabled=false` remains set for all three pilot languages.
+- Added `app/lib/l10n/app_ar.arb` and regenerated Flutter localization output.
+- Kept existing `app/lib/l10n/app_zh.arb` and `app/lib/l10n/app_zh_Hant.arb`.
+- Expanded `hankoSupportedLocales` to include `ar`, `zh-Hans`, and `zh-Hant`.
+- Added Settings content JSON for `ar`, `zh`, and `zhtw`.
+- Updated Settings content loading to use route codes, so `zh` and `zhtw` do
+  not collapse into the same `zh` file.
+- Sidecars still contain deferred `locale_not_release_enabled` app entries.
+  These entries must be translated before this task can be checked again.
+- Updated app tests for generated localizations, registry selectability, and
+  Settings content loading.
+
+M0-T05 preservation evidence:
+
+- Existing English and Japanese app copy remains unchanged.
+- Existing Simplified and Traditional Chinese ARB files remain in place.
+- Arabic app copy is renderable but not release-ready; same-as-English values
+  are explicitly approved as `locale_not_release_enabled`.
+- Pilot languages remain `release.enabled=false`, so store metadata and
+  fastlane release paths are still inactive.
+- Rollback path: set `app.enabled=false` and `app.selectable=false` for `zh`,
+  `zhtw`, and `ar`, remove the pilot app/settings files and sidecars, rerun
+  Flutter localization generation, and reopen `M7-T02`.
+
+Validation:
+
+```sh
+flutter gen-l10n
+make i18n-check
+make i18n-ci
+flutter test test/generated_hanko_localizations_test.dart test/language_registry_test.dart test/settings_content_test.dart
+```
+
+#### M7-T03 Pilot Web and Payment Content
+
+Completed on 2026-06-18. Filled the pilot web copy files for `zh`, `zhtw`, and
+`ar`, and wired the web copy loader so pilot routes use their own JSON instead
+of collapsing `zhtw` into `zh` or `ar` into English.
+
+Implementation notes:
+
+- Added translated pilot copy for all web JSON namespaces:
+  - `common`
+  - `top`
+  - `about`
+  - `blog_index`
+  - `blog_article`
+  - `design`
+  - `kanji_suggestions`
+  - `payment_success`
+  - `payment_failure`
+  - `purchase_result`
+  - `terms`
+  - `commercial_transactions`
+- Filled localized SEO title and description fields for pilot routes.
+- Filled payment result copy for `/payment/success` and `/payment/failure`.
+- Updated the web copy loader to parse `zh`, `zhtw`, and `ar` JSON files as
+  distinct locale buckets.
+- Updated web locale aliasing:
+  - `zh`, `zh-Hans`, and generic `zh-*` use Simplified Chinese copy.
+  - `zhtw`, `zh-Hant`, `zh-TW`, `zh-HK`, and `zh-MO` use Traditional Chinese
+    copy.
+  - `ar` and `ar-*` use Arabic copy.
+- Kept `web.indexed=false` and `release.enabled=false` for all three pilot
+  languages.
+- Kept full blog article HTML body localization out of this task. The page
+  chrome, listing copy, article UI copy, and SEO JSON are covered here; full
+  article body translation should be handled separately if required.
+- Removed pilot sidecar files where values no longer match English, and kept
+  intention sidecars only for values that intentionally remain unchanged such
+  as brand, payment provider, URL, contact, and legal entity fields.
+- Added route tests that verify `/zh/about`, `/zhtw/about`, `/ar/about`,
+  `/zh/payment/success`, `/zhtw/payment/success`, `/ar/payment/success`,
+  `/zh/payment/failure`, `/zhtw/payment/failure`, and `/ar/payment/failure`
+  render localized body copy, localized SEO fields, and `noindex,follow`.
+
+M0-T05 preservation evidence:
+
+- Existing English and Japanese web copy remains unchanged.
+- Existing Simplified Chinese content remains in `zh`; Traditional Chinese is
+  kept separately in `zhtw`.
+- Arabic pilot copy is renderable but remains non-release because
+  `release.enabled=false`.
+- Same-as-English values are explicitly approved only where the value is a
+  brand, provider name, legal entity, URL, email, phone, ID label, or other
+  intentional literal.
+- Rollback path: restore the previous pilot placeholder JSON and sidecars,
+  remove `zhtw` and `ar` from the web copy loader, and reopen `M7-T03`.
+
+Validation:
+
+```sh
+make i18n-check
+make i18n-ci
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+git diff --check
+git diff --cached --check
+```
+
+#### M7-T04 Pilot API and Checkout Content
+
+Completed on 2026-06-18. Filled pilot API catalog content and Arabic checkout
+copy so `zh`, `zhtw`, and `ar` no longer rely on English placeholders in API
+catalog or Stripe Checkout labels.
+
+Implementation notes:
+
+- Added translated pilot catalog values for `zh`, `zhtw`, and `ar` in:
+  - `api/content/i18n/catalog/materials.json`
+  - `api/content/i18n/catalog/stone_listings.json`
+  - `api/content/i18n/catalog/facet_tags.json`
+  - `api/content/i18n/catalog/countries.json`
+- Removed catalog sidecars that only approved the previous English placeholders.
+- Filled `api/content/i18n/checkout/ar.json` with Arabic product name,
+  product description, and shape labels.
+- Removed `api/content/i18n/checkout/ar_intentions.json` because the Arabic
+  checkout copy no longer matches English.
+- Updated the API checkout copy loader to include `ar`.
+- Updated checkout locale routing so `ar` and `ar-*` use Arabic checkout copy.
+- Updated API registry public-config tests for the pilot app-enabled locales:
+  `ar`, `en`, `ja`, `zh`, and `zhtw`.
+- Added checkout tests for Arabic product labels and `lang=ar` app return URLs.
+- Added app checkout-return parser coverage proving pilot return route codes
+  are preserved when the app receives `lang=ar` or `locale=ar`.
+
+M0-T05 preservation evidence:
+
+- Existing English and Japanese catalog values remain unchanged.
+- Existing Simplified and Traditional Chinese checkout copy remains unchanged.
+- New `zh`, `zhtw`, and `ar` catalog values are additive map entries under the
+  existing localized fields.
+- The seed merge behavior from `M4-T03` still preserves future unknown locale
+  keys in Firestore.
+- Pilot languages remain `release.enabled=false`, so store metadata and
+  fastlane release paths are still inactive.
+- Rollback path: restore the previous pilot placeholder catalog values and
+  sidecars, remove `ar` from the checkout loader, restore the Arabic checkout
+  placeholder sidecar, and reopen `M7-T04`.
+
+Validation:
+
+```sh
+jq empty api/content/i18n/catalog/*.json api/content/i18n/checkout/*.json config/languages.json
+make i18n-check
+make i18n-ci
+cargo fmt --manifest-path api/Cargo.toml -- --check
+cargo test --manifest-path api/Cargo.toml checkout -- --nocapture
+cargo test --manifest-path api/Cargo.toml
+dart format --set-exit-if-changed app/test/checkout_return_test.dart
+flutter test test/checkout_return_test.dart
+git diff --check
+git diff --cached --check
+```
+
+#### M7-T05 Pilot Screenshot QA
+
+Completed on 2026-06-18. Ran pilot QA for app settings, app design, app
+checkout, web top, web about, web payment, and RTL pages for `zh`, `zhtw`,
+and `ar`.
+
+Implementation notes:
+
+- Added web HTML direction handling so Arabic web routes render with
+  `dir="rtl"` and other current pilot routes render with `dir="ltr"`.
+- Updated web route tests to verify both `lang` and `dir` for pilot routes.
+- Captured web pilot screenshots under `doc/qa/m7-t05/screenshots`:
+  - `web-zh-top-mobile.png`
+  - `web-zhtw-about-mobile.png`
+  - `web-ar-payment-success-mobile.png`
+  - `web-ar-about-mobile.png`
+- Added `doc/qa/m7-t05/README.md` and `doc/qa/m7-t05/manifest.json` to record
+  screenshot metadata, DOM checks, app layout coverage, and the tracked app
+  PNG capture limitation.
+- Added focused Flutter layout QA for pilot app Settings, Design, Checkout,
+  and RTL directionality in `app/test/pilot_layout_qa_test.dart`.
+
+Findings and disposition:
+
+- Web Arabic pages lacked explicit document direction. Fixed by adding
+  `dir="{{ self.html_dir() }}"` to web root templates and mapping Arabic to
+  `rtl`.
+- Web screenshot probes found no horizontal overflow for `zh`, `zhtw`, or
+  `ar`.
+- App pilot layout probes found no Flutter overflow errors for Settings,
+  Design, Checkout, or existing RTL probes.
+- App PNG screenshot capture from local `flutter test` was attempted, but
+  `RenderRepaintBoundary.toImage()` did not return in this tester
+  environment. This limitation is tracked in `doc/qa/m7-t05/README.md`; app
+  evidence for this task is the focused layout probe.
+
+M0-T05 preservation evidence:
+
+- Existing English, Japanese, and Chinese translation values remain unchanged.
+- Pilot languages remain controlled by the registry state from `M7-T01` to
+  `M7-T04`; this task only adds QA coverage and web document direction.
+- No release, store metadata, signing, fastlane, polling, streaming, SSE, or
+  WebSocket behavior was added.
+- Rollback path: remove the `dir` helper and template attributes, remove
+  `app/test/pilot_layout_qa_test.dart`, remove `doc/qa/m7-t05`, and reopen
+  `M7-T05`.
+
+Validation:
+
+```sh
+jq empty doc/qa/m7-t05/manifest.json
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml
+flutter test test/pilot_layout_qa_test.dart test/rtl_overflow_test.dart
+make i18n-check
+sips -g pixelWidth -g pixelHeight doc/qa/m7-t05/screenshots/*.png
+git diff --check
+git diff --cached --check
+```
+
+#### M7-T06 Pilot Public Readiness
+
+Completed on 2026-07-14. Kept `zh`, `zhtw`, and `ar` render-only, and deferred
+app selection, public web indexing, and store release.
+
+Implementation notes:
+
+- Confirmed `config/languages.json` keeps:
+  - `app.enabled=true` and `app.selectable=false` for all three pilot languages.
+  - `web.enabled=true` for all three pilot languages.
+  - `web.indexed=false` for all three pilot languages.
+  - `release.enabled=false` for all three pilot languages.
+- Kept pilot public pages `noindex,follow` because `web.indexed` is currently
+  language-wide and would also index blog index and article routes.
+- Kept payment result pages `noindex,follow` because they are not SEO targets.
+- Added readiness evidence in `doc/qa/m7-t06/README.md` and
+  `doc/qa/m7-t06/readiness.json`.
+
+Per-language readiness decisions:
+
+| Locale | Decision | Evidence |
+| --- | --- | --- |
+| `zh` | Render-only; app selection, web indexing, and store release deferred. | Forced app/web rendering passes. App selection waits for deferred ARB entries; web indexing waits for localized blog article bodies and metadata. |
+| `zhtw` | Render-only; app selection, web indexing, and store release deferred. | Forced app/web rendering passes. App selection waits for deferred ARB entries; web indexing waits for localized blog article bodies and metadata. |
+| `ar` | Render-only; app selection, web indexing, and store release deferred. | Forced app/web RTL rendering passes. App selection waits for deferred ARB entries; web indexing waits for localized blog article bodies and metadata. |
+
+M0-T05 preservation evidence:
+
+- Existing English, Japanese, and Chinese translation values remain unchanged.
+- The task does not alter source copy, release metadata, or store metadata.
+- Web indexing remains disabled to avoid indexing fallback English blog
+  article content for pilot routes.
+- Store release remains gated by M8 fastlane and M9 production translation
+  work.
+- No signing, secret, polling, streaming, SSE, or WebSocket behavior was added.
+- Rollback path: remove `doc/qa/m7-t06` and reopen `M7-T06`.
+
+Validation:
+
+```sh
+jq empty config/languages.json doc/qa/m7-t06/readiness.json
+make i18n-check
+cargo fmt --manifest-path web/Cargo.toml -- --check
+cargo test --manifest-path web/Cargo.toml web_router_resolves_supported_and_unknown_locale_prefixes -- --nocapture
+cargo test --manifest-path web/Cargo.toml
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+### M8: Store Metadata and fastlane
+
+- [x] `M8-T01` Define store metadata source schema.
+  Output: `release/store_metadata/source/*.json` schema and examples for
+  `en`, `ja`, `zh`, and `zhtw`.
+  Done when: required fields are validated before generation and the `M0-T05`
+  store-copy preservation rules are satisfied.
+- [x] `M8-T02` Generate Google Play metadata.
+  Output: deterministic `release/store_metadata/google_play/**` folders using
+  `android_store_locale`.
+  Done when: unsupported Google Play locales fail with clear messages.
+- [x] `M8-T03` Generate App Store metadata.
+  Output: deterministic `release/store_metadata/app_store/**` folders using
+  `ios_store_locale`.
+  Done when: unsupported App Store locales fail with clear messages.
+- [x] `M8-T04` Add Android fastlane with Bundler.
+  Output: `app/android/Gemfile`, `Appfile`, and metadata/internal lanes.
+  Done when: metadata-only Android lane runs without uploading binaries.
+- [x] `M8-T05` Add iOS fastlane with Bundler.
+  Output: `app/ios/Gemfile`, `Appfile`, and metadata/TestFlight lanes.
+  Done when: metadata-only iOS lane runs without uploading binaries.
+- [x] `M8-T06` Add secret and signing guardrails.
+  Output: `.gitignore` and setup notes for service accounts, Apple API keys,
+  keystore files, passwords, and exported binaries.
+  Done when: private release material cannot be staged accidentally and the
+  `M0-T05` release-secret gate is satisfied.
+- [x] `M8-T07` Add screenshot metadata workflow.
+  Output: screenshot naming rules and optional screengrab/deliver metadata
+  preparation.
+  Done when: screenshots can be matched to locale and device deterministically.
+
+#### M8-T01 Store Metadata Source Schema
+
+Completed on 2026-06-18. Added the source schema, initial source examples, and
+pre-generation validation for mobile store metadata.
+
+Implementation notes:
+
+- Added `release/store_metadata/source/schema.json` as the canonical source
+  shape for store metadata.
+- Added initial source examples:
+  - `release/store_metadata/source/en.json`
+  - `release/store_metadata/source/ja.json`
+  - `release/store_metadata/source/zh.json`
+  - `release/store_metadata/source/zhtw.json`
+- Added intention sidecars for values that intentionally remain identical to
+  English, such as the brand name and public URLs.
+- Added `scripts/release/store_metadata.mjs` to validate store metadata before
+  Google Play or App Store generation.
+- Added `scripts/release/store_metadata.test.mjs` to cover required fields,
+  HTTPS URLs, and required M8-T01 example locales.
+- Added Make targets:
+  - `make store-metadata-check`
+  - `make store-metadata-test`
+- Added store metadata checks to `make i18n-ci` so future metadata generation
+  cannot bypass required-field validation.
+
+Validated source fields:
+
+- `app_name`
+- `subtitle`
+- `short_description`
+- `full_description`
+- `keywords`
+- `release_notes`
+- `support_url`
+- `marketing_url`
+- `privacy_policy_url`
+- `screenshot_captions.design`
+- `screenshot_captions.stones`
+- `screenshot_captions.checkout`
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, and checkout copy remains unchanged.
+- Store metadata is added under a new release-owned source directory and does
+  not replace runtime localization files.
+- Same-as-English store metadata values are explicitly documented in
+  `{locale}_intentions.json` sidecars.
+- `release.enabled=false` remains unchanged for all languages; M8-T01 defines
+  source data and validation only.
+- No fastlane lanes, signing files, private keys, uploads, polling, streaming,
+  SSE, or WebSocket behavior were added.
+- Rollback path: remove `release/store_metadata/source`, remove
+  `scripts/release/store_metadata.*`, remove the Makefile targets, and reopen
+  `M8-T01`.
+
+Validation:
+
+```sh
+jq empty release/store_metadata/source/*.json
+make store-metadata-check
+make store-metadata-test
+make i18n-check
+make i18n-check LANGS=ja FILE=release/store_metadata/source/ja.json
+make i18n-check LANGS=zh FILE=release/store_metadata/source/zh.json
+make i18n-check LANGS=zhtw FILE=release/store_metadata/source/zhtw.json
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T02 Google Play Metadata Generation
+
+Completed on 2026-06-18. Added deterministic Google Play metadata generation
+from the store metadata source files.
+
+Implementation notes:
+
+- Added `scripts/release/google_play_metadata.mjs` to generate fastlane
+  `supply`-style text metadata.
+- Added `scripts/release/google_play_metadata.test.mjs` to cover:
+  - generated file mapping
+  - deterministic `--check` behavior
+  - stale generated file detection
+  - clear failure when a source locale has no `android_store_locale`
+- Added Make targets:
+  - `make google-play-metadata`
+  - `make google-play-metadata-check`
+  - `make google-play-metadata-test`
+- Added Google Play metadata check and test targets to `make i18n-ci`.
+- Generated metadata under `release/store_metadata/google_play` using
+  `release.android_store_locale`:
+  - `en` -> `en-US`
+  - `ja` -> `ja-JP`
+  - `zh` -> `zh-CN`
+  - `zhtw` -> `zh-TW`
+
+Generated file layout:
+
+```text
+release/store_metadata/google_play/<android_store_locale>/title.txt
+release/store_metadata/google_play/<android_store_locale>/short_description.txt
+release/store_metadata/google_play/<android_store_locale>/full_description.txt
+release/store_metadata/google_play/<android_store_locale>/changelogs/default.txt
+```
+
+Mapping rules:
+
+- `app_name` -> `title.txt`
+- `short_description` -> `short_description.txt`
+- `full_description[]` -> `full_description.txt`, joined by blank lines
+- latest `release_notes` entry -> `changelogs/default.txt`
+- `subtitle`, `keywords`, and `screenshot_captions` stay in source JSON for
+  App Store metadata and screenshot workflows; Google Play text generation does
+  not invent unsupported files from those fields.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, and source store metadata copy remains
+  unchanged.
+- Google Play metadata is generated from source JSON only; no manual edits are
+  required under generated output.
+- `release.enabled=false` remains unchanged for all languages.
+- No fastlane lanes, signing files, private keys, uploads, polling, streaming,
+  SSE, or WebSocket behavior were added.
+- Rollback path: remove `release/store_metadata/google_play`, remove
+  `scripts/release/google_play_metadata.*`, remove the Makefile targets, and
+  reopen `M8-T02`.
+
+Validation:
+
+```sh
+make store-metadata-check
+make google-play-metadata
+make google-play-metadata-check
+make google-play-metadata-test
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T03 App Store Metadata Generation
+
+Completed on 2026-06-18. Added deterministic App Store metadata generation
+from the store metadata source files.
+
+Implementation notes:
+
+- Added `scripts/release/app_store_metadata.mjs` to generate fastlane
+  `deliver`-style text metadata.
+- Added `scripts/release/app_store_metadata.test.mjs` to cover:
+  - generated file mapping
+  - deterministic `--check` behavior
+  - stale generated file detection
+  - clear failure when a source locale has no `ios_store_locale`
+  - clear failure when `ios_store_locale` is not in fastlane deliver's
+    supported App Store locale list
+- Added Make targets:
+  - `make app-store-metadata`
+  - `make app-store-metadata-check`
+  - `make app-store-metadata-test`
+- Added App Store metadata check and test targets to `make i18n-ci`.
+- Generated metadata under `release/store_metadata/app_store` using
+  `release.ios_store_locale`:
+  - `en` -> `en-US`
+  - `ja` -> `ja`
+  - `zh` -> `zh-Hans`
+  - `zhtw` -> `zh-Hant`
+
+Generated file layout:
+
+```text
+release/store_metadata/app_store/<ios_store_locale>/name.txt
+release/store_metadata/app_store/<ios_store_locale>/subtitle.txt
+release/store_metadata/app_store/<ios_store_locale>/description.txt
+release/store_metadata/app_store/<ios_store_locale>/keywords.txt
+release/store_metadata/app_store/<ios_store_locale>/release_notes.txt
+release/store_metadata/app_store/<ios_store_locale>/support_url.txt
+release/store_metadata/app_store/<ios_store_locale>/marketing_url.txt
+release/store_metadata/app_store/<ios_store_locale>/privacy_url.txt
+```
+
+Mapping rules:
+
+- `app_name` -> `name.txt`
+- `subtitle` -> `subtitle.txt`
+- `full_description[]` -> `description.txt`, joined by blank lines
+- `keywords[]` -> `keywords.txt`, joined by commas
+- latest `release_notes` entry -> `release_notes.txt`
+- `support_url` -> `support_url.txt`
+- `marketing_url` -> `marketing_url.txt`
+- `privacy_policy_url` -> `privacy_url.txt`
+- `short_description` and `screenshot_captions` stay in source JSON for
+  Google Play and screenshot workflows; App Store text generation does not
+  invent unsupported files from those fields.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, source store metadata, and Google Play
+  generated metadata remains unchanged.
+- App Store metadata is generated from source JSON only; no manual edits are
+  required under generated output.
+- `release.enabled=false` remains unchanged for all languages.
+- No fastlane lanes, signing files, private keys, uploads, polling, streaming,
+  SSE, or WebSocket behavior were added.
+- Rollback path: remove `release/store_metadata/app_store`, remove
+  `scripts/release/app_store_metadata.*`, remove the Makefile targets, and
+  reopen `M8-T03`.
+
+Validation:
+
+```sh
+node --check scripts/release/app_store_metadata.mjs
+make store-metadata-check
+make app-store-metadata
+make app-store-metadata-check
+make app-store-metadata-test
+make google-play-metadata-check
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T04 Android fastlane with Bundler
+
+Completed on 2026-06-18. Added Android fastlane setup with Bundler and
+metadata-safe lanes.
+
+Implementation notes:
+
+- Added `app/android/Gemfile` and `app/android/Gemfile.lock`.
+- Pinned fastlane to `2.228.0` because the local macOS Ruby is `2.6.10`,
+  while newer fastlane releases require newer Ruby runtimes.
+- Added `app/android/fastlane/Appfile` with:
+  - `package_name("org.finitefield.hankofield")`
+- Added `app/android/fastlane/Fastfile` with:
+  - `android metadata_check`: runs `make google-play-metadata-check` locally
+    without Google Play credentials.
+  - `android metadata`: runs `metadata_check` locally, then calls
+    `upload_to_play_store` only when `SUPPLY_JSON_KEY` is set. The Google
+    Play call uses `metadata_path` pointing at
+    `release/store_metadata/google_play`, `validate_only: true`,
+    `skip_upload_apk: true`, `skip_upload_aab: true`,
+    `skip_upload_images: true`, and `skip_upload_screenshots: true`.
+  - `android internal`: builds a release AAB and targets the Google Play
+    internal track. It defaults to `validate_only` unless
+    `SUPPLY_VALIDATE_ONLY=false` is explicitly set.
+- Added `scripts/release/android_fastlane_config.mjs` to validate that the
+  Android fastlane setup keeps metadata and binary lanes separate.
+- Added `scripts/release/android_fastlane_config.test.mjs` to cover:
+  - valid Android fastlane configuration shape
+  - failure when the metadata lane can upload an AAB
+  - failure when Google Play credential material is committed in `Appfile`
+- Added Make targets:
+  - `make android-fastlane-check`
+  - `make android-fastlane-test`
+- Added Android fastlane checks to `make i18n-ci`.
+
+Credential and upload behavior:
+
+- `SUPPLY_JSON_KEY` is required only for lanes that contact Google Play.
+- No Google Play service account JSON, key file path, keystore, password, AAB,
+  APK, fastlane report, polling, streaming, SSE, or WebSocket behavior was
+  added.
+- The completed local lane for M8-T04 is `bundle exec fastlane android
+  metadata` from `app/android`; without `SUPPLY_JSON_KEY`, it validates
+  generated metadata and does not contact Google Play or upload metadata, APKs,
+  or AABs.
+- The `metadata` lane is prepared as a Google Play validate-only metadata lane.
+  It cannot upload binaries because both APK and AAB upload are explicitly
+  skipped and are guarded by `make android-fastlane-check`.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, source store metadata, Google Play
+  generated metadata, and App Store generated metadata remains unchanged.
+- Android release signing files remain local and uncommitted.
+- `release.enabled=false` remains unchanged for all languages.
+- Binary upload remains separated into the `internal` lane for later M10
+  validation.
+- Rollback path: remove `app/android/Gemfile`,
+  `app/android/Gemfile.lock`, `app/android/fastlane`,
+  `scripts/release/android_fastlane_config.*`, remove the Makefile targets,
+  and reopen `M8-T04`.
+
+Validation:
+
+```sh
+node --check scripts/release/android_fastlane_config.mjs
+make android-fastlane-check
+make android-fastlane-test
+ruby -c app/android/fastlane/Fastfile
+ruby -c app/android/fastlane/Appfile
+BUNDLE_PATH=/tmp/hanko-field-android-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-android-bundle-config bundle install
+BUNDLE_PATH=/tmp/hanko-field-android-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-android-bundle-config bundle exec fastlane android metadata
+make google-play-metadata-check
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T05 iOS fastlane with Bundler
+
+Completed on 2026-06-18. Added iOS fastlane setup with Bundler and
+metadata-safe lanes.
+
+Implementation notes:
+
+- Added `app/ios/Gemfile` and `app/ios/Gemfile.lock`.
+- Pinned fastlane to `2.228.0` to match Android fastlane and the local macOS
+  Ruby `2.6.10` runtime.
+- Added `app/ios/fastlane/Appfile` with:
+  - `app_identifier("org.finitefield.hankofield")`
+- Added `app/ios/fastlane/Fastfile` with:
+  - `ios metadata_check`: runs `make app-store-metadata-check` locally
+    without App Store Connect credentials.
+  - `ios metadata`: runs `metadata_check` locally, then calls `deliver` only
+    when `APP_STORE_CONNECT_API_KEY_PATH` is set. The App Store Connect call
+    uses `metadata_path` pointing at `release/store_metadata/app_store`,
+    `skip_binary_upload: true`, `skip_screenshots: true`,
+    `submit_for_review: false`, and `force: true`.
+  - `ios testflight_upload`: builds a release IPA and uploads it to
+    TestFlight. The lane requires `APP_STORE_CONNECT_API_KEY_PATH` and defaults
+    to `skip_submission` unless `TESTFLIGHT_SKIP_SUBMISSION=false` is set.
+- Added `scripts/release/ios_fastlane_config.mjs` to validate that the iOS
+  fastlane setup keeps metadata and binary lanes separate.
+- Added `scripts/release/ios_fastlane_config.test.mjs` to cover:
+  - valid iOS fastlane configuration shape
+  - failure when the metadata lane can upload an IPA
+  - failure when App Store Connect credential material is committed in
+    `Appfile`
+- Added Make targets:
+  - `make ios-fastlane-check`
+  - `make ios-fastlane-test`
+- Added iOS fastlane checks to `make i18n-ci`.
+
+Credential and upload behavior:
+
+- `APP_STORE_CONNECT_API_KEY_PATH` is required only for lanes that contact App
+  Store Connect or TestFlight.
+- No App Store Connect API key JSON, `.p8` key, issuer ID, key ID, exported
+  IPA, fastlane report, polling, streaming, SSE, or WebSocket behavior was
+  added.
+- The completed local lane for M8-T05 is `bundle exec fastlane ios metadata`
+  from `app/ios`; without `APP_STORE_CONNECT_API_KEY_PATH`, it validates
+  generated metadata and does not contact App Store Connect or upload metadata,
+  screenshots, or binaries.
+- The `metadata` lane is prepared as an App Store metadata lane. It cannot
+  upload binaries because binary upload is explicitly skipped and guarded by
+  `make ios-fastlane-check`.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, source store metadata, Google Play
+  generated metadata, App Store generated metadata, and Android fastlane files
+  remain unchanged.
+- iOS signing assets and App Store Connect API keys remain external to the
+  repository.
+- `release.enabled=false` remains unchanged for all languages.
+- Binary upload remains separated into the `testflight_upload` lane for later
+  M10 validation.
+- Rollback path: remove `app/ios/Gemfile`, `app/ios/Gemfile.lock`,
+  `app/ios/fastlane`, `scripts/release/ios_fastlane_config.*`, remove the
+  Makefile targets, and reopen `M8-T05`.
+
+Validation:
+
+```sh
+node --check scripts/release/ios_fastlane_config.mjs
+make ios-fastlane-check
+make ios-fastlane-test
+ruby -c app/ios/fastlane/Fastfile
+ruby -c app/ios/fastlane/Appfile
+BUNDLE_PATH=/tmp/hanko-field-ios-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-ios-bundle-config bundle install
+BUNDLE_PATH=/tmp/hanko-field-ios-bundle BUNDLE_APP_CONFIG=/tmp/hanko-field-ios-bundle-config bundle exec fastlane ios metadata
+make app-store-metadata-check
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T06 Secret and Signing Guardrails
+
+Completed on 2026-06-18. Added release-secret ignore rules, setup notes, and
+mechanical checks for signing and fastlane private material.
+
+Implementation notes:
+
+- Added root `.gitignore` rules for:
+  - Android `key.properties`
+  - Android `.jks` and `.keystore` files
+  - Google Play service account JSON files
+  - App Store Connect `AuthKey*.p8` files
+  - App Store Connect API key JSON files
+  - Apple provisioning profiles
+  - exported `.aab`, `.apk`, and `.ipa` binaries
+  - local fastlane `report.xml` files and generated fastlane `README.md`
+    files
+- Added `doc/release-secret-guardrails.md` with local and CI setup notes for
+  Android signing, Google Play service account paths, App Store Connect API
+  key paths, TestFlight, and release-binary handling.
+- Added `scripts/release/secret_guardrails.mjs` to validate that known private
+  release paths are ignored and forbidden release material is not tracked.
+- Added `scripts/release/secret_guardrails.test.mjs` to cover:
+  - checked-in guardrail configuration
+  - failure when a required private release path is not ignored
+  - failure when forbidden release material is already tracked
+- Added Make targets:
+  - `make release-secret-guardrails-check`
+  - `make release-secret-guardrails-test`
+- Added release-secret guardrails to `make i18n-ci`.
+
+Guarded material:
+
+- `app/android/key.properties`
+- `app/android/app/upload-keystore.jks`
+- Google Play service account JSON files
+- App Store Connect `.p8` keys and API key JSON files
+- Apple provisioning profiles
+- exported Android and iOS release binaries
+- local fastlane reports and generated lane docs
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, store metadata, Android fastlane, and iOS
+  fastlane behavior remains unchanged.
+- Current local signing files stay untracked and ignored.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, keystores, provisioning profiles, exported release binaries,
+  polling, streaming, SSE, or WebSocket behavior were added.
+- Rollback path: remove the M8-T06 `.gitignore` block, remove
+  `doc/release-secret-guardrails.md`, remove
+  `scripts/release/secret_guardrails.*`, remove the Makefile targets, and
+  reopen `M8-T06`.
+
+Validation:
+
+```sh
+node --check scripts/release/secret_guardrails.mjs
+make release-secret-guardrails-check
+make release-secret-guardrails-test
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M8-T07 Screenshot Metadata Workflow
+
+Completed on 2026-06-18. Added deterministic screenshot slot generation for
+store metadata preparation without requiring screenshot images to exist yet.
+
+Implementation notes:
+
+- Added `doc/release-screenshot-workflow.md` with the source screenshot naming
+  rules:
+  - `release/store_metadata/screenshots/source/{route_code}/{device}/{NN}-{key}.png`
+  - devices: `phone_6_5`, `tablet_12_9`
+  - keys: `design`, `stones`, `checkout`
+  - slot files: `01-design.png`, `02-stones.png`, `03-checkout.png`
+- Added `scripts/release/screenshot_metadata.mjs` to generate and check
+  `release/store_metadata/screenshots/manifest.json`.
+- The manifest maps each source screenshot slot to:
+  - route code
+  - BCP-47 locale
+  - text direction
+  - Google Play store locale
+  - App Store locale
+  - device profile
+  - caption from `release/store_metadata/source/{route_code}.json`
+  - prepared Google Play and App Store screenshot paths
+- Added `scripts/release/screenshot_metadata.test.mjs` to cover:
+  - deterministic slot generation
+  - generated manifest check mode
+  - stale manifest detection
+  - clear failure when a source locale cannot map to store screenshot locales
+- Added Make targets:
+  - `make screenshot-metadata`
+  - `make screenshot-metadata-check`
+  - `make screenshot-metadata-test`
+- Added screenshot metadata checks and tests to `make i18n-ci`.
+
+Deterministic matching:
+
+- A screenshot can be matched by `{route_code, device, key}` before platform
+  upload preparation.
+- Platform locale paths are derived from `config/languages.json`, not entered
+  manually.
+- Screenshot captions are derived from the existing store metadata source, so
+  captions move with the same translation workflow as store copy.
+- Current Android and iOS metadata lanes still skip screenshot upload. The
+  screenshot tree remains preparation data until screenshot upload is
+  intentionally enabled in a later release milestone.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, store metadata, fastlane lanes, and release
+  secret guardrails remain unchanged except for CI integration of the new
+  screenshot metadata check.
+- `release.enabled=false` remains unchanged for all languages.
+- No screenshot image uploads, binary uploads, credentials, signing files,
+  polling, streaming, SSE, or WebSocket behavior were added.
+- Rollback path: remove `doc/release-screenshot-workflow.md`, remove
+  `scripts/release/screenshot_metadata.*`, remove
+  `release/store_metadata/screenshots/manifest.json`, remove the Makefile
+  targets and `i18n-ci` entries, and reopen `M8-T07`.
+
+Validation:
+
+```sh
+node --check scripts/release/screenshot_metadata.mjs
+make screenshot-metadata
+make screenshot-metadata-check
+make screenshot-metadata-test
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+### M9: 68-Language Content Production
+
+- [x] `M9-T01` Create all missing locale files.
+  Output: ARB, settings JSON, web JSON, API content, and metadata source
+  stubs for every enabled language.
+  Done when: `i18n-todo` reports missing keys instead of missing files and the
+  `M0-T05` migration-safety checklist is satisfied.
+- [ ] `M9-T02` Translate in script-family batches.
+  Output: reviewed translations for Latin, Cyrillic, Indic, Southeast Asian,
+  CJK, and RTL groups.
+  Done when: each batch passes `make i18n-check LANGS=<batch>`.
+- [x] `M9-T03` Review brand, legal, and product-name holdouts.
+  Output: intention sidecars for approved shared English or legal terms.
+  Done when: non-English files have no unapproved English leftovers and the
+  `M0-T05` intention sidecar gate is satisfied.
+- [x] `M9-T04` Run tiered layout QA.
+  Output: full QA for Tier 1, screenshot QA for Tier 2, mechanical checks for
+  Tier 3.
+  Done when: layout issues are fixed before indexing or release enablement.
+- [x] `M9-T05` Enable language flags in stages.
+  Output: separate PRs or commits for render-only, app-selectable,
+  web-indexed, and store-release-enabled transitions.
+  Done when: each flag change has validation evidence.
+- [x] `M9-T06` Freeze release candidate translations.
+  Output: language set and metadata baseline for the next app release.
+  Done when: translation changes after freeze require explicit review and the
+  `M0-T05` preservation gates are recorded in the freeze notes.
+
+#### M9-T01 Missing Locale File Stubs
+
+Completed on 2026-06-18. Added missing locale stub files for the full
+68-language registry so translation work can proceed as missing keys instead
+of missing files.
+
+Implementation notes:
+
+- Added `scripts/i18n/stubs.mjs` to create missing locale files without
+  overwriting existing translated or pilot files.
+- Added `scripts/i18n/stubs.test.mjs` to cover:
+  - ARB stubs with target `@@locale` and metadata preserved
+  - JSON stubs that keep non-string structure while leaving strings missing
+  - check mode before and after generation
+  - `i18n-todo` reporting missing keys instead of missing files
+- Added Make targets:
+  - `make i18n-stubs`
+  - `make i18n-stubs-check`
+  - `make i18n-stubs-test`
+- Added stub script checks to `make i18n-ci`.
+- Generated 945 missing stub files across:
+  - app ARB files
+  - app settings JSON files
+  - web content JSON files
+  - API checkout JSON files
+
+Stub behavior:
+
+- Existing `en`, `ja`, `zh`, `zhtw`, and `ar` files remain untouched.
+- ARB stubs preserve `@@locale` and `@message` metadata but intentionally omit
+  message values until translation.
+- JSON stubs preserve non-string containers and scalar values needed for stable
+  shape, while string values remain absent until translation.
+- API catalog files were already present as embedded language maps; remaining
+  catalog work is reported as missing keys.
+- Store metadata source files were not expanded in this task because
+  `release.enabled=false` for all languages and only `en`, `ja`, `zh`, and
+  `zhtw` currently have platform store locale mappings. Adding unsupported
+  release metadata source files would break the existing Google Play and App
+  Store generation checks before those languages are release-enabled.
+
+M0-T05 preservation evidence:
+
+- Existing app, web, API, checkout, catalog, store metadata, fastlane lanes,
+  and release secret guardrails remain unchanged except for translation stub
+  files and the new stub helper.
+- Registry flags remain unchanged; no language was made app-selectable,
+  web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, signing files, uploads, polling, streaming, SSE, or
+  WebSocket behavior were added.
+- Rollback path: remove `scripts/i18n/stubs.*`, remove the Makefile targets
+  and `i18n-ci` entries, remove generated stub files for non-pilot languages,
+  and reopen `M9-T01`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/stubs.mjs
+node --check scripts/i18n/stubs.test.mjs
+make i18n-stubs
+make i18n-stubs-check
+make i18n-stubs-test
+make i18n-check
+make i18n-ci
+node --input-type=module - <<'NODE'
+import { buildI18nTodo } from './scripts/i18n/todo.mjs';
+const report = await buildI18nTodo({ langs: ['all'] });
+const counts = new Map();
+for (const item of report.items) counts.set(item.type, (counts.get(item.type) ?? 0) + 1);
+const missingFiles = new Set(report.items.filter((item) => item.type === 'missing-file').map((item) => item.file));
+console.log({ items: report.items.length, counts: Object.fromEntries(counts), missing_file_paths: missingFiles.size });
+NODE
+git diff --check
+git diff --cached --check
+```
+
+#### M9-T03 Brand, Legal, and Product-Name Holdout Review
+
+Completed on 2026-06-18. Added a repository-level holdout review gate so
+approved English, brand, legal, URL, payment-provider, and code-literal terms
+remain explicit in intention sidecars before more languages are enabled.
+
+Implementation notes:
+
+- Added `scripts/i18n/holdouts.mjs`.
+- Added `scripts/i18n/holdouts.test.mjs`.
+- Added Make targets:
+  - `make i18n-holdouts`
+  - `make i18n-holdouts-check`
+  - `make i18n-holdouts-test`
+- Added holdout script checks to `make i18n-ci`.
+- The holdout check reuses `validateIntentions({ LANGS=all })`, so any
+  non-English exact same-as-English value without an approved intention sidecar
+  fails before release enablement.
+- Existing intention sidecars were reviewed and no new sidecar approval was
+  required for this task.
+
+Current holdout review summary:
+
+- `LANGS=all` intention validation passes with zero unapproved same-as-English
+  leftovers.
+- 21 sidecar files are parsed for the review.
+- 1,484 non-English approved holdout entries are tracked.
+- 51 entries are reviewed shared English/legal holdouts.
+- 1,433 entries are deferred because the target locale is not release-enabled
+  yet.
+- Reviewed holdout reason counts:
+  - `brand_name`: 9
+  - `code_literal`: 4
+  - `email`: 1
+  - `intentionally_english`: 2
+  - `legal_entity`: 3
+  - `payment_provider`: 1
+  - `url`: 9
+  - `url_or_email`: 22
+
+Holdout policy:
+
+- `brand_name` approvals cover `STONE SIGNATURE` where the exact English brand
+  name is intentionally retained.
+- `legal_entity` approvals cover legal company-name strings such as
+  `Finite Field, K.K.`.
+- `payment_provider` approvals cover provider names such as `Stripe Checkout`.
+- `url`, `url_or_email`, and `email` approvals cover support, legal, privacy,
+  and contact targets that must remain literal.
+- `code_literal` and `intentionally_english` approvals cover UI labels or
+  lookup literals that are intentionally not translated.
+- `locale_not_release_enabled` is not release-ready translation approval; it is
+  a temporary deferral that must be cleared or re-reviewed before its locale is
+  made app-selectable, web-indexed, or release-enabled.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- Existing intention sidecars remain the source of truth for approved same-as-
+  English values.
+- No language was made app-selectable, web-indexed, or release-enabled.
+- No credentials, signing files, uploads, polling, streaming, SSE, or WebSocket
+  behavior were added.
+- Rollback path: remove `scripts/i18n/holdouts.*`, remove the Makefile targets
+  and `i18n-ci` entries, and reopen `M9-T03`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/holdouts.mjs
+node --check scripts/i18n/holdouts.test.mjs
+node scripts/i18n/intentions.mjs
+LANGS=all node scripts/i18n/intentions.mjs
+make i18n-holdouts-check
+make i18n-holdouts-test
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M9-T04 Tiered Layout QA
+
+Completed on 2026-06-18. Added a tiered layout QA evidence gate for
+localization release readiness.
+
+Implementation notes:
+
+- Added `scripts/i18n/layout_qa.mjs`.
+- Added `scripts/i18n/layout_qa.test.mjs`.
+- Added Make targets:
+  - `make i18n-layout-qa`
+  - `make i18n-layout-qa-check`
+  - `make i18n-layout-qa-test`
+- Added layout QA checks to `make i18n-ci`.
+- Added machine-readable QA evidence:
+  - `doc/qa/m9-t04/layout-qa.json`
+  - `doc/qa/m9-t04/README.md`
+- The checker derives expected tiers from `config/languages.json`:
+  - Tier 1: non-English locales with `web.indexed=true` or
+    `release.enabled=true`.
+  - Tier 2: non-English locales that are app-enabled/app-selectable or
+    web-enabled but not indexed or release-enabled.
+  - Tier 3: non-English locales with app, web, and release flags disabled.
+- The checker also verifies web templates bind `<html lang>` and `<html dir>`
+  to the selected locale and verifies all RTL registry languages are covered by
+  the web direction helper.
+
+Current tier results:
+
+- Tier 1 full QA: `ja`
+- Tier 2 screenshot QA: `ar`, `zh`, `zhtw`
+- Tier 3 mechanical QA: the remaining 63 non-English route languages
+- `make i18n-layout-qa-check` passes with no layout QA issues.
+
+Evidence:
+
+- Tier 1 `ja` references existing app widget/localization tests and web locale
+  routing tests.
+- Tier 2 `ar`, `zh`, and `zhtw` references the M7-T05 screenshot QA and app
+  pilot/RTL layout probes.
+- Tier 3 references `make i18n-check LANGS=all` and
+  `make i18n-stubs-check`.
+- Current `ar`, `zh`, and `zhtw` remain `noindex` and release-disabled; this
+  task does not promote them.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or release-enabled.
+- No credentials, signing files, uploads, polling, streaming, SSE, or WebSocket
+  behavior were added.
+- The gate is read-only and blocks future promotion if tier evidence is
+  missing or stale.
+- Rollback path: remove `scripts/i18n/layout_qa.*`, remove the Makefile
+  targets and `i18n-ci` entries, remove `doc/qa/m9-t04/`, and reopen
+  `M9-T04`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/layout_qa.mjs
+node --check scripts/i18n/layout_qa.test.mjs
+jq empty doc/qa/m9-t04/layout-qa.json
+make i18n-layout-qa-check
+make i18n-layout-qa-test
+cd app && flutter test test/pilot_layout_qa_test.dart test/rtl_overflow_test.dart test/generated_hanko_localizations_test.dart
+cargo test --manifest-path web/Cargo.toml web_router_resolves_supported_and_unknown_locale_prefixes -- --nocapture
+cargo test --manifest-path web/Cargo.toml pilot_payment_routes_render_localized_copy -- --nocapture
+make i18n-check
+make i18n-stubs-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M9-T05 Staged Language Flags
+
+Updated on 2026-07-14. The staged language-flag readiness gate now blocks
+promotion while deferred translation entries remain.
+
+Implementation notes:
+
+- Added `scripts/i18n/flag_stages.mjs`.
+- Added `scripts/i18n/flag_stages.test.mjs`.
+- Added Make targets:
+  - `make i18n-flag-stages`
+  - `make i18n-flag-stages-check`
+  - `make i18n-flag-stages-test`
+- Added staged flag checks to `make i18n-ci`.
+- Added machine-readable stage evidence:
+  - `doc/qa/m9-t05/flag-stages.json`
+  - `doc/qa/m9-t05/README.md`
+- The checker derives the current stage for every non-English route language
+  from `config/languages.json`.
+- The checker verifies that `flag-stages.json` matches the current registry
+  state and includes the required evidence kinds for each non-empty stage.
+- The checker also enforces flag invariants:
+  - `app.selectable=true` requires `app.enabled=true`.
+  - Deferred translation entries block app selection, web indexing, and store
+    release.
+  - `web.indexed=true` requires `web.enabled=true`.
+  - `release.enabled=true` requires app selectable, web indexed, Android and
+    iOS store locale mappings, and store metadata source.
+
+Current stage results:
+
+- `web_indexed`: `ja`
+- `render_only`: `ar`, `zh`, `zhtw`
+- `app_selectable`: none
+- `disabled`: the remaining 63 non-English route languages
+- `store_release_enabled`: none
+
+Transition policy:
+
+- Future language-flag promotion order is:
+  1. `disabled`
+  2. `render_only`
+  3. `app_selectable`
+  4. `web_indexed`
+  5. `store_release_enabled`
+- Each transition kind must be made in a separate PR or commit.
+- Each transition must update `doc/qa/m9-t05/flag-stages.json` with fresh
+  evidence before the gate passes.
+- This correction demotes the three pilot locales from `app_selectable` to
+  `render_only`; future promotions still require a separate reviewed change.
+
+M0-T05 preservation evidence:
+
+- Existing translation values remain unchanged.
+- `ar`, `zh`, and `zhtw` are no longer user-selectable while deferred copy
+  remains; forced render-only QA stays available.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, signing files, uploads, polling, streaming, SSE, or WebSocket
+  behavior were added.
+- Rollback path: remove `scripts/i18n/flag_stages.*`, remove the Makefile
+  targets and `i18n-ci` entries, remove `doc/qa/m9-t05/`, and reopen
+  `M9-T05`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/flag_stages.mjs
+node --check scripts/i18n/flag_stages.test.mjs
+jq empty doc/qa/m9-t05/flag-stages.json
+make i18n-flag-stages-check
+make i18n-flag-stages-test
+make i18n-check
+make i18n-holdouts-check
+make i18n-layout-qa-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M9-T06 Release-Candidate Translation Freeze
+
+Completed on 2026-06-18. Added a release-candidate translation freeze gate so
+future translation or metadata changes must be reviewed before the frozen
+baseline is updated.
+
+Implementation notes:
+
+- Added `scripts/i18n/freeze.mjs`.
+- Added `scripts/i18n/freeze.test.mjs`.
+- Added Make targets:
+  - `make i18n-freeze`
+  - `make i18n-freeze-check`
+  - `make i18n-freeze-manifest`
+  - `make i18n-freeze-test`
+- Added freeze checks to `make i18n-ci`.
+- Added machine-readable freeze evidence:
+  - `doc/qa/m9-t06/translation-freeze.json`
+  - `doc/qa/m9-t06/README.md`
+- The checker derives the frozen language set from `config/languages.json`.
+- The checker derives the store metadata source locale set from
+  `release/store_metadata/source`.
+- The checker verifies SHA-256 and byte-size baselines for frozen app, web,
+  API, catalog, store metadata source, and generated store metadata files.
+- The checker verifies that required M0-T05 preservation and release guardrail
+  checks are recorded in the manifest.
+
+Current freeze baseline:
+
+- Frozen locales: `ar`, `en`, `ja`, `zh`, `zhtw`
+- Store metadata source locales: `en`, `ja`, `zh`, `zhtw`
+- Release-enabled locales: none
+- Frozen files: 151
+- `make i18n-freeze-check` passes with no translation freeze issues.
+
+Post-freeze review policy:
+
+- Any change to a frozen translation, registry, API catalog, or store metadata
+  file must be explicitly reviewed before `translation-freeze.json` is updated.
+- After review, run the required gates and then update the manifest with:
+  `make i18n-freeze-manifest`.
+- The updated manifest must pass `make i18n-freeze-check`.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, signing files, uploads, polling, streaming, SSE, or WebSocket
+  behavior were added.
+- Rollback path: remove `scripts/i18n/freeze.*`, remove the Makefile targets
+  and `i18n-ci` entries, remove `doc/qa/m9-t06/`, and reopen `M9-T06`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/freeze.mjs
+node --check scripts/i18n/freeze.test.mjs
+jq empty doc/qa/m9-t06/translation-freeze.json
+make i18n-freeze-check
+make i18n-freeze-test
+make i18n-check
+make i18n-stubs-check
+make i18n-holdouts-check
+make i18n-layout-qa-check
+make i18n-flag-stages-check
+make store-metadata-check
+make google-play-metadata-check
+make app-store-metadata-check
+make screenshot-metadata-check
+make android-fastlane-check
+make ios-fastlane-check
+make release-secret-guardrails-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+### M10: Release QA and Staged Launch
+
+- [x] `M10-T01` Build Android release candidate.
+  Output: signed AAB build evidence.
+  Done when: `flutter build appbundle --release` passes with release signing.
+- [x] `M10-T02` Build iOS release candidate.
+  Output: signed IPA build evidence from a signing-capable Mac.
+  Done when: `flutter build ipa --release` passes.
+- [x] `M10-T03` Verify deep links and payment return paths.
+  Output: smoke-test results for custom scheme, Universal Links/App Links, and
+  localized payment paths.
+  Done when: checkout returns preserve route code across pilot languages and
+  the `M0-T05` route and deep-link gate is satisfied.
+- [ ] `M10-T04` Upload to internal Google Play track.
+  Output: fastlane internal upload evidence.
+  Done when: internal testers can install the build.
+- [ ] `M10-T05` Upload to TestFlight.
+  Output: fastlane TestFlight upload evidence.
+  Done when: TestFlight testers can install the build.
+- [x] `M10-T06` Run production release signoff.
+  Output: checklist covering validation gates, screenshots, metadata, rollback,
+  and support readiness.
+  Done when: production lane requires and records explicit manual confirmation.
+- [ ] `M10-T07` Execute staged production release.
+  Output: store rollout notes and monitoring checkpoints.
+  Done when: rollout percentage, observed issues, and rollback decision points
+  are recorded.
+
+#### M10-T01 Android Release Candidate
+
+Completed on 2026-06-18. Built and verified the Android release candidate AAB
+for the current multilingual release baseline.
+
+Implementation notes:
+
+- Ran `cd app && flutter build appbundle --release`.
+- Generated local ignored artifact:
+  `app/build/app/outputs/bundle/release/app-release.aab`.
+- Added machine-readable release evidence:
+  - `doc/qa/m10-t01/android-release-candidate.json`
+  - `doc/qa/m10-t01/README.md`
+- Committed release-build source updates:
+  - Flutter migrator flags in `app/android/gradle.properties`.
+  - Regenerated `app/lib/l10n/generated/` files for the 68-language ARB set
+    created in M9-T01.
+  - Updated `test/generated_hanko_localizations_test.dart` so generated
+    localizations are validated against `config/languages.json`, while runtime
+    app locales remain gated by `hankoSupportedLocales`.
+- The AAB, key properties, keystore, and upload credentials remain ignored and
+  uncommitted.
+
+Release artifact:
+
+- Path: `app/build/app/outputs/bundle/release/app-release.aab`
+- Size: 62,753,384 bytes, reported by Flutter as 62.8MB
+- SHA-256:
+  `2ef6ff7862ce0a33731e4be1aaa92d19a2e4dd12bb8262b5f9fc853bb9f9f77c`
+- Version: `1.1.0+11`
+
+Signing evidence:
+
+- `jarsigner -verify -verbose -certs` reports `jar verified`.
+- Signer:
+  `CN=Hanko Field, OU=Mobile, O=Hanko Field, L=Tokyo, ST=Tokyo, C=JP`
+- Signature algorithm: SHA256withRSA, 2048-bit key.
+- Certificate validity: 2026-04-07 16:45 JST to 2053-08-23 16:45 JST.
+- `jarsigner -verify -strict` exits with code 4 because the signing
+  certificate is self-signed and the signature has no timestamp. This is
+  recorded as a known signing-tool warning in the evidence JSON.
+
+Known warnings:
+
+- Flutter warns that the app and `url_launcher_android` still apply the Kotlin
+  Gradle Plugin and must migrate to Built-in Kotlin before future Flutter
+  versions require it.
+- Flutter reports 403 untranslated messages for each disabled/stub locale. This
+  matches the current M9 stub baseline; M9-T02/M9-T05/M9-T06 continue to block
+  public release enablement for those locales.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No signing material, AAB/APK artifact, upload credential, polling, streaming,
+  SSE, or WebSocket behavior was committed.
+- Rollback path: remove `doc/qa/m10-t01/`, revert the generated l10n source
+  updates and Gradle migrator flags if release-build regeneration is deferred,
+  and reopen `M10-T01`.
+
+Validation:
+
+```sh
+cd app && flutter build appbundle --release
+shasum -a 256 app/build/app/outputs/bundle/release/app-release.aab
+jarsigner -verify -verbose -certs app/build/app/outputs/bundle/release/app-release.aab
+jarsigner -verify -strict app/build/app/outputs/bundle/release/app-release.aab
+cd app && flutter test test/generated_hanko_localizations_test.dart
+cd app && flutter test test/language_registry_test.dart
+git diff --check
+git diff --cached --check
+```
+
+#### M10-T02 iOS Release Candidate
+
+Completed on 2026-06-18. Built and verified the signed iOS release candidate
+IPA for the current multilingual release baseline.
+
+Implementation notes:
+
+- Ran `cd app && flutter build ipa --release --export-options-plist=ios/ExportOptions.plist`.
+- Generated local ignored artifact:
+  `app/build/ios/ipa/STONE SIGNATURE.ipa`.
+- Added machine-readable release evidence:
+  - `doc/qa/m10-t02/ios-release-candidate.json`
+  - `doc/qa/m10-t02/README.md`
+- Committed release-build source updates:
+  - Registered the existing iOS project in `app/.metadata`, so Flutter treats
+    the project as iOS-capable.
+  - Added automatic signing team `5267S9U4PR` to the Runner iOS build
+    configurations.
+  - Added `app/ios/ExportOptions.plist` so App Store IPA export preserves
+    `pubspec.yaml` build number `11`.
+  - Updated the iOS fastlane TestFlight lane to use the same export options.
+  - Accepted Flutter/Xcode Swift Package Manager integration changes generated
+    during the iOS release build.
+- The IPA, App Store Connect API keys, provisioning profiles, and local Xcode
+  wrapper remain ignored or outside the repository.
+
+Release artifact:
+
+- Path: `app/build/ios/ipa/STONE SIGNATURE.ipa`
+- Size: 31,355,322 bytes, reported by Flutter as 31.5MB
+- SHA-256:
+  `b74de0d4c300acfbdfba44f1c6423693835b999a2ea876b835cca1684349c427`
+- Version: `1.1.0+11`
+- Bundle identifier: `org.finitefield.hankofield`
+- Archive path: `app/build/ios/archive/Runner.xcarchive`
+- Archive size: 193.7MB
+
+Signing evidence:
+
+- `codesign --verify --deep --strict --verbose=2` reports the app is valid on
+  disk and satisfies its designated requirement.
+- Signer:
+  `Apple Distribution: Finite Field, K.K. (5267S9U4PR)`
+- Team identifier: `5267S9U4PR`
+- Provisioning profile:
+  `iOS Team Store Provisioning Profile: org.finitefield.hankofield`
+- Provisioning profile expiration: 2027-05-04 15:57:13 JST.
+- Signed time: 2026-06-18 22:30:54 JST.
+
+Known warnings:
+
+- This Mac's global active developer directory is
+  `/Library/Developer/CommandLineTools`, so the local build used
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` plus a temporary
+  `xcrun` wrapper. No local absolute Xcode path is committed.
+- Flutter reports that all iOS plugins are Swift Packages while the project
+  still has CocoaPods integration. Removing CocoaPods can improve build time,
+  but the signed IPA build passed with the current project.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No IPA artifact, App Store Connect credential, provisioning profile, polling,
+  streaming, SSE, or WebSocket behavior was committed.
+- No App Store Connect or TestFlight upload was performed.
+- Rollback path: remove `doc/qa/m10-t02/`, revert the iOS metadata/signing,
+  export options, fastlane, and generated Xcode project changes, then reopen
+  `M10-T02`.
+
+Validation:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer flutter doctor -v
+cd app && flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+shasum -a 256 "app/build/ios/ipa/STONE SIGNATURE.ipa"
+codesign --verify --deep --strict --verbose=2 Payload/Runner.app
+codesign -dv --verbose=4 Payload/Runner.app
+security cms -D -i Payload/Runner.app/embedded.mobileprovision
+jq empty doc/qa/m10-t02/ios-release-candidate.json
+make ios-fastlane-check
+make ios-fastlane-test
+make release-secret-guardrails-check
+git diff --check
+git diff --cached --check
+```
+
+#### M10-T03 Deep Links and Payment Return Paths
+
+Completed on 2026-06-18. Verified the repository-level deep-link and payment
+return behavior needed before internal store uploads.
+
+Implementation notes:
+
+- Added Android App Link path prefixes for both `finitefield.org` and
+  `www.finitefield.org`:
+  - `/zh/payment`
+  - `/zhtw/payment`
+  - `/ar/payment`
+- Kept existing default, English, and Japanese payment paths unchanged:
+  `/payment`, `/en/payment`, and `/ja/payment`.
+- Updated the app checkout-return parser so localized Universal Link/App Link
+  paths infer `zh`, `zhtw`, or `ar` when `lang` or `locale` is absent.
+- Kept query-based custom scheme behavior as the primary Stripe app-return
+  path.
+- Added API coverage proving normalized Stripe order locales preserve route
+  codes in custom-scheme success and cancel URLs.
+- Added web coverage proving localized payment-result URLs and app-return URLs
+  preserve `return_to=app`, `session_id`, `order_id`, and pilot route codes.
+- Updated `doc/app-release-deep-link-config.md` so release smoke testing covers
+  `en`, `ja`, `zh`, `zhtw`, and `ar` custom scheme and Universal Link routes.
+- Added machine-readable and human-readable smoke evidence:
+  - `doc/qa/m10-t03/deep-link-payment-return-smoke.json`
+  - `doc/qa/m10-t03/README.md`
+
+Smoke result:
+
+- Custom scheme: PASS for `hankofield://checkout/*` with `lang=en`, `lang=ja`,
+  `lang=zh`, `lang=zhtw`, and `lang=ar`.
+- Android App Links: PASS for repository manifest declarations covering
+  localized payment path prefixes on both configured hosts.
+- iOS Universal Links: PASS for repository entitlements and documented
+  localized payment paths.
+- App parser: PASS for pilot localized Universal Link/App Link paths without a
+  `lang` query.
+- API Stripe URLs: PASS for `zh-Hans` to `zh`, `zh-Hant` to `zhtw`, and `ar`
+  to `ar` normalization.
+- Web payment result URLs: PASS for pilot localized success URLs and app-return
+  custom scheme URLs.
+
+Known limitations:
+
+- No live installed-device deep-link test was run in this task.
+- No hosted `assetlinks.json` or AASA file was fetched from production in this
+  task.
+- No Stripe network checkout, Google Play upload, or TestFlight upload was
+  performed. Those remain covered by later M10 upload and staged-release tasks.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No signing material, upload credential, store upload, polling, streaming,
+  SSE, or WebSocket behavior was committed.
+- Rollback path: remove `doc/qa/m10-t03/`, revert the Android path-prefix,
+  app parser, API/web/app tests, and deep-link documentation changes, then
+  reopen `M10-T03`.
+
+Validation:
+
+```sh
+jq empty doc/qa/m10-t03/deep-link-payment-return-smoke.json
+cd app && flutter test test/checkout_return_test.dart test/platform_deep_link_config_test.dart
+cargo test --manifest-path api/Cargo.toml stripe_checkout_return_urls_preserve_normalized_route_code -- --nocapture
+cargo test --manifest-path api/Cargo.toml pilot_checkout_return_urls_preserve_arabic_route_code -- --nocapture
+cargo test --manifest-path web/Cargo.toml payment_result_urls_preserve_app_return_marker -- --nocapture
+cargo test --manifest-path web/Cargo.toml pilot_payment_result_urls_preserve_app_return_route_codes -- --nocapture
+cargo test --manifest-path web/Cargo.toml app_checkout_success_page_does_not_auto_redirect_to_custom_scheme -- --nocapture
+cargo test --manifest-path web/Cargo.toml pilot_payment_routes_render_localized_copy -- --nocapture
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M10-T06 Production Release Signoff
+
+Completed on 2026-06-18. Added guarded production fastlane lanes and recorded
+the production release checklist state before staged production execution.
+
+Implementation notes:
+
+- Added Android `production` lane in `app/android/fastlane/Fastfile`.
+  - Builds the release AAB.
+  - Uploads to the Google Play `production` track only after explicit signoff.
+  - Defaults `SUPPLY_PRODUCTION_RELEASE_STATUS` to `draft`.
+- Added iOS `production` lane in `app/ios/fastlane/Fastfile`.
+  - Builds the release IPA.
+  - Uploads a production App Store Connect binary only after explicit signoff.
+  - Keeps `submit_for_review: false` so App Store review submission remains a
+    separate release-owner action.
+- Added shared production signoff requirements:
+  - `RELEASE_SIGNOFF_PATH` must point to an existing signoff record.
+  - `RELEASE_SIGNOFF_CONFIRMATION` must exactly equal
+    `I confirm the Stone Signature production release`.
+  - The signoff JSON must record the same confirmation phrase and set
+    `approval.approved_for_m10_t07_execution=true`; the committed M10-T06
+    record intentionally keeps that value `false` until M10-T07.
+- Updated Android and iOS fastlane config validators so production lanes must
+  call `require_release_signoff`.
+- Added regression tests proving production lanes fail validation if the manual
+  signoff call is removed.
+- Updated `doc/release-secret-guardrails.md` with production signoff inputs.
+- Added signoff evidence:
+  - `doc/qa/m10-t06/README.md`
+  - `doc/qa/m10-t06/production-release-signoff.json`
+
+Checklist state:
+
+- `M10-T01` Android release candidate evidence is present.
+- `M10-T02` iOS release candidate evidence is present.
+- `M10-T03` deep-link and payment-return evidence is present.
+- Store metadata, screenshots, i18n checks, fastlane config checks, and release
+  secret guardrails are covered by automated gates.
+- `M10-T04` Google Play internal upload remains pending because
+  `SUPPLY_JSON_KEY` is not available in this environment.
+- `M10-T05` TestFlight upload remains pending because
+  `APP_STORE_CONNECT_API_KEY_PATH` is not available in this environment.
+- `M10-T07` must not execute production release until the release owner updates
+  the signoff record after internal/TestFlight evidence is available. The
+  production lanes reject the current M10-T06 signoff JSON until that happens.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No signing material, upload credential, production upload, polling,
+  streaming, SSE, or WebSocket behavior was committed.
+- Rollback path: remove `doc/qa/m10-t06/`, revert the production fastlane lane,
+  validator, test, and guardrail documentation changes, then reopen
+  `M10-T06`.
+
+Validation:
+
+```sh
+node --check scripts/release/android_fastlane_config.mjs
+node --check scripts/release/ios_fastlane_config.mjs
+make android-fastlane-check
+make android-fastlane-test
+make ios-fastlane-check
+make ios-fastlane-test
+make release-secret-guardrails-check
+make release-secret-guardrails-test
+jq empty doc/qa/m10-t06/production-release-signoff.json
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+### M11: Post-Release Monitoring and Cleanup
+
+- [x] `M11-T01` Monitor locale diagnostics.
+  Output: review of unsupported locale, fallback, missing content, checkout
+  locale, and malformed translation logs.
+  Done when: no release-enabled locale has unexpected fallback spikes.
+- [x] `M11-T02` Triage support feedback by locale.
+  Output: issue list grouped by language, platform, and screen.
+  Done when: translation and layout fixes have owners.
+- [x] `M11-T03` Patch high-priority translation issues.
+  Output: small content-only fixes with `i18n-check` evidence.
+  Done when: store-release-enabled languages remain clean after patches.
+- [x] `M11-T04` Remove temporary migration wrappers.
+  Output: cleanup PR for compatibility code that is no longer needed.
+  Done when: generated localization and registry paths are the only active
+  localization mechanisms.
+- [x] `M11-T05` Update the release runbook.
+  Output: final notes for adding future languages, store metadata updates, and
+  fastlane release steps.
+  Done when: the next localized release does not need rediscovery.
+
+#### M11-T01 Locale Diagnostics Monitoring
+
+Completed on 2026-06-18. Added a locale diagnostics monitoring gate and
+recorded the first post-release diagnostic review state.
+
+Implementation notes:
+
+- Added `scripts/i18n/diagnostics.mjs` to validate locale diagnostics review
+  evidence against `config/languages.json`.
+- Added `scripts/i18n/diagnostics.test.mjs` covering:
+  - checked-in evidence acceptance
+  - required diagnostic stream omissions
+  - release-enabled fallback spikes
+  - release-enabled locale mismatches between evidence and registry
+- Added Make targets:
+  - `make i18n-diagnostics`
+  - `make i18n-diagnostics-check`
+  - `make i18n-diagnostics-test`
+- Added the diagnostics checks to `make i18n-ci`.
+- Added monitoring evidence:
+  - `doc/qa/m11-t01/README.md`
+  - `doc/qa/m11-t01/locale-diagnostics-review.json`
+
+Reviewed streams:
+
+- Unsupported locale requests.
+- Fallback locale decisions and fallback reasons.
+- Missing content files or missing localized keys.
+- Checkout locale, preferred locale, and route code.
+- Malformed translation or catalog parse failures.
+
+Current review result:
+
+- Current release-enabled locales: none.
+- Unexpected fallback spikes for release-enabled locales: none.
+- Because `M10-T04`, `M10-T05`, and `M10-T07` are not complete, no production
+  log export is available yet. The evidence records this as a local release-gate
+  review and requires a live log refresh after staged rollout begins.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, production log exports, polling, streaming, SSE, or WebSocket
+  behavior was committed.
+- Rollback path: remove `doc/qa/m11-t01/`, remove the diagnostics script,
+  tests, Make targets, and `i18n-ci` entries, then reopen `M11-T01`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/diagnostics.mjs
+make i18n-diagnostics-check
+make i18n-diagnostics-test
+jq empty doc/qa/m11-t01/locale-diagnostics-review.json
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M11-T02 Support Feedback Triage
+
+Completed on 2026-06-18. Added a support feedback triage gate and recorded the
+first multilingual support review state.
+
+Implementation notes:
+
+- Added `scripts/i18n/support_triage.mjs` to validate support triage evidence
+  against `config/languages.json`.
+- Added `scripts/i18n/support_triage.test.mjs` covering:
+  - checked-in evidence acceptance
+  - missing translation or layout owners
+  - triage groups with unknown locale codes
+  - missing required support sources
+- Added Make targets:
+  - `make i18n-support-triage`
+  - `make i18n-support-triage-check`
+  - `make i18n-support-triage-test`
+- Added the support triage checks to `make i18n-ci`.
+- Added triage evidence:
+  - `doc/qa/m11-t02/README.md`
+  - `doc/qa/m11-t02/support-feedback-triage.json`
+
+Reviewed sources:
+
+- Support email.
+- Support form or customer contact exports.
+- Google Play reviews.
+- App Store Connect reviews.
+
+Current review result:
+
+- Production rollout has not started.
+- Support feedback records reviewed in this pre-rollout gate: 0.
+- Translation issues requiring owners: 0.
+- Layout issues requiring owners: 0.
+- Missing owners: 0.
+- Future M11 runs must replace the zero-count local review with real support
+  and store-review exports after staged rollout begins.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, production support exports, polling, streaming, SSE, or
+  WebSocket behavior was committed.
+- Rollback path: remove `doc/qa/m11-t02/`, remove the support triage script,
+  tests, Make targets, and `i18n-ci` entries, then reopen `M11-T02`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/support_triage.mjs
+make i18n-support-triage-check
+make i18n-support-triage-test
+jq empty doc/qa/m11-t02/support-feedback-triage.json
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M11-T03 High-Priority Translation Patch Review
+
+Completed on 2026-06-18. Added a high-priority translation patch gate and
+recorded the current patch review state.
+
+Implementation notes:
+
+- Added `scripts/i18n/translation_patches.mjs` to validate high-priority
+  translation patch evidence against:
+  - `config/languages.json`
+  - `doc/qa/m11-t02/support-feedback-triage.json`
+  - store-release-enabled locale flags
+- Added `scripts/i18n/translation_patches.test.mjs` covering:
+  - checked-in evidence acceptance
+  - high-priority translation issues without patches
+  - valid content-only translation patches
+  - non-content file paths in patch evidence
+  - missing `make i18n-check` evidence
+- Added Make targets:
+  - `make i18n-translation-patches`
+  - `make i18n-translation-patches-check`
+  - `make i18n-translation-patches-test`
+- Added the translation patch checks to `make i18n-ci`.
+- Added patch review evidence:
+  - `doc/qa/m11-t03/README.md`
+  - `doc/qa/m11-t03/translation-patch-review.json`
+
+Patch contract:
+
+- Every `critical` or `high` severity `translation` issue from M11-T02 must
+  have a patch entry.
+- Patch entries must include an owner, source issue id, locale, status,
+  touched content files, and passing `make i18n-check` evidence.
+- Patch files are limited to localization content roots:
+  - `app/lib/l10n/`
+  - `app/assets/i18n/`
+  - `api/content/i18n/`
+  - `web/content/i18n/`
+  - `release/store_metadata/source/`
+
+Current review result:
+
+- Source triage evidence: `doc/qa/m11-t02/support-feedback-triage.json`.
+- High-priority translation issues found in M11-T02: 0.
+- Content-only translation patches applied: 0.
+- Store-release-enabled locales: none.
+- Future M11 runs must replace the zero-count local review with real support
+  issue data after staged rollout begins.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, production support exports, polling, streaming, SSE, or
+  WebSocket behavior was committed.
+- Rollback path: remove `doc/qa/m11-t03/`, remove the translation patch script,
+  tests, Make targets, and `i18n-ci` entries, then reopen `M11-T03`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/translation_patches.mjs
+make i18n-translation-patches-check
+make i18n-translation-patches-test
+jq empty doc/qa/m11-t03/translation-patch-review.json
+make i18n-check
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+#### M11-T04 Migration Wrapper Cleanup
+
+Completed on 2026-06-18. Removed temporary Flutter localization migration
+wrappers and added a cleanup gate to keep generated localization and registry
+paths as the active localization mechanisms.
+
+Implementation notes:
+
+- Removed the `HankoLocalizations` typedef.
+- Removed the hardcoded `hankoSupportedLocales` constant.
+- Removed the `hankoLocalizationsDelegates` constant.
+- Updated `MaterialApp` and app/widget tests to use:
+  - `GeneratedHankoLocalizations.supportedLocales`
+  - `GeneratedHankoLocalizations.localizationsDelegates`
+- Updated localized helper type annotations from `HankoLocalizations` to
+  `GeneratedHankoLocalizations`.
+- Added `scripts/i18n/migration_cleanup.mjs` to validate:
+  - removed wrapper names do not return
+  - `MaterialApp` uses generated localization delegates and supported locales
+  - the app language registry still loads `config/languages.json`
+  - M11-T04 cleanup evidence is present
+- Added `scripts/i18n/migration_cleanup.test.mjs` covering:
+  - checked-in evidence acceptance
+  - returning `HankoLocalizations` typedef
+  - leaving generated localization delegates
+  - incomplete removed-wrapper evidence
+- Added Make targets:
+  - `make i18n-migration-cleanup`
+  - `make i18n-migration-cleanup-check`
+  - `make i18n-migration-cleanup-test`
+- Added the migration cleanup checks to `make i18n-ci`.
+- Added cleanup evidence:
+  - `doc/qa/m11-t04/README.md`
+  - `doc/qa/m11-t04/migration-cleanup.json`
+
+Retained compatibility:
+
+- `preferred_language_code` upgrade fallback remains intentionally retained.
+  It preserves previously saved language preferences for upgraded installs and
+  is not used as a translation lookup source.
+
+Current review result:
+
+- Active Flutter localization path:
+  `app/lib/l10n/generated/generated_hanko_localizations.dart`.
+- Active language registry path:
+  `config/languages.json`.
+- Temporary localization wrappers removed: 3.
+- Production rollout has not started.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, production support exports, polling, streaming, SSE, or
+  WebSocket behavior was committed.
+- Rollback path: restore the removed app localization wrappers, remove
+  `doc/qa/m11-t04/`, remove the migration cleanup script, tests, Make targets,
+  and `i18n-ci` entries, then reopen `M11-T04`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/migration_cleanup.mjs
+make i18n-migration-cleanup-check
+make i18n-migration-cleanup-test
+jq empty doc/qa/m11-t04/migration-cleanup.json
+make i18n-check
+make i18n-ci
+cd app && flutter test test/generated_hanko_localizations_test.dart
+git diff --check
+git diff --cached --check
+```
+
+#### M11-T05 Release Runbook Update
+
+Completed on 2026-06-18. Added a localized release runbook and a validation
+gate so future language additions, store metadata updates, fastlane release
+steps, and post-release cleanup can proceed without rediscovering the workflow.
+
+Implementation notes:
+
+- Added `doc/localized-release-runbook.md` covering:
+  - future language addition from `config/languages.json`
+  - translation content roots and intention sidecars
+  - staged flag progression from disabled to store-release-enabled
+  - store metadata source and generated output paths
+  - Android fastlane metadata, internal, and production lanes
+  - iOS fastlane metadata, TestFlight, and production lanes
+  - production secret and signoff inputs
+  - M11 diagnostics, support triage, translation patch, and cleanup checks
+  - rollback paths for content, release-enabled, app-selectable, and indexed
+    web-language issues
+- Added `scripts/i18n/release_runbook.mjs` to validate:
+  - the runbook includes required operational sections
+  - future language, store metadata, fastlane, and M11 cleanup commands are
+    documented
+  - M11-T05 evidence is present
+  - the evidence route-code count matches `config/languages.json`
+- Added `scripts/i18n/release_runbook.test.mjs` covering:
+  - checked-in runbook acceptance
+  - missing fastlane release steps
+  - route-code count drift
+  - missing store metadata path evidence
+- Added Make targets:
+  - `make i18n-release-runbook`
+  - `make i18n-release-runbook-check`
+  - `make i18n-release-runbook-test`
+- Added the release runbook checks to `make i18n-ci`.
+- Added runbook evidence:
+  - `doc/qa/m11-t05/README.md`
+  - `doc/qa/m11-t05/release-runbook-review.json`
+
+Current review result:
+
+- Canonical runbook path: `doc/localized-release-runbook.md`.
+- Registered route-code count: 68.
+- Required M11-T05 sections: language addition, store metadata update,
+  fastlane release, post-release monitoring and cleanup, rollback.
+- Production rollout has not started.
+
+M0-T05 preservation evidence:
+
+- Existing translation values and registry flags remain unchanged.
+- No language was made app-selectable, web-indexed, or store-release-enabled.
+- `release.enabled=false` remains unchanged for all languages.
+- No credentials, production support exports, polling, streaming, SSE, or
+  WebSocket behavior was committed.
+- Rollback path: remove `doc/localized-release-runbook.md`, remove
+  `doc/qa/m11-t05/`, remove the release runbook script, tests, Make targets,
+  and `i18n-ci` entries, then reopen `M11-T05`.
+
+Validation:
+
+```sh
+node --check scripts/i18n/release_runbook.mjs
+make i18n-release-runbook-check
+make i18n-release-runbook-test
+jq empty doc/qa/m11-t05/release-runbook-review.json
+make i18n-ci
+git diff --check
+git diff --cached --check
+```
+
+### Suggested PR Slices
+
+- PR 1: `M0` baseline inventory and migration safety.
+- PR 2: `M1` registry and read-only status tooling.
+- PR 3: `M2` Flutter app migration.
+- PR 4: `M3` web copy and route migration.
+- PR 5: `M4` API, catalog, and checkout localization.
+- PR 6: `M5` admin data preservation.
+- PR 7: `M6` translation workflow tooling.
+- PR 8: `M7` pilot language render-only QA.
+- PR 9: `M8` store metadata generation and fastlane metadata lanes.
+- PR 10+: `M9` language-batch translation and content production.
+- PR 11: `M10` internal/TestFlight release validation.
+- PR 12: `M11` post-release monitoring and cleanup.
+
+## 13. Store Metadata Source
+
+Add:
+
+```text
+release/store_metadata/source/en.json
+release/store_metadata/source/ja.json
+release/store_metadata/source/zh.json
+release/store_metadata/source/zhtw.json
+```
+
+Source schema:
+
+```json
+{
+  "app_name": "STONE SIGNATURE",
+  "subtitle": "Custom gemstone seals",
+  "short_description": "Design and order a custom gemstone seal.",
+  "full_description": ["Paragraph 1", "Paragraph 2"],
+  "keywords": ["hanko", "seal", "gemstone"],
+  "release_notes": {
+    "1.1.0": ["Localized app experience and store metadata."]
+  },
+  "support_url": "https://finitefield.org/contact/",
+  "marketing_url": "https://finitefield.org/",
+  "privacy_policy_url": "https://finitefield.org/privacy/",
+  "screenshot_captions": {
+    "design": "Design your seal impression",
+    "stones": "Choose a one-of-a-kind stone",
+    "checkout": "Order securely"
+  }
+}
+```
+
+Generation rules:
+
+- Google Play folders use `android_store_locale`.
+- App Store folders use `ios_store_locale`.
+- Skip platform generation for null store locale values.
+- Fail if `release.enabled` is true and required platform metadata is missing.
+- Keep generated metadata deterministic to make diffs reviewable.
+
+## 14. fastlane Plan
+
+Use official fastlane concepts:
+
+- `supply` / `upload_to_play_store` for Google Play metadata, screenshots,
+  APKs, and AABs.
+- `deliver` / `upload_to_app_store` for App Store Connect metadata,
+  screenshots, and binaries.
+- TestFlight upload via `upload_to_testflight`.
+- Bundler for reproducible fastlane versions in both `app/android` and
+  `app/ios`.
+
+Run Android lanes from `app/android` and iOS lanes from `app/ios`. The
+Fastfiles should use paths relative to those directories.
+
+Recommended Android `Appfile` values:
+
+```ruby
+package_name("org.finitefield.hankofield")
+```
+
+Recommended iOS `Appfile` values:
+
+```ruby
+app_identifier("org.finitefield.hankofield")
+```
+
+Recommended Android lanes:
+
+```ruby
+default_platform(:android)
+
+platform :android do
+  lane :metadata do
+    upload_to_play_store(
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+      metadata_path: "../../release/store_metadata/google_play"
+    )
+  end
+
+  lane :internal do
+    sh("cd .. && flutter build appbundle --release")
+    upload_to_play_store(
+      track: "internal",
+      aab: "../build/app/outputs/bundle/release/app-release.aab"
+    )
+  end
+end
+```
+
+Recommended iOS lanes:
+
+```ruby
+default_platform(:ios)
+
+platform :ios do
+  lane :metadata do
+    deliver(
+      metadata_path: "../../release/store_metadata/app_store",
+      skip_binary_upload: true,
+      skip_screenshots: true
+    )
+  end
+
+  lane :testflight do
+    sh("cd .. && flutter build ipa --release")
+    upload_to_testflight
+  end
+end
+```
+
+Credential rules:
+
+- Google Play service account data must come from local ignored files or CI
+  secrets.
+- Apple credentials must come from App Store Connect API key files or CI
+  secrets, not committed files.
+- Android keystore and passwords must be provided by local files or CI secrets.
+- CI should reconstruct private signing files at build time.
+- Do not echo secret values in scripts.
+
+## 15. QA Strategy
+
+### Tier 1: Full QA Languages
+
+Use full manual and screenshot QA:
+
+- `en`
+- `ja`
+- `zh`
+- `zhtw`
+- `ar`
+
+Coverage:
+
+- app onboarding
+- design flow
+- kanji candidates
+- seal style selection
+- seal generation result
+- stone list and detail
+- order flow
+- payment result
+- settings language selection
+- order lookup
+- web top/design/about/blog/payment/legal pages
+
+### Tier 2: Script and Layout Coverage
+
+Use targeted screenshots:
+
+- `de` for long Latin text
+- `fr` or `es` for punctuation and common store copy
+- `ru` or `uk` for Cyrillic
+- `hi` for Devanagari
+- `ta` or `te` for South Indian scripts
+- `th` for Thai wrapping
+- `ko` for Korean
+- `he` or `ur` for RTL
+
+### Tier 3: Mechanical Coverage
+
+All remaining languages:
+
+- must pass `make i18n-check`
+- must build in app/web contexts if enabled
+- must have store metadata when release-enabled
+
+## 16. Test Plan
+
+### Unit Tests
+
+App:
+
+- registry route code normalization
+- saved locale fallback
+- generated localization availability
+- settings JSON loader fallback
+- `reasonLanguage` mapping
+
+Web:
+
+- path locale parsing
+- canonical URL generation
+- language link generation
+- `hreflang` generation
+- sitemap inclusion/exclusion
+- copy JSON deserialization
+
+API:
+
+- public config normalization
+- locale support checks
+- catalog fallback order
+- checkout product template resolution
+- order locale persistence
+- `reason_language` validation and fallback
+
+Admin:
+
+- localized map preservation on save
+- no loss of unknown locale keys
+
+### Integration Tests
+
+- App requests `/v1/catalog?locale=zh`.
+- App creates order with `locale=zhtw` and `preferred_locale=zhtw`.
+- API creates checkout session preserving `lang=zhtw`.
+- Web payment result renders for `/zhtw/payment/success`.
+- Unknown `/xx/about` returns 404.
+- `/en/about` redirects to or canonicalizes as `/about` if compatibility route
+  is retained.
+
+### Manual Tests
+
+- Switch language in app settings.
+- Restart app and verify selected locale persists.
+- Open web language switcher and move between localized pages.
+- Confirm RTL layout in app and web.
+- Confirm Stripe return routes include and preserve `lang`.
+- Confirm Universal Link/App Link behavior after route expansion.
+
+### Release Tests
+
+- `flutter build appbundle --release`
+- `flutter build ipa --release`
+- metadata-only Android fastlane lane
+- metadata-only iOS fastlane lane
+- Google Play internal upload
+- TestFlight upload
+
+## 17. Rollout Plan
+
+### Phase 1: Foundation Only
+
+- Add registry and read-only status tooling.
+- No user-visible changes.
+
+Rollback:
+
+- Revert registry/tooling commit.
+
+### Phase 2: English/Japanese Migration
+
+- Move existing `en` and `ja` strings to new file layout.
+- Preserve behavior.
+- Keep only `en` and `ja` selectable.
+
+Rollback:
+
+- Revert localization migration.
+- Keep existing app/web behavior.
+
+### Phase 3: Pilot Languages
+
+- Enable `zh`, `zhtw`, and `ar` for render-only QA.
+- Do not index web pages or release store metadata yet.
+
+Rollback:
+
+- Set registry flags `web.indexed=false`, `app.selectable=false`,
+  `release.enabled=false`.
+
+### Phase 4: Web Indexing
+
+- Index languages only after page title, meta description, body copy, and
+  `hreflang` validation pass.
+
+Rollback:
+
+- Set `web.indexed=false` for affected language.
+- Regenerate sitemap.
+
+### Phase 5: App Store Metadata
+
+- Generate and upload metadata-only updates.
+- Keep binary release lanes separate.
+
+Rollback:
+
+- Restore previous store metadata through fastlane or store console.
+
+### Phase 6: Binary Release
+
+- Use internal Google Play and TestFlight first.
+- Promote to production only after manual signoff.
+
+Rollback:
+
+- Use store rollback/promote previous build where supported.
+- Disable problematic locale in remote/public config when possible.
+- Ship hotfix with language hidden if client-side issue is severe.
+
+## 18. Monitoring and Diagnostics
+
+Add logs/diagnostics for:
+
+- unsupported locale requested
+- fallback locale used
+- missing content file
+- malformed translation file
+- checkout locale and preferred locale
+- store metadata generation skipped because platform locale is missing
+
+Do not log private customer data beyond existing policy. Locale, route code, and
+fallback reason are safe diagnostic fields.
+
+## 19. Security and Privacy
+
+- Translation files must not contain secrets.
+- Store metadata source must not contain credentials.
+- fastlane service account JSON and Apple API keys must be ignored or stored in
+  CI secrets.
+- Local Android signing files and passwords must not be staged.
+- Translation tooling must not upload customer/order data to external services.
+- If external translation services are used later, only source strings and
+  non-private product copy may be exported.
+
+## 20. Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+| --- | --- | --- |
+| UI overflow | Broken app/web screens | Tiered screenshots, flexible layout, no single-line assumptions. |
+| Font coverage gaps | Missing glyphs | Add UI font fallback; keep seal rendering font rules separate. |
+| RTL layout regressions | Incorrect navigation and forms | Registry-driven `dir`, RTL screenshots, review directional icons. |
+| Store locale mismatch | fastlane upload failure | Store platform locale mapping in registry and validate before upload. |
+| Legal copy divergence | Legal/review risk | Japanese governing text, manual legal review, sidecar reasons for legal names. |
+| Credential exposure | Security incident | Ignore private files, use CI secrets, avoid logging secrets. |
+| Silent fallback | Users see wrong language | Fallback diagnostics and release-enabled fallback checks. |
+| Admin overwrites translations | Data loss | Merge map writes and add preservation tests. |
+| Deep link route gaps | Checkout return failure | Update association files and smoke-test all payment path variants. |
+
+## 21. Validation Gates
+
+Before enabling a language for app selection:
+
+- ARB exists and passes `i18n-check`.
+- Long settings JSON exists or has approved fallback.
+- App launches in the locale.
+- Settings screen can select and persist the locale.
+- Tier-appropriate screenshot QA passes.
+
+Before indexing a web language:
+
+- Page copy exists for all indexed routes.
+- SEO title and meta description are translated.
+- `hreflang` output includes the language.
+- Sitemap includes the language.
+- Unknown locale and fallback behavior are tested.
+
+Before enabling a release language:
+
+- Store metadata source exists.
+- Platform-specific metadata folders generate.
+- Unsupported platform locale mappings are explicit.
+- Screenshots are ready or intentionally skipped.
+- Metadata-only fastlane lane passes.
+
+Before production binary release:
+
+- `flutter test` passes.
+- Rust API tests pass.
+- Rust web tests pass.
+- `make i18n-check` passes for all release-enabled languages.
+- `flutter build appbundle --release` passes.
+- `flutter build ipa --release` passes on a signing-capable Mac.
+- Google Play internal lane succeeds.
+- TestFlight lane succeeds.
+- Manual release signoff is recorded.
+
+## 22. Open Assumptions
+
+- The 68 finitefield.org route codes are the desired product language set for
+  Stone Signature.
+- English remains the canonical unprefixed web URL.
+- Japanese remains `JPY`; other locales use `USD` until pricing policy changes.
+- Admin can remain Japanese/internal for the initial multilingual rollout.
+- Store locale availability will be validated during fastlane metadata setup,
+  because Google Play and App Store Connect accepted locale lists can differ.
+- CI provider and secret-storage mechanism are not chosen yet.
+
+## 23. References
+
+- Flutter internationalization:
+  https://docs.flutter.dev/ui/internationalization
+- Flutter continuous delivery:
+  https://docs.flutter.dev/deployment/cd
+- fastlane supply:
+  https://docs.fastlane.tools/actions/supply/
+- fastlane deliver:
+  https://docs.fastlane.tools/actions/deliver/
+- fastlane screengrab:
+  https://docs.fastlane.tools/actions/screengrab/

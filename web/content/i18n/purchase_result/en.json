@@ -1,0 +1,12 @@
+{
+  "purchase_result_001": "Source",
+  "purchase_result_002": "Seal",
+  "purchase_result_003": "Shipping to",
+  "purchase_result_004": "Address",
+  "purchase_result_005": "Subtotal",
+  "purchase_result_006": "Shipping",
+  "purchase_result_007": "Total",
+  "purchase_result_008": "Confirmation email",
+  "purchase_result_009": "Order received (mock)",
+  "purchase_result_010": "Order details accepted (validation)"
+}

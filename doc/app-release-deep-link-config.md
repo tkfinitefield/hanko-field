@@ -8,7 +8,8 @@ This checklist covers Stripe Checkout return routes for the Flutter app release.
 - iOS bundle ID: `org.finitefield.hankofield`
 - Primary app link domain: `finitefield.org`
 - Secondary app link domain: `www.finitefield.org`
-- Checkout return paths: `/payment/*`, `/en/payment/*`, `/ja/payment/*`
+- Checkout return paths: `/payment/*`, `/en/payment/*`, `/ja/payment/*`,
+  `/zh/payment/*`, `/zhtw/payment/*`, `/ar/payment/*`
 - Custom scheme fallback: `hankofield://checkout/*`
 
 ## Hosted Association Files
@@ -41,8 +42,10 @@ The API appends `checkout=success` or `checkout=cancel`, `order_id`, `lang`, and
 ## Smoke Test
 
 1. Install a release-signed app build.
-2. Verify the custom scheme route `hankofield://checkout/success?checkout=success&order_id=<order>&session_id=<session>&lang=en` opens the app.
+2. Verify the custom scheme routes for `en`, `ja`, `zh`, `zhtw`, and `ar`, for
+   example `hankofield://checkout/success?checkout=success&order_id=<order>&session_id=<session>&lang=ar`.
 3. Start Checkout from the app, pay with Stripe test mode, and confirm the return opens the app at the payment status check screen without showing a web 404.
 4. Cancel Checkout and confirm the app opens the canceled state.
-5. Verify the Universal Link route `https://finitefield.org/payment/success?checkout=success&order_id=<order>&session_id=<session>&lang=en&return_to=app` still opens the app or the web success page for compatibility diagnostics.
+5. Verify the Universal Link routes for `en`, `ja`, `zh`, `zhtw`, and `ar`, for
+   example `https://finitefield.org/ar/payment/success?checkout=success&order_id=<order>&session_id=<session>&return_to=app`.
 6. Open an invalid checkout route and confirm the app shows the deep link error state.

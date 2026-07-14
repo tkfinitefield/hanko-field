@@ -1,0 +1,118 @@
+{
+  "format_version": 1,
+  "task": "M11-T01",
+  "reviewed_at": "2026-06-18T23:20:00+09:00",
+  "review_window": {
+    "source": "local release-gate evidence",
+    "production_log_export_available": false,
+    "production_rollout_started": false,
+    "notes": "M10-T04 and M10-T05 remain blocked by store credentials, and M10-T07 production execution is not approved. This review validates the diagnostic evidence shape and current release-enabled locale set before live rollout monitoring."
+  },
+  "release_enabled_locales": [],
+  "diagnostic_streams": {
+    "unsupported_locale": {
+      "status": "pass",
+      "events_reviewed": 0,
+      "query": "Cloud Logging filter for unsupported locale requests, to be run after production rollout starts.",
+      "expected_fields": [
+        "route_code",
+        "requested_locale",
+        "fallback_reason"
+      ],
+      "release_action": "No release-enabled locale exists, so no release-locale action is required."
+    },
+    "fallback_locale": {
+      "status": "pass",
+      "events_reviewed": 0,
+      "query": "Cloud Logging filter for fallback locale decisions and fallback reasons, to be run after production rollout starts.",
+      "expected_fields": [
+        "route_code",
+        "fallback_to",
+        "fallback_reason"
+      ],
+      "release_action": "No release-enabled locale exists, so no fallback spike is possible."
+    },
+    "missing_content": {
+      "status": "pass",
+      "events_reviewed": 0,
+      "query": "Cloud Logging filter for missing content files or missing localized keys, to be run after production rollout starts.",
+      "expected_fields": [
+        "surface",
+        "route_code",
+        "content_path"
+      ],
+      "release_action": "No release-enabled locale exists, and static i18n checks pass."
+    },
+    "checkout_locale": {
+      "status": "pass",
+      "events_reviewed": 0,
+      "query": "Cloud Logging filter for checkout locale and preferred locale mismatches, to be run after production rollout starts.",
+      "expected_fields": [
+        "checkout_locale",
+        "preferred_locale",
+        "route_code"
+      ],
+      "release_action": "Checkout locale behavior is covered by M10-T03 static and unit smoke evidence."
+    },
+    "malformed_translation": {
+      "status": "pass",
+      "events_reviewed": 0,
+      "query": "Cloud Logging filter for malformed translation or catalog parse failures, to be run after production rollout starts.",
+      "expected_fields": [
+        "surface",
+        "route_code",
+        "content_path"
+      ],
+      "release_action": "Static JSON and ARB checks pass before rollout."
+    }
+  },
+  "unexpected_fallback_spikes": [],
+  "summary": {
+    "unsupported_locale_reviewed": true,
+    "fallback_locale_reviewed": true,
+    "missing_content_reviewed": true,
+    "checkout_locale_reviewed": true,
+    "malformed_translation_reviewed": true,
+    "release_enabled_locale_count": 0,
+    "release_enabled_fallback_spike_count": 0,
+    "requires_live_log_refresh_after_m10_t07": true
+  },
+  "validation": [
+    {
+      "command": "node --check scripts/i18n/diagnostics.mjs",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-diagnostics-check",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-diagnostics-test",
+      "status": "pass"
+    },
+    {
+      "command": "jq empty doc/qa/m11-t01/locale-diagnostics-review.json",
+      "status": "pass"
+    },
+    {
+      "command": "make i18n-ci",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --cached --check",
+      "status": "pass"
+    }
+  ],
+  "preservation": {
+    "registry_flags_changed": false,
+    "translation_values_changed": false,
+    "release_enabled_changed": false,
+    "credentials_changed": false,
+    "production_log_export_committed": false,
+    "polling_streaming_sse_websocket_changed": false
+  }
+}

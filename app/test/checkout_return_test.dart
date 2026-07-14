@@ -33,6 +33,50 @@ void main() {
     expect(result?.locale, 'en');
   });
 
+  test('normalizes lang and locale query values to route codes', () {
+    final langResult = parseCheckoutReturnRoute(
+      'hankofield://checkout/success?order_id=ord_006&session_id=cs_test_006&lang=zh_Hant',
+    );
+    final localeResult = parseCheckoutReturnRoute(
+      'https://finitefield.org/zhtw/payment/success?checkout=success&order_id=ord_007&locale=zh-TW',
+    );
+
+    expect(langResult?.locale, 'zhtw');
+    expect(localeResult?.locale, 'zhtw');
+  });
+
+  test('preserves pilot checkout return route codes', () {
+    final appResult = parseCheckoutReturnRoute(
+      'hankofield://checkout/success?order_id=ord_008&session_id=cs_test_008&lang=ar',
+    );
+    final webResult = parseCheckoutReturnRoute(
+      'https://finitefield.org/ar/payment/success?checkout=success&order_id=ord_009&locale=ar',
+    );
+
+    expect(appResult?.outcome, CheckoutReturnOutcome.success);
+    expect(appResult?.locale, 'ar');
+    expect(webResult?.outcome, CheckoutReturnOutcome.success);
+    expect(webResult?.orderId, 'ord_009');
+    expect(webResult?.locale, 'ar');
+  });
+
+  test('infers pilot locale from localized universal link paths', () {
+    for (final entry in const [
+      ('zh', 'https://finitefield.org/zh/payment/success'),
+      ('zhtw', 'https://finitefield.org/zhtw/payment/success'),
+      ('ar', 'https://finitefield.org/ar/payment/success'),
+    ]) {
+      final result = parseCheckoutReturnRoute(
+        '${entry.$2}?checkout=success&order_id=ord_${entry.$1}&session_id=cs_test_${entry.$1}&return_to=app',
+      );
+
+      expect(result?.outcome, CheckoutReturnOutcome.success);
+      expect(result?.orderId, 'ord_${entry.$1}');
+      expect(result?.sessionId, 'cs_test_${entry.$1}');
+      expect(result?.locale, entry.$1);
+    }
+  });
+
   test('uses checkout query to distinguish Stripe cancel from failure path', () {
     final result = parseCheckoutReturnRoute(
       'https://finitefield.org/payment/failure?checkout=cancel&order_id=ord_004',

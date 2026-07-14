@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, env, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    env,
+    sync::Arc,
+};
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
@@ -7,9 +11,29 @@ use firebase_sdk_rust::firebase_firestore::{
     GetDocumentOptions, PatchDocumentOptions,
 };
 use gcp_auth::{CustomServiceAccount, TokenProvider, provider};
+use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value as JsonValue, json};
 
+#[path = "../language_registry.rs"]
+mod language_registry;
+
 const DATASTORE_SCOPE: &str = "https://www.googleapis.com/auth/datastore";
+const MATERIALS_I18N_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/catalog/materials.json"
+));
+const STONE_LISTINGS_I18N_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/catalog/stone_listings.json"
+));
+const FACET_TAGS_I18N_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/catalog/facet_tags.json"
+));
+const COUNTRIES_I18N_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/content/i18n/catalog/countries.json"
+));
 
 #[derive(Debug, Clone)]
 struct SeedConfig {
@@ -30,10 +54,6 @@ struct FontSeed {
 #[derive(Debug, Clone, Copy)]
 struct MaterialSeed {
     key: &'static str,
-    label_ja: &'static str,
-    label_en: &'static str,
-    description_ja: &'static str,
-    description_en: &'static str,
     sort_order: i64,
 }
 
@@ -43,12 +63,6 @@ struct StoneListingSeed {
     listing_code: &'static str,
     material_key: &'static str,
     size: &'static str,
-    title_ja: &'static str,
-    title_en: &'static str,
-    description_ja: &'static str,
-    description_en: &'static str,
-    story_ja: &'static str,
-    story_en: &'static str,
     color_family: &'static str,
     color_tags: &'static [&'static str],
     pattern_primary: &'static str,
@@ -68,8 +82,6 @@ struct FacetTagSeed {
     doc_id: &'static str,
     facet_type: &'static str,
     key: &'static str,
-    label_ja: &'static str,
-    label_en: &'static str,
     aliases: &'static [&'static str],
     sort_order: i64,
 }
@@ -77,11 +89,33 @@ struct FacetTagSeed {
 #[derive(Debug, Clone, Copy)]
 struct CountrySeed {
     code: &'static str,
-    label_ja: &'static str,
-    label_en: &'static str,
     shipping_fee_usd: i64,
     shipping_fee_jpy: i64,
     sort_order: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct MaterialCopy {
+    label: HashMap<String, String>,
+    description: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct StoneListingCopy {
+    title: HashMap<String, String>,
+    description: HashMap<String, String>,
+    story: HashMap<String, String>,
+    photo_alt: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct FacetTagCopy {
+    label: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CountryCopy {
+    label: HashMap<String, String>,
 }
 
 #[tokio::main]
@@ -115,49 +149,69 @@ async fn main() -> Result<()> {
         .with_context(|| format!("failed to seed fonts/{}", font.key))?;
     }
 
+    let material_copy = material_copy_documents();
     for material in material_seeds() {
         upsert_named_document(
             &client,
             &parent,
             "materials",
             material.key,
-            material_document(&material, now),
+            material_document(
+                &material,
+                required_catalog_copy(&material_copy, "materials", material.key),
+                now,
+            ),
         )
         .await
         .with_context(|| format!("failed to seed materials/{}", material.key))?;
     }
 
+    let facet_tag_copy = facet_tag_copy_documents();
     for facet_tag in facet_tag_seeds() {
         upsert_named_document(
             &client,
             &parent,
             "facet_tags",
             facet_tag.doc_id,
-            facet_tag_document(&facet_tag, now),
+            facet_tag_document(
+                &facet_tag,
+                required_catalog_copy(&facet_tag_copy, "facet_tags", facet_tag.doc_id),
+                now,
+            ),
         )
         .await
         .with_context(|| format!("failed to seed facet_tags/{}", facet_tag.doc_id))?;
     }
 
+    let stone_listing_copy = stone_listing_copy_documents();
     for listing in stone_listing_seeds() {
         upsert_named_document(
             &client,
             &parent,
             "stone_listings",
             listing.key,
-            stone_listing_document(&listing, now),
+            stone_listing_document(
+                &listing,
+                required_catalog_copy(&stone_listing_copy, "stone_listings", listing.key),
+                now,
+            ),
         )
         .await
         .with_context(|| format!("failed to seed stone_listings/{}", listing.key))?;
     }
 
+    let country_copy = country_copy_documents();
     for country in country_seeds() {
         upsert_named_document(
             &client,
             &parent,
             "countries",
             country.code,
-            country_document(&country, now),
+            country_document(
+                &country,
+                required_catalog_copy(&country_copy, "countries", country.code),
+                now,
+            ),
         )
         .await
         .with_context(|| format!("failed to seed countries/{}", country.code))?;
@@ -225,7 +279,9 @@ async fn upsert_named_document(
         .get_document(&name, &GetDocumentOptions::default())
         .await
     {
-        Ok(_) => {
+        Ok(existing) => {
+            let mut document = document;
+            preserve_existing_localized_maps(&existing.fields, &mut document.fields);
             client
                 .patch_document(&name, &document, &PatchDocumentOptions::default())
                 .await
@@ -252,21 +308,121 @@ async fn upsert_named_document(
     Ok(())
 }
 
+fn preserve_existing_localized_maps(
+    existing_fields: &BTreeMap<String, JsonValue>,
+    next_fields: &mut BTreeMap<String, JsonValue>,
+) {
+    for (field_name, next_value) in next_fields {
+        if let Some(existing_value) = existing_fields.get(field_name) {
+            preserve_existing_localized_value(field_name, existing_value, next_value);
+        }
+    }
+}
+
+fn preserve_existing_localized_value(
+    field_name: &str,
+    existing_value: &JsonValue,
+    next_value: &mut JsonValue,
+) {
+    if is_localized_string_map_field(field_name) {
+        preserve_missing_string_map_entries(existing_value, next_value);
+        return;
+    }
+
+    if let (Some(existing_fields), Some(next_fields)) = (
+        firestore_map_fields(existing_value),
+        firestore_map_fields_mut(next_value),
+    ) {
+        for (nested_field_name, nested_next_value) in next_fields {
+            if let Some(nested_existing_value) = existing_fields.get(nested_field_name) {
+                preserve_existing_localized_value(
+                    nested_field_name,
+                    nested_existing_value,
+                    nested_next_value,
+                );
+            }
+        }
+        return;
+    }
+
+    if let (Some(existing_values), Some(next_values)) = (
+        firestore_array_values(existing_value),
+        firestore_array_values_mut(next_value),
+    ) {
+        for (index, next_item) in next_values.iter_mut().enumerate() {
+            if let Some(existing_item) = existing_values.get(index) {
+                preserve_existing_localized_value(field_name, existing_item, next_item);
+            }
+        }
+    }
+}
+
+fn preserve_missing_string_map_entries(existing_value: &JsonValue, next_value: &mut JsonValue) {
+    let Some(existing_fields) = firestore_map_fields(existing_value) else {
+        return;
+    };
+    let Some(next_fields) = firestore_map_fields_mut(next_value) else {
+        return;
+    };
+
+    for (locale, existing_locale_value) in existing_fields {
+        next_fields
+            .entry(locale.clone())
+            .or_insert_with(|| existing_locale_value.clone());
+    }
+}
+
+fn is_localized_string_map_field(field_name: &str) -> bool {
+    field_name == "alt_i18n" || field_name.ends_with("_i18n")
+}
+
+fn firestore_map_fields(value: &JsonValue) -> Option<&serde_json::Map<String, JsonValue>> {
+    value
+        .get("mapValue")
+        .and_then(|map| map.get("fields"))
+        .and_then(JsonValue::as_object)
+}
+
+fn firestore_map_fields_mut(
+    value: &mut JsonValue,
+) -> Option<&mut serde_json::Map<String, JsonValue>> {
+    value
+        .get_mut("mapValue")
+        .and_then(|map| map.get_mut("fields"))
+        .and_then(JsonValue::as_object_mut)
+}
+
+fn firestore_array_values(value: &JsonValue) -> Option<&Vec<JsonValue>> {
+    value
+        .get("arrayValue")
+        .and_then(|array| array.get("values"))
+        .and_then(JsonValue::as_array)
+}
+
+fn firestore_array_values_mut(value: &mut JsonValue) -> Option<&mut Vec<JsonValue>> {
+    value
+        .get_mut("arrayValue")
+        .and_then(|array| array.get_mut("values"))
+        .and_then(JsonValue::as_array_mut)
+}
+
 fn app_config_public_document(now: DateTime<Utc>) -> Document {
+    let public_config = language_registry::public_config_from_registry()
+        .expect("checked-in language registry should generate public config");
     Document {
         fields: btree_from_pairs(vec![
             (
                 "supported_locales",
-                fs_array(vec![fs_string("ja"), fs_string("en")]),
+                fs_string_array(&public_config.supported_locales),
             ),
-            ("default_locale", fs_string("ja")),
-            ("default_currency", fs_string("USD")),
+            ("default_locale", fs_string(public_config.default_locale)),
+            (
+                "default_currency",
+                fs_string(public_config.default_currency),
+            ),
             (
                 "currency_by_locale",
-                fs_map(btree_from_pairs(vec![
-                    ("ja", fs_string("JPY")),
-                    ("en", fs_string("USD")),
-                ])),
+                fs_owned_string_map(&public_config.currency_by_locale),
             ),
             ("created_at", fs_timestamp(now)),
             ("updated_at", fs_timestamp(now)),
@@ -292,20 +448,11 @@ fn font_document(font: &FontSeed, now: DateTime<Utc>) -> Document {
     }
 }
 
-fn material_document(material: &MaterialSeed, now: DateTime<Utc>) -> Document {
+fn material_document(material: &MaterialSeed, copy: &MaterialCopy, now: DateTime<Utc>) -> Document {
     Document {
         fields: btree_from_pairs(vec![
-            (
-                "label_i18n",
-                fs_string_map(&[("ja", material.label_ja), ("en", material.label_en)]),
-            ),
-            (
-                "description_i18n",
-                fs_string_map(&[
-                    ("ja", material.description_ja),
-                    ("en", material.description_en),
-                ]),
-            ),
+            ("label_i18n", fs_owned_string_map(&copy.label)),
+            ("description_i18n", fs_owned_string_map(&copy.description)),
             ("comparison_texture_ja", fs_string("")),
             ("comparison_texture_en", fs_string("")),
             ("comparison_weight_ja", fs_string("")),
@@ -325,27 +472,19 @@ fn material_document(material: &MaterialSeed, now: DateTime<Utc>) -> Document {
     }
 }
 
-fn stone_listing_document(listing: &StoneListingSeed, now: DateTime<Utc>) -> Document {
+fn stone_listing_document(
+    listing: &StoneListingSeed,
+    copy: &StoneListingCopy,
+    now: DateTime<Utc>,
+) -> Document {
     Document {
         fields: btree_from_pairs(vec![
             ("listing_code", fs_string(listing.listing_code)),
             ("material_key", fs_string(listing.material_key)),
             ("size", fs_string(listing.size)),
-            (
-                "title_i18n",
-                fs_string_map(&[("ja", listing.title_ja), ("en", listing.title_en)]),
-            ),
-            (
-                "description_i18n",
-                fs_string_map(&[
-                    ("ja", listing.description_ja),
-                    ("en", listing.description_en),
-                ]),
-            ),
-            (
-                "story_i18n",
-                fs_string_map(&[("ja", listing.story_ja), ("en", listing.story_en)]),
-            ),
+            ("title_i18n", fs_owned_string_map(&copy.title)),
+            ("description_i18n", fs_owned_string_map(&copy.description)),
+            ("story_i18n", fs_owned_string_map(&copy.story)),
             (
                 "facets",
                 fs_map(btree_from_pairs(vec![
@@ -362,10 +501,7 @@ fn stone_listing_document(listing: &StoneListingSeed, now: DateTime<Utc>) -> Doc
                 fs_array(vec![fs_map(btree_from_pairs(vec![
                     ("asset_id", fs_string(listing.photo_asset_id)),
                     ("storage_path", fs_string(listing.photo_storage_path)),
-                    (
-                        "alt_i18n",
-                        fs_string_map(&[("ja", listing.title_ja), ("en", listing.title_en)]),
-                    ),
+                    ("alt_i18n", fs_owned_string_map(&copy.photo_alt)),
                     ("sort_order", fs_int(0)),
                     ("is_primary", fs_bool(true)),
                     ("width", fs_int(1200)),
@@ -391,15 +527,12 @@ fn stone_listing_document(listing: &StoneListingSeed, now: DateTime<Utc>) -> Doc
     }
 }
 
-fn facet_tag_document(tag: &FacetTagSeed, now: DateTime<Utc>) -> Document {
+fn facet_tag_document(tag: &FacetTagSeed, copy: &FacetTagCopy, now: DateTime<Utc>) -> Document {
     Document {
         fields: btree_from_pairs(vec![
             ("facet_type", fs_string(tag.facet_type)),
             ("key", fs_string(tag.key)),
-            (
-                "label_i18n",
-                fs_string_map(&[("ja", tag.label_ja), ("en", tag.label_en)]),
-            ),
+            ("label_i18n", fs_owned_string_map(&copy.label)),
             ("aliases", fs_string_array(tag.aliases)),
             ("is_active", fs_bool(true)),
             ("sort_order", fs_int(tag.sort_order)),
@@ -411,13 +544,10 @@ fn facet_tag_document(tag: &FacetTagSeed, now: DateTime<Utc>) -> Document {
     }
 }
 
-fn country_document(country: &CountrySeed, now: DateTime<Utc>) -> Document {
+fn country_document(country: &CountrySeed, copy: &CountryCopy, now: DateTime<Utc>) -> Document {
     Document {
         fields: btree_from_pairs(vec![
-            (
-                "label_i18n",
-                fs_string_map(&[("ja", country.label_ja), ("en", country.label_en)]),
-            ),
+            ("label_i18n", fs_owned_string_map(&copy.label)),
             (
                 "shipping_fee_by_currency",
                 fs_int_map(&[
@@ -433,6 +563,40 @@ fn country_document(country: &CountrySeed, now: DateTime<Utc>) -> Document {
         ]),
         ..Document::default()
     }
+}
+
+fn material_copy_documents() -> BTreeMap<String, MaterialCopy> {
+    load_catalog_copy_documents(MATERIALS_I18N_JSON, "materials")
+}
+
+fn stone_listing_copy_documents() -> BTreeMap<String, StoneListingCopy> {
+    load_catalog_copy_documents(STONE_LISTINGS_I18N_JSON, "stone_listings")
+}
+
+fn facet_tag_copy_documents() -> BTreeMap<String, FacetTagCopy> {
+    load_catalog_copy_documents(FACET_TAGS_I18N_JSON, "facet_tags")
+}
+
+fn country_copy_documents() -> BTreeMap<String, CountryCopy> {
+    load_catalog_copy_documents(COUNTRIES_I18N_JSON, "countries")
+}
+
+fn load_catalog_copy_documents<T>(source: &str, owner: &str) -> BTreeMap<String, T>
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_str(source)
+        .unwrap_or_else(|error| panic!("failed to parse {owner} catalog copy: {error}"))
+}
+
+fn required_catalog_copy<'a, T>(
+    documents: &'a BTreeMap<String, T>,
+    owner: &str,
+    key: &str,
+) -> &'a T {
+    documents
+        .get(key)
+        .unwrap_or_else(|| panic!("missing {owner} catalog copy for `{key}`"))
 }
 
 fn font_seeds() -> Vec<FontSeed> {
@@ -492,66 +656,34 @@ fn material_seeds() -> Vec<MaterialSeed> {
     vec![
         MaterialSeed {
             key: "wood",
-            label_ja: "木材",
-            label_en: "Wood",
-            description_ja: "自然な木目と軽さがあり、あたたかみのある印象に仕上がる材質です。",
-            description_en: "A lightweight material with natural grain that gives the seal a warm, organic feel.",
             sort_order: 10,
         },
         MaterialSeed {
             key: "qingtian_stone",
-            label_ja: "青田石",
-            label_en: "Qingtian Stone",
-            description_ja: "中国浙江省青田産として知られる代表的な篆刻石で、きめ細かく彫りやすい石材です。",
-            description_en: "A classic seal-carving stone associated with Qingtian, Zhejiang, known for its fine texture and ease of carving.",
             sort_order: 20,
         },
         MaterialSeed {
             key: "shoushan_stone",
-            label_ja: "寿山石",
-            label_en: "Shoushan Stone",
-            description_ja: "中国福建省寿山産として知られる印材石で、色味の幅と滑らかな彫り心地が特徴です。",
-            description_en: "A seal stone associated with Shoushan, Fujian, valued for its range of colors and smooth carving feel.",
             sort_order: 30,
         },
         MaterialSeed {
             key: "balin_stone",
-            label_ja: "巴林石",
-            label_en: "Balin Stone",
-            description_ja: "中国内モンゴル産として知られる印材石で、色柄の変化とほどよい硬さを持つ材質です。",
-            description_en: "A seal stone associated with Inner Mongolia, known for varied colors and patterns with moderate hardness.",
             sort_order: 40,
         },
         MaterialSeed {
             key: "yili_stone",
-            label_ja: "伊犁石",
-            label_en: "Yili Stone",
-            description_ja: "中国新疆ウイグル自治区の伊犁地域に由来する印材石で、落ち着いた色味と素朴な石質が特徴です。",
-            description_en: "A seal stone associated with the Yili region of Xinjiang, with subdued colors and a natural stone texture.",
             sort_order: 50,
         },
         MaterialSeed {
             key: "laos_stone",
-            label_ja: "ラオス石",
-            label_en: "Laos Stone",
-            description_ja: "ラオス産として流通する印材石で、やわらかめの石質と彫刻しやすさが特徴です。",
-            description_en: "A seal stone commonly traded as Laos stone, known for its softer texture and ease of carving.",
             sort_order: 60,
         },
         MaterialSeed {
             key: "xixia_stone",
-            label_ja: "西峡石",
-            label_en: "Xixia Stone",
-            description_ja: "中国河南省西峡産として知られる印材石で、緻密で落ち着いた質感を持つ材質です。",
-            description_en: "A seal stone associated with Xixia, Henan, with a dense structure and calm, refined texture.",
             sort_order: 70,
         },
         MaterialSeed {
             key: "frozen_stone",
-            label_ja: "凍石",
-            label_en: "Frozen Stone",
-            description_ja: "凍ったような半透明感としっとりした質感が特徴の、篆刻向けの石材です。",
-            description_en: "A seal-carving stone with a moist, semi-translucent appearance reminiscent of frozen stone.",
             sort_order: 80,
         },
     ]
@@ -564,12 +696,6 @@ fn stone_listing_seeds() -> Vec<StoneListingSeed> {
             listing_code: "QTN-0001",
             material_key: "qingtian_stone",
             size: "15mm x 15mm x 60mm",
-            title_ja: "青田石の一点物 01",
-            title_en: "One-of-a-kind Qingtian Stone 01",
-            description_ja: "淡い緑と灰色の揺らぎが入った、落ち着きのある印材です。",
-            description_en: "A calm seal stone with soft green and gray natural movement.",
-            story_ja: "きめ細かな石質で、日常使いにも贈り物にも合わせやすい一本です。",
-            story_en: "Its fine texture makes it suitable for daily use or a thoughtful gift.",
             color_family: "green",
             color_tags: &["soft_green", "gray_green"],
             pattern_primary: "cloud",
@@ -588,12 +714,6 @@ fn stone_listing_seeds() -> Vec<StoneListingSeed> {
             listing_code: "SHS-0001",
             material_key: "shoushan_stone",
             size: "18mm x 18mm x 60mm",
-            title_ja: "寿山石の一点物 01",
-            title_en: "One-of-a-kind Shoushan Stone 01",
-            description_ja: "あたたかな黄味に自然な筋が走る、存在感のある個体です。",
-            description_en: "A warm yellow piece with natural veining and a strong presence.",
-            story_ja: "柔らかな色味と彫り心地のよさが魅力の、表情豊かな石です。",
-            story_en: "A characterful stone known for its gentle color and smooth carving feel.",
             color_family: "yellow",
             color_tags: &["warm_yellow", "cream"],
             pattern_primary: "veined",
@@ -612,12 +732,6 @@ fn stone_listing_seeds() -> Vec<StoneListingSeed> {
             listing_code: "FRZ-0001",
             material_key: "frozen_stone",
             size: "16mm x 16mm x 60mm",
-            title_ja: "凍石の一点物 01",
-            title_en: "One-of-a-kind Frozen Stone 01",
-            description_ja: "白く半透明な奥行きがあり、清らかな印象に仕上がる石です。",
-            description_en: "A white, translucent stone that gives the finished seal a clear impression.",
-            story_ja: "凍った光のような質感が、印面の朱色を引き立てます。",
-            story_en: "Its frozen-light texture sets off the red seal impression beautifully.",
             color_family: "white",
             color_tags: &["white", "translucent"],
             pattern_primary: "plain",
@@ -640,8 +754,6 @@ fn facet_tag_seeds() -> Vec<FacetTagSeed> {
             doc_id: "color:green",
             facet_type: "color",
             key: "green",
-            label_ja: "緑",
-            label_en: "Green",
             aliases: &["soft_green", "gray_green"],
             sort_order: 10,
         },
@@ -649,8 +761,6 @@ fn facet_tag_seeds() -> Vec<FacetTagSeed> {
             doc_id: "color:yellow",
             facet_type: "color",
             key: "yellow",
-            label_ja: "黄",
-            label_en: "Yellow",
             aliases: &["warm_yellow", "cream"],
             sort_order: 20,
         },
@@ -658,8 +768,6 @@ fn facet_tag_seeds() -> Vec<FacetTagSeed> {
             doc_id: "color:white",
             facet_type: "color",
             key: "white",
-            label_ja: "白",
-            label_en: "White",
             aliases: &["translucent"],
             sort_order: 30,
         },
@@ -667,8 +775,6 @@ fn facet_tag_seeds() -> Vec<FacetTagSeed> {
             doc_id: "pattern:cloud",
             facet_type: "pattern",
             key: "cloud",
-            label_ja: "雲状",
-            label_en: "Cloud",
             aliases: &["mottled"],
             sort_order: 10,
         },
@@ -676,8 +782,6 @@ fn facet_tag_seeds() -> Vec<FacetTagSeed> {
             doc_id: "pattern:veined",
             facet_type: "pattern",
             key: "veined",
-            label_ja: "筋",
-            label_en: "Veined",
             aliases: &[],
             sort_order: 20,
         },
@@ -685,8 +789,6 @@ fn facet_tag_seeds() -> Vec<FacetTagSeed> {
             doc_id: "pattern:plain",
             facet_type: "pattern",
             key: "plain",
-            label_ja: "無地",
-            label_en: "Plain",
             aliases: &[],
             sort_order: 30,
         },
@@ -697,48 +799,36 @@ fn country_seeds() -> Vec<CountrySeed> {
     vec![
         CountrySeed {
             code: "JP",
-            label_ja: "日本",
-            label_en: "Japan",
             shipping_fee_usd: 600,
             shipping_fee_jpy: 600,
             sort_order: 10,
         },
         CountrySeed {
             code: "US",
-            label_ja: "アメリカ",
-            label_en: "United States",
             shipping_fee_usd: 1_800,
             shipping_fee_jpy: 1_800,
             sort_order: 20,
         },
         CountrySeed {
             code: "CA",
-            label_ja: "カナダ",
-            label_en: "Canada",
             shipping_fee_usd: 1_900,
             shipping_fee_jpy: 1_900,
             sort_order: 30,
         },
         CountrySeed {
             code: "GB",
-            label_ja: "イギリス",
-            label_en: "United Kingdom",
             shipping_fee_usd: 2_000,
             shipping_fee_jpy: 2_000,
             sort_order: 40,
         },
         CountrySeed {
             code: "AU",
-            label_ja: "オーストラリア",
-            label_en: "Australia",
             shipping_fee_usd: 2_100,
             shipping_fee_jpy: 2_100,
             sort_order: 50,
         },
         CountrySeed {
             code: "SG",
-            label_ja: "シンガポール",
-            label_en: "Singapore",
             shipping_fee_usd: 1_300,
             shipping_fee_jpy: 1_300,
             sort_order: 60,
@@ -798,14 +888,23 @@ fn fs_array(values: Vec<JsonValue>) -> JsonValue {
     json!({ "arrayValue": { "values": values } })
 }
 
-fn fs_string_array(values: &[&str]) -> JsonValue {
-    fs_array(values.iter().map(|value| fs_string(*value)).collect())
+fn fs_string_array<T: AsRef<str>>(values: &[T]) -> JsonValue {
+    fs_array(
+        values
+            .iter()
+            .map(|value| fs_string(value.as_ref()))
+            .collect(),
+    )
 }
 
-fn fs_string_map(values: &[(&str, &str)]) -> JsonValue {
+fn fs_owned_string_map(values: &HashMap<String, String>) -> JsonValue {
+    let mut keys = values.keys().collect::<Vec<_>>();
+    keys.sort();
     let mut fields = BTreeMap::new();
-    for (key, value) in values {
-        fields.insert((*key).to_owned(), fs_string(*value));
+    for key in keys {
+        if let Some(value) = values.get(key) {
+            fields.insert(key.to_owned(), fs_string(value.clone()));
+        }
     }
     fs_map(fields)
 }
@@ -828,6 +927,44 @@ fn btree_from_pairs(pairs: Vec<(&str, JsonValue)>) -> BTreeMap<String, JsonValue
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn app_config_public_document_matches_language_registry() {
+        let now = DateTime::parse_from_rfc3339("2026-06-18T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        let document = app_config_public_document(now);
+        let registry_config = language_registry::public_config_from_registry()
+            .expect("checked-in registry should generate public config");
+
+        let supported_locales = document.fields["supported_locales"]["arrayValue"]["values"]
+            .as_array()
+            .expect("supported_locales should be an array")
+            .iter()
+            .map(|value| {
+                value["stringValue"]
+                    .as_str()
+                    .expect("supported locale should be a string")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(supported_locales, registry_config.supported_locales);
+        assert_eq!(
+            document.fields["default_locale"]["stringValue"].as_str(),
+            Some(registry_config.default_locale.as_str())
+        );
+        assert_eq!(
+            document.fields["default_currency"]["stringValue"].as_str(),
+            Some(registry_config.default_currency.as_str())
+        );
+        for (locale, currency) in registry_config.currency_by_locale {
+            assert_eq!(
+                document.fields["currency_by_locale"]["mapValue"]["fields"][&locale]["stringValue"]
+                    .as_str(),
+                Some(currency.as_str())
+            );
+        }
+    }
 
     #[test]
     fn font_seeds_include_active_ai_generated_seal_record() {
@@ -885,6 +1022,113 @@ mod tests {
     }
 
     #[test]
+    fn catalog_copy_files_cover_seed_records() {
+        let material_copy = material_copy_documents();
+        for seed in material_seeds() {
+            let copy = required_catalog_copy(&material_copy, "materials", seed.key);
+            if seed.key == "wood" {
+                assert_eq!(copy.label.get("en").map(String::as_str), Some("Wood"));
+            }
+            assert!(copy.label.contains_key("ja"));
+            assert!(copy.description.contains_key("en"));
+            assert!(copy.description.contains_key("ja"));
+        }
+
+        let listing_copy = stone_listing_copy_documents();
+        for seed in stone_listing_seeds() {
+            let copy = required_catalog_copy(&listing_copy, "stone_listings", seed.key);
+            assert!(copy.title.contains_key("en"));
+            assert!(copy.title.contains_key("ja"));
+            assert!(copy.description.contains_key("en"));
+            assert!(copy.description.contains_key("ja"));
+            assert!(copy.story.contains_key("en"));
+            assert!(copy.story.contains_key("ja"));
+            assert!(copy.photo_alt.contains_key("en"));
+            assert!(copy.photo_alt.contains_key("ja"));
+        }
+
+        let facet_tag_copy = facet_tag_copy_documents();
+        for seed in facet_tag_seeds() {
+            let copy = required_catalog_copy(&facet_tag_copy, "facet_tags", seed.doc_id);
+            assert!(copy.label.contains_key("en"));
+            assert!(copy.label.contains_key("ja"));
+        }
+
+        let country_copy = country_copy_documents();
+        for seed in country_seeds() {
+            let copy = required_catalog_copy(&country_copy, "countries", seed.code);
+            assert!(copy.label.contains_key("en"));
+            assert!(copy.label.contains_key("ja"));
+        }
+    }
+
+    #[test]
+    fn seed_patch_preserves_unknown_locale_keys_in_localized_maps() {
+        let existing = btree_from_pairs(vec![
+            (
+                "label_i18n",
+                fs_owned_string_map(&HashMap::from([
+                    ("en".to_owned(), "Old Wood".to_owned()),
+                    ("ja".to_owned(), "古い木材".to_owned()),
+                    ("fr".to_owned(), "Bois".to_owned()),
+                    ("zh".to_owned(), "木材".to_owned()),
+                    ("zhtw".to_owned(), "木材".to_owned()),
+                ])),
+            ),
+            (
+                "photos",
+                fs_array(vec![fs_map(btree_from_pairs(vec![(
+                    "alt_i18n",
+                    fs_owned_string_map(&HashMap::from([
+                        ("en".to_owned(), "Old photo".to_owned()),
+                        ("ja".to_owned(), "古い写真".to_owned()),
+                        ("zhtw".to_owned(), "照片".to_owned()),
+                    ])),
+                )]))]),
+            ),
+        ]);
+        let mut next = btree_from_pairs(vec![
+            (
+                "label_i18n",
+                fs_owned_string_map(&HashMap::from([
+                    ("en".to_owned(), "Wood".to_owned()),
+                    ("ja".to_owned(), "木材".to_owned()),
+                ])),
+            ),
+            (
+                "photos",
+                fs_array(vec![fs_map(btree_from_pairs(vec![(
+                    "alt_i18n",
+                    fs_owned_string_map(&HashMap::from([
+                        ("en".to_owned(), "New photo".to_owned()),
+                        ("ja".to_owned(), "新しい写真".to_owned()),
+                    ])),
+                )]))]),
+            ),
+        ]);
+
+        preserve_existing_localized_maps(&existing, &mut next);
+
+        let label_fields = next["label_i18n"]["mapValue"]["fields"]
+            .as_object()
+            .expect("label_i18n should be a Firestore map");
+        assert_eq!(label_fields["en"]["stringValue"], "Wood");
+        assert_eq!(label_fields["ja"]["stringValue"], "木材");
+        assert_eq!(label_fields["fr"]["stringValue"], "Bois");
+        assert_eq!(label_fields["zh"]["stringValue"], "木材");
+        assert_eq!(label_fields["zhtw"]["stringValue"], "木材");
+
+        let photo_alt_fields =
+            next["photos"]["arrayValue"]["values"][0]["mapValue"]["fields"]["alt_i18n"]["mapValue"]
+                ["fields"]
+                .as_object()
+                .expect("alt_i18n should be a Firestore map");
+        assert_eq!(photo_alt_fields["en"]["stringValue"], "New photo");
+        assert_eq!(photo_alt_fields["ja"]["stringValue"], "新しい写真");
+        assert_eq!(photo_alt_fields["zhtw"]["stringValue"], "照片");
+    }
+
+    #[test]
     fn stone_listing_document_contains_app_required_fields() {
         let listing = stone_listing_seeds()
             .into_iter()
@@ -894,7 +1138,12 @@ mod tests {
             .expect("timestamp")
             .with_timezone(&Utc);
 
-        let document = stone_listing_document(&listing, now);
+        let listing_copy = stone_listing_copy_documents();
+        let document = stone_listing_document(
+            &listing,
+            required_catalog_copy(&listing_copy, "stone_listings", listing.key),
+            now,
+        );
 
         assert_eq!(document.fields.get("status"), Some(&fs_string("published")));
         assert_eq!(document.fields.get("is_active"), Some(&fs_bool(true)));

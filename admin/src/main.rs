@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     env,
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
@@ -37,6 +37,14 @@ const ADMIN_SESSION_COOKIE_NAME: &str = "hanko_admin_session";
 const ADMIN_SESSION_DURATION_SECONDS: i64 = 60 * 60 * 24 * 7;
 const ADMIN_SESSION_ISSUER: &str = "hanko-field-admin";
 const HX_REDIRECT_HEADER: &str = "hx-redirect";
+const ADMIN_EDITABLE_LOCALE_KEYS: [&str; 2] = ["ja", "en"];
+const LANGUAGE_REGISTRY_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../config/languages.json"
+));
+
+static ADMIN_LOCALIZED_EDITOR_LANGUAGES: OnceLock<Vec<AdminLocalizedEditorLanguage>> =
+    OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RunMode {
@@ -710,12 +718,29 @@ struct FontListItemView {
 }
 
 #[derive(Debug, Clone)]
+struct LocalizedEditorGroupView {
+    label: String,
+    values: Vec<LocalizedEditorValueView>,
+}
+
+#[derive(Debug, Clone)]
+struct LocalizedEditorValueView {
+    route_code: String,
+    language_label: String,
+    text_direction: String,
+    input_name: String,
+    value: String,
+}
+
+#[derive(Debug, Clone)]
 struct MaterialDetailView {
     key: String,
     label_ja: String,
     label_en: String,
     description_ja: String,
     description_en: String,
+    localized_editors: Vec<LocalizedEditorGroupView>,
+    has_localized_editors: bool,
     is_active: bool,
     version: i64,
     updated_at: String,
@@ -774,6 +799,8 @@ struct StoneListingDetailView {
     primary_photo_url: String,
     photo_alt_ja: String,
     photo_alt_en: String,
+    localized_editors: Vec<LocalizedEditorGroupView>,
+    has_localized_editors: bool,
     has_photo: bool,
     version: i64,
     updated_at: String,
@@ -817,6 +844,8 @@ struct CountryDetailView {
     code: String,
     label_ja: String,
     label_en: String,
+    localized_editors: Vec<LocalizedEditorGroupView>,
+    has_localized_editors: bool,
     shipping_fee_usd: i64,
     shipping_fee_jpy: i64,
     is_active: bool,
@@ -864,6 +893,8 @@ struct FacetTagDetailView {
     facet_type_label: String,
     label_ja: String,
     label_en: String,
+    localized_editors: Vec<LocalizedEditorGroupView>,
+    has_localized_editors: bool,
     aliases: String,
     sort_order: i64,
     is_active: bool,
@@ -1023,6 +1054,8 @@ struct MaterialPatchInput {
     label_en: String,
     description_ja: String,
     description_en: String,
+    label_i18n_updates: HashMap<String, String>,
+    description_i18n_updates: HashMap<String, String>,
     is_active: bool,
 }
 
@@ -1049,6 +1082,10 @@ struct StoneListingPatchInput {
     photo_storage_path: String,
     photo_alt_ja: String,
     photo_alt_en: String,
+    title_i18n_updates: HashMap<String, String>,
+    description_i18n_updates: HashMap<String, String>,
+    story_i18n_updates: HashMap<String, String>,
+    photo_alt_i18n_updates: HashMap<String, String>,
     status: String,
     is_active: bool,
 }
@@ -1066,6 +1103,7 @@ struct FontPatchInput {
 struct CountryPatchInput {
     label_ja: String,
     label_en: String,
+    label_i18n_updates: HashMap<String, String>,
     shipping_fee_usd: i64,
     shipping_fee_jpy: i64,
     sort_order: i64,
@@ -1098,9 +1136,26 @@ struct FacetTagCreateInput {
 struct FacetTagPatchInput {
     label_ja: String,
     label_en: String,
+    label_i18n_updates: HashMap<String, String>,
     aliases: Vec<String>,
     sort_order: i64,
     is_active: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct AdminLanguageRegistryEntry {
+    route_code: String,
+    native_name: String,
+    english_name: String,
+    text_direction: String,
+}
+
+#[derive(Debug, Clone)]
+struct AdminLocalizedEditorLanguage {
+    route_code: String,
+    native_name: String,
+    english_name: String,
+    text_direction: String,
 }
 
 #[derive(Template)]
@@ -2499,6 +2554,8 @@ async fn handle_material_patch(
         label_en: form_value(&form, "label_en"),
         description_ja: form_value(&form, "description_ja"),
         description_en: form_value(&form, "description_en"),
+        label_i18n_updates: parse_localized_form_updates(&form, "label_i18n"),
+        description_i18n_updates: parse_localized_form_updates(&form, "description_i18n"),
         is_active: form.contains_key("is_active"),
     };
 
@@ -3934,6 +3991,7 @@ async fn handle_country_patch(
     let input = CountryPatchInput {
         label_ja: form_value(&form, "label_ja"),
         label_en: form_value(&form, "label_en"),
+        label_i18n_updates: parse_localized_form_updates(&form, "label_i18n"),
         shipping_fee_usd,
         shipping_fee_jpy,
         sort_order,
@@ -4452,6 +4510,8 @@ impl ServerState {
     ) -> Option<FacetTagDetailView> {
         let data = self.data.read().await;
         let tag = data.facet_tags.get(id)?;
+        let localized_editors = localized_editor_groups(&[("名称", "label_i18n", &tag.label_i18n)]);
+        let has_localized_editors = !localized_editors.is_empty();
 
         Some(FacetTagDetailView {
             id: id.to_owned(),
@@ -4459,6 +4519,8 @@ impl ServerState {
             facet_type_label: facet_tag_type_label(&tag.facet_type).to_owned(),
             label_ja: tag.label_i18n.get("ja").cloned().unwrap_or_default(),
             label_en: tag.label_i18n.get("en").cloned().unwrap_or_default(),
+            localized_editors,
+            has_localized_editors,
             aliases: tag.aliases.join(", "),
             sort_order: tag.sort_order,
             is_active: tag.is_active,
@@ -4565,8 +4627,11 @@ impl ServerState {
             };
 
             let now = Utc::now();
-            tag.label_i18n.insert("ja".to_owned(), label_ja);
-            tag.label_i18n.insert("en".to_owned(), label_en);
+            merge_admin_localized_map_values(
+                &mut tag.label_i18n,
+                &[("ja", &label_ja), ("en", &label_en)],
+            );
+            merge_admin_localized_extra_map_values(&mut tag.label_i18n, &input.label_i18n_updates);
             tag.aliases = aliases;
             tag.is_active = input.is_active;
             tag.sort_order = input.sort_order;
@@ -4649,6 +4714,11 @@ impl ServerState {
     ) -> Option<MaterialDetailView> {
         let data = self.data.read().await;
         let material = data.materials.get(key)?;
+        let localized_editors = localized_editor_groups(&[
+            ("材質名", "label_i18n", &material.label_i18n),
+            ("説明", "description_i18n", &material.description_i18n),
+        ]);
+        let has_localized_editors = !localized_editors.is_empty();
 
         Some(MaterialDetailView {
             key: material.key.clone(),
@@ -4664,6 +4734,8 @@ impl ServerState {
                 .get("en")
                 .cloned()
                 .unwrap_or_default(),
+            localized_editors,
+            has_localized_editors,
             is_active: material.is_active,
             version: material.version,
             updated_at: format_datetime(material.updated_at),
@@ -4688,6 +4760,16 @@ impl ServerState {
             .unwrap_or_default();
         let primary_photo_url =
             build_storage_media_url(&self.storage_assets_bucket, &photo_storage_path);
+        let photo_alt_i18n = primary_photo
+            .map(|photo| photo.alt_i18n.clone())
+            .unwrap_or_default();
+        let localized_editors = localized_editor_groups(&[
+            ("一点物タイトル", "title_i18n", &listing.title_i18n),
+            ("説明", "description_i18n", &listing.description_i18n),
+            ("作品紹介", "story_i18n", &listing.story_i18n),
+            ("写真代替テキスト", "photo_alt_i18n", &photo_alt_i18n),
+        ]);
+        let has_localized_editors = !localized_editors.is_empty();
 
         Some(StoneListingDetailView {
             key: listing.key.clone(),
@@ -4737,6 +4819,8 @@ impl ServerState {
             photo_alt_en: primary_photo
                 .and_then(|photo| photo.alt_i18n.get("en").cloned())
                 .unwrap_or_default(),
+            localized_editors,
+            has_localized_editors,
             has_photo: !primary_photo_url.is_empty(),
             version: listing.version,
             updated_at: format_datetime(listing.updated_at),
@@ -4853,11 +4937,16 @@ impl ServerState {
     ) -> Option<CountryDetailView> {
         let data = self.data.read().await;
         let country = data.countries.get(code)?;
+        let localized_editors =
+            localized_editor_groups(&[("配送国名", "label_i18n", &country.label_i18n)]);
+        let has_localized_editors = !localized_editors.is_empty();
 
         Some(CountryDetailView {
             code: country.code.clone(),
             label_ja: country.label_i18n.get("ja").cloned().unwrap_or_default(),
             label_en: country.label_i18n.get("en").cloned().unwrap_or_default(),
+            localized_editors,
+            has_localized_editors,
             shipping_fee_usd: country.shipping_fee_usd,
             shipping_fee_jpy: country.shipping_fee_jpy,
             is_active: country.is_active,
@@ -4988,8 +5077,14 @@ impl ServerState {
             };
 
             let now = Utc::now();
-            country.label_i18n.insert("ja".to_owned(), label_ja);
-            country.label_i18n.insert("en".to_owned(), label_en);
+            merge_admin_localized_map_values(
+                &mut country.label_i18n,
+                &[("ja", &label_ja), ("en", &label_en)],
+            );
+            merge_admin_localized_extra_map_values(
+                &mut country.label_i18n,
+                &input.label_i18n_updates,
+            );
             country.shipping_fee_usd = input.shipping_fee_usd;
             country.shipping_fee_jpy = input.shipping_fee_jpy;
             country.sort_order = input.sort_order;
@@ -5193,14 +5288,22 @@ impl ServerState {
             };
 
             let now = Utc::now();
-            material.label_i18n.insert("ja".to_owned(), label_ja);
-            material.label_i18n.insert("en".to_owned(), label_en);
-            material
-                .description_i18n
-                .insert("ja".to_owned(), description_ja);
-            material
-                .description_i18n
-                .insert("en".to_owned(), description_en);
+            merge_admin_localized_map_values(
+                &mut material.label_i18n,
+                &[("ja", &label_ja), ("en", &label_en)],
+            );
+            merge_admin_localized_extra_map_values(
+                &mut material.label_i18n,
+                &input.label_i18n_updates,
+            );
+            merge_admin_localized_map_values(
+                &mut material.description_i18n,
+                &[("ja", &description_ja), ("en", &description_en)],
+            );
+            merge_admin_localized_extra_map_values(
+                &mut material.description_i18n,
+                &input.description_i18n_updates,
+            );
             material.is_active = input.is_active;
             material.version += 1;
             material.updated_at = now;
@@ -5734,16 +5837,30 @@ impl ServerState {
             listing.listing_code = listing_code;
             listing.material_key = material_key;
             listing.size = size;
-            listing.title_i18n.insert("ja".to_owned(), title_ja);
-            listing.title_i18n.insert("en".to_owned(), title_en);
-            listing
-                .description_i18n
-                .insert("ja".to_owned(), description_ja);
-            listing
-                .description_i18n
-                .insert("en".to_owned(), description_en);
-            listing.story_i18n.insert("ja".to_owned(), story_ja);
-            listing.story_i18n.insert("en".to_owned(), story_en);
+            merge_admin_localized_map_values(
+                &mut listing.title_i18n,
+                &[("ja", &title_ja), ("en", &title_en)],
+            );
+            merge_admin_localized_extra_map_values(
+                &mut listing.title_i18n,
+                &input.title_i18n_updates,
+            );
+            merge_admin_localized_map_values(
+                &mut listing.description_i18n,
+                &[("ja", &description_ja), ("en", &description_en)],
+            );
+            merge_admin_localized_extra_map_values(
+                &mut listing.description_i18n,
+                &input.description_i18n_updates,
+            );
+            merge_admin_localized_map_values(
+                &mut listing.story_i18n,
+                &[("ja", &story_ja), ("en", &story_en)],
+            );
+            merge_admin_localized_extra_map_values(
+                &mut listing.story_i18n,
+                &input.story_i18n_updates,
+            );
             listing.facets.color_family = color_family;
             listing.facets.color_tags = color_tags;
             listing.facets.pattern_primary = pattern_primary;
@@ -5768,6 +5885,10 @@ impl ServerState {
                 &photo_storage_path,
                 &photo_alt_ja,
                 &photo_alt_en,
+            );
+            merge_primary_stone_listing_photo_alt_updates(
+                &mut listing.photos,
+                &input.photo_alt_i18n_updates,
             );
             listing.version += 1;
             listing.updated_at = now;
@@ -6853,28 +6974,38 @@ impl FirestoreAdminSource {
             ..Document::default()
         };
 
+        let mut update_mask_field_paths = vec![
+            "comparison_texture_ja".to_owned(),
+            "comparison_texture_en".to_owned(),
+            "comparison_weight_ja".to_owned(),
+            "comparison_weight_en".to_owned(),
+            "comparison_usage_ja".to_owned(),
+            "comparison_usage_en".to_owned(),
+            "shape".to_owned(),
+            "photos".to_owned(),
+            "price_by_currency".to_owned(),
+            "is_active".to_owned(),
+            "sort_order".to_owned(),
+            "version".to_owned(),
+            "updated_at".to_owned(),
+        ];
+        append_admin_localized_update_mask_paths_for_values(
+            &mut update_mask_field_paths,
+            "label_i18n",
+            &material.label_i18n,
+        );
+        append_admin_localized_update_mask_paths_for_values(
+            &mut update_mask_field_paths,
+            "description_i18n",
+            &material.description_i18n,
+        );
+
         client
             .patch_document(
                 &material_name,
                 &document,
                 &PatchDocumentOptions {
-                    update_mask_field_paths: vec![
-                        "label_i18n".to_owned(),
-                        "description_i18n".to_owned(),
-                        "comparison_texture_ja".to_owned(),
-                        "comparison_texture_en".to_owned(),
-                        "comparison_weight_ja".to_owned(),
-                        "comparison_weight_en".to_owned(),
-                        "comparison_usage_ja".to_owned(),
-                        "comparison_usage_en".to_owned(),
-                        "shape".to_owned(),
-                        "photos".to_owned(),
-                        "price_by_currency".to_owned(),
-                        "is_active".to_owned(),
-                        "sort_order".to_owned(),
-                        "version".to_owned(),
-                        "updated_at".to_owned(),
-                    ],
+                    update_mask_field_paths,
                     ..PatchDocumentOptions::default()
                 },
             )
@@ -6894,33 +7025,44 @@ impl FirestoreAdminSource {
             ..Document::default()
         };
 
+        let mut update_mask_field_paths = vec![
+            "listing_code".to_owned(),
+            "material_key".to_owned(),
+            "size".to_owned(),
+            "facets".to_owned(),
+            "photos".to_owned(),
+            "price_by_currency".to_owned(),
+            "status".to_owned(),
+            "is_active".to_owned(),
+            "sort_order".to_owned(),
+            "version".to_owned(),
+            "updated_at".to_owned(),
+        ];
+        append_admin_localized_update_mask_paths_for_values(
+            &mut update_mask_field_paths,
+            "title_i18n",
+            &listing.title_i18n,
+        );
+        append_admin_localized_update_mask_paths_for_values(
+            &mut update_mask_field_paths,
+            "description_i18n",
+            &listing.description_i18n,
+        );
+        append_admin_localized_update_mask_paths_for_values(
+            &mut update_mask_field_paths,
+            "story_i18n",
+            &listing.story_i18n,
+        );
+        if listing.published_at.is_some() {
+            update_mask_field_paths.push("published_at".to_owned());
+        }
+
         client
             .patch_document(
                 &listing_name,
                 &document,
                 &PatchDocumentOptions {
-                    update_mask_field_paths: {
-                        let mut fields = vec![
-                            "listing_code".to_owned(),
-                            "material_key".to_owned(),
-                            "size".to_owned(),
-                            "title_i18n".to_owned(),
-                            "description_i18n".to_owned(),
-                            "story_i18n".to_owned(),
-                            "facets".to_owned(),
-                            "photos".to_owned(),
-                            "price_by_currency".to_owned(),
-                            "status".to_owned(),
-                            "is_active".to_owned(),
-                            "sort_order".to_owned(),
-                            "version".to_owned(),
-                            "updated_at".to_owned(),
-                        ];
-                        if listing.published_at.is_some() {
-                            fields.push("published_at".to_owned());
-                        }
-                        fields
-                    },
+                    update_mask_field_paths,
                     ..PatchDocumentOptions::default()
                 },
             )
@@ -6944,21 +7086,27 @@ impl FirestoreAdminSource {
             ..Document::default()
         };
 
+        let mut update_mask_field_paths = vec![
+            "key".to_owned(),
+            "facet_type".to_owned(),
+            "aliases".to_owned(),
+            "is_active".to_owned(),
+            "sort_order".to_owned(),
+            "version".to_owned(),
+            "updated_at".to_owned(),
+        ];
+        append_admin_localized_update_mask_paths_for_values(
+            &mut update_mask_field_paths,
+            "label_i18n",
+            &tag.label_i18n,
+        );
+
         client
             .patch_document(
                 &tag_name,
                 &document,
                 &PatchDocumentOptions {
-                    update_mask_field_paths: vec![
-                        "key".to_owned(),
-                        "facet_type".to_owned(),
-                        "label_i18n".to_owned(),
-                        "aliases".to_owned(),
-                        "is_active".to_owned(),
-                        "sort_order".to_owned(),
-                        "version".to_owned(),
-                        "updated_at".to_owned(),
-                    ],
+                    update_mask_field_paths,
                     ..PatchDocumentOptions::default()
                 },
             )
@@ -7038,19 +7186,25 @@ impl FirestoreAdminSource {
             ..Document::default()
         };
 
+        let mut update_mask_field_paths = vec![
+            "shipping_fee_by_currency".to_owned(),
+            "is_active".to_owned(),
+            "sort_order".to_owned(),
+            "version".to_owned(),
+            "updated_at".to_owned(),
+        ];
+        append_admin_localized_update_mask_paths_for_values(
+            &mut update_mask_field_paths,
+            "label_i18n",
+            &country.label_i18n,
+        );
+
         client
             .patch_document(
                 &country_name,
                 &document,
                 &PatchDocumentOptions {
-                    update_mask_field_paths: vec![
-                        "label_i18n".to_owned(),
-                        "shipping_fee_by_currency".to_owned(),
-                        "is_active".to_owned(),
-                        "sort_order".to_owned(),
-                        "version".to_owned(),
-                        "updated_at".to_owned(),
-                    ],
+                    update_mask_field_paths,
                     ..PatchDocumentOptions::default()
                 },
             )
@@ -7298,6 +7452,194 @@ fn form_value(form: &HashMap<String, String>, key: &str) -> String {
     form.get(key)
         .map(|value| value.trim().to_owned())
         .unwrap_or_default()
+}
+
+fn merge_admin_localized_map_values(
+    values: &mut HashMap<String, String>,
+    updates: &[(&str, &str)],
+) {
+    for (locale, value) in updates {
+        let locale = locale.trim();
+        if locale.is_empty() {
+            continue;
+        }
+        values.insert(locale.to_owned(), value.trim().to_owned());
+    }
+}
+
+fn merge_optional_admin_localized_map_values(
+    values: &mut HashMap<String, String>,
+    updates: &[(&str, &str)],
+) {
+    for (locale, value) in updates {
+        let locale = locale.trim();
+        if locale.is_empty() {
+            continue;
+        }
+        let value = value.trim();
+        if value.is_empty() {
+            values.remove(locale);
+        } else {
+            values.insert(locale.to_owned(), value.to_owned());
+        }
+    }
+}
+
+fn merge_admin_localized_extra_map_values(
+    values: &mut HashMap<String, String>,
+    updates: &HashMap<String, String>,
+) {
+    let mut locales = updates.keys().collect::<Vec<_>>();
+    locales.sort();
+
+    for locale in locales {
+        let locale = locale.trim();
+        if locale.is_empty() {
+            continue;
+        }
+        let Some(value) = updates.get(locale) else {
+            continue;
+        };
+        values.insert(locale.to_owned(), value.trim().to_owned());
+    }
+}
+
+fn admin_localized_update_mask_paths(field: &str) -> Vec<String> {
+    ADMIN_EDITABLE_LOCALE_KEYS
+        .iter()
+        .map(|locale| format!("{field}.{locale}"))
+        .collect()
+}
+
+fn append_admin_localized_update_mask_paths(paths: &mut Vec<String>, field: &str) {
+    paths.extend(admin_localized_update_mask_paths(field));
+}
+
+fn admin_localized_update_mask_paths_for_values(
+    field: &str,
+    values: &HashMap<String, String>,
+) -> Vec<String> {
+    let mut locales = values
+        .keys()
+        .map(|locale| locale.trim().to_lowercase())
+        .filter(|locale| !locale.is_empty())
+        .collect::<Vec<_>>();
+    locales.sort();
+    locales.dedup();
+    locales
+        .into_iter()
+        .map(|locale| format!("{field}.{locale}"))
+        .collect()
+}
+
+fn append_admin_localized_update_mask_paths_for_values(
+    paths: &mut Vec<String>,
+    field: &str,
+    values: &HashMap<String, String>,
+) {
+    paths.extend(admin_localized_update_mask_paths_for_values(field, values));
+}
+
+fn admin_localized_editor_languages() -> &'static [AdminLocalizedEditorLanguage] {
+    ADMIN_LOCALIZED_EDITOR_LANGUAGES
+        .get_or_init(|| {
+            let mut languages =
+                serde_json::from_str::<Vec<AdminLanguageRegistryEntry>>(LANGUAGE_REGISTRY_JSON)
+                    .expect("checked-in language registry must parse for admin localized editor")
+                    .into_iter()
+                    .filter_map(|entry| {
+                        let route_code = entry.route_code.trim().to_lowercase();
+                        if route_code.is_empty()
+                            || ADMIN_EDITABLE_LOCALE_KEYS.contains(&route_code.as_str())
+                        {
+                            return None;
+                        }
+
+                        Some(AdminLocalizedEditorLanguage {
+                            route_code,
+                            native_name: entry.native_name.trim().to_owned(),
+                            english_name: entry.english_name.trim().to_owned(),
+                            text_direction: if entry
+                                .text_direction
+                                .trim()
+                                .eq_ignore_ascii_case("rtl")
+                            {
+                                "rtl".to_owned()
+                            } else {
+                                "ltr".to_owned()
+                            },
+                        })
+                    })
+                    .collect::<Vec<_>>();
+            languages.sort_by(|left, right| left.route_code.cmp(&right.route_code));
+            languages
+        })
+        .as_slice()
+}
+
+fn localized_editor_group(
+    label: &str,
+    input_prefix: &str,
+    values: &HashMap<String, String>,
+) -> LocalizedEditorGroupView {
+    LocalizedEditorGroupView {
+        label: label.to_owned(),
+        values: admin_localized_editor_languages()
+            .iter()
+            .map(|language| LocalizedEditorValueView {
+                route_code: language.route_code.clone(),
+                language_label: localized_editor_language_label(language),
+                text_direction: language.text_direction.clone(),
+                input_name: format!("{input_prefix}__{}", language.route_code),
+                value: values
+                    .get(&language.route_code)
+                    .cloned()
+                    .unwrap_or_default(),
+            })
+            .collect(),
+    }
+}
+
+fn localized_editor_groups(
+    groups: &[(&str, &str, &HashMap<String, String>)],
+) -> Vec<LocalizedEditorGroupView> {
+    groups
+        .iter()
+        .map(|(label, input_prefix, values)| localized_editor_group(label, input_prefix, values))
+        .collect()
+}
+
+fn localized_editor_language_label(language: &AdminLocalizedEditorLanguage) -> String {
+    if language.native_name == language.english_name {
+        language.native_name.clone()
+    } else {
+        format!("{} / {}", language.native_name, language.english_name)
+    }
+}
+
+fn parse_localized_form_updates(
+    form: &HashMap<String, String>,
+    input_prefix: &str,
+) -> HashMap<String, String> {
+    let allowed_routes = admin_localized_editor_languages()
+        .iter()
+        .map(|language| language.route_code.as_str())
+        .collect::<BTreeSet<_>>();
+    let field_prefix = format!("{input_prefix}__");
+
+    form.iter()
+        .filter_map(|(key, value)| {
+            let route_code = key.strip_prefix(&field_prefix)?.trim().to_lowercase();
+            let value = value.trim();
+            if route_code.is_empty()
+                || value.is_empty()
+                || !allowed_routes.contains(route_code.as_str())
+            {
+                return None;
+            }
+            Some((route_code, value.to_owned()))
+        })
+        .collect()
 }
 
 fn next_material_sort_order(materials: &HashMap<String, Material>) -> i64 {
@@ -7557,6 +7899,10 @@ fn stone_listing_patch_input_from_form(
         photo_storage_path,
         photo_alt_ja,
         photo_alt_en,
+        title_i18n_updates: parse_localized_form_updates(form, "title_i18n"),
+        description_i18n_updates: parse_localized_form_updates(form, "description_i18n"),
+        story_i18n_updates: parse_localized_form_updates(form, "story_i18n"),
+        photo_alt_i18n_updates: parse_localized_form_updates(form, "photo_alt_i18n"),
         status,
         is_active,
     }
@@ -7769,6 +8115,7 @@ fn facet_tag_patch_input_from_form(
     FacetTagPatchInput {
         label_ja: form_value(form, "label_ja"),
         label_en: form_value(form, "label_en"),
+        label_i18n_updates: parse_localized_form_updates(form, "label_i18n"),
         aliases: parse_comma_separated_values(&form_value(form, "aliases")),
         sort_order,
         is_active: form.contains_key("is_active"),
@@ -8508,12 +8855,7 @@ fn build_single_stone_listing_photos(
     }
 
     let mut alt_i18n = HashMap::new();
-    if !alt_ja.trim().is_empty() {
-        alt_i18n.insert("ja".to_owned(), alt_ja.trim().to_owned());
-    }
-    if !alt_en.trim().is_empty() {
-        alt_i18n.insert("en".to_owned(), alt_en.trim().to_owned());
-    }
+    merge_optional_admin_localized_map_values(&mut alt_i18n, &[("ja", alt_ja), ("en", alt_en)]);
 
     vec![MaterialPhoto {
         asset_id: format!("lst_{}_01", stone_listing_key),
@@ -8551,20 +8893,10 @@ fn merge_primary_stone_listing_photo(
         let primary = &mut photos[primary_index];
         primary.storage_path = storage_path.to_owned();
 
-        if alt_ja.trim().is_empty() {
-            primary.alt_i18n.remove("ja");
-        } else {
-            primary
-                .alt_i18n
-                .insert("ja".to_owned(), alt_ja.trim().to_owned());
-        }
-        if alt_en.trim().is_empty() {
-            primary.alt_i18n.remove("en");
-        } else {
-            primary
-                .alt_i18n
-                .insert("en".to_owned(), alt_en.trim().to_owned());
-        }
+        merge_optional_admin_localized_map_values(
+            &mut primary.alt_i18n,
+            &[("ja", alt_ja), ("en", alt_en)],
+        );
 
         if primary.asset_id.trim().is_empty() {
             primary.asset_id = format!("lst_{}_01", stone_listing_key);
@@ -8579,6 +8911,21 @@ fn merge_primary_stone_listing_photo(
     }
 
     photos
+}
+
+fn merge_primary_stone_listing_photo_alt_updates(
+    photos: &mut [MaterialPhoto],
+    updates: &HashMap<String, String>,
+) {
+    if updates.is_empty() || photos.is_empty() {
+        return;
+    }
+
+    let primary_index = photos
+        .iter()
+        .position(|photo| photo.is_primary)
+        .unwrap_or(0);
+    merge_admin_localized_extra_map_values(&mut photos[primary_index].alt_i18n, updates);
 }
 
 fn validate_material_photo_storage_path(storage_path: &str) -> std::result::Result<(), String> {
@@ -11086,6 +11433,10 @@ mod tests {
             photo_storage_path: "stone_listings/jade/jade_01/main.webp".to_owned(),
             photo_alt_ja: "翡翠の一点物 01".to_owned(),
             photo_alt_en: "One-of-a-kind Jade 01".to_owned(),
+            title_i18n_updates: HashMap::new(),
+            description_i18n_updates: HashMap::new(),
+            story_i18n_updates: HashMap::new(),
+            photo_alt_i18n_updates: HashMap::new(),
             status: "published".to_owned(),
             is_active: true,
         }
@@ -11746,6 +12097,7 @@ mod tests {
                 FacetTagPatchInput {
                     label_ja: "淡桃".to_owned(),
                     label_en: "Soft Pink".to_owned(),
+                    label_i18n_updates: HashMap::new(),
                     aliases: vec!["forest_green".to_owned()],
                     sort_order: 20,
                     is_active: true,
@@ -11905,6 +12257,474 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn m5_t02_admin_localized_merge_preserves_unknown_locale_keys() {
+        let mut values = HashMap::from([
+            ("ja".to_owned(), "旧日本語".to_owned()),
+            ("en".to_owned(), "Old English".to_owned()),
+            ("fr".to_owned(), "Français".to_owned()),
+            ("zh".to_owned(), "简体中文".to_owned()),
+            ("zhtw".to_owned(), "繁體中文".to_owned()),
+        ]);
+
+        merge_admin_localized_map_values(
+            &mut values,
+            &[("ja", " 新日本語 "), ("en", " New English ")],
+        );
+
+        assert_eq!(values.get("ja").map(String::as_str), Some("新日本語"));
+        assert_eq!(values.get("en").map(String::as_str), Some("New English"));
+        assert_eq!(values.get("fr").map(String::as_str), Some("Français"));
+        assert_eq!(values.get("zh").map(String::as_str), Some("简体中文"));
+        assert_eq!(values.get("zhtw").map(String::as_str), Some("繁體中文"));
+    }
+
+    #[test]
+    fn m5_t02_optional_localized_merge_only_removes_edited_blank_keys() {
+        let mut values = HashMap::from([
+            ("ja".to_owned(), "旧日本語".to_owned()),
+            ("en".to_owned(), "Old English".to_owned()),
+            ("fr".to_owned(), "Français".to_owned()),
+            ("zh".to_owned(), "简体中文".to_owned()),
+            ("zhtw".to_owned(), "繁體中文".to_owned()),
+        ]);
+
+        merge_optional_admin_localized_map_values(
+            &mut values,
+            &[("ja", " "), ("en", " New English ")],
+        );
+
+        assert!(!values.contains_key("ja"));
+        assert_eq!(values.get("en").map(String::as_str), Some("New English"));
+        assert_eq!(values.get("fr").map(String::as_str), Some("Français"));
+        assert_eq!(values.get("zh").map(String::as_str), Some("简体中文"));
+        assert_eq!(values.get("zhtw").map(String::as_str), Some("繁體中文"));
+    }
+
+    #[test]
+    fn m5_t02_localized_update_masks_target_editable_subkeys_only() {
+        let mut paths = vec!["version".to_owned()];
+
+        append_admin_localized_update_mask_paths(&mut paths, "label_i18n");
+
+        assert_eq!(
+            paths,
+            vec![
+                "version".to_owned(),
+                "label_i18n.ja".to_owned(),
+                "label_i18n.en".to_owned(),
+            ]
+        );
+        assert!(!paths.iter().any(|path| path == "label_i18n"));
+    }
+
+    #[test]
+    fn m5_t02_primary_photo_alt_merge_preserves_unknown_locales_and_extra_photos() {
+        let existing = vec![
+            MaterialPhoto {
+                asset_id: "primary".to_owned(),
+                storage_path: "stone_listings/jade_01/primary.webp".to_owned(),
+                alt_i18n: HashMap::from([
+                    ("ja".to_owned(), "旧日本語".to_owned()),
+                    ("en".to_owned(), "Old English".to_owned()),
+                    ("fr".to_owned(), "Français".to_owned()),
+                    ("zh".to_owned(), "简体中文".to_owned()),
+                    ("zhtw".to_owned(), "繁體中文".to_owned()),
+                ]),
+                sort_order: 0,
+                is_primary: true,
+                width: 1200,
+                height: 800,
+            },
+            MaterialPhoto {
+                asset_id: "secondary".to_owned(),
+                storage_path: "stone_listings/jade_01/secondary.webp".to_owned(),
+                alt_i18n: HashMap::from([("fr".to_owned(), "Secondaire".to_owned())]),
+                sort_order: 1,
+                is_primary: false,
+                width: 900,
+                height: 600,
+            },
+        ];
+
+        let photos = merge_primary_stone_listing_photo(
+            &existing,
+            "jade_01",
+            "stone_listings/jade_01/primary-updated.webp",
+            " ",
+            " New English ",
+        );
+
+        assert_eq!(photos.len(), 2);
+        let primary = photos
+            .iter()
+            .find(|photo| photo.asset_id == "primary")
+            .expect("primary photo should remain");
+        assert_eq!(
+            primary.storage_path,
+            "stone_listings/jade_01/primary-updated.webp"
+        );
+        assert!(!primary.alt_i18n.contains_key("ja"));
+        assert_eq!(
+            primary.alt_i18n.get("en").map(String::as_str),
+            Some("New English")
+        );
+        assert_eq!(
+            primary.alt_i18n.get("fr").map(String::as_str),
+            Some("Français")
+        );
+        assert_eq!(
+            primary.alt_i18n.get("zh").map(String::as_str),
+            Some("简体中文")
+        );
+        assert_eq!(
+            primary.alt_i18n.get("zhtw").map(String::as_str),
+            Some("繁體中文")
+        );
+
+        let secondary = photos
+            .iter()
+            .find(|photo| photo.asset_id == "secondary")
+            .expect("secondary photo should remain");
+        assert!(!secondary.is_primary);
+        assert_eq!(
+            secondary.alt_i18n.get("fr").map(String::as_str),
+            Some("Secondaire")
+        );
+    }
+
+    fn insert_preservation_locales(values: &mut HashMap<String, String>, prefix: &str) {
+        values.insert("fr".to_owned(), format!("{prefix} français"));
+        values.insert("zh".to_owned(), format!("{prefix} 简体中文"));
+        values.insert("zhtw".to_owned(), format!("{prefix} 繁體中文"));
+    }
+
+    fn assert_preservation_locales(values: &HashMap<String, String>, prefix: &str) {
+        assert_eq!(
+            values.get("fr").map(String::as_str),
+            Some(format!("{prefix} français").as_str())
+        );
+        assert_eq!(
+            values.get("zh").map(String::as_str),
+            Some(format!("{prefix} 简体中文").as_str())
+        );
+        assert_eq!(
+            values.get("zhtw").map(String::as_str),
+            Some(format!("{prefix} 繁體中文").as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn m5_t03_update_material_preserves_fr_zh_and_zhtw_values() {
+        let state = mock_server_state();
+
+        {
+            let mut data = state.data.write().await;
+            let material = data
+                .materials
+                .get_mut("jade")
+                .expect("jade material should exist");
+            insert_preservation_locales(&mut material.label_i18n, "material label");
+            insert_preservation_locales(&mut material.description_i18n, "material description");
+        }
+
+        let result = state
+            .update_material(
+                "jade",
+                MaterialPatchInput {
+                    label_ja: "翡翠 更新".to_owned(),
+                    label_en: "Jade Updated".to_owned(),
+                    description_ja: "更新された説明です。".to_owned(),
+                    description_en: "Updated description.".to_owned(),
+                    label_i18n_updates: HashMap::new(),
+                    description_i18n_updates: HashMap::new(),
+                    is_active: true,
+                },
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let data = state.data.read().await;
+        let material = data
+            .materials
+            .get("jade")
+            .expect("jade material should remain");
+        assert_eq!(
+            material.label_i18n.get("ja").map(String::as_str),
+            Some("翡翠 更新")
+        );
+        assert_eq!(
+            material.label_i18n.get("en").map(String::as_str),
+            Some("Jade Updated")
+        );
+        assert_preservation_locales(&material.label_i18n, "material label");
+        assert_preservation_locales(&material.description_i18n, "material description");
+    }
+
+    #[tokio::test]
+    async fn m5_t03_update_stone_listing_preserves_fr_zh_and_zhtw_values() {
+        let state = mock_server_state();
+
+        {
+            let mut data = state.data.write().await;
+            let listing = data
+                .stone_listings
+                .get_mut("jade_01")
+                .expect("jade_01 listing should exist");
+            insert_preservation_locales(&mut listing.title_i18n, "listing title");
+            insert_preservation_locales(&mut listing.description_i18n, "listing description");
+            insert_preservation_locales(&mut listing.story_i18n, "listing story");
+            let primary = listing
+                .photos
+                .iter_mut()
+                .find(|photo| photo.is_primary)
+                .expect("primary photo should exist");
+            insert_preservation_locales(&mut primary.alt_i18n, "listing photo alt");
+        }
+
+        let mut input = valid_stone_listing_patch_input();
+        input.title_ja = "翡翠の一点物 01 更新".to_owned();
+        input.title_en = "Updated One-of-a-kind Jade 01".to_owned();
+        input.description_ja = "更新された一点物説明です。".to_owned();
+        input.description_en = "Updated listing description.".to_owned();
+        input.story_ja = "更新されたストーリーです。".to_owned();
+        input.story_en = "Updated story.".to_owned();
+        input.photo_alt_ja = "更新された翡翠写真".to_owned();
+        input.photo_alt_en = "Updated jade photo".to_owned();
+
+        let result = state.update_stone_listing("jade_01", input).await;
+
+        assert!(result.is_ok());
+        let data = state.data.read().await;
+        let listing = data
+            .stone_listings
+            .get("jade_01")
+            .expect("jade_01 listing should remain");
+        assert_eq!(
+            listing.title_i18n.get("ja").map(String::as_str),
+            Some("翡翠の一点物 01 更新")
+        );
+        assert_eq!(
+            listing.title_i18n.get("en").map(String::as_str),
+            Some("Updated One-of-a-kind Jade 01")
+        );
+        assert_preservation_locales(&listing.title_i18n, "listing title");
+        assert_preservation_locales(&listing.description_i18n, "listing description");
+        assert_preservation_locales(&listing.story_i18n, "listing story");
+        let primary = listing
+            .photos
+            .iter()
+            .find(|photo| photo.is_primary)
+            .expect("primary photo should remain");
+        assert_eq!(
+            primary.alt_i18n.get("ja").map(String::as_str),
+            Some("更新された翡翠写真")
+        );
+        assert_eq!(
+            primary.alt_i18n.get("en").map(String::as_str),
+            Some("Updated jade photo")
+        );
+        assert_preservation_locales(&primary.alt_i18n, "listing photo alt");
+    }
+
+    #[tokio::test]
+    async fn m5_t03_update_country_preserves_fr_zh_and_zhtw_values() {
+        let state = mock_server_state();
+
+        {
+            let mut data = state.data.write().await;
+            let country = data.countries.get_mut("JP").expect("JP should exist");
+            insert_preservation_locales(&mut country.label_i18n, "country label");
+        }
+
+        let result = state
+            .update_country(
+                "JP",
+                CountryPatchInput {
+                    label_ja: "日本国内".to_owned(),
+                    label_en: "Japan Domestic".to_owned(),
+                    label_i18n_updates: HashMap::new(),
+                    shipping_fee_usd: 900,
+                    shipping_fee_jpy: 1200,
+                    sort_order: 15,
+                    is_active: true,
+                },
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let data = state.data.read().await;
+        let country = data.countries.get("JP").expect("JP should remain");
+        assert_eq!(
+            country.label_i18n.get("ja").map(String::as_str),
+            Some("日本国内")
+        );
+        assert_eq!(
+            country.label_i18n.get("en").map(String::as_str),
+            Some("Japan Domestic")
+        );
+        assert_preservation_locales(&country.label_i18n, "country label");
+    }
+
+    #[tokio::test]
+    async fn m5_t03_update_facet_tag_preserves_fr_zh_and_zhtw_values() {
+        let state = mock_server_state();
+
+        {
+            let mut data = state.data.write().await;
+            let tag = data
+                .facet_tags
+                .get_mut("color:soft_pink")
+                .expect("soft pink tag should exist");
+            insert_preservation_locales(&mut tag.label_i18n, "facet label");
+        }
+
+        let result = state
+            .update_facet_tag(
+                "color:soft_pink",
+                FacetTagPatchInput {
+                    label_ja: "淡桃 更新".to_owned(),
+                    label_en: "Soft Pink Updated".to_owned(),
+                    label_i18n_updates: HashMap::new(),
+                    aliases: vec!["light_pink".to_owned()],
+                    sort_order: 25,
+                    is_active: true,
+                },
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let data = state.data.read().await;
+        let tag = data
+            .facet_tags
+            .get("color:soft_pink")
+            .expect("soft pink tag should remain");
+        assert_eq!(
+            tag.label_i18n.get("ja").map(String::as_str),
+            Some("淡桃 更新")
+        );
+        assert_eq!(
+            tag.label_i18n.get("en").map(String::as_str),
+            Some("Soft Pink Updated")
+        );
+        assert_preservation_locales(&tag.label_i18n, "facet label");
+    }
+
+    #[test]
+    fn m5_t04_registry_editor_languages_exclude_primary_admin_locales() {
+        let languages = admin_localized_editor_languages();
+
+        assert_eq!(languages.len(), 66);
+        assert!(!languages.iter().any(|language| language.route_code == "ja"));
+        assert!(!languages.iter().any(|language| language.route_code == "en"));
+        assert!(languages.iter().any(|language| language.route_code == "fr"));
+        assert!(languages.iter().any(|language| language.route_code == "zh"));
+        assert!(
+            languages
+                .iter()
+                .any(|language| language.route_code == "zhtw")
+        );
+        assert!(
+            languages
+                .iter()
+                .any(|language| language.route_code == "ar" && language.text_direction == "rtl")
+        );
+    }
+
+    #[test]
+    fn m5_t04_parse_localized_form_updates_accepts_registry_routes_only() {
+        let form = HashMap::from([
+            ("label_i18n__fr".to_owned(), " Français ".to_owned()),
+            ("label_i18n__zh".to_owned(), " 简体中文 ".to_owned()),
+            ("label_i18n__ja".to_owned(), "日本語".to_owned()),
+            ("label_i18n__xx".to_owned(), "Unknown".to_owned()),
+            ("label_i18n__zhtw".to_owned(), " ".to_owned()),
+        ]);
+
+        let updates = parse_localized_form_updates(&form, "label_i18n");
+
+        assert_eq!(updates.len(), 2);
+        assert_eq!(updates.get("fr").map(String::as_str), Some("Français"));
+        assert_eq!(updates.get("zh").map(String::as_str), Some("简体中文"));
+        assert!(!updates.contains_key("ja"));
+        assert!(!updates.contains_key("xx"));
+        assert!(!updates.contains_key("zhtw"));
+    }
+
+    #[tokio::test]
+    async fn m5_t04_material_detail_renders_collapsed_localized_editor() {
+        let state = mock_server_state();
+
+        {
+            let mut data = state.data.write().await;
+            let material = data
+                .materials
+                .get_mut("jade")
+                .expect("jade material should exist");
+            material
+                .label_i18n
+                .insert("fr".to_owned(), "Jade français".to_owned());
+        }
+
+        let detail = state
+            .get_material_detail("jade", "", "")
+            .await
+            .expect("jade material detail should render");
+        let html = render_material_detail(&detail).expect("material detail should render");
+
+        assert!(html.contains("<details"));
+        assert!(!html.contains("<details open"));
+        assert!(html.contains("追加ロケール"));
+        assert!(html.contains("name=\"label_i18n__fr\""));
+        assert!(html.contains("value=\"Jade français\""));
+        assert!(html.contains("name=\"description_i18n__zhtw\""));
+    }
+
+    #[tokio::test]
+    async fn m5_t04_update_material_saves_extra_localized_editor_values() {
+        let state = mock_server_state();
+
+        let result = state
+            .update_material(
+                "jade",
+                MaterialPatchInput {
+                    label_ja: "翡翠".to_owned(),
+                    label_en: "Jade".to_owned(),
+                    description_ja: "説明です。".to_owned(),
+                    description_en: "Description.".to_owned(),
+                    label_i18n_updates: HashMap::from([
+                        ("fr".to_owned(), "Jade français".to_owned()),
+                        ("zh".to_owned(), "翡翠简体".to_owned()),
+                    ]),
+                    description_i18n_updates: HashMap::from([(
+                        "zhtw".to_owned(),
+                        "繁體説明".to_owned(),
+                    )]),
+                    is_active: true,
+                },
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let data = state.data.read().await;
+        let material = data
+            .materials
+            .get("jade")
+            .expect("jade material should remain");
+        assert_eq!(
+            material.label_i18n.get("fr").map(String::as_str),
+            Some("Jade français")
+        );
+        assert_eq!(
+            material.label_i18n.get("zh").map(String::as_str),
+            Some("翡翠简体")
+        );
+        assert_eq!(
+            material.description_i18n.get("zhtw").map(String::as_str),
+            Some("繁體説明")
+        );
+    }
+
     #[tokio::test]
     async fn create_material_accepts_master_fields_only() {
         let form = HashMap::from([
@@ -11998,6 +12818,7 @@ mod tests {
                 CountryPatchInput {
                     label_ja: "日本国内".to_owned(),
                     label_en: "Japan Domestic".to_owned(),
+                    label_i18n_updates: HashMap::new(),
                     shipping_fee_usd: 900,
                     shipping_fee_jpy: 1200,
                     sort_order: 15,
@@ -12027,6 +12848,7 @@ mod tests {
                 CountryPatchInput {
                     label_ja: "日本".to_owned(),
                     label_en: "Japan".to_owned(),
+                    label_i18n_updates: HashMap::new(),
                     shipping_fee_usd: -1,
                     shipping_fee_jpy: 800,
                     sort_order: 10,

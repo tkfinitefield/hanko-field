@@ -1,0 +1,8 @@
+{
+  "product_name_template": "ختم حجر كريم ({listing_label}؛ {shape_label})",
+  "product_description_template": "طلب ختم حجر كريم مخصص",
+  "shape_labels": {
+    "round": "دائري",
+    "square": "مربع"
+  }
+}

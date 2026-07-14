@@ -1,0 +1,22 @@
+{
+  "slug": "english-name-kanji-seal",
+  "published_date": "2026-05-12",
+  "last_modified_date": "2026-05-12",
+  "image_url": "/static/blog/english-name-kanji-seal.svg",
+  "locales": {
+    "en": {
+      "date_display": "May 12, 2026",
+      "title": "How to Turn Your English Name into a Japanese or Chinese Seal",
+      "excerpt": "Learn how to turn an English name into a custom name seal using alphabet letters, initials, katakana, kanji, or Chinese characters.",
+      "meta_description": "Turn an English name into a Japanese or Chinese seal. Compare kanji seals, custom name seals, Japanese name stamps, katakana, initials, and characters.",
+      "image_alt": "A natural stone name seal with alphabet letters, katakana, and Chinese characters on paper."
+    },
+    "ja": {
+      "date_display": "2026年5月12日",
+      "title": "英語の名前を日本語・中国語の印にする方法",
+      "excerpt": "英語の名前を custom name seal にする方法を、アルファベット、イニシャル、カタカナ、漢字・中国語文字の選択肢から解説します。",
+      "meta_description": "英語の名前を日本語・中国語の印にする方法を解説。English name in kanji seal、custom name seal、Japanese name stamp、カタカナ、イニシャルを比較します。",
+      "image_alt": "アルファベット、カタカナ、中国語文字の文字案と紙の上に置かれた天然石の名前印。"
+    }
+  }
+}

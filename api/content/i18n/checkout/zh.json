@@ -1,0 +1,8 @@
+{
+  "product_name_template": "宝石印章（{listing_label}，{shape_label}）",
+  "product_description_template": "宝石印章定制订单",
+  "shape_labels": {
+    "round": "圆",
+    "square": "方"
+  }
+}

@@ -4,13 +4,13 @@
 </div>
 {% else %}
 <div class="result-card is-success">
-  <h4>{% if selected_locale == "ja" %}{% if is_mock %}注文を受け付けました（モック）{% else %}注文内容を受け付けました（検証）{% endif %}{% else %}{% if is_mock %}Order received (mock){% else %}Order details accepted (validation){% endif %}{% endif %}</h4>
-  <p>{% if selected_locale == "ja" %}データソース{% else %}Source{% endif %}: {{ source_label }}</p>
-  <p>{% if selected_locale == "ja" %}印影{% else %}Seal{% endif %}: {{ seal_line1 }}{% if has_seal_line2 %} / {{ seal_line2 }}{% endif %}</p>
+  <h4>{% if is_mock %}{{ self.copy_text("purchase_result_009") }}{% else %}{{ self.copy_text("purchase_result_010") }}{% endif %}</h4>
+  <p>{{ self.copy_text("purchase_result_001") }}: {{ source_label }}</p>
+  <p>{{ self.copy_text("purchase_result_002") }}: {{ seal_line1 }}{% if has_seal_line2 %} / {{ seal_line2 }}{% endif %}</p>
   <p>{{ shape_label }} / {{ listing_label }} / {{ font_label }}</p>
-  <p>{% if selected_locale == "ja" %}配送先{% else %}Shipping to{% endif %}: {{ country_label }} / {{ stripe_name }} / {{ stripe_phone }}</p>
-  <p>{% if selected_locale == "ja" %}住所{% else %}Address{% endif %}: {{ postal_code }} {{ state }} {{ city }} {{ address_line1 }}{% if has_address_line2 %} {{ address_line2 }}{% endif %}</p>
-  <p>{% if selected_locale == "ja" %}小計{% else %}Subtotal{% endif %}: {{ subtotal_display }} / {% if selected_locale == "ja" %}送料{% else %}Shipping{% endif %}: {{ shipping_display }} / {% if selected_locale == "ja" %}合計{% else %}Total{% endif %}: {{ total_display }}</p>
-  <p>{% if selected_locale == "ja" %}確認メール送信先{% else %}Confirmation email{% endif %}: {{ email }}</p>
+  <p>{{ self.copy_text("purchase_result_003") }}: {{ country_label }} / {{ stripe_name }} / {{ stripe_phone }}</p>
+  <p>{{ self.copy_text("purchase_result_004") }}: {{ postal_code }} {{ state }} {{ city }} {{ address_line1 }}{% if has_address_line2 %} {{ address_line2 }}{% endif %}</p>
+  <p>{{ self.copy_text("purchase_result_005") }}: {{ subtotal_display }} / {{ self.copy_text("purchase_result_006") }}: {{ shipping_display }} / {{ self.copy_text("purchase_result_007") }}: {{ total_display }}</p>
+  <p>{{ self.copy_text("purchase_result_008") }}: {{ email }}</p>
 </div>
 {% endif %}

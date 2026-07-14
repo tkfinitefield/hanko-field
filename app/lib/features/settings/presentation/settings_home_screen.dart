@@ -2,6 +2,7 @@ import 'package:declarative_nav/declarative_nav.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/localization/app_localization.dart';
+import '../../../app/localization/language_registry.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/widgets/core_widgets.dart';
 import 'settings_content.dart';
@@ -248,7 +249,6 @@ class _SettingsDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final content = SettingsContentBundle.forLanguage(l10n.locale.languageCode);
 
     return _SettingsPageFrame(
       title: destination.title(l10n),
@@ -264,6 +264,85 @@ class _SettingsDetailPage extends StatelessWidget {
             currentLocale: l10n.locale,
             onLocaleSelected: onLocaleSelected,
           ),
+          _SettingsDestination.about ||
+          _SettingsDestination.howItWorks ||
+          _SettingsDestination.faq ||
+          _SettingsDestination.privacy ||
+          _SettingsDestination.terms ||
+          _SettingsDestination.contact => _SettingsContentLoader(
+            routeCode: fallbackRouteCodeForLocale(l10n.locale),
+            destination: destination,
+          ),
+          _SettingsDestination.version => const _VersionSettingsContent(),
+        },
+      ],
+    );
+  }
+}
+
+class _SettingsContentLoader extends StatefulWidget {
+  const _SettingsContentLoader({
+    required this.routeCode,
+    required this.destination,
+  });
+
+  final String routeCode;
+  final _SettingsDestination destination;
+
+  @override
+  State<_SettingsContentLoader> createState() => _SettingsContentLoaderState();
+}
+
+class _SettingsContentLoaderState extends State<_SettingsContentLoader> {
+  Object? _bundle;
+  Future<SettingsContentBundle>? _content;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bundle = DefaultAssetBundle.of(context);
+    if (!identical(_bundle, bundle)) {
+      _bundle = bundle;
+      _content = SettingsContentBundle.forLanguage(
+        widget.routeCode,
+        bundle: bundle,
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _SettingsContentLoader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.routeCode != widget.routeCode) {
+      _content = SettingsContentBundle.forLanguage(
+        widget.routeCode,
+        bundle: DefaultAssetBundle.of(context),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return FutureBuilder<SettingsContentBundle>(
+      future: _content,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return HankoStateView.error(
+            title: l10n.commonGenericErrorTitle,
+            message: l10n.commonGenericErrorMessage,
+          );
+        }
+
+        final content = snapshot.data;
+        if (content == null) {
+          return HankoStateView.loading(
+            title: widget.destination.title(l10n),
+            message: l10n.splashPreparing,
+          );
+        }
+
+        return switch (widget.destination) {
           _SettingsDestination.about => _AboutSettingsContent(
             content: content.about,
           ),
@@ -282,9 +361,10 @@ class _SettingsDetailPage extends StatelessWidget {
           _SettingsDestination.contact => _ContactSettingsContent(
             content: content.contact,
           ),
-          _SettingsDestination.version => const _VersionSettingsContent(),
-        },
-      ],
+          _SettingsDestination.language ||
+          _SettingsDestination.version => const SizedBox.shrink(),
+        };
+      },
     );
   }
 }
@@ -301,7 +381,6 @@ class _LanguageSettingsContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final currentLanguageCode = currentLocale.languageCode;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -312,41 +391,92 @@ class _LanguageSettingsContent extends StatelessWidget {
           body: l10n.settingsLanguageMessage,
         ),
         const SizedBox(height: HankoSpacing.md),
-        HankoSurfaceCard(
-          padding: const EdgeInsets.symmetric(vertical: HankoSpacing.xs),
-          radius: HankoRadii.md,
-          child: Column(
-            children: [
-              _LanguageOptionRow(
-                label: l10n.settingsLanguageEnglish,
-                isSelected: currentLanguageCode == 'en',
-                onTap: onLocaleSelected == null
-                    ? null
-                    : () => onLocaleSelected!(const Locale('en')),
-              ),
-              _LanguageOptionRow(
-                label: l10n.settingsLanguageJapanese,
-                isSelected: currentLanguageCode == 'ja',
-                onTap: onLocaleSelected == null
-                    ? null
-                    : () => onLocaleSelected!(const Locale('ja')),
-              ),
-            ],
-          ),
+        _LanguageRegistryRows(
+          currentLocale: currentLocale,
+          onLocaleSelected: onLocaleSelected,
         ),
       ],
     );
   }
 }
 
+class _LanguageRegistryRows extends StatefulWidget {
+  const _LanguageRegistryRows({
+    required this.currentLocale,
+    required this.onLocaleSelected,
+  });
+
+  final Locale currentLocale;
+  final ValueChanged<Locale>? onLocaleSelected;
+
+  @override
+  State<_LanguageRegistryRows> createState() => _LanguageRegistryRowsState();
+}
+
+class _LanguageRegistryRowsState extends State<_LanguageRegistryRows> {
+  Object? _bundle;
+  Future<AppLanguageRegistry>? _registry;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bundle = DefaultAssetBundle.of(context);
+    if (!identical(_bundle, bundle)) {
+      _bundle = bundle;
+      _registry = AppLanguageRegistry.load(bundle: bundle);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return FutureBuilder<AppLanguageRegistry>(
+      future: _registry,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return HankoStateView.error(
+            title: l10n.commonGenericErrorTitle,
+            message: l10n.commonGenericErrorMessage,
+          );
+        }
+
+        final languages = snapshot.data?.selectableLanguages;
+        if (languages == null) {
+          return HankoStateView.loading(
+            title: l10n.settingsLanguageTitle,
+            message: l10n.splashPreparing,
+          );
+        }
+
+        return HankoSurfaceCard(
+          padding: const EdgeInsets.symmetric(vertical: HankoSpacing.xs),
+          radius: HankoRadii.md,
+          child: Column(
+            children: [
+              for (final language in languages)
+                _LanguageOptionRow(
+                  language: language,
+                  isSelected: language.matchesLocale(widget.currentLocale),
+                  onTap: widget.onLocaleSelected == null
+                      ? null
+                      : () => widget.onLocaleSelected!(language.locale),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _LanguageOptionRow extends StatelessWidget {
   const _LanguageOptionRow({
-    required this.label,
+    required this.language,
     required this.isSelected,
     required this.onTap,
   });
 
-  final String label;
+  final AppLanguageOption language;
   final bool isSelected;
   final VoidCallback? onTap;
 
@@ -365,7 +495,17 @@ class _LanguageOptionRow extends StatelessWidget {
               children: [
                 const Icon(Icons.translate, color: HankoColors.gold, size: 20),
                 const SizedBox(width: 14),
-                Expanded(child: Text(label, style: HankoTextStyles.label)),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(language.nativeName, style: HankoTextStyles.label),
+                      if (language.englishNameLabel case final label?)
+                        Text(label, style: HankoTextStyles.compactBody),
+                    ],
+                  ),
+                ),
                 Icon(
                   isSelected
                       ? Icons.radio_button_checked
@@ -911,7 +1051,7 @@ enum _SettingsDestination {
     };
   }
 
-  String title(HankoLocalizations l10n) {
+  String title(GeneratedHankoLocalizations l10n) {
     return switch (this) {
       _SettingsDestination.language => l10n.language,
       _SettingsDestination.about => l10n.about,

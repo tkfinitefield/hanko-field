@@ -1,0 +1,30 @@
+{
+  "app_name": "STONE SIGNATURE",
+  "subtitle": "訂製寶石印章",
+  "short_description": "設計印面並訂購你的天然寶石印章。",
+  "full_description": [
+    "STONE SIGNATURE 可協助你用天然寶石製作個人印章。輸入姓名，查看漢字建議，並在 App 中產生平衡美觀的印面設計。",
+    "選擇獨一無二的石材，確認設計和配送資訊，然後進入安全結帳。已儲存的印面和預覽圖會保留在本機，付款由 Stripe 安全處理。"
+  ],
+  "keywords": [
+    "印章",
+    "篆刻",
+    "寶石",
+    "天然石",
+    "漢字",
+    "個人印章"
+  ],
+  "release_notes": {
+    "1.1.0": [
+      "新增多語言 App 內容和試點商店中繼資料來源檔案。"
+    ]
+  },
+  "support_url": "https://finitefield.org/contact/",
+  "marketing_url": "https://finitefield.org/",
+  "privacy_policy_url": "https://finitefield.org/privacy/",
+  "screenshot_captions": {
+    "design": "設計你的印面",
+    "stones": "選擇獨一無二的石材",
+    "checkout": "安全下單"
+  }
+}

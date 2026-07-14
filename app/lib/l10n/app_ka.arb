@@ -1,0 +1,1218 @@
+{
+  "@@locale": "ka",
+  "@appTitle": {
+    "description": "Application title shown by MaterialApp. The brand name intentionally remains in English."
+  },
+  "@splashPreparing": {
+    "description": "Localized app string for splashPreparing."
+  },
+  "@onboardingTitle": {
+    "description": "Localized app string for onboardingTitle."
+  },
+  "@onboardingHeroTitle": {
+    "description": "Localized app string for onboardingHeroTitle."
+  },
+  "@onboardingTagline": {
+    "description": "Localized app string for onboardingTagline."
+  },
+  "@onboardingKanjiTitle": {
+    "description": "Localized app string for onboardingKanjiTitle."
+  },
+  "@onboardingKanjiMessage": {
+    "description": "Localized app string for onboardingKanjiMessage."
+  },
+  "@onboardingAiTitle": {
+    "description": "Localized app string for onboardingAiTitle."
+  },
+  "@onboardingAiMessage": {
+    "description": "Localized app string for onboardingAiMessage."
+  },
+  "@onboardingStoneTitle": {
+    "description": "Localized app string for onboardingStoneTitle."
+  },
+  "@onboardingStoneMessage": {
+    "description": "Localized app string for onboardingStoneMessage."
+  },
+  "@onboardingStorageTitle": {
+    "description": "Localized app string for onboardingStorageTitle."
+  },
+  "@onboardingStorageMessage": {
+    "description": "Localized app string for onboardingStorageMessage."
+  },
+  "@onboardingGetStarted": {
+    "description": "Localized app string for onboardingGetStarted."
+  },
+  "@onboardingSaving": {
+    "description": "Localized app string for onboardingSaving."
+  },
+  "@onboardingSkip": {
+    "description": "Localized app string for onboardingSkip."
+  },
+  "@onboardingSaveError": {
+    "description": "Localized app string for onboardingSaveError."
+  },
+  "@design": {
+    "description": "Localized app string for design."
+  },
+  "@mySeals": {
+    "description": "Localized app string for mySeals."
+  },
+  "@stones": {
+    "description": "Localized app string for stones."
+  },
+  "@settings": {
+    "description": "Localized app string for settings."
+  },
+  "@createCustomSeal": {
+    "description": "Localized app string for createCustomSeal."
+  },
+  "@customSealDescription": {
+    "description": "Localized app string for customSealDescription."
+  },
+  "@startDesigning": {
+    "description": "Localized app string for startDesigning."
+  },
+  "@designNameTitle": {
+    "description": "Localized app string for designNameTitle."
+  },
+  "@designNameIntro": {
+    "description": "Localized app string for designNameIntro."
+  },
+  "@designNameLabel": {
+    "description": "Localized app string for designNameLabel."
+  },
+  "@designNameHint": {
+    "description": "Localized app string for designNameHint."
+  },
+  "@designNameHelp": {
+    "description": "Localized app string for designNameHelp."
+  },
+  "@designGenderLabel": {
+    "description": "Localized app string for designGenderLabel."
+  },
+  "@designGenderUnspecified": {
+    "description": "Localized app string for designGenderUnspecified."
+  },
+  "@designGenderMale": {
+    "description": "Localized app string for designGenderMale."
+  },
+  "@designGenderFemale": {
+    "description": "Localized app string for designGenderFemale."
+  },
+  "@designKanjiStyleLabel": {
+    "description": "Localized app string for designKanjiStyleLabel."
+  },
+  "@designKanjiStyleJapanese": {
+    "description": "Localized app string for designKanjiStyleJapanese."
+  },
+  "@designKanjiStyleChinese": {
+    "description": "Localized app string for designKanjiStyleChinese."
+  },
+  "@designKanjiStyleTaiwanese": {
+    "description": "Localized app string for designKanjiStyleTaiwanese."
+  },
+  "@suggestKanji": {
+    "description": "Localized app string for suggestKanji."
+  },
+  "@designKanjiTipTitle": {
+    "description": "Localized app string for designKanjiTipTitle."
+  },
+  "@designKanjiTipMessage": {
+    "description": "Localized app string for designKanjiTipMessage."
+  },
+  "@designCandidateReadyTitle": {
+    "description": "Localized app string for designCandidateReadyTitle."
+  },
+  "@designCandidateReadyMessage": {
+    "description": "Localized app string for designCandidateReadyMessage."
+  },
+  "@designRequestDetails": {
+    "description": "Localized app string for designRequestDetails."
+  },
+  "@editName": {
+    "description": "Localized app string for editName."
+  },
+  "@designLoadingTitle": {
+    "description": "Localized app string for designLoadingTitle."
+  },
+  "@designLoadingMessage": {
+    "description": "Localized app string for designLoadingMessage."
+  },
+  "@designInvalidNameSummary": {
+    "description": "Localized app string for designInvalidNameSummary."
+  },
+  "@designInvalidNameMessage": {
+    "description": "Localized app string for designInvalidNameMessage."
+  },
+  "@designSuggestionErrorTitle": {
+    "description": "Localized app string for designSuggestionErrorTitle."
+  },
+  "@designSuggestionErrorMessage": {
+    "description": "Localized app string for designSuggestionErrorMessage."
+  },
+  "@designNoKanjiTitle": {
+    "description": "Localized app string for designNoKanjiTitle."
+  },
+  "@designNoKanjiMessage": {
+    "description": "Localized app string for designNoKanjiMessage."
+  },
+  "@designNoKanjiRuleCharacters": {
+    "description": "Localized app string for designNoKanjiRuleCharacters."
+  },
+  "@designNoKanjiRuleCommon": {
+    "description": "Localized app string for designNoKanjiRuleCommon."
+  },
+  "@designNoKanjiRuleEngraving": {
+    "description": "Localized app string for designNoKanjiRuleEngraving."
+  },
+  "@designErrorTip": {
+    "description": "Localized app string for designErrorTip."
+  },
+  "@designNoKanjiTip": {
+    "description": "Localized app string for designNoKanjiTip."
+  },
+  "@tryAgain": {
+    "description": "Localized app string for tryAgain."
+  },
+  "@back": {
+    "description": "Localized app string for back."
+  },
+  "@commonNetworkErrorTitle": {
+    "description": "Localized app string for commonNetworkErrorTitle."
+  },
+  "@commonNetworkErrorMessage": {
+    "description": "Localized app string for commonNetworkErrorMessage."
+  },
+  "@commonServerErrorTitle": {
+    "description": "Localized app string for commonServerErrorTitle."
+  },
+  "@commonServerErrorMessage": {
+    "description": "Localized app string for commonServerErrorMessage."
+  },
+  "@storageErrorTitle": {
+    "description": "Localized app string for storageErrorTitle."
+  },
+  "@storageErrorMessage": {
+    "description": "Localized app string for storageErrorMessage."
+  },
+  "@deepLinkErrorTitle": {
+    "description": "Localized app string for deepLinkErrorTitle."
+  },
+  "@deepLinkErrorMessage": {
+    "description": "Localized app string for deepLinkErrorMessage."
+  },
+  "@maintenanceTitle": {
+    "description": "Localized app string for maintenanceTitle."
+  },
+  "@maintenanceMessage": {
+    "description": "Localized app string for maintenanceMessage."
+  },
+  "@appUpdateRequiredTitle": {
+    "description": "Localized app string for appUpdateRequiredTitle."
+  },
+  "@appUpdateRequiredMessage": {
+    "description": "Localized app string for appUpdateRequiredMessage."
+  },
+  "@appUpdateRequiredAction": {
+    "description": "Localized app string for appUpdateRequiredAction."
+  },
+  "@commonGenericErrorTitle": {
+    "description": "Localized app string for commonGenericErrorTitle."
+  },
+  "@commonGenericErrorMessage": {
+    "description": "Localized app string for commonGenericErrorMessage."
+  },
+  "@kanjiSuggestionsTitle": {
+    "description": "Localized app string for kanjiSuggestionsTitle."
+  },
+  "@kanjiSuggestionsMessage": {
+    "description": "Localized app string for kanjiSuggestionsMessage."
+  },
+  "@kanjiCandidateDetailTitle": {
+    "description": "Localized app string for kanjiCandidateDetailTitle."
+  },
+  "@kanjiReadingLabel": {
+    "description": "Localized app string for kanjiReadingLabel."
+  },
+  "@kanjiMeaningLabel": {
+    "description": "Localized app string for kanjiMeaningLabel."
+  },
+  "@kanjiImpressionLabel": {
+    "description": "Localized app string for kanjiImpressionLabel."
+  },
+  "@kanjiReasonLabel": {
+    "description": "Localized app string for kanjiReasonLabel."
+  },
+  "@kanjiCharacterCountLabel": {
+    "description": "Localized app string for kanjiCharacterCountLabel."
+  },
+  "@kanjiStrokeComplexityLabel": {
+    "description": "Localized app string for kanjiStrokeComplexityLabel."
+  },
+  "@kanjiEngravingSuitabilityLabel": {
+    "description": "Localized app string for kanjiEngravingSuitabilityLabel."
+  },
+  "@selectKanji": {
+    "description": "Localized app string for selectKanji."
+  },
+  "@kanjiSelectedTitle": {
+    "description": "Localized app string for kanjiSelectedTitle."
+  },
+  "@kanjiSelectedMessage": {
+    "description": "Localized app string for kanjiSelectedMessage."
+  },
+  "@sealStyleTitle": {
+    "description": "Localized app string for sealStyleTitle."
+  },
+  "@sealStyleMessage": {
+    "description": "Localized app string for sealStyleMessage."
+  },
+  "@sealStyleSelectedKanjiLabel": {
+    "description": "Localized app string for sealStyleSelectedKanjiLabel."
+  },
+  "@sealShapeLabel": {
+    "description": "Localized app string for sealShapeLabel."
+  },
+  "@sealShapeSquare": {
+    "description": "Localized app string for sealShapeSquare."
+  },
+  "@sealShapeRound": {
+    "description": "Localized app string for sealShapeRound."
+  },
+  "@sealStyleNameLabel": {
+    "description": "Localized app string for sealStyleNameLabel."
+  },
+  "@sealStyleTraditional": {
+    "description": "Localized app string for sealStyleTraditional."
+  },
+  "@sealStyleElegant": {
+    "description": "Localized app string for sealStyleElegant."
+  },
+  "@sealStyleSoft": {
+    "description": "Localized app string for sealStyleSoft."
+  },
+  "@sealStyleBold": {
+    "description": "Localized app string for sealStyleBold."
+  },
+  "@sealStrokeWeightLabel": {
+    "description": "Localized app string for sealStrokeWeightLabel."
+  },
+  "@sealStrokeStandard": {
+    "description": "Localized app string for sealStrokeStandard."
+  },
+  "@sealStrokeBold": {
+    "description": "Localized app string for sealStrokeBold."
+  },
+  "@sealBalanceLabel": {
+    "description": "Localized app string for sealBalanceLabel."
+  },
+  "@sealBalanceAiry": {
+    "description": "Localized app string for sealBalanceAiry."
+  },
+  "@sealBalanceBalanced": {
+    "description": "Localized app string for sealBalanceBalanced."
+  },
+  "@sealBalanceDense": {
+    "description": "Localized app string for sealBalanceDense."
+  },
+  "@sealStyleSummaryTitle": {
+    "description": "Localized app string for sealStyleSummaryTitle."
+  },
+  "@confirmStyle": {
+    "description": "Localized app string for confirmStyle."
+  },
+  "@sealStyleConfirmedTitle": {
+    "description": "Localized app string for sealStyleConfirmedTitle."
+  },
+  "@sealStyleConfirmedMessage": {
+    "description": "Localized app string for sealStyleConfirmedMessage."
+  },
+  "@generateSeal": {
+    "description": "Localized app string for generateSeal."
+  },
+  "@sealGenerationLoadingTitle": {
+    "description": "Localized app string for sealGenerationLoadingTitle."
+  },
+  "@sealGenerationLoadingMessage": {
+    "description": "Localized app string for sealGenerationLoadingMessage."
+  },
+  "@sealGenerationLoadingDetail": {
+    "description": "Localized app string for sealGenerationLoadingDetail."
+  },
+  "@sealGenerationErrorTitle": {
+    "description": "Localized app string for sealGenerationErrorTitle."
+  },
+  "@sealGenerationErrorMessage": {
+    "description": "Localized app string for sealGenerationErrorMessage."
+  },
+  "@sealGenerationLimitTitle": {
+    "description": "Localized app string for sealGenerationLimitTitle."
+  },
+  "@sealGenerationLimitMessage": {
+    "description": "Localized app string for sealGenerationLimitMessage."
+  },
+  "@sealGenerationAttemptLabel": {
+    "description": "Localized app string for sealGenerationAttemptLabel."
+  },
+  "@sealGenerationStyleDetails": {
+    "description": "Localized app string for sealGenerationStyleDetails."
+  },
+  "@sealGenerationErrorTip": {
+    "description": "Localized app string for sealGenerationErrorTip."
+  },
+  "@sealGenerationLimitTip": {
+    "description": "Localized app string for sealGenerationLimitTip."
+  },
+  "@adjustStyle": {
+    "description": "Localized app string for adjustStyle."
+  },
+  "@sealVariantSelectionTitle": {
+    "description": "Localized app string for sealVariantSelectionTitle."
+  },
+  "@sealVariantSelectionMessage": {
+    "description": "Localized app string for sealVariantSelectionMessage."
+  },
+  "@sealVariantSelectedBadge": {
+    "description": "Localized app string for sealVariantSelectedBadge."
+  },
+  "@sealVariantSelectedTitle": {
+    "description": "Localized app string for sealVariantSelectedTitle."
+  },
+  "@sealVariantSelectedMessage": {
+    "description": "Localized app string for sealVariantSelectedMessage."
+  },
+  "@regenerateSeal": {
+    "description": "Localized app string for regenerateSeal."
+  },
+  "@sealPreviewTitle": {
+    "description": "Localized app string for sealPreviewTitle."
+  },
+  "@sealPreviewMessage": {
+    "description": "Localized app string for sealPreviewMessage."
+  },
+  "@sealPreviewVariantLabel": {
+    "description": "Localized app string for sealPreviewVariantLabel."
+  },
+  "@saveSeal": {
+    "description": "Localized app string for saveSeal."
+  },
+  "@chooseStone": {
+    "description": "Localized app string for chooseStone."
+  },
+  "@sealSavedTitle": {
+    "description": "Localized app string for sealSavedTitle."
+  },
+  "@sealSavedHeading": {
+    "description": "Localized app string for sealSavedHeading."
+  },
+  "@sealSavedMessage": {
+    "description": "Localized app string for sealSavedMessage."
+  },
+  "@goToMySeals": {
+    "description": "Localized app string for goToMySeals."
+  },
+  "@createAnotherSeal": {
+    "description": "Localized app string for createAnotherSeal."
+  },
+  "@savedSeals": {
+    "description": "Localized app string for savedSeals."
+  },
+  "@savedSealsDescription": {
+    "description": "Localized app string for savedSealsDescription."
+  },
+  "@savedOnThisDevice": {
+    "description": "Localized app string for savedOnThisDevice."
+  },
+  "@savedSealsLoadingTitle": {
+    "description": "Localized app string for savedSealsLoadingTitle."
+  },
+  "@savedSealsLoadingMessage": {
+    "description": "Localized app string for savedSealsLoadingMessage."
+  },
+  "@savedSealsLoadErrorTitle": {
+    "description": "Localized app string for savedSealsLoadErrorTitle."
+  },
+  "@savedSealsLoadErrorMessage": {
+    "description": "Localized app string for savedSealsLoadErrorMessage."
+  },
+  "@chooseSavedSeal": {
+    "description": "Localized app string for chooseSavedSeal."
+  },
+  "@viewSealDetails": {
+    "description": "Localized app string for viewSealDetails."
+  },
+  "@favoriteSeal": {
+    "description": "Localized app string for favoriteSeal."
+  },
+  "@removeFavoriteSeal": {
+    "description": "Localized app string for removeFavoriteSeal."
+  },
+  "@sealDetailTitle": {
+    "description": "Localized app string for sealDetailTitle."
+  },
+  "@kanjiLabel": {
+    "description": "Localized app string for kanjiLabel."
+  },
+  "@createdAtLabel": {
+    "description": "Localized app string for createdAtLabel."
+  },
+  "@compareSavedSeals": {
+    "description": "Localized app string for compareSavedSeals."
+  },
+  "@compareSavedSealsTitle": {
+    "description": "Localized app string for compareSavedSealsTitle."
+  },
+  "@compareSavedSealsMessage": {
+    "description": "Localized app string for compareSavedSealsMessage."
+  },
+  "@editSavedSeal": {
+    "description": "Localized app string for editSavedSeal."
+  },
+  "@editSavedSealTitle": {
+    "description": "Localized app string for editSavedSealTitle."
+  },
+  "@editSavedSealMessage": {
+    "description": "Localized app string for editSavedSealMessage."
+  },
+  "@chooseSealForOrder": {
+    "description": "Localized app string for chooseSealForOrder."
+  },
+  "@sealSelectedForOrderTitle": {
+    "description": "Localized app string for sealSelectedForOrderTitle."
+  },
+  "@sealSelectedForOrderMessage": {
+    "description": "Localized app string for sealSelectedForOrderMessage."
+  },
+  "@sealSelectedForOrderAction": {
+    "description": "Localized app string for sealSelectedForOrderAction."
+  },
+  "@deleteSavedSeal": {
+    "description": "Localized app string for deleteSavedSeal."
+  },
+  "@deleteSealTitle": {
+    "description": "Localized app string for deleteSealTitle."
+  },
+  "@deleteSealMessage": {
+    "description": "Localized app string for deleteSealMessage."
+  },
+  "@deleteSealConfirm": {
+    "description": "Localized app string for deleteSealConfirm."
+  },
+  "@cancel": {
+    "description": "Localized app string for cancel."
+  },
+  "@close": {
+    "description": "Localized app string for close."
+  },
+  "@browseStones": {
+    "description": "Localized app string for browseStones."
+  },
+  "@browseStonesDescription": {
+    "description": "Localized app string for browseStonesDescription."
+  },
+  "@noSavedSeals": {
+    "description": "Localized app string for noSavedSeals."
+  },
+  "@noSavedSealsMessage": {
+    "description": "Localized app string for noSavedSealsMessage."
+  },
+  "@stonesLoadingTitle": {
+    "description": "Localized app string for stonesLoadingTitle."
+  },
+  "@stonesLoadingMessage": {
+    "description": "Localized app string for stonesLoadingMessage."
+  },
+  "@stonesLoadErrorTitle": {
+    "description": "Localized app string for stonesLoadErrorTitle."
+  },
+  "@stonesLoadErrorMessage": {
+    "description": "Localized app string for stonesLoadErrorMessage."
+  },
+  "@noStonesLoaded": {
+    "description": "Localized app string for noStonesLoaded."
+  },
+  "@noStonesLoadedMessage": {
+    "description": "Localized app string for noStonesLoadedMessage."
+  },
+  "@stoneFiltersTitle": {
+    "description": "Localized app string for stoneFiltersTitle."
+  },
+  "@stoneFilterAll": {
+    "description": "Localized app string for stoneFilterAll."
+  },
+  "@stoneFilterMaterial": {
+    "description": "Localized app string for stoneFilterMaterial."
+  },
+  "@stoneFilterColor": {
+    "description": "Localized app string for stoneFilterColor."
+  },
+  "@stoneFilterPattern": {
+    "description": "Localized app string for stoneFilterPattern."
+  },
+  "@stoneFilterAvailability": {
+    "description": "Localized app string for stoneFilterAvailability."
+  },
+  "@stoneFilterReset": {
+    "description": "Localized app string for stoneFilterReset."
+  },
+  "@noStonesMatchFilters": {
+    "description": "Localized app string for noStonesMatchFilters."
+  },
+  "@noStonesMatchFiltersMessage": {
+    "description": "Localized app string for noStonesMatchFiltersMessage."
+  },
+  "@stoneSortTitle": {
+    "description": "Localized app string for stoneSortTitle."
+  },
+  "@stoneSortAction": {
+    "description": "Localized app string for stoneSortAction."
+  },
+  "@stoneSortRecommended": {
+    "description": "Localized app string for stoneSortRecommended."
+  },
+  "@stoneSortNewest": {
+    "description": "Localized app string for stoneSortNewest."
+  },
+  "@stoneSortPriceLowToHigh": {
+    "description": "Localized app string for stoneSortPriceLowToHigh."
+  },
+  "@stoneSortPriceHighToLow": {
+    "description": "Localized app string for stoneSortPriceHighToLow."
+  },
+  "@viewStoneDetails": {
+    "description": "Localized app string for viewStoneDetails."
+  },
+  "@stoneDetailTitle": {
+    "description": "Localized app string for stoneDetailTitle."
+  },
+  "@stoneDetailDescriptionTitle": {
+    "description": "Localized app string for stoneDetailDescriptionTitle."
+  },
+  "@stoneDetailStoryTitle": {
+    "description": "Localized app string for stoneDetailStoryTitle."
+  },
+  "@stoneDetailSpecsTitle": {
+    "description": "Localized app string for stoneDetailSpecsTitle."
+  },
+  "@stoneDetailNotesTitle": {
+    "description": "Localized app string for stoneDetailNotesTitle."
+  },
+  "@stoneDetailNotesMessage": {
+    "description": "Localized app string for stoneDetailNotesMessage."
+  },
+  "@stoneDetailMaterialLabel": {
+    "description": "Localized app string for stoneDetailMaterialLabel."
+  },
+  "@stoneDetailSizeLabel": {
+    "description": "Localized app string for stoneDetailSizeLabel."
+  },
+  "@stoneDetailColorLabel": {
+    "description": "Localized app string for stoneDetailColorLabel."
+  },
+  "@stoneDetailPatternLabel": {
+    "description": "Localized app string for stoneDetailPatternLabel."
+  },
+  "@stoneDetailShapeLabel": {
+    "description": "Localized app string for stoneDetailShapeLabel."
+  },
+  "@stoneDetailTextureLabel": {
+    "description": "Localized app string for stoneDetailTextureLabel."
+  },
+  "@stoneDetailStatusLabel": {
+    "description": "Localized app string for stoneDetailStatusLabel."
+  },
+  "@selectStone": {
+    "description": "Localized app string for selectStone."
+  },
+  "@selectStoneConfirmationTitle": {
+    "description": "Localized app string for selectStoneConfirmationTitle."
+  },
+  "@selectStoneConfirmationMessage": {
+    "description": "Localized app string for selectStoneConfirmationMessage."
+  },
+  "@selectStoneConfirm": {
+    "description": "Localized app string for selectStoneConfirm."
+  },
+  "@stoneSelectedForOrderTitle": {
+    "description": "Localized app string for stoneSelectedForOrderTitle."
+  },
+  "@stoneSelectedForOrderMessage": {
+    "description": "Localized app string for stoneSelectedForOrderMessage."
+  },
+  "@stoneSelectedForOrderAction": {
+    "description": "Localized app string for stoneSelectedForOrderAction."
+  },
+  "@soldOutStoneTitle": {
+    "description": "Localized app string for soldOutStoneTitle."
+  },
+  "@soldOutStoneMessage": {
+    "description": "Localized app string for soldOutStoneMessage."
+  },
+  "@stoneAvailable": {
+    "description": "Localized app string for stoneAvailable."
+  },
+  "@stoneUnavailable": {
+    "description": "Localized app string for stoneUnavailable."
+  },
+  "@order": {
+    "description": "Localized app string for order."
+  },
+  "@noActiveDraft": {
+    "description": "Localized app string for noActiveDraft."
+  },
+  "@noActiveDraftMessage": {
+    "description": "Localized app string for noActiveDraftMessage."
+  },
+  "@reviewSelection": {
+    "description": "Localized app string for reviewSelection."
+  },
+  "@orderMissingSealTitle": {
+    "description": "Localized app string for orderMissingSealTitle."
+  },
+  "@orderMissingSealMessage": {
+    "description": "Localized app string for orderMissingSealMessage."
+  },
+  "@orderMissingSealNotice": {
+    "description": "Localized app string for orderMissingSealNotice."
+  },
+  "@orderChooseSealAction": {
+    "description": "Localized app string for orderChooseSealAction."
+  },
+  "@orderChangeSealAction": {
+    "description": "Localized app string for orderChangeSealAction."
+  },
+  "@orderMissingStoneTitle": {
+    "description": "Localized app string for orderMissingStoneTitle."
+  },
+  "@orderMissingStoneMessage": {
+    "description": "Localized app string for orderMissingStoneMessage."
+  },
+  "@orderChooseStoneAction": {
+    "description": "Localized app string for orderChooseStoneAction."
+  },
+  "@orderChangeStoneAction": {
+    "description": "Localized app string for orderChangeStoneAction."
+  },
+  "@orderReviewTitle": {
+    "description": "Localized app string for orderReviewTitle."
+  },
+  "@orderReviewMessage": {
+    "description": "Localized app string for orderReviewMessage."
+  },
+  "@orderItemPriceLabel": {
+    "description": "Localized app string for orderItemPriceLabel."
+  },
+  "@orderShippingFeeLabel": {
+    "description": "Localized app string for orderShippingFeeLabel."
+  },
+  "@orderShippingEstimateNote": {
+    "description": "Localized app string for orderShippingEstimateNote."
+  },
+  "@orderTotalLabel": {
+    "description": "Localized app string for orderTotalLabel."
+  },
+  "@orderCustomMadeNotice": {
+    "description": "Localized app string for orderCustomMadeNotice."
+  },
+  "@continueToShipping": {
+    "description": "Localized app string for continueToShipping."
+  },
+  "@checkoutInputTitle": {
+    "description": "Localized app string for checkoutInputTitle."
+  },
+  "@checkoutInputMessage": {
+    "description": "Localized app string for checkoutInputMessage."
+  },
+  "@checkoutContactTitle": {
+    "description": "Localized app string for checkoutContactTitle."
+  },
+  "@checkoutShippingTitle": {
+    "description": "Localized app string for checkoutShippingTitle."
+  },
+  "@checkoutOrderNoteTitle": {
+    "description": "Localized app string for checkoutOrderNoteTitle."
+  },
+  "@checkoutFullNameLabel": {
+    "description": "Localized app string for checkoutFullNameLabel."
+  },
+  "@checkoutFullNameHint": {
+    "description": "Localized app string for checkoutFullNameHint."
+  },
+  "@checkoutPhoneLabel": {
+    "description": "Localized app string for checkoutPhoneLabel."
+  },
+  "@checkoutPhoneHint": {
+    "description": "Localized app string for checkoutPhoneHint."
+  },
+  "@checkoutCountryLabel": {
+    "description": "Localized app string for checkoutCountryLabel."
+  },
+  "@checkoutPostalCodeLabel": {
+    "description": "Localized app string for checkoutPostalCodeLabel."
+  },
+  "@checkoutPostalCodeHint": {
+    "description": "Localized app string for checkoutPostalCodeHint."
+  },
+  "@checkoutAddressLine1Label": {
+    "description": "Localized app string for checkoutAddressLine1Label."
+  },
+  "@checkoutAddressLine1Hint": {
+    "description": "Localized app string for checkoutAddressLine1Hint."
+  },
+  "@checkoutAddressLine2Label": {
+    "description": "Localized app string for checkoutAddressLine2Label."
+  },
+  "@checkoutAddressLine2Hint": {
+    "description": "Localized app string for checkoutAddressLine2Hint."
+  },
+  "@checkoutCityLabel": {
+    "description": "Localized app string for checkoutCityLabel."
+  },
+  "@checkoutCityHint": {
+    "description": "Localized app string for checkoutCityHint."
+  },
+  "@checkoutStateLabel": {
+    "description": "Localized app string for checkoutStateLabel."
+  },
+  "@checkoutStateHint": {
+    "description": "Localized app string for checkoutStateHint."
+  },
+  "@checkoutOrderNoteLabel": {
+    "description": "Localized app string for checkoutOrderNoteLabel."
+  },
+  "@checkoutOrderNoteHint": {
+    "description": "Localized app string for checkoutOrderNoteHint."
+  },
+  "@checkoutInputSaveAction": {
+    "description": "Localized app string for checkoutInputSaveAction."
+  },
+  "@checkoutInputSavingAction": {
+    "description": "Localized app string for checkoutInputSavingAction."
+  },
+  "@checkoutInputSavedMessage": {
+    "description": "Localized app string for checkoutInputSavedMessage."
+  },
+  "@checkoutValidationTitle": {
+    "description": "Localized app string for checkoutValidationTitle."
+  },
+  "@checkoutValidationMessage": {
+    "description": "Localized app string for checkoutValidationMessage."
+  },
+  "@checkoutEmailInvalidMessage": {
+    "description": "Localized app string for checkoutEmailInvalidMessage."
+  },
+  "@checkoutFullNameRequiredMessage": {
+    "description": "Localized app string for checkoutFullNameRequiredMessage."
+  },
+  "@checkoutPhoneInvalidMessage": {
+    "description": "Localized app string for checkoutPhoneInvalidMessage."
+  },
+  "@checkoutCountryRequiredMessage": {
+    "description": "Localized app string for checkoutCountryRequiredMessage."
+  },
+  "@checkoutPostalCodeRequiredMessage": {
+    "description": "Localized app string for checkoutPostalCodeRequiredMessage."
+  },
+  "@checkoutAddressLine1RequiredMessage": {
+    "description": "Localized app string for checkoutAddressLine1RequiredMessage."
+  },
+  "@checkoutCityRequiredMessage": {
+    "description": "Localized app string for checkoutCityRequiredMessage."
+  },
+  "@checkoutStateRequiredMessage": {
+    "description": "Localized app string for checkoutStateRequiredMessage."
+  },
+  "@orderConfirmationTitle": {
+    "description": "Localized app string for orderConfirmationTitle."
+  },
+  "@orderConfirmationMessage": {
+    "description": "Localized app string for orderConfirmationMessage."
+  },
+  "@orderConfirmationMissingInputMessage": {
+    "description": "Localized app string for orderConfirmationMissingInputMessage."
+  },
+  "@orderConfirmationCheckoutTitle": {
+    "description": "Localized app string for orderConfirmationCheckoutTitle."
+  },
+  "@orderConfirmationNoOrderNote": {
+    "description": "Localized app string for orderConfirmationNoOrderNote."
+  },
+  "@editCheckoutInformation": {
+    "description": "Localized app string for editCheckoutInformation."
+  },
+  "@customMadeAgreementTitle": {
+    "description": "Localized app string for customMadeAgreementTitle."
+  },
+  "@customMadeAgreementMessage": {
+    "description": "Localized app string for customMadeAgreementMessage."
+  },
+  "@confirmKanjiAndDesignLabel": {
+    "description": "Localized app string for confirmKanjiAndDesignLabel."
+  },
+  "@confirmCustomMadePolicyLabel": {
+    "description": "Localized app string for confirmCustomMadePolicyLabel."
+  },
+  "@orderConfirmationSecurePaymentNote": {
+    "description": "Localized app string for orderConfirmationSecurePaymentNote."
+  },
+  "@orderConfirmationAgreementRequiredMessage": {
+    "description": "Localized app string for orderConfirmationAgreementRequiredMessage."
+  },
+  "@orderConfirmationSavedMessage": {
+    "description": "Localized app string for orderConfirmationSavedMessage."
+  },
+  "@proceedToSecurePayment": {
+    "description": "Localized app string for proceedToSecurePayment."
+  },
+  "@checkoutProcessingTitle": {
+    "description": "Localized app string for checkoutProcessingTitle."
+  },
+  "@checkoutProcessingMessage": {
+    "description": "Localized app string for checkoutProcessingMessage."
+  },
+  "@checkoutProcessingOrderStep": {
+    "description": "Localized app string for checkoutProcessingOrderStep."
+  },
+  "@checkoutProcessingSessionStep": {
+    "description": "Localized app string for checkoutProcessingSessionStep."
+  },
+  "@checkoutProcessingReadyTitle": {
+    "description": "Localized app string for checkoutProcessingReadyTitle."
+  },
+  "@checkoutProcessingReadyMessage": {
+    "description": "Localized app string for checkoutProcessingReadyMessage."
+  },
+  "@checkoutProcessingErrorTitle": {
+    "description": "Localized app string for checkoutProcessingErrorTitle."
+  },
+  "@checkoutProcessingErrorMessage": {
+    "description": "Localized app string for checkoutProcessingErrorMessage."
+  },
+  "@stripeCheckoutTitle": {
+    "description": "Localized app string for stripeCheckoutTitle."
+  },
+  "@stripeCheckoutOpeningTitle": {
+    "description": "Localized app string for stripeCheckoutOpeningTitle."
+  },
+  "@stripeCheckoutOpeningMessage": {
+    "description": "Localized app string for stripeCheckoutOpeningMessage."
+  },
+  "@stripeCheckoutWaitingTitle": {
+    "description": "Localized app string for stripeCheckoutWaitingTitle."
+  },
+  "@stripeCheckoutWaitingMessage": {
+    "description": "Localized app string for stripeCheckoutWaitingMessage."
+  },
+  "@stripeCheckoutReturnedTitle": {
+    "description": "Localized app string for stripeCheckoutReturnedTitle."
+  },
+  "@stripeCheckoutReturnedMessage": {
+    "description": "Localized app string for stripeCheckoutReturnedMessage."
+  },
+  "@stripeCheckoutCanceledTitle": {
+    "description": "Localized app string for stripeCheckoutCanceledTitle."
+  },
+  "@stripeCheckoutCanceledMessage": {
+    "description": "Localized app string for stripeCheckoutCanceledMessage."
+  },
+  "@stripeCheckoutReturnFailedTitle": {
+    "description": "Localized app string for stripeCheckoutReturnFailedTitle."
+  },
+  "@stripeCheckoutReturnFailedMessage": {
+    "description": "Localized app string for stripeCheckoutReturnFailedMessage."
+  },
+  "@stripeCheckoutLaunchFailedTitle": {
+    "description": "Localized app string for stripeCheckoutLaunchFailedTitle."
+  },
+  "@stripeCheckoutLaunchFailedMessage": {
+    "description": "Localized app string for stripeCheckoutLaunchFailedMessage."
+  },
+  "@stripeCheckoutOpenAction": {
+    "description": "Localized app string for stripeCheckoutOpenAction."
+  },
+  "@stripeCheckoutRetryAction": {
+    "description": "Localized app string for stripeCheckoutRetryAction."
+  },
+  "@stripeCheckoutSecureNote": {
+    "description": "Localized app string for stripeCheckoutSecureNote."
+  },
+  "@stripeCheckoutReturnOrderIdLabel": {
+    "description": "Localized app string for stripeCheckoutReturnOrderIdLabel."
+  },
+  "@paymentStatusTitle": {
+    "description": "Localized app string for paymentStatusTitle."
+  },
+  "@paymentStatusCheckingTitle": {
+    "description": "Localized app string for paymentStatusCheckingTitle."
+  },
+  "@paymentStatusCheckingMessage": {
+    "description": "Localized app string for paymentStatusCheckingMessage."
+  },
+  "@paymentStatusPaidTitle": {
+    "description": "Localized app string for paymentStatusPaidTitle."
+  },
+  "@paymentStatusPaidMessage": {
+    "description": "Localized app string for paymentStatusPaidMessage."
+  },
+  "@paymentStatusPendingTitle": {
+    "description": "Localized app string for paymentStatusPendingTitle."
+  },
+  "@paymentStatusPendingMessage": {
+    "description": "Localized app string for paymentStatusPendingMessage."
+  },
+  "@paymentStatusPendingNotice": {
+    "description": "Localized app string for paymentStatusPendingNotice."
+  },
+  "@paymentStatusFailedTitle": {
+    "description": "Localized app string for paymentStatusFailedTitle."
+  },
+  "@paymentStatusFailedMessage": {
+    "description": "Localized app string for paymentStatusFailedMessage."
+  },
+  "@orderCompleteTitle": {
+    "description": "Localized app string for orderCompleteTitle."
+  },
+  "@orderCompleteStatusTitle": {
+    "description": "Localized app string for orderCompleteStatusTitle."
+  },
+  "@orderCompleteMessage": {
+    "description": "Localized app string for orderCompleteMessage."
+  },
+  "@orderCompleteStatusLabel": {
+    "description": "Localized app string for orderCompleteStatusLabel."
+  },
+  "@orderCompleteStatusValue": {
+    "description": "Localized app string for orderCompleteStatusValue."
+  },
+  "@orderCompleteEmailMessage": {
+    "description": "Localized app string for orderCompleteEmailMessage."
+  },
+  "@orderCompleteSummaryTitle": {
+    "description": "Localized app string for orderCompleteSummaryTitle."
+  },
+  "@orderCompleteLookupAction": {
+    "description": "Localized app string for orderCompleteLookupAction."
+  },
+  "@orderCompleteBackToDesignAction": {
+    "description": "Localized app string for orderCompleteBackToDesignAction."
+  },
+  "@emailSentNoticeTitle": {
+    "description": "Localized app string for emailSentNoticeTitle."
+  },
+  "@emailSentNoticeMessage": {
+    "description": "Localized app string for emailSentNoticeMessage."
+  },
+  "@orderEmailMissingGuideTitle": {
+    "description": "Localized app string for orderEmailMissingGuideTitle."
+  },
+  "@orderEmailMissingGuideMessage": {
+    "description": "Localized app string for orderEmailMissingGuideMessage."
+  },
+  "@orderEmailMissingSpamCheck": {
+    "description": "Localized app string for orderEmailMissingSpamCheck."
+  },
+  "@orderEmailMissingAddressCheck": {
+    "description": "Localized app string for orderEmailMissingAddressCheck."
+  },
+  "@orderEmailMissingDeliveryWait": {
+    "description": "Localized app string for orderEmailMissingDeliveryWait."
+  },
+  "@orderEmailMissingContactSupport": {
+    "description": "Localized app string for orderEmailMissingContactSupport."
+  },
+  "@contactSupportPromptTitle": {
+    "description": "Localized app string for contactSupportPromptTitle."
+  },
+  "@contactSupportPromptMessage": {
+    "description": "Localized app string for contactSupportPromptMessage."
+  },
+  "@contactSupportPromptAction": {
+    "description": "Localized app string for contactSupportPromptAction."
+  },
+  "@orderLookup": {
+    "description": "Localized app string for orderLookup."
+  },
+  "@orderNo": {
+    "description": "Localized app string for orderNo."
+  },
+  "@orderNoHint": {
+    "description": "Localized app string for orderNoHint."
+  },
+  "@email": {
+    "description": "Localized app string for email."
+  },
+  "@emailHint": {
+    "description": "Localized app string for emailHint."
+  },
+  "@lookupOrder": {
+    "description": "Localized app string for lookupOrder."
+  },
+  "@orderLookupLoadingTitle": {
+    "description": "Localized app string for orderLookupLoadingTitle."
+  },
+  "@orderLookupLoadingMessage": {
+    "description": "Localized app string for orderLookupLoadingMessage."
+  },
+  "@orderLookupNotFoundTitle": {
+    "description": "Localized app string for orderLookupNotFoundTitle."
+  },
+  "@orderLookupNotFoundMessage": {
+    "description": "Localized app string for orderLookupNotFoundMessage."
+  },
+  "@orderLookupErrorTitle": {
+    "description": "Localized app string for orderLookupErrorTitle."
+  },
+  "@orderLookupErrorMessage": {
+    "description": "Localized app string for orderLookupErrorMessage."
+  },
+  "@orderLookupResultTitle": {
+    "description": "Localized app string for orderLookupResultTitle."
+  },
+  "@orderLookupResultMessage": {
+    "description": "Localized app string for orderLookupResultMessage."
+  },
+  "@orderLookupOrderStatusLabel": {
+    "description": "Localized app string for orderLookupOrderStatusLabel."
+  },
+  "@orderLookupProgressTitle": {
+    "description": "Localized app string for orderLookupProgressTitle."
+  },
+  "@orderLookupProductionStatusLabel": {
+    "description": "Localized app string for orderLookupProductionStatusLabel."
+  },
+  "@orderLookupShippingStatusLabel": {
+    "description": "Localized app string for orderLookupShippingStatusLabel."
+  },
+  "@orderLookupFulfillmentStatusLabel": {
+    "description": "Localized app string for orderLookupFulfillmentStatusLabel."
+  },
+  "@orderLookupTrackingNumberLabel": {
+    "description": "Localized app string for orderLookupTrackingNumberLabel."
+  },
+  "@orderLookupTrackingDetailsTitle": {
+    "description": "Localized app string for orderLookupTrackingDetailsTitle."
+  },
+  "@orderLookupCarrierLabel": {
+    "description": "Localized app string for orderLookupCarrierLabel."
+  },
+  "@orderLookupShippedAtLabel": {
+    "description": "Localized app string for orderLookupShippedAtLabel."
+  },
+  "@orderLookupUpdatedAtLabel": {
+    "description": "Localized app string for orderLookupUpdatedAtLabel."
+  },
+  "@orderLookupNoTrackingValue": {
+    "description": "Localized app string for orderLookupNoTrackingValue."
+  },
+  "@orderLookupOrderDateLabel": {
+    "description": "Localized app string for orderLookupOrderDateLabel."
+  },
+  "@orderLookupContentTitle": {
+    "description": "Localized app string for orderLookupContentTitle."
+  },
+  "@orderLookupSelectedSealLabel": {
+    "description": "Localized app string for orderLookupSelectedSealLabel."
+  },
+  "@orderLookupGemstoneLabel": {
+    "description": "Localized app string for orderLookupGemstoneLabel."
+  },
+  "@orderLookupLookupAnotherAction": {
+    "description": "Localized app string for orderLookupLookupAnotherAction."
+  },
+  "@language": {
+    "description": "Localized app string for language."
+  },
+  "@about": {
+    "description": "Localized app string for about."
+  },
+  "@howItWorks": {
+    "description": "Localized app string for howItWorks."
+  },
+  "@faq": {
+    "description": "Localized app string for faq."
+  },
+  "@privacy": {
+    "description": "Localized app string for privacy."
+  },
+  "@terms": {
+    "description": "Localized app string for terms."
+  },
+  "@contact": {
+    "description": "Localized app string for contact."
+  },
+  "@version": {
+    "description": "Localized app string for version."
+  },
+  "@settingsLanguageTitle": {
+    "description": "Localized app string for settingsLanguageTitle."
+  },
+  "@settingsLanguageMessage": {
+    "description": "Localized app string for settingsLanguageMessage."
+  },
+  "@settingsLanguageEnglish": {
+    "description": "Localized app string for settingsLanguageEnglish."
+  },
+  "@settingsLanguageJapanese": {
+    "description": "Localized app string for settingsLanguageJapanese."
+  },
+  "@settingsFaqIntro": {
+    "description": "Localized app string for settingsFaqIntro."
+  },
+  "@settingsVersionTitle": {
+    "description": "Localized app string for settingsVersionTitle."
+  },
+  "@settingsVersionMessage": {
+    "description": "Installed app version label. The version placeholder is supplied by the app package metadata.",
+    "placeholders": {
+      "version": {
+        "type": "String",
+        "example": "1.0.0"
+      }
+    }
+  },
+  "@designTipPrefix": {
+    "description": "Prefix shown before short design-state guidance messages."
+  },
+  "@orderStatusPaid": {
+    "description": "Order status label for paid orders."
+  },
+  "@orderStatusUnpaid": {
+    "description": "Order status label for unpaid orders."
+  },
+  "@orderStatusPending": {
+    "description": "Order status label for pending orders."
+  },
+  "@orderStatusPendingPayment": {
+    "description": "Order status label for orders waiting for payment."
+  },
+  "@orderStatusFailed": {
+    "description": "Order status label for failed orders."
+  },
+  "@orderStatusCanceled": {
+    "description": "Order status label for canceled orders."
+  },
+  "@orderStatusNotStarted": {
+    "description": "Order status label for work that has not started."
+  },
+  "@orderStatusInProduction": {
+    "description": "Order status label for orders in production."
+  },
+  "@orderStatusCompleted": {
+    "description": "Order status label for completed production."
+  },
+  "@orderStatusPreparingShipment": {
+    "description": "Order status label for orders preparing shipment."
+  },
+  "@orderStatusNotShipped": {
+    "description": "Order status label for orders not yet shipped."
+  },
+  "@orderStatusShipped": {
+    "description": "Order status label for shipped orders."
+  },
+  "@orderStatusFulfilled": {
+    "description": "Order status label for fulfilled orders."
+  },
+  "@orderStatusEmpty": {
+    "description": "Fallback order status label for an empty status value."
+  }
+}

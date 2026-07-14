@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ selected_locale }}">
+<html lang="{{ self.html_lang() }}" dir="{{ self.html_dir() }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,8 +7,9 @@
   <meta name="description" content="{{ meta_description }}">
   <meta name="robots" content="{{ robots_meta }}">
   <link rel="canonical" href="{{ canonical_url }}">
-  <link rel="alternate" hreflang="ja" href="{{ lang_ja_url }}">
-  <link rel="alternate" hreflang="en" href="{{ lang_en_url }}">
+  {% for language_link in seo_language_links %}
+  <link rel="alternate" hreflang="{{ language_link.bcp47 }}" href="{{ language_link.url }}">
+  {% endfor %}
   <link rel="alternate" hreflang="x-default" href="{{ x_default_url }}">
   <meta property="og:type" content="article">
   <meta property="og:title" content="{{ page_title }}">
@@ -38,7 +39,7 @@
           <img class="top-brand__logo" src="/static/site-logo.png" alt="" aria-hidden="true">
           <div class="top-brand__text">
             <h1 class="top-brand__title">STONE SIGNATURE</h1>
-            <span class="top-brand__subtitle">{% if selected_locale == "ja" %}印鑑フィールド{% else %}Seal Field{% endif %}</span>
+            <span class="top-brand__subtitle">{{ self.copy_text("blog_article_001") }}</span>
           </div>
         </div>
       </a>
@@ -48,8 +49,9 @@
             <span class="material-symbols-outlined top-brand__icon" aria-hidden="true">language</span>
           </summary>
           <div class="top-language-switcher__menu" role="menu" aria-label="Language options">
-            <a class="top-language-switcher__item{% if selected_locale == "ja" %} is-active{% endif %}" href="{{ lang_ja_url }}" hreflang="ja" data-language-option="ja">日本語</a>
-            <a class="top-language-switcher__item{% if selected_locale == "en" %} is-active{% endif %}" href="{{ lang_en_url }}" hreflang="en" data-language-option="en">English</a>
+            {% for language_link in language_links %}
+            <a class="top-language-switcher__item{{ self.language_active_class(language_link.route_code) }}" href="{{ language_link.url }}" hreflang="{{ language_link.bcp47 }}" data-language-option="{{ language_link.route_code }}">{{ language_link.label }}</a>
+            {% endfor %}
           </div>
         </details>
       </div>
@@ -61,7 +63,7 @@
     <article class="blog-article">
       <a class="blog-article__back" href="{{ blog_index_url }}">
         <span class="material-symbols-outlined blog-article__back-icon" aria-hidden="true">arrow_back</span>
-        {% if selected_locale == "ja" %}ジャーナル一覧へ{% else %}Journal{% endif %}
+        {{ self.copy_text("blog_article_006") }}
       </a>
       <header class="blog-article__header">
         <span class="blog-article__date">{{ post.date_display }}</span>
@@ -88,10 +90,10 @@
         </a>
       </div>
       <div class="top-footer__links">
-        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{% if selected_locale == "ja" %}特商法に基づく表記{% else %}Legal Notice{% endif %}</a>
-        <a class="top-footer__link" href="{{ terms_url }}">{% if selected_locale == "ja" %}利用規約{% else %}Terms of Service{% endif %}</a>
-        <a class="top-footer__link" href="{{ privacy_policy_url }}">{% if selected_locale == "ja" %}プライバシーポリシー{% else %}Privacy Policy{% endif %}</a>
-        <a class="top-footer__link" href="{{ company_url }}">{% if selected_locale == "ja" %}運営会社{% else %}Company{% endif %}</a>
+        <a class="top-footer__link" href="{{ commercial_transactions_url }}">{{ self.copy_text("blog_article_002") }}</a>
+        <a class="top-footer__link" href="{{ terms_url }}">{{ self.copy_text("blog_article_003") }}</a>
+        <a class="top-footer__link" href="{{ privacy_policy_url }}">{{ self.copy_text("blog_article_004") }}</a>
+        <a class="top-footer__link" href="{{ company_url }}">{{ self.copy_text("blog_article_005") }}</a>
       </div>
       <div class="top-footer__copyright">
         © STONE SIGNATURE

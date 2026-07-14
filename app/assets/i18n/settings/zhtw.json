@@ -1,0 +1,156 @@
+{
+  "about": {
+    "heading": "Your seal, made from gemstone",
+    "body": "STONE SIGNATURE helps you choose a gemstone seal online, design the seal impression, and place an order from the app. Review the material and one-of-a-kind stone listings as you find the seal that fits you.",
+    "points": [
+      {
+        "title": "Custom design",
+        "body": "Turn your name into a kanji-based seal design with meaning, balance, and a personal sense of intention."
+      },
+      {
+        "title": "Natural gemstones",
+        "body": "Choose the seal material while reviewing colors, patterns, and natural character unique to each stone."
+      },
+      {
+        "title": "Handcrafted with care",
+        "body": "After payment and design confirmation, each custom seal is produced one by one by our partner workshop."
+      }
+    ],
+    "tagline": "Your name. Your stone. Your signature."
+  },
+  "howItWorks": {
+    "heading": "Create a one-of-a-kind seal",
+    "intro": "Move from name selection to a saved design, gemstone choice, checkout, and delivery without losing your place.",
+    "steps": [
+      {
+        "title": "Choose your name and kanji",
+        "body": "Enter your name, review kanji candidates, and choose the characters that match your intention."
+      },
+      {
+        "title": "Generate your seal design",
+        "body": "Pick a seal style, generate design variants, and save the version you want to keep on this device."
+      },
+      {
+        "title": "Select a gemstone",
+        "body": "Browse one-of-a-kind stones, review details and availability, then pair a stone with your saved seal."
+      },
+      {
+        "title": "Checkout and receive your seal",
+        "body": "Confirm shipping details, agree to the terms, complete payment through Stripe Checkout, and track the order by order number and email."
+      }
+    ],
+    "summaryTitle": "Handcrafted with care, delivered to you.",
+    "summaryBody": "Each seal is made to order by our partner workshop after payment and design confirmation. Production usually takes 5-10 business days, and shipping usually takes about 7-14 days after dispatch."
+  },
+  "faq": {
+    "heading": "Frequently asked questions",
+    "items": [
+      {
+        "question": "How is kanji selected?",
+        "answer": "Kanji is suggested from your name, the desired meaning, and the balance of the seal design. You can review candidates before choosing the design direction."
+      },
+      {
+        "question": "Can I change my order after payment?",
+        "answer": "Because each seal is custom-made, changes may not be possible after production starts. Review the design, stone, shipping details, and terms before completing payment."
+      },
+      {
+        "question": "How long does production take?",
+        "answer": "Production usually takes 5-10 business days after payment and design confirmation. Shipping usually takes about 7-14 days after dispatch."
+      },
+      {
+        "question": "Do you ship internationally?",
+        "answer": "Orders are shipped from our partner workshop in China. Customs duties, import taxes, and clearance fees may be charged on receipt and are the customer's responsibility."
+      },
+      {
+        "question": "Are gemstones one of a kind?",
+        "answer": "Yes. Natural stones vary in color, pattern, and texture. These differences are part of the material and are not treated as defects."
+      },
+      {
+        "question": "How do I track my order?",
+        "answer": "Use Order Lookup with your order number and email address. Tracking details will appear there when shipment information is available."
+      }
+    ]
+  },
+  "privacy": {
+    "updated": "Last updated: May 16, 2025",
+    "intro": "This app displays the privacy policy in an app-friendly format and references the official web policy for the latest legal text.",
+    "officialLinkLabel": "Official privacy policy",
+    "officialUrl": "https://finitefield.org/en/privacy/",
+    "sections": [
+      {
+        "title": "Information we collect",
+        "body": "We collect information you provide directly, such as your name, email address, shipping details, and order details. Saved seal designs and preview images remain on this device until you delete them."
+      },
+      {
+        "title": "How we use information",
+        "body": "We use information to provide the service, process orders, communicate important updates, and improve the app experience."
+      },
+      {
+        "title": "Sharing information",
+        "body": "We do not sell personal information. We may share information with service providers needed for payment, production, delivery, support, legal compliance, or protection of rights."
+      },
+      {
+        "title": "Retention and local storage",
+        "body": "Order-related information is retained as required for service operation and legal obligations. Local saved designs are stored only on this device and are not synced across devices in the MVP."
+      },
+      {
+        "title": "Contact",
+        "body": "For privacy questions, use the contact guidance in Settings or the official privacy policy page."
+      }
+    ]
+  },
+  "terms": {
+    "updated": "Last updated: May 22, 2025",
+    "intro": "These terms summarize the conditions for using STONE SIGNATURE in the app. The official web terms remain the legal source of truth.",
+    "officialLinkLabel": "Official terms of service",
+    "officialUrl": "https://finitefield.org/terms",
+    "sections": [
+      {
+        "title": "Scope",
+        "body": "The service is operated by Finite Field, K.K. Customers are deemed to agree to the terms when they complete the order process."
+      },
+      {
+        "title": "Orders and contract formation",
+        "body": "An order is treated as received when required information is entered and the order process is completed. A sales contract is formed when payment is confirmed and an order confirmation notice is sent."
+      },
+      {
+        "title": "Fees, payment, and duties",
+        "body": "Prices are shown on each product page. Payment is made in advance through Stripe Checkout. Customs duties, import taxes, and clearance fees may apply and are the customer's responsibility."
+      },
+      {
+        "title": "Production and delivery",
+        "body": "Each item is made to order by our partner workshop in China. Production usually takes 5-10 business days and shipping usually takes about 7-14 days after dispatch."
+      },
+      {
+        "title": "Cancellations, returns, and exchanges",
+        "body": "Because custom seals are made to order, cancellations, returns, and exchanges are not accepted after production starts, except for significant damage or engraving errors caused by our fault."
+      },
+      {
+        "title": "Governing law and language",
+        "body": "The terms are governed by the laws of Japan. If translated versions differ, the Japanese version prevails."
+      }
+    ]
+  },
+  "contact": {
+    "heading": "We are here to help.",
+    "intro": "For order, shipping, payment, or app questions, use the official inquiry form or email support guidance below. Include your order number when the question is about an order.",
+    "options": [
+      {
+        "title": "Send an inquiry",
+        "body": "Use the official contact form for questions about orders, shipping, returns, privacy, or account support.",
+        "value": "https://finitefield.org/en/contact/"
+      },
+      {
+        "title": "Email support",
+        "body": "If your mail app is easier, include your order number, email address used at checkout, and a short description.",
+        "value": "dev@finitefield.org"
+      },
+      {
+        "title": "Before contacting us",
+        "body": "Order status can be checked from Order Lookup with your order number and email address.",
+        "value": "Order Lookup"
+      }
+    ],
+    "replyNote": "We usually reply within 2 business days."
+  }
+}

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../app/localization/app_localization.dart';
+import '../../../app/localization/language_registry.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/errors/core_errors.dart';
 import '../../../core/domain/money.dart';
@@ -341,7 +342,7 @@ class _CheckoutInputScreenState extends State<CheckoutInputScreen> {
     if (_isSaving) {
       return;
     }
-    final locale = Localizations.localeOf(context).languageCode;
+    final locale = fallbackRouteCodeForLocale(Localizations.localeOf(context));
     final input = _inputFromControllers(locale: locale);
     final errors = _validateInput(context, input);
     if (errors.isNotEmpty) {
@@ -1395,7 +1396,7 @@ class _PaymentStatusIcon extends StatelessWidget {
 }
 
 String _paymentStatusTitle(
-  HankoLocalizations l10n,
+  GeneratedHankoLocalizations l10n,
   PaymentStatusStep step,
   bool hasError,
 ) {
@@ -1411,7 +1412,7 @@ String _paymentStatusTitle(
 }
 
 String _paymentStatusMessage(
-  HankoLocalizations l10n,
+  GeneratedHankoLocalizations l10n,
   PaymentStatusStep step,
   bool hasError,
 ) {
@@ -1427,7 +1428,7 @@ String _paymentStatusMessage(
 }
 
 String _stripeCheckoutStatusTitle(
-  HankoLocalizations l10n,
+  GeneratedHankoLocalizations l10n,
   StripeCheckoutExternalStep step,
   CheckoutReturnResult? returnResult,
   bool hasError,
@@ -1457,7 +1458,7 @@ String _stripeCheckoutStatusTitle(
 }
 
 String _stripeCheckoutStatusMessage(
-  HankoLocalizations l10n,
+  GeneratedHankoLocalizations l10n,
   StripeCheckoutExternalStep step,
   CheckoutReturnResult? returnResult,
   bool hasError,
@@ -1592,33 +1593,39 @@ class _CustomMadeAgreementCard extends StatelessWidget {
           const SizedBox(height: HankoSpacing.md),
           Text(l10n.customMadeAgreementMessage, style: HankoTextStyles.body),
           const SizedBox(height: HankoSpacing.sm),
-          CheckboxListTile(
-            key: const Key('order-confirm-kanji-design-checkbox'),
-            value: kanjiAndDesignConfirmed,
-            onChanged: onKanjiAndDesignChanged == null
-                ? null
-                : (value) => onKanjiAndDesignChanged?.call(value ?? false),
-            activeColor: HankoColors.red,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              l10n.confirmKanjiAndDesignLabel,
-              style: HankoTextStyles.body.copyWith(color: HankoColors.ink),
+          Material(
+            type: MaterialType.transparency,
+            child: CheckboxListTile(
+              key: const Key('order-confirm-kanji-design-checkbox'),
+              value: kanjiAndDesignConfirmed,
+              onChanged: onKanjiAndDesignChanged == null
+                  ? null
+                  : (value) => onKanjiAndDesignChanged?.call(value ?? false),
+              activeColor: HankoColors.red,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                l10n.confirmKanjiAndDesignLabel,
+                style: HankoTextStyles.body.copyWith(color: HankoColors.ink),
+              ),
             ),
           ),
           const Divider(color: HankoColors.surfaceBorder, height: 1),
-          CheckboxListTile(
-            key: const Key('order-confirm-custom-made-checkbox'),
-            value: customMadePolicyConfirmed,
-            onChanged: onCustomMadePolicyChanged == null
-                ? null
-                : (value) => onCustomMadePolicyChanged?.call(value ?? false),
-            activeColor: HankoColors.red,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              l10n.confirmCustomMadePolicyLabel,
-              style: HankoTextStyles.body.copyWith(color: HankoColors.ink),
+          Material(
+            type: MaterialType.transparency,
+            child: CheckboxListTile(
+              key: const Key('order-confirm-custom-made-checkbox'),
+              value: customMadePolicyConfirmed,
+              onChanged: onCustomMadePolicyChanged == null
+                  ? null
+                  : (value) => onCustomMadePolicyChanged?.call(value ?? false),
+              activeColor: HankoColors.red,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                l10n.confirmCustomMadePolicyLabel,
+                style: HankoTextStyles.body.copyWith(color: HankoColors.ink),
+              ),
             ),
           ),
         ],
@@ -2348,7 +2355,7 @@ class _StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = available ? const Color(0xFF5F8F57) : HankoColors.error;
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.13),
@@ -2361,7 +2368,14 @@ class _StatusPill extends StatelessWidget {
             children: [
               Icon(Icons.circle, size: 10, color: color),
               const SizedBox(width: 8),
-              Text(label, style: HankoTextStyles.label.copyWith(color: color)),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: HankoTextStyles.label.copyWith(color: color),
+                ),
+              ),
             ],
           ),
         ),
@@ -2780,7 +2794,7 @@ String _stoneSubtitle(OrderDraftStoneSelection selection) {
   return '$material / $size';
 }
 
-String _sealShapeLabel(HankoLocalizations l10n, String value) {
+String _sealShapeLabel(GeneratedHankoLocalizations l10n, String value) {
   return switch (value.trim().toLowerCase()) {
     'square' => l10n.sealShapeSquare,
     'round' => l10n.sealShapeRound,
@@ -2788,7 +2802,7 @@ String _sealShapeLabel(HankoLocalizations l10n, String value) {
   };
 }
 
-String _sealStyleLabel(HankoLocalizations l10n, String value) {
+String _sealStyleLabel(GeneratedHankoLocalizations l10n, String value) {
   return switch (value.trim().toLowerCase()) {
     'traditional' => l10n.sealStyleTraditional,
     'elegant' => l10n.sealStyleElegant,

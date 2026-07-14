@@ -1,0 +1,8 @@
+{
+  "product_name_template": "宝石印鑑 ({listing_label}、{shape_label})",
+  "product_description_template": "宝石印鑑のカスタム注文",
+  "shape_labels": {
+    "round": "丸",
+    "square": "角"
+  }
+}
